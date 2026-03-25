@@ -9,6 +9,7 @@ import godot from "@/assets/godot.jpeg";
 import dogSailing from "@/assets/dog-sailing.jpeg";
 import godotSnow from "@/assets/godot-snow.jpeg";
 import snowSami from "@/assets/snow-sami.jpeg";
+import duodji from "@/assets/duodji.jpeg";
 
 const TheCrew = () => {
   const { t } = useI18n();
@@ -48,11 +49,18 @@ const TheCrew = () => {
 
       {/* The Project */}
       <section className="page-section bg-salt-warm">
-        <div className="page-section-narrow">
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.project.title")}</h2>
-          <p className="editorial-body text-muted-foreground text-lg leading-relaxed">
-            {t("crew.project.text")}
-          </p>
+        <div className="page-section-wide">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            <div>
+              <h2 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.project.title")}</h2>
+              <p className="editorial-body text-muted-foreground text-lg leading-relaxed">
+                {t("crew.project.text")}
+              </p>
+            </div>
+            <div className="aspect-[4/3] overflow-hidden">
+              <img src={duodji} alt="Duodji — the camper" className="img-cover hover:scale-105 transition-transform duration-700" />
+            </div>
+          </div>
         </div>
       </section>
 
