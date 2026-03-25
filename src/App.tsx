@@ -6,7 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
 import Layout from "@/components/Layout";
 import Index from "./pages/Index";
-import About from "./pages/About";
+import TheCrew from "./pages/About";
+import { Navigate } from "react-router-dom";
 import Manifesto from "./pages/Manifesto";
 import Journal from "./pages/Journal";
 import RoutePage from "./pages/Route";
@@ -33,7 +34,8 @@ const App = () => (
           <Layout>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/about" element={<About />} />
+              <Route path="/crew" element={<TheCrew />} />
+              <Route path="/about" element={<Navigate to="/crew" replace />} />
               <Route path="/manifesto" element={<Manifesto />} />
               <Route path="/logbook" element={<Journal />} />
               <Route path="/route" element={<RoutePage />} />
