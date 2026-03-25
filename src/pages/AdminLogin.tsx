@@ -5,8 +5,8 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 
 const ADMIN_ACCOUNTS = [
   { name: "Site Admin", email: "hello@biteproject.it" },
-  { name: "Massimo", email: "alexx.bear@hotmail.com" },
-  { name: "Sami", email: "mpernozzoli@icloud.com" },
+  { name: "Massimo", email: "mpernozzoli@icloud.com" },
+  { name: "Sami", email: "alexx.bear@hotmail.com" },
 ];
 
 const AdminLogin = () => {
@@ -75,9 +75,6 @@ const AdminLogin = () => {
               >
                 <span className="block text-sm font-sans font-medium text-foreground group-hover:text-accent transition-colors">
                   {account.name}
-                </span>
-                <span className="block text-xs font-sans text-muted-foreground mt-1">
-                  {account.email}
                 </span>
               </button>
             ))}
