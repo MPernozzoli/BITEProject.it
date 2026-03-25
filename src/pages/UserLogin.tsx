@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -20,35 +20,66 @@ const UserLogin = () => {
     });
   }, [navigate, redirectTo]);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
+  // Cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const sendOtp = useCallback(async () => {
     setLoading(true);
     setError("");
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
+    setLoading(false);
     if (error) {
       setError(error.message);
-      setLoading(false);
-      return;
+      return false;
     }
-    setStep("verify");
-    setLoading(false);
+    setResendCooldown(30);
+    return true;
+  }, [email]);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    const ok = await sendOtp();
+    if (ok) setStep("verify");
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    setOtp("");
+    setError("");
+    await sendOtp();
   };
 
   const handleVerify = async () => {
     if (otp.length < 6) return;
     setLoading(true);
     setError("");
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: "email",
-    });
-    if (error) {
-      setError(error.message);
+
+    // Try multiple OTP types since Supabase may categorize the token differently
+    let verifyError: any = null;
+    for (const otpType of ["email", "magiclink", "recovery"] as const) {
+      const { error, data } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: otpType,
+      });
+      if (!error && data?.session) {
+        verifyError = null;
+        break;
+      }
+      verifyError = error;
+    }
+
+    if (verifyError) {
+      setError(verifyError.message);
       setLoading(false);
       return;
     }
+
     // Check if admin and redirect accordingly
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
@@ -123,7 +154,14 @@ const UserLogin = () => {
               </InputOTP>
             </div>
 
-            {error && <p className="text-sm text-destructive text-center">{error}</p>}
+            {error && (
+              <div className="text-center space-y-2">
+                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-xs text-muted-foreground">
+                  Prova a rinviare il codice e inseriscilo subito dopo averlo ricevuto.
+                </p>
+              </div>
+            )}
 
             <button
               onClick={handleVerify}
@@ -133,12 +171,21 @@ const UserLogin = () => {
               {loading ? "..." : "Verifica"}
             </button>
 
-            <button
-              onClick={() => { setStep("email"); setOtp(""); setError(""); }}
-              className="w-full text-xs font-sans text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              ← Cambia email
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
+                className="text-xs font-sans text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                ← Cambia email
+              </button>
+              <button
+                onClick={handleResend}
+                disabled={resendCooldown > 0 || loading}
+                className="text-xs font-sans text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50"
+              >
+                {resendCooldown > 0 ? `Rinvia tra ${resendCooldown}s` : "Rinvia codice"}
+              </button>
+            </div>
           </div>
         )}
       </div>
