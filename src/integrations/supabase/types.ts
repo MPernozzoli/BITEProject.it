@@ -138,6 +138,42 @@ export type Database = {
           },
         ]
       }
+      article_reads: {
+        Row: {
+          article_id: string
+          id: string
+          profile_id: string
+          read_at: string
+        }
+        Insert: {
+          article_id: string
+          id?: string
+          profile_id: string
+          read_at?: string
+        }
+        Update: {
+          article_id?: string
+          id?: string
+          profile_id?: string
+          read_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_reads_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       article_tags: {
         Row: {
           article_id: string
