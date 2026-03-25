@@ -63,7 +63,7 @@ const Index = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              to="/journal"
+              to="/logbook"
               className="inline-flex items-center gap-2 bg-primary-foreground text-primary px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/90 transition-colors"
             >
               {t("hero.cta.journey")}
@@ -176,7 +176,7 @@ const Index = () => {
               </p>
             </div>
             <Link
-              to="/journal"
+              to="/logbook"
               className="hidden md:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               {t("journal.viewall")} <ArrowRight size={14} />
@@ -206,7 +206,7 @@ const Index = () => {
           </div>
           <div className="mt-8 md:hidden text-center">
             <Link
-              to="/journal"
+              to="/logbook"
               className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               {t("journal.viewall")} <ArrowRight size={14} />

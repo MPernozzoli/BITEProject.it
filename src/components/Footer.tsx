@@ -18,7 +18,7 @@ const Footer = () => {
           <div className="flex flex-col gap-3">
             <Link to="/about" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.about")}</Link>
             <Link to="/manifesto" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.manifesto")}</Link>
-            <Link to="/journal" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.journal")}</Link>
+            <Link to="/logbook" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.journal")}</Link>
             <Link to="/route" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.route")}</Link>
             <Link to="/collaborations" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.collaborations")}</Link>
             <Link to="/contact" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">{t("nav.contact")}</Link>
