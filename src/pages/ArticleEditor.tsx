@@ -185,6 +185,46 @@ const ArticleEditor = () => {
         ));
       }
       await Promise.all(inserts);
+
+      // Send email notifications to story subscribers when publishing a new chapter
+      if (finalStatus === "published" && selectedStoryId && articleId) {
+        try {
+          // Get story info
+          const story = allStories.find((s) => s.id === selectedStoryId);
+          // Get subscribers' profile_ids
+          const { data: subs } = await supabase
+            .from("story_subscriptions")
+            .select("profile_id")
+            .eq("story_id", selectedStoryId);
+          if (subs && subs.length > 0) {
+            const subProfileIds = subs.map((s) => s.profile_id);
+            const { data: subProfiles } = await supabase
+              .from("profiles")
+              .select("id, email")
+              .in("id", subProfileIds);
+            const origin = window.location.origin;
+            for (const profile of subProfiles || []) {
+              if (profile.email) {
+                await supabase.functions.invoke("send-transactional-email", {
+                  body: {
+                    templateName: "new-chapter-notification",
+                    recipientEmail: profile.email,
+                    idempotencyKey: `new-chapter-${articleId}-${profile.id}`,
+                    templateData: {
+                      storyTitle: story?.title_en || "",
+                      chapterTitle: titleEn,
+                      chapterUrl: `${origin}/logbook/${slug}`,
+                      storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
+                    },
+                  },
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to send story notifications:", e);
+        }
+      }
     }
 
     setSaving(false);
