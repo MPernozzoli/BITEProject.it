@@ -4,9 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
 import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon } from "lucide-react";
-
-const categories = ["Refit", "Life Aboard", "Navigation", "Remote Work", "Places", "Notes from the Boat", "Lessons Learned"];
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus } from "lucide-react";
 
 const ArticleEditor = () => {
   const { id } = useParams();
@@ -24,19 +22,35 @@ const ArticleEditor = () => {
   const [contentEn, setContentEn] = useState<object>({});
   const [contentIt, setContentIt] = useState<object>({});
   const [coverImage, setCoverImage] = useState("");
-  const [category, setCategory] = useState(categories[0]);
+  const [category, setCategory] = useState("Notes from the Boat");
   const [publishDate, setPublishDate] = useState("");
   const [authorIds, setAuthorIds] = useState<string[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  useEffect(() => {
-    init();
-  }, [id]);
+  // Tags
+  const [allTags, setAllTags] = useState<{ id: string; name: string }[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState("");
+
+  // Stories
+  const [allStories, setAllStories] = useState<{ id: string; title_en: string; title_it: string; slug: string }[]>([]);
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
+
+  useEffect(() => { init(); }, [id]);
 
   const init = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { navigate("/admin/login"); return; }
     setCurrentUserId(session.user.id);
+
+    // Load tags and stories
+    const [tagsRes, storiesRes] = await Promise.all([
+      supabase.from("tags").select("*").order("name"),
+      supabase.from("stories").select("id, title_en, title_it, slug").order("title_en"),
+    ]);
+    setAllTags(tagsRes.data || []);
+    setAllStories(storiesRes.data || []);
+
     if (isNew) {
       setAuthorIds([session.user.id]);
       setPublishDate(new Date().toISOString().slice(0, 16));
@@ -56,16 +70,18 @@ const ArticleEditor = () => {
     setContentEn(data.content_en as object || {});
     setContentIt(data.content_it as object || {});
     setCoverImage(data.cover_image || "");
-    setCategory(data.category || categories[0]);
+    setCategory(data.category || "Notes from the Boat");
     setPublishDate(data.published_at ? new Date(data.published_at).toISOString().slice(0, 16) : data.scheduled_at ? new Date(data.scheduled_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
+    setSelectedStoryId((data as any).story_id || null);
 
-    // Load authors
-    const { data: authorsData } = await supabase.from("article_authors").select("profile_id").eq("article_id", id);
-    if (authorsData?.length) {
-      setAuthorIds(authorsData.map((a) => a.profile_id));
-    } else {
-      setAuthorIds([userId]);
-    }
+    // Load authors and tags
+    const [authorsRes, tagsRes] = await Promise.all([
+      supabase.from("article_authors").select("profile_id").eq("article_id", id),
+      supabase.from("article_tags").select("tag_id").eq("article_id", id),
+    ]);
+    if (authorsRes.data?.length) setAuthorIds(authorsRes.data.map((a) => a.profile_id));
+    else setAuthorIds([userId]);
+    if (tagsRes.data?.length) setSelectedTagIds(tagsRes.data.map((t) => t.tag_id));
   };
 
   const generateSlug = (title: string) =>
@@ -83,6 +99,24 @@ const ArticleEditor = () => {
     if (error) { console.error("Cover upload error:", error); return; }
     const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
     setCoverImage(urlData.publicUrl);
+  };
+
+  const addNewTag = async () => {
+    const name = newTagInput.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+    if (!name) return;
+    // Check if exists
+    const existing = allTags.find((t) => t.name === name);
+    if (existing) {
+      if (!selectedTagIds.includes(existing.id)) setSelectedTagIds((prev) => [...prev, existing.id]);
+      setNewTagInput("");
+      return;
+    }
+    const { data, error } = await supabase.from("tags").insert({ name }).select().single();
+    if (!error && data) {
+      setAllTags((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedTagIds((prev) => [...prev, data.id]);
+    }
+    setNewTagInput("");
   };
 
   const saveArticle = useCallback(async (action: "draft" | "publish") => {
@@ -105,7 +139,7 @@ const ArticleEditor = () => {
       publishedAt = selectedDate.toISOString();
     }
 
-    const articleData = {
+    const articleData: any = {
       title_en: titleEn,
       title_it: titleIt,
       slug,
@@ -118,6 +152,7 @@ const ArticleEditor = () => {
       status: finalStatus,
       published_at: publishedAt,
       scheduled_at: scheduledAt,
+      story_id: selectedStoryId || null,
     };
 
     let articleId = id;
@@ -131,18 +166,29 @@ const ArticleEditor = () => {
       await supabase.from("logbook_articles").update(articleData).eq("id", id);
     }
 
-    // Save authors
+    // Save authors and tags
     if (articleId && articleId !== "new") {
-      await supabase.from("article_authors").delete().eq("article_id", articleId);
+      await Promise.all([
+        supabase.from("article_authors").delete().eq("article_id", articleId),
+        supabase.from("article_tags").delete().eq("article_id", articleId),
+      ]);
+
+      const inserts = [];
       if (authorIds.length > 0) {
-        await supabase.from("article_authors").insert(
+        inserts.push(supabase.from("article_authors").insert(
           authorIds.map((profileId) => ({ article_id: articleId!, profile_id: profileId }))
-        );
+        ));
       }
+      if (selectedTagIds.length > 0) {
+        inserts.push(supabase.from("article_tags").insert(
+          selectedTagIds.map((tagId) => ({ article_id: articleId!, tag_id: tagId }))
+        ));
+      }
+      await Promise.all(inserts);
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, category, publishDate, authorIds, id, isNew, navigate]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, category, publishDate, authorIds, selectedTagIds, selectedStoryId, id, isNew, navigate]);
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
@@ -216,11 +262,56 @@ const ArticleEditor = () => {
               <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
             </div>
 
-            {/* Category */}
+            {/* Tags */}
             <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors">
-                {categories.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Tags</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {selectedTagIds.map((tagId) => {
+                  const tag = allTags.find((t) => t.id === tagId);
+                  if (!tag) return null;
+                  return (
+                    <span key={tag.id} className="inline-flex items-center gap-1 text-xs font-sans bg-accent/10 text-accent px-2 py-1 border border-accent/20">
+                      #{tag.name}
+                      <button onClick={() => setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))} className="hover:text-foreground">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addNewTag())}
+                  placeholder="Add tag..."
+                  className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  list="tag-suggestions"
+                />
+                <datalist id="tag-suggestions">
+                  {allTags.filter((t) => !selectedTagIds.includes(t.id)).map((t) => (
+                    <option key={t.id} value={t.name} />
+                  ))}
+                </datalist>
+                <button onClick={addNewTag} className="border border-border px-2 py-2 text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Story */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Story</label>
+              <select
+                value={selectedStoryId || ""}
+                onChange={(e) => setSelectedStoryId(e.target.value || null)}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              >
+                <option value="">No story (standalone post)</option>
+                {allStories.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title_en || s.title_it}</option>
+                ))}
               </select>
             </div>
 
