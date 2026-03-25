@@ -435,6 +435,13 @@ export type Database = {
           name: string
           preferred_language: string
           secondary_language: string | null
+          social_facebook: string | null
+          social_instagram: string | null
+          social_linkedin: string | null
+          social_tiktok: string | null
+          social_website: string | null
+          social_x: string | null
+          social_youtube: string | null
           updated_at: string
         }
         Insert: {
@@ -446,6 +453,13 @@ export type Database = {
           name?: string
           preferred_language?: string
           secondary_language?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_tiktok?: string | null
+          social_website?: string | null
+          social_x?: string | null
+          social_youtube?: string | null
           updated_at?: string
         }
         Update: {
@@ -457,6 +471,13 @@ export type Database = {
           name?: string
           preferred_language?: string
           secondary_language?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_tiktok?: string | null
+          social_website?: string | null
+          social_x?: string | null
+          social_youtube?: string | null
           updated_at?: string
         }
         Relationships: []
