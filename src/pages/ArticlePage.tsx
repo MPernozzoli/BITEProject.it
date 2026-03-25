@@ -11,7 +11,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
@@ -65,6 +65,31 @@ const ArticlePage = () => {
     },
   });
 
+  // Fetch tags
+  const { data: tags = [] } = useQuery({
+    queryKey: ["article-tags", article?.id],
+    enabled: !!article?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("article_tags")
+        .select("tag_id, tags(id, name)")
+        .eq("article_id", article!.id);
+      return (data || []).map((d: any) => d.tags).filter(Boolean);
+    },
+  });
+
+  // Fetch story info if article belongs to one
+  const { data: story } = useQuery({
+    queryKey: ["article-story", article?.id],
+    enabled: !!article?.id,
+    queryFn: async () => {
+      const storyId = (article as any)?.story_id;
+      if (!storyId) return null;
+      const { data } = await supabase.from("stories").select("*").eq("id", storyId).single();
+      return data;
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-20">
@@ -110,19 +135,34 @@ const ArticlePage = () => {
             <ArrowLeft size={14} /> Back to Logbook
           </Link>
 
-          <div className="flex items-center gap-4 mb-6">
-            <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
-              {article.category}
-            </span>
+          <div className="flex items-center gap-3 mb-6 flex-wrap">
+            {tags.length > 0 && tags.map((tag: any) => (
+              <span key={tag.id} className="text-xs font-sans text-accent">#{tag.name}</span>
+            ))}
             {article.published_at && (
-              <>
-                <span className="text-xs text-muted-foreground/40">·</span>
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(article.published_at), "MMMM d, yyyy")}
-                </span>
-              </>
+              <span className="text-xs text-muted-foreground">
+                {format(new Date(article.published_at), "MMMM d, yyyy")}
+              </span>
             )}
           </div>
+
+          {/* Story banner */}
+          {story && (
+            <Link
+              to={`/logbook/story/${story.slug}`}
+              className="flex items-center gap-3 mb-8 p-4 border border-border hover:border-accent transition-colors group"
+            >
+              <BookOpen size={16} className="text-accent flex-shrink-0" />
+              <div>
+                <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
+                  {lang === "it" ? "Parte della storia" : "Part of story"}
+                </span>
+                <p className="editorial-heading text-sm group-hover:text-accent transition-colors">
+                  {lang === "en" ? story.title_en : (story.title_it || story.title_en)}
+                </p>
+              </div>
+            </Link>
+          )}
 
           <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-6">
             {title}

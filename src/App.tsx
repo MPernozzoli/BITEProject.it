@@ -20,6 +20,8 @@ import ArticleEditor from "./pages/ArticleEditor";
 import AdminProfile from "./pages/AdminProfile";
 import UserLogin from "./pages/UserLogin";
 import PublicProfile from "./pages/PublicProfile";
+import StoryPage from "./pages/StoryPage";
+import Unsubscribe from "./pages/Unsubscribe";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +43,7 @@ const App = () => (
               <Route path="/route" element={<RoutePage />} />
               <Route path="/collaborations" element={<Collaborations />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/logbook/story/:slug" element={<StoryPage />} />
               <Route path="/logbook/:slug" element={<ArticlePage />} />
               <Route path="/profile/:id" element={<PublicProfile />} />
               <Route path="/login" element={<UserLogin />} />
@@ -48,6 +51,7 @@ const App = () => (
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/article/:id" element={<ArticleEditor />} />
               <Route path="/admin/profile" element={<AdminProfile />} />
+              <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>
