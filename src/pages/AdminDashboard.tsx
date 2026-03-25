@@ -50,6 +50,7 @@ const AdminDashboard = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activeSection, setActiveSection] = useState<"articles" | "stories">("articles");
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
@@ -58,12 +59,26 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     checkAuth();
-    fetchData();
   }, []);
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) navigate("/admin/login");
+    if (!session) {
+      navigate("/login", { state: { from: "/admin" } });
+      return;
+    }
+    // Check admin role from DB
+    const { data: isAdmin } = await supabase.rpc("has_role", {
+      _user_id: session.user.id,
+      _role: "admin",
+    });
+    if (!isAdmin) {
+      toast.error("Accesso non autorizzato");
+      navigate("/", { replace: true });
+      return;
+    }
+    setAuthChecked(true);
+    fetchData();
   };
 
   const fetchData = async () => {
@@ -84,7 +99,7 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/admin/login");
+    navigate("/login");
   };
 
   const generateSlug = (title: string) =>
@@ -127,6 +142,14 @@ const AdminDashboard = () => {
     setStories((prev) => prev.filter((s) => s.id !== id));
     toast.success("Story deleted");
   };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground animate-pulse">Verifica accesso...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
@@ -227,7 +250,6 @@ const AdminDashboard = () => {
               </button>
             </div>
 
-            {/* Story form modal */}
             {showStoryForm && (
               <div className="border border-border p-6 mb-8 space-y-4">
                 <div className="flex items-center justify-between">
