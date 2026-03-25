@@ -14,6 +14,209 @@ export type Database = {
   }
   public: {
     Tables: {
+      article_authors: {
+        Row: {
+          article_id: string
+          id: string
+          profile_id: string
+          role: string
+        }
+        Insert: {
+          article_id: string
+          id?: string
+          profile_id: string
+          role?: string
+        }
+        Update: {
+          article_id?: string
+          id?: string
+          profile_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_authors_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_authors_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_comments: {
+        Row: {
+          article_id: string
+          content: string
+          created_at: string
+          id: string
+          parent_id: string | null
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          article_id: string
+          content?: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          article_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_comments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_comments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_likes: {
+        Row: {
+          article_id: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_likes_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_likes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_likes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_likes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_likes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_mentions: {
+        Row: {
+          comment_id: string
+          id: string
+          mentioned_article_id: string | null
+          mentioned_profile_id: string | null
+        }
+        Insert: {
+          comment_id: string
+          id?: string
+          mentioned_article_id?: string | null
+          mentioned_profile_id?: string | null
+        }
+        Update: {
+          comment_id?: string
+          id?: string
+          mentioned_article_id?: string | null
+          mentioned_profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_mentions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_mentions_mentioned_article_id_fkey"
+            columns: ["mentioned_article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_mentions_mentioned_profile_id_fkey"
+            columns: ["mentioned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logbook_articles: {
         Row: {
           category: string
@@ -64,6 +267,68 @@ export type Database = {
           status?: Database["public"]["Enums"]["article_status"]
           title_en?: string
           title_it?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profile_badges: {
+        Row: {
+          awarded_at: string
+          badge_icon: string | null
+          badge_name: string
+          id: string
+          profile_id: string
+        }
+        Insert: {
+          awarded_at?: string
+          badge_icon?: string | null
+          badge_name: string
+          id?: string
+          profile_id: string
+        }
+        Update: {
+          awarded_at?: string
+          badge_icon?: string | null
+          badge_name?: string
+          id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_badges_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          email?: string
+          id: string
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
           updated_at?: string
         }
         Relationships: []
