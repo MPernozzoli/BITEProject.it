@@ -42,7 +42,7 @@ const TheCrew = () => {
               </p>
             </div>
             <div className="aspect-[4/3] overflow-hidden">
-              <img src={duodji} alt="Duodji — the camper" className="img-cover hover:scale-105 transition-transform duration-700" />
+              <img src={duodji} alt="Duodji — the camper" className="img-cover hover:scale-105 transition-transform duration-700 object-bottom" />
             </div>
           </div>
         </div>
@@ -150,7 +150,7 @@ const TheCrew = () => {
 
       {/* Full width closing image */}
       <section className="h-[40vh] md:h-[50vh] overflow-hidden">
-        <img src={boatSunset} alt="Spritz at sunset" className="img-cover" />
+        <img src={boatSunset} alt="Spritz at sunset" className="img-cover object-bottom" />
       </section>
     </div>
   );
