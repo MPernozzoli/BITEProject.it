@@ -14,7 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      logbook_articles: {
+        Row: {
+          category: string
+          content_en: Json | null
+          content_it: Json | null
+          cover_image: string | null
+          created_at: string
+          excerpt_en: string | null
+          excerpt_it: string | null
+          id: string
+          published_at: string | null
+          scheduled_at: string | null
+          slug: string
+          status: Database["public"]["Enums"]["article_status"]
+          title_en: string
+          title_it: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          content_en?: Json | null
+          content_it?: Json | null
+          cover_image?: string | null
+          created_at?: string
+          excerpt_en?: string | null
+          excerpt_it?: string | null
+          id?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          slug: string
+          status?: Database["public"]["Enums"]["article_status"]
+          title_en?: string
+          title_it?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          content_en?: Json | null
+          content_it?: Json | null
+          cover_image?: string | null
+          created_at?: string
+          excerpt_en?: string | null
+          excerpt_it?: string | null
+          id?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["article_status"]
+          title_en?: string
+          title_it?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +76,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      article_status: "draft" | "scheduled" | "published"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +203,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      article_status: ["draft", "scheduled", "published"],
+    },
   },
 } as const
