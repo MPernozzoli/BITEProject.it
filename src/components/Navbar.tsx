@@ -95,14 +95,14 @@ const Navbar = () => {
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         scrolled
           ? "bg-background/95 backdrop-blur-md border-b border-border shadow-sm"
-          : "bg-gradient-to-b from-black/50 to-transparent"
+          : "bg-gradient-to-b from-black/60 via-black/30 to-transparent"
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16 md:h-20">
         {/* Logo with hover expand */}
         <Link
           to="/"
-          className="relative font-serif text-xl md:text-2xl font-bold tracking-widest text-foreground overflow-hidden"
+          className={`relative font-serif text-xl md:text-2xl font-bold tracking-widest overflow-hidden transition-colors duration-500 ${scrolled ? "text-foreground" : "text-white"}`}
           onMouseEnter={() => setLogoHovered(true)}
           onMouseLeave={() => setLogoHovered(false)}
         >
@@ -158,20 +158,24 @@ const Navbar = () => {
               key={link.to}
               to={link.to}
               className={`text-[13px] font-sans tracking-wide transition-colors duration-300 hover:text-accent ${
-                location.pathname === link.to
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground"
+                scrolled
+                  ? location.pathname === link.to ? "text-foreground font-medium" : "text-muted-foreground"
+                  : location.pathname === link.to ? "text-white font-medium" : "text-white/75"
               }`}
             >
               {link.label}
             </Link>
           ))}
 
-          <div className="w-px h-5 bg-border mx-1" />
+          <div className={`w-px h-5 mx-1 ${scrolled ? "bg-border" : "bg-white/30"}`} />
 
           <button
             onClick={() => setLang(lang === "en" ? "it" : "en")}
-            className="text-xs font-sans tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase border border-border px-3 py-1 rounded-sm"
+            className={`text-xs font-sans tracking-widest transition-colors uppercase px-3 py-1 rounded-sm ${
+              scrolled
+                ? "text-muted-foreground hover:text-foreground border border-border"
+                : "text-white/75 hover:text-white border border-white/30"
+            }`}
           >
             {lang === "en" ? "IT" : "EN"}
           </button>
@@ -213,7 +217,7 @@ const Navbar = () => {
           ) : (
             <Link
               to="/login"
-              className="text-xs font-sans tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+              className={`text-xs font-sans tracking-wide transition-colors ${scrolled ? "text-muted-foreground hover:text-foreground" : "text-white/75 hover:text-white"}`}
             >
               {lang === "it" ? "Accedi" : "Login"}
             </Link>
@@ -224,7 +228,7 @@ const Navbar = () => {
         <div className="flex items-center gap-3 lg:hidden">
           <button
             onClick={() => setLang(lang === "en" ? "it" : "en")}
-            className="text-xs font-sans tracking-widest text-muted-foreground uppercase"
+            className={`text-xs font-sans tracking-widest uppercase ${scrolled ? "text-muted-foreground" : "text-white/75"}`}
           >
             {lang === "en" ? "IT" : "EN"}
           </button>
@@ -239,7 +243,7 @@ const Navbar = () => {
             </Link>
           )}
 
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-foreground">
+          <button onClick={() => setMobileOpen(!mobileOpen)} className={scrolled ? "text-foreground" : "text-white"}>
             {mobileOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
