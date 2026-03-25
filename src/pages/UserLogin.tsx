@@ -81,38 +81,53 @@ const UserLogin = () => {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.verifyOtp({
-      email: submittedEmail,
-      token: otp,
-      type: "recovery",
-    });
+    try {
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        email: submittedEmail,
+        token: otp,
+        type: "recovery",
+      });
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
+      if (verifyError) {
+        setError(verifyError.message);
+        return;
+      }
 
-    // Handle "remember me" preference
-    if (!rememberMe) {
-      localStorage.setItem("bite_ephemeral_session", "true");
-    } else {
-      localStorage.removeItem("bite_ephemeral_session");
-    }
+      // Handle "remember me" preference
+      if (!rememberMe) {
+        localStorage.setItem("bite_ephemeral_session", "true");
+      } else {
+        localStorage.removeItem("bite_ephemeral_session");
+      }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { data: isAdmin } = await supabase.rpc("has_role", {
+      const session = verifyData?.session ?? (await supabase.auth.getSession()).data.session;
+
+      if (!session) {
+        setError("Sessione non pronta. Riprova tra un secondo.");
+        return;
+      }
+
+      const { data: isAdmin, error: roleError } = await supabase.rpc("has_role", {
         _user_id: session.user.id,
         _role: "admin",
       });
+
+      if (roleError) {
+        navigate(redirectTo, { replace: true });
+        return;
+      }
+
       if (redirectTo === "/" && isAdmin) {
         navigate("/admin", { replace: true });
       } else {
         navigate(redirectTo, { replace: true });
       }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Errore durante la verifica";
+      setError(message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
