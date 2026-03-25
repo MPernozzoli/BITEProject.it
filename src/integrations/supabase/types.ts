@@ -562,6 +562,57 @@ export type Database = {
         }
         Relationships: []
       }
+      route_legs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          id: string
+          lat_end: number | null
+          lat_start: number | null
+          lng_end: number | null
+          lng_start: number | null
+          name: string
+          nautical_miles: number | null
+          sort_order: number
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          lat_end?: number | null
+          lat_start?: number | null
+          lng_end?: number | null
+          lng_start?: number | null
+          name?: string
+          nautical_miles?: number | null
+          sort_order?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          lat_end?: number | null
+          lat_start?: number | null
+          lng_end?: number | null
+          lng_start?: number | null
+          name?: string
+          nautical_miles?: number | null
+          sort_order?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       stories: {
         Row: {
           cover_image: string | null
