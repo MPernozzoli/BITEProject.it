@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation } from "lucide-react";
+import AdminRouteManager from "@/components/admin/AdminRouteManager";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -51,7 +52,7 @@ const AdminDashboard = () => {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
-  const [activeSection, setActiveSection] = useState<"articles" | "stories">("articles");
+  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route">("articles");
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
@@ -183,6 +184,14 @@ const AdminDashboard = () => {
             }`}
           >
             <BookOpen size={14} /> Stories
+          </button>
+          <button
+            onClick={() => setActiveSection("route")}
+            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors inline-flex items-center gap-2 ${
+              activeSection === "route" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
+            }`}
+          >
+            <Navigation size={14} /> Route
           </button>
         </div>
 
@@ -323,6 +332,8 @@ const AdminDashboard = () => {
             )}
           </>
         )}
+
+        {activeSection === "route" && <AdminRouteManager />}
       </div>
     </div>
   );
