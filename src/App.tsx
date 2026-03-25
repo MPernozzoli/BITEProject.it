@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
+import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import Index from "./pages/Index";
 import TheCrew from "./pages/About";
@@ -32,6 +33,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <I18nProvider>
+        <AuthProvider>
         <BrowserRouter>
           <Layout>
             <Routes>
@@ -56,6 +58,7 @@ const App = () => (
             </Routes>
           </Layout>
         </BrowserRouter>
+        </AuthProvider>
       </I18nProvider>
     </TooltipProvider>
   </QueryClientProvider>
