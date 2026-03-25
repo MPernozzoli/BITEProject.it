@@ -5,6 +5,7 @@ import boatSunset from "@/assets/boat-sunset.jpeg";
 import dogsMarina from "@/assets/dogs-marina.jpeg";
 import sailingCockpit from "@/assets/sailing-cockpit.jpeg";
 import boatHarbor from "@/assets/boat-harbor.jpeg";
+import godot from "@/assets/godot.jpeg";
 import dogSailing from "@/assets/dog-sailing.jpeg";
 import snowSami from "@/assets/snow-sami.jpeg";
 
@@ -78,17 +79,22 @@ const TheCrew = () => {
       <section className="page-section bg-salt-warm">
         <div className="page-section-wide">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
-            <div className="aspect-[4/3] overflow-hidden">
-              <img src={dogSailing} alt="Dogs on board" className="img-cover hover:scale-105 transition-transform duration-700" />
-            </div>
             <div className="space-y-12">
+              <div className="aspect-[4/3] overflow-hidden">
+                <img src={godot} alt="Godot" className="img-cover hover:scale-105 transition-transform duration-700" />
+              </div>
               <div>
                 <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.godot.title")}</h3>
                 <p className="editorial-body text-muted-foreground leading-relaxed">
                   {t("crew.godot.text")}
                 </p>
               </div>
-              <div className="border-t border-border pt-8">
+            </div>
+            <div className="space-y-12">
+              <div className="aspect-[4/3] overflow-hidden">
+                <img src={dogSailing} alt="Dogs on board" className="img-cover hover:scale-105 transition-transform duration-700" />
+              </div>
+              <div>
                 <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.freya.title")}</h3>
                 <p className="editorial-body text-muted-foreground leading-relaxed">
                   {t("crew.freya.text")}
