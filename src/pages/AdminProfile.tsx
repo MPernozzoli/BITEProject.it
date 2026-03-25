@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Save, Camera } from "lucide-react";
+import { Save, Camera, Mail } from "lucide-react";
 import { useRef } from "react";
 
 const AdminProfile = () => {
@@ -12,6 +12,7 @@ const AdminProfile = () => {
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -27,6 +28,9 @@ const AdminProfile = () => {
       setEmail(data.email || session.user.email || "");
       setAvatarUrl(data.avatar_url || "");
     }
+    // Load newsletter subscription
+    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", session.user.id).maybeSingle();
+    if (sub) setNewsletterSubscribed(sub.subscribed);
   };
 
   const handleAvatarUpload = async (file: File) => {
@@ -43,6 +47,15 @@ const AdminProfile = () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     await supabase.from("profiles").update({ name, bio, avatar_url: avatarUrl }).eq("id", session.user.id);
+
+    // Save newsletter preference
+    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", session.user.id).maybeSingle();
+    if (existingSub) {
+      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email: email }).eq("profile_id", session.user.id);
+    } else {
+      await supabase.from("newsletter_subscribers").insert({ profile_id: session.user.id, email: email, subscribed: newsletterSubscribed });
+    }
+
     setSaving(false);
   };
 
@@ -80,6 +93,23 @@ const AdminProfile = () => {
             <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Bio</label>
             <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} className="w-full bg-transparent border border-border px-4 py-3 font-sans focus:outline-none focus:border-accent transition-colors resize-none" placeholder="Tell something about yourself..." />
           </div>
+          {/* Newsletter */}
+          <div className="border-t border-border pt-6">
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 block">Newsletter</label>
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div
+                onClick={() => setNewsletterSubscribed(!newsletterSubscribed)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${newsletterSubscribed ? "bg-accent" : "bg-muted"}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-primary-foreground shadow transition-transform ${newsletterSubscribed ? "translate-x-5" : "translate-x-0.5"}`} />
+              </div>
+              <div>
+                <span className="text-sm font-sans">{newsletterSubscribed ? "Iscritto alla newsletter" : "Non iscritto alla newsletter"}</span>
+                <p className="text-xs text-muted-foreground mt-0.5">Ricevi aggiornamenti su nuovi articoli e novità dal progetto.</p>
+              </div>
+            </label>
+          </div>
+
           <button onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
             <Save size={14} /> {saving ? "Saving..." : "Save Profile"}
           </button>
