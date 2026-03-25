@@ -1,6 +1,19 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Language = "en" | "it";
+export type ExtendedLanguage = "en" | "it" | "fr" | "de" | "es" | "pt";
+
+export const ALL_LANGUAGES: { code: ExtendedLanguage; label: string }[] = [
+  { code: "it", label: "Italiano" },
+  { code: "en", label: "English" },
+  { code: "fr", label: "Français" },
+  { code: "de", label: "Deutsch" },
+  { code: "es", label: "Español" },
+  { code: "pt", label: "Português" },
+];
+
+export const SITE_LANGUAGES: Language[] = ["it", "en"];
 
 type Translations = Record<string, Record<Language, string>>;
 
@@ -141,8 +154,50 @@ const I18nContext = createContext<I18nContextType>({
   t: (key) => key,
 });
 
+// Maps extended languages to the closest available site language
+function resolveToSiteLanguage(preferred: string, secondary?: string | null): Language {
+  if (preferred === "it" || preferred === "en") return preferred as Language;
+  // For non-native languages, use secondary if it's a site language
+  if (secondary === "it" || secondary === "en") return secondary as Language;
+  // Fallback: romance languages → Italian, others → English
+  if (["fr", "es", "pt"].includes(preferred)) return "it";
+  return "en";
+}
+
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLang] = useState<Language>("en");
+
+  useEffect(() => {
+    const loadUserLanguage = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("preferred_language, secondary_language")
+          .eq("id", session.user.id)
+          .single();
+        if (data?.preferred_language) {
+          setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
+        }
+      }
+    };
+    loadUserLanguage();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user?.id) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("preferred_language, secondary_language")
+          .eq("id", session.user.id)
+          .single();
+        if (data?.preferred_language) {
+          setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const t = useCallback(
     (key: string) => {
