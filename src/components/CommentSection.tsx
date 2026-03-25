@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Heart, Reply, Send } from "lucide-react";
 import ProfileCard from "./ProfileCard";
@@ -28,6 +29,7 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
   const [replyText, setReplyText] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     checkSession();
@@ -56,7 +58,6 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
     const { data: profiles } = await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds);
     const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
 
-    // Get like counts
     const commentIds = commentsData.map((c) => c.id);
     const { data: likesData } = await supabase
       .from("comment_likes")
@@ -77,7 +78,6 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
       liked_by_me: myLikes.has(c.id),
     }));
 
-    // Build tree
     const topLevel = enriched.filter((c) => !c.parent_id);
     const childMap: Record<string, Comment[]> = {};
     enriched.filter((c) => c.parent_id).forEach((c) => {
@@ -105,13 +105,22 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
   };
 
   const toggleCommentLike = async (commentId: string, isLiked: boolean) => {
-    if (!userId) return;
+    if (!userId) {
+      navigate("/login", { state: { from: window.location.pathname } });
+      return;
+    }
     if (isLiked) {
       await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("profile_id", userId);
     } else {
       await supabase.from("comment_likes").insert({ comment_id: commentId, profile_id: userId });
     }
     fetchComments();
+  };
+
+  const handleCommentAction = () => {
+    if (!userId) {
+      navigate("/login", { state: { from: window.location.pathname } });
+    }
   };
 
   const renderComment = (comment: Comment, isReply = false) => (
@@ -128,7 +137,7 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-muted-foreground">
-                {format(new Date(comment.created_at), "MMM d, yyyy · HH:mm")}
+                {format(new Date(comment.created_at), "d MMM yyyy · HH:mm")}
               </span>
             </div>
             <p className="text-sm font-sans text-foreground/90 whitespace-pre-wrap">{comment.content}</p>
@@ -137,27 +146,27 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
                 onClick={() => toggleCommentLike(comment.id, comment.liked_by_me)}
                 className={`inline-flex items-center gap-1 text-xs transition-colors ${
                   comment.liked_by_me ? "text-red-500" : "text-muted-foreground hover:text-foreground"
-                } ${!userId ? "opacity-50 cursor-default" : ""}`}
-                disabled={!userId}
+                }`}
               >
                 <Heart size={12} fill={comment.liked_by_me ? "currentColor" : "none"} />
                 {comment.likes_count > 0 && comment.likes_count}
               </button>
-              {userId && (
-                <button
-                  onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Reply size={12} /> Reply
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (!userId) { handleCommentAction(); return; }
+                  setReplyTo(replyTo === comment.id ? null : comment.id);
+                }}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Reply size={12} /> Rispondi
+              </button>
             </div>
             {replyTo === comment.id && (
               <div className="flex gap-2 mt-3">
                 <input
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Write a reply..."
+                  placeholder="Scrivi una risposta..."
                   className="flex-1 bg-transparent border-b border-border py-1.5 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   onKeyDown={(e) => e.key === "Enter" && submitComment(comment.id, replyText)}
                 />
@@ -179,15 +188,15 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
   return (
     <div className="border-t border-border pt-8 mt-12">
       <h3 className="editorial-heading text-xl mb-6">
-        Comments {comments.length > 0 && `(${comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})`}
+        Commenti {comments.length > 0 && `(${comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})`}
       </h3>
 
-      {userId && (
+      {userId ? (
         <div className="flex gap-3 mb-8">
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Leave a comment..."
+            placeholder="Scrivi un commento..."
             rows={2}
             className="flex-1 bg-transparent border border-border px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
           />
@@ -199,12 +208,19 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
             <Send size={14} />
           </button>
         </div>
+      ) : (
+        <button
+          onClick={handleCommentAction}
+          className="mb-8 text-sm font-sans text-accent hover:text-foreground transition-colors underline"
+        >
+          Accedi per commentare
+        </button>
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading comments...</p>
+        <p className="text-sm text-muted-foreground">Caricamento commenti...</p>
       ) : comments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No comments yet. Be the first to share your thoughts.</p>
+        <p className="text-sm text-muted-foreground">Nessun commento. Sii il primo a condividere il tuo pensiero.</p>
       ) : (
         <div className="divide-y divide-border">
           {comments.map((c) => renderComment(c))}
