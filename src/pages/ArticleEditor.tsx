@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
+import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Clock, Image as ImageIcon } from "lucide-react";
 import { useRef } from "react";
 
@@ -97,8 +98,8 @@ const ArticleEditor = () => {
       slug,
       excerpt_en: excerptEn,
       excerpt_it: excerptIt,
-      content_en: contentEn,
-      content_it: contentIt,
+      content_en: contentEn as Json,
+      content_it: contentIt as Json,
       cover_image: coverImage,
       category,
       status: finalStatus,
