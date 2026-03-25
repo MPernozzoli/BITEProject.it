@@ -21,6 +21,7 @@ import AdminProfile from "./pages/AdminProfile";
 import UserLogin from "./pages/UserLogin";
 import PublicProfile from "./pages/PublicProfile";
 import StoryPage from "./pages/StoryPage";
+import Unsubscribe from "./pages/Unsubscribe";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/article/:id" element={<ArticleEditor />} />
               <Route path="/admin/profile" element={<AdminProfile />} />
+              <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>
