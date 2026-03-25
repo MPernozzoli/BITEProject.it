@@ -6,6 +6,7 @@ import dogsMarina from "@/assets/dogs-marina.jpeg";
 import sailingCockpit from "@/assets/sailing-cockpit.jpeg";
 import boatHarbor from "@/assets/boat-harbor.jpeg";
 import dogSailing from "@/assets/dog-sailing.jpeg";
+import snowSami from "@/assets/snow-sami.jpeg";
 
 const TheCrew = () => {
   const { t } = useI18n();
@@ -100,15 +101,22 @@ const TheCrew = () => {
 
       {/* Snow Daisy — Ad Honorem */}
       <section className="page-section bg-primary text-primary-foreground">
-        <div className="page-section-narrow text-center">
-          <Heart size={24} className="mx-auto mb-6 text-primary-foreground/50" />
-          <p className="text-xs font-sans tracking-[0.3em] uppercase text-primary-foreground/50 mb-4">
-            {t("crew.snow.subtitle")}
-          </p>
-          <h3 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.snow.title")}</h3>
-          <p className="editorial-body text-primary-foreground/80 text-lg leading-relaxed max-w-2xl mx-auto">
-            {t("crew.snow.text")}
-          </p>
+        <div className="page-section-wide">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+            <div className="aspect-[3/4] overflow-hidden max-h-[500px] mx-auto lg:mx-0">
+              <img src={snowSami} alt="Snow Daisy and Sami" className="img-cover" />
+            </div>
+            <div className="text-center lg:text-left">
+              <Heart size={24} className="mx-auto lg:mx-0 mb-6 text-primary-foreground/50" />
+              <p className="text-xs font-sans tracking-[0.3em] uppercase text-primary-foreground/50 mb-4">
+                {t("crew.snow.subtitle")}
+              </p>
+              <h3 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.snow.title")}</h3>
+              <p className="editorial-body text-primary-foreground/80 text-lg leading-relaxed">
+                {t("crew.snow.text")}
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
