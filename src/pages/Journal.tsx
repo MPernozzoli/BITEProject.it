@@ -4,16 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { Search, TrendingUp, Clock, BookOpen } from "lucide-react";
+import { Search, TrendingUp, Clock, BookOpen, Eye } from "lucide-react";
 import ProfileCard from "@/components/ProfileCard";
+import { useArticleReads } from "@/hooks/useArticleReads";
 
 const Journal = () => {
   const { t, lang } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"recent" | "popular">("recent");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const { isRead } = useArticleReads();
 
-  // Fetch articles with authors, tags, and like counts
   const { data: articles = [], isLoading } = useQuery({
     queryKey: ["logbook-articles-full"],
     queryFn: async () => {
@@ -27,21 +28,18 @@ const Journal = () => {
       const ids = (data || []).map((a) => a.id);
       if (!ids.length) return [];
 
-      // Fetch authors, tags, and likes in parallel
       const [authorRes, tagRes, likeRes] = await Promise.all([
         supabase.from("article_authors").select("article_id, profile_id").in("article_id", ids),
         supabase.from("article_tags").select("article_id, tag_id, tags(id, name)").in("article_id", ids),
         supabase.from("article_likes").select("article_id").in("article_id", ids),
       ]);
 
-      // Build profile map
       const profileIds = [...new Set((authorRes.data || []).map((a) => a.profile_id))];
       const { data: profiles } = profileIds.length
         ? await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
         : { data: [] };
       const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
 
-      // Build maps
       const articleAuthorsMap: Record<string, any[]> = {};
       (authorRes.data || []).forEach((link) => {
         if (!articleAuthorsMap[link.article_id]) articleAuthorsMap[link.article_id] = [];
@@ -69,7 +67,6 @@ const Journal = () => {
     },
   });
 
-  // Fetch all tags
   const { data: allTags = [] } = useQuery({
     queryKey: ["all-tags"],
     queryFn: async () => {
@@ -78,7 +75,6 @@ const Journal = () => {
     },
   });
 
-  // Fetch stories
   const { data: stories = [] } = useQuery({
     queryKey: ["stories-list"],
     queryFn: async () => {
@@ -87,11 +83,9 @@ const Journal = () => {
     },
   });
 
-  // Filter and sort
   const filtered = useMemo(() => {
     let result = [...articles];
 
-    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter((a) => {
@@ -103,18 +97,15 @@ const Journal = () => {
       });
     }
 
-    // Tag filter
     if (selectedTags.length > 0) {
       result = result.filter((a) =>
         selectedTags.every((tagId) => a.tags?.some((t: any) => t.id === tagId))
       );
     }
 
-    // Sort
     if (activeTab === "popular") {
       result.sort((a, b) => b.likeCount - a.likeCount);
     }
-    // "recent" is already sorted by published_at desc from the query
 
     return result;
   }, [articles, searchQuery, selectedTags, activeTab, lang]);
@@ -125,58 +116,65 @@ const Journal = () => {
     );
   };
 
+  // Split: featured (first article) + rest
+  const featured = filtered[0];
+  const rest = filtered.slice(1);
+
   return (
     <div>
-      <section className="pt-32 pb-12 md:pt-40 md:pb-16 px-6 md:px-12">
+      {/* Header */}
+      <section className="pt-32 pb-8 md:pt-40 md:pb-12 px-6 md:px-12">
         <div className="page-section-wide">
           <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
             {t("journal.page.title")}
           </h1>
-          <p className="editorial-body text-lg text-muted-foreground">
+          <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
             {t("journal.page.subtitle")}
           </p>
         </div>
       </section>
 
-      {/* Search & Tabs */}
-      <section className="px-6 md:px-12 pb-8">
+      {/* Controls */}
+      <section className="px-6 md:px-12 pb-6">
         <div className="page-section-wide">
-          {/* Search bar */}
-          <div className="relative mb-6">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={lang === "it" ? "Cerca per titolo, hashtag, autore o contenuto..." : "Search by title, hashtag, author or content..."}
-              className="w-full bg-transparent border border-border pl-12 pr-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
+          <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between mb-6">
+            {/* Search */}
+            <div className="relative flex-1 max-w-lg">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={lang === "it" ? "Cerca articoli..." : "Search articles..."}
+                className="w-full bg-transparent border border-border pl-10 pr-4 py-2.5 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              />
+            </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-6 mb-6">
-            <button
-              onClick={() => setActiveTab("recent")}
-              className={`inline-flex items-center gap-2 text-sm font-sans tracking-wide pb-2 border-b-2 transition-colors ${
-                activeTab === "recent"
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Clock size={14} />
-              {lang === "it" ? "Recenti" : "Recent"}
-            </button>
-            <button
-              onClick={() => setActiveTab("popular")}
-              className={`inline-flex items-center gap-2 text-sm font-sans tracking-wide pb-2 border-b-2 transition-colors ${
-                activeTab === "popular"
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <TrendingUp size={14} />
-              {lang === "it" ? "Popolari" : "Popular"}
-            </button>
+            {/* Tabs */}
+            <div className="flex items-center gap-1 bg-muted p-1">
+              <button
+                onClick={() => setActiveTab("recent")}
+                className={`inline-flex items-center gap-1.5 text-xs font-sans tracking-wide px-4 py-2 transition-colors ${
+                  activeTab === "recent"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Clock size={12} />
+                {lang === "it" ? "Recenti" : "Recent"}
+              </button>
+              <button
+                onClick={() => setActiveTab("popular")}
+                className={`inline-flex items-center gap-1.5 text-xs font-sans tracking-wide px-4 py-2 transition-colors ${
+                  activeTab === "popular"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <TrendingUp size={12} />
+                {lang === "it" ? "Popolari" : "Popular"}
+              </button>
+            </div>
           </div>
 
           {/* Tags */}
@@ -186,7 +184,7 @@ const Journal = () => {
                 <button
                   key={tag.id}
                   onClick={() => toggleTag(tag.id)}
-                  className={`text-xs font-sans px-3 py-1.5 border transition-colors ${
+                  className={`text-xs font-sans px-3 py-1.5 border transition-all ${
                     selectedTags.includes(tag.id)
                       ? "bg-accent text-accent-foreground border-accent"
                       : "border-border text-muted-foreground hover:text-foreground hover:border-foreground"
@@ -201,16 +199,16 @@ const Journal = () => {
       </section>
 
       {/* Stories */}
-      {stories.length > 0 && (
-        <section className="px-6 md:px-12 pb-12">
+      {stories.length > 0 && !searchQuery && selectedTags.length === 0 && (
+        <section className="px-6 md:px-12 pb-10">
           <div className="page-section-wide">
-            <div className="flex items-center gap-2 mb-6">
-              <BookOpen size={16} className="text-accent" />
-              <h2 className="text-sm font-sans tracking-[0.2em] uppercase text-accent">
+            <div className="flex items-center gap-2 mb-5">
+              <BookOpen size={14} className="text-accent" />
+              <h2 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
                 {lang === "it" ? "Storie" : "Stories"}
               </h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {stories.map((story) => {
                 const title = lang === "en" ? story.title_en : (story.title_it || story.title_en);
                 const desc = lang === "en" ? story.description_en : (story.description_it || story.description_en);
@@ -218,19 +216,21 @@ const Journal = () => {
                   <Link
                     key={story.id}
                     to={`/logbook/story/${story.slug}`}
-                    className="group border border-border p-6 hover:border-accent transition-colors"
+                    className="group border border-border hover:border-accent transition-all overflow-hidden"
                   >
                     {story.cover_image && (
-                      <div className="aspect-[16/9] overflow-hidden mb-4 -mx-6 -mt-6">
+                      <div className="aspect-[21/9] overflow-hidden">
                         <img src={story.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
                       </div>
                     )}
-                    <h3 className="editorial-heading text-lg mb-2 group-hover:text-accent transition-colors">
-                      {title}
-                    </h3>
-                    {desc && (
-                      <p className="text-sm text-muted-foreground font-sans line-clamp-2">{desc}</p>
-                    )}
+                    <div className="p-5">
+                      <h3 className="editorial-heading text-base mb-1.5 group-hover:text-accent transition-colors">
+                        {title}
+                      </h3>
+                      {desc && (
+                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{desc}</p>
+                      )}
+                    </div>
                   </Link>
                 );
               })}
@@ -243,72 +243,116 @@ const Journal = () => {
       <section className="px-6 md:px-12 pb-20 md:pb-32">
         <div className="page-section-wide">
           {isLoading ? (
-            <p className="text-muted-foreground text-center py-20">Loading...</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-[16/10] bg-muted mb-4" />
+                  <div className="h-4 bg-muted w-3/4 mb-2" />
+                  <div className="h-3 bg-muted w-1/2" />
+                </div>
+              ))}
+            </div>
           ) : filtered.length === 0 ? (
             <p className="text-muted-foreground text-center py-20">
               {lang === "it" ? "Nessun risultato." : "No entries found."}
             </p>
           ) : (
-            <div className="space-y-16">
-              {filtered.map((article, i) => {
-                const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-                const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
-                return (
-                  <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
-                    <article>
-                      <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center`}>
-                        <div className={`aspect-[16/10] overflow-hidden bg-muted ${i % 2 === 1 ? "lg:order-2" : ""}`}>
-                          {article.cover_image ? (
-                            <img
-                              src={article.cover_image}
-                              alt={title}
-                              className="img-cover group-hover:scale-105 transition-transform duration-700"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted-foreground/30 font-serif text-2xl">
-                              BITE
-                            </div>
-                          )}
-                        </div>
-                        <div className={i % 2 === 1 ? "lg:order-1" : ""}>
-                          <div className="flex items-center gap-3 mb-4 flex-wrap">
-                            {article.tags?.map((tag: any) => (
-                              <span key={tag.id} className="text-xs font-sans text-accent">
-                                #{tag.name}
+            <div className="space-y-12">
+              {/* Featured article */}
+              {featured && (
+                <Link to={`/logbook/${featured.slug}`} className="block group">
+                  <article className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-center">
+                    <div className="aspect-[16/10] overflow-hidden bg-muted relative">
+                      {featured.cover_image ? (
+                        <img src={featured.cover_image} alt="" className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-4xl">BITE</div>
+                      )}
+                      {isRead(featured.id) && (
+                        <span className="absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] font-sans bg-background/90 backdrop-blur-sm text-muted-foreground px-2 py-1">
+                          <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3 mb-3 flex-wrap">
+                        {featured.tags?.map((tag: any) => (
+                          <span key={tag.id} className="text-xs font-sans text-accent">#{tag.name}</span>
+                        ))}
+                        {featured.published_at && (
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(featured.published_at), "MMM d, yyyy")}
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="editorial-heading text-2xl md:text-3xl lg:text-4xl mb-3 group-hover:text-accent transition-colors">
+                        {lang === "en" ? featured.title_en : (featured.title_it || featured.title_en)}
+                      </h2>
+                      <p className="editorial-body text-muted-foreground leading-relaxed line-clamp-3 mb-4">
+                        {lang === "en" ? featured.excerpt_en : (featured.excerpt_it || featured.excerpt_en)}
+                      </p>
+                      <div className="flex items-center gap-4">
+                        {featured.authors?.length > 0 && featured.authors.map((a: any) => (
+                          <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+                        ))}
+                        {featured.likeCount > 0 && (
+                          <span className="text-xs text-muted-foreground">♥ {featured.likeCount}</span>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                </Link>
+              )}
+
+              {/* Grid of remaining articles */}
+              {rest.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+                  {rest.map((article) => {
+                    const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
+                    const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+                    return (
+                      <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
+                        <article>
+                          <div className="aspect-[16/10] overflow-hidden bg-muted mb-4 relative">
+                            {article.cover_image ? (
+                              <img src={article.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>
+                            )}
+                            {isRead(article.id) && (
+                              <span className="absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] font-sans bg-background/90 backdrop-blur-sm text-muted-foreground px-2 py-0.5">
+                                <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
                               </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            {article.tags?.slice(0, 2).map((tag: any) => (
+                              <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
                             ))}
                             {article.published_at && (
-                              <span className="text-xs text-muted-foreground">
-                                {format(new Date(article.published_at), "MMM d, yyyy")}
+                              <span className="text-[11px] text-muted-foreground">
+                                {format(new Date(article.published_at), "MMM d")}
                               </span>
                             )}
                           </div>
-                          <h2 className="editorial-heading text-2xl md:text-3xl lg:text-4xl mb-4 group-hover:text-accent transition-colors">
+                          <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
                             {title}
-                          </h2>
-                          <p className="editorial-body text-muted-foreground leading-relaxed">
-                            {excerpt}
-                          </p>
-                          <div className="flex items-center gap-4 mt-4">
-                            {article.authors?.length > 0 && (
-                              <div className="flex items-center gap-3">
-                                {article.authors.map((a: any) => (
-                                  <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
-                                ))}
-                              </div>
-                            )}
+                          </h3>
+                          <p className="text-sm text-muted-foreground font-sans line-clamp-2 mb-3">{excerpt}</p>
+                          <div className="flex items-center gap-3">
+                            {article.authors?.slice(0, 2).map((a: any) => (
+                              <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+                            ))}
                             {article.likeCount > 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                ♥ {article.likeCount}
-                              </span>
+                              <span className="text-xs text-muted-foreground ml-auto">♥ {article.likeCount}</span>
                             )}
                           </div>
-                        </div>
-                      </div>
-                    </article>
-                  </Link>
-                );
-              })}
+                        </article>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
