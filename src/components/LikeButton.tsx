@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -11,6 +12,7 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
   const [liked, setLiked] = useState(false);
   const [count, setCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchLikes();
@@ -40,7 +42,10 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
   };
 
   const toggleLike = async () => {
-    if (!userId) return;
+    if (!userId) {
+      navigate("/login", { state: { from: window.location.pathname } });
+      return;
+    }
     if (liked) {
       await supabase.from("article_likes").delete().eq("article_id", articleId).eq("profile_id", userId);
       setCount((c) => Math.max(0, c - 1));
@@ -56,9 +61,8 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
       onClick={toggleLike}
       className={`inline-flex items-center gap-1.5 text-sm font-sans transition-colors ${
         liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
-      } ${!userId ? "opacity-50 cursor-default" : ""}`}
-      disabled={!userId}
-      title={userId ? (liked ? "Remove like" : "Like") : "Sign in to like"}
+      }`}
+      title={userId ? (liked ? "Rimuovi mi piace" : "Mi piace") : "Accedi per mettere mi piace"}
     >
       <Heart size={size} fill={liked ? "currentColor" : "none"} />
       {count > 0 && <span>{count}</span>}
