@@ -13,6 +13,10 @@ import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
+import ProfileCard from "@/components/ProfileCard";
+import LikeButton from "@/components/LikeButton";
+import ShareButton from "@/components/ShareButton";
+import CommentSection from "@/components/CommentSection";
 
 const extensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
@@ -40,6 +44,24 @@ const ArticlePage = () => {
         .single();
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: authors = [] } = useQuery({
+    queryKey: ["article-authors", article?.id],
+    enabled: !!article?.id,
+    queryFn: async () => {
+      const { data: authorLinks } = await supabase
+        .from("article_authors")
+        .select("profile_id")
+        .eq("article_id", article!.id);
+      if (!authorLinks?.length) return [];
+      const ids = authorLinks.map((a) => a.profile_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, avatar_url")
+        .in("id", ids);
+      return profiles || [];
     },
   });
 
@@ -72,7 +94,6 @@ const ArticlePage = () => {
 
   return (
     <div>
-      {/* Hero */}
       {article.cover_image && (
         <section className="relative h-[50vh] md:h-[60vh] overflow-hidden">
           <img src={article.cover_image} alt={title} className="img-cover" />
@@ -103,9 +124,19 @@ const ArticlePage = () => {
             )}
           </div>
 
-          <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-8">
+          <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-6">
             {title}
           </h1>
+
+          {/* Authors */}
+          {authors.length > 0 && (
+            <div className="flex items-center gap-4 mb-8">
+              <span className="text-xs text-muted-foreground">by</span>
+              {authors.map((a: any) => (
+                <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+              ))}
+            </div>
+          )}
 
           {htmlContent && (
             <div
@@ -113,6 +144,15 @@ const ArticlePage = () => {
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
           )}
+
+          {/* Like & Share */}
+          <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">
+            <LikeButton articleId={article.id} />
+            <ShareButton title={title} />
+          </div>
+
+          {/* Comments */}
+          <CommentSection articleId={article.id} />
         </div>
       </article>
     </div>
