@@ -1,5 +1,5 @@
 import { useI18n } from "@/lib/i18n";
-import { Heart } from "lucide-react";
+import { Heart, Music } from "lucide-react";
 import dinghyCrew from "@/assets/dinghy-crew.jpg";
 import boatSunset from "@/assets/boat-sunset.jpeg";
 import sailingCockpit from "@/assets/sailing-cockpit.jpeg";
