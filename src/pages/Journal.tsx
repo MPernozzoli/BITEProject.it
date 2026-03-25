@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
+import ProfileCard from "@/components/ProfileCard";
 
 const categories = ["All", "Refit", "Life Aboard", "Navigation", "Remote Work", "Places", "Notes from the Boat", "Lessons Learned"];
 
@@ -20,7 +21,31 @@ const Journal = () => {
         .eq("status", "published")
         .order("published_at", { ascending: false });
       if (error) throw error;
-      return data;
+
+      // Fetch authors for all articles
+      const ids = (data || []).map((a) => a.id);
+      const { data: authorLinks } = await supabase
+        .from("article_authors")
+        .select("article_id, profile_id")
+        .in("article_id", ids);
+
+      const profileIds = [...new Set((authorLinks || []).map((a) => a.profile_id))];
+      const { data: profiles } = profileIds.length
+        ? await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
+        : { data: [] };
+
+      const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+      const articleAuthorsMap: Record<string, any[]> = {};
+      (authorLinks || []).forEach((link) => {
+        if (!articleAuthorsMap[link.article_id]) articleAuthorsMap[link.article_id] = [];
+        const profile = profileMap[link.profile_id];
+        if (profile) articleAuthorsMap[link.article_id].push(profile);
+      });
+
+      return (data || []).map((article) => ({
+        ...article,
+        authors: articleAuthorsMap[article.id] || [],
+      }));
     },
   });
 
@@ -109,6 +134,13 @@ const Journal = () => {
                           <p className="editorial-body text-muted-foreground leading-relaxed">
                             {excerpt}
                           </p>
+                          {article.authors?.length > 0 && (
+                            <div className="flex items-center gap-3 mt-4">
+                              {article.authors.map((a: any) => (
+                                <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </article>

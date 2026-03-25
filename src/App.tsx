@@ -16,6 +16,7 @@ import ArticlePage from "./pages/ArticlePage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import ArticleEditor from "./pages/ArticleEditor";
+import AdminProfile from "./pages/AdminProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/article/:id" element={<ArticleEditor />} />
+              <Route path="/admin/profile" element={<AdminProfile />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>
