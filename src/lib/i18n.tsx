@@ -9,7 +9,7 @@ const translations: Translations = {
   "nav.home": { en: "Home", it: "Home" },
   "nav.about": { en: "About", it: "Chi siamo" },
   "nav.manifesto": { en: "Manifesto", it: "Manifesto" },
-  "nav.journal": { en: "Journal", it: "Giornale di bordo" },
+  "nav.journal": { en: "Logbook", it: "Giornale di bordo" },
   "nav.route": { en: "Route", it: "Rotta" },
   "nav.collaborations": { en: "Collaborations", it: "Collaborazioni" },
   "nav.contact": { en: "Contact", it: "Contatti" },
@@ -52,7 +52,7 @@ const translations: Translations = {
   "topics.storytelling.text": { en: "Long-form writing, photography, and video that captures the texture of days spent between salt, wind, and work.", it: "Scrittura lunga, fotografia e video che catturano la consistenza dei giorni trascorsi tra sale, vento e lavoro." },
 
   // Journal
-  "journal.label": { en: "From the Journal", it: "Dal giornale di bordo" },
+  "journal.label": { en: "From the Logbook", it: "Dal giornale di bordo" },
   "journal.readmore": { en: "Read More", it: "Leggi tutto" },
   "journal.viewall": { en: "View All Entries", it: "Vedi tutte le voci" },
 
@@ -94,7 +94,7 @@ const translations: Translations = {
   "manifesto.intro": { en: "These are the principles that guide BITE — not as marketing copy, but as decisions we make every day aboard.", it: "Questi sono i principi che guidano BITE — non come copy pubblicitario, ma come decisioni che prendiamo ogni giorno a bordo." },
 
   // Journal Page
-  "journal.page.title": { en: "Journal", it: "Giornale di bordo" },
+  "journal.page.title": { en: "Logbook", it: "Giornale di bordo" },
   "journal.page.subtitle": { en: "Stories, technical notes, and reflections from aboard.", it: "Storie, note tecniche e riflessioni da bordo." },
 
   // Route Page
