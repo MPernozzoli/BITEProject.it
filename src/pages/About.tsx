@@ -66,7 +66,7 @@ const TheCrew = () => {
           </p>
           <div className="flex items-center justify-center gap-4">
             <a
-              href="https://open.spotify.com/search/tophouse%20better%20is%20the%20end"
+              href="https://open.spotify.com/intl-it/track/0CdiZMYPqjof8EhRWYg9hr"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 border border-primary-foreground/20 text-primary-foreground/70 px-5 py-2.5 text-xs font-sans tracking-wide hover:text-primary-foreground hover:border-primary-foreground/40 transition-colors"
