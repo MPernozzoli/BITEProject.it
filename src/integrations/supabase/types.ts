@@ -138,6 +138,39 @@ export type Database = {
           },
         ]
       }
+      article_tags: {
+        Row: {
+          article_id: string
+          id: string
+          tag_id: string
+        }
+        Insert: {
+          article_id: string
+          id?: string
+          tag_id: string
+        }
+        Update: {
+          article_id?: string
+          id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_tags_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comment_likes: {
         Row: {
           comment_id: string
@@ -318,6 +351,7 @@ export type Database = {
           scheduled_at: string | null
           slug: string
           status: Database["public"]["Enums"]["article_status"]
+          story_id: string | null
           title_en: string
           title_it: string
           updated_at: string
@@ -335,6 +369,7 @@ export type Database = {
           scheduled_at?: string | null
           slug: string
           status?: Database["public"]["Enums"]["article_status"]
+          story_id?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string
@@ -352,11 +387,20 @@ export type Database = {
           scheduled_at?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["article_status"]
+          story_id?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "logbook_articles_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       newsletter_subscribers: {
         Row: {
@@ -482,6 +526,78 @@ export type Database = {
         }
         Relationships: []
       }
+      stories: {
+        Row: {
+          cover_image: string | null
+          created_at: string
+          description_en: string | null
+          description_it: string | null
+          id: string
+          slug: string
+          title_en: string
+          title_it: string
+          updated_at: string
+        }
+        Insert: {
+          cover_image?: string | null
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          id?: string
+          slug: string
+          title_en?: string
+          title_it?: string
+          updated_at?: string
+        }
+        Update: {
+          cover_image?: string | null
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          id?: string
+          slug?: string
+          title_en?: string
+          title_it?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      story_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          story_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          story_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          story_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "story_subscriptions_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppressed_emails: {
         Row: {
           created_at: string
@@ -503,6 +619,24 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason?: string
+        }
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
