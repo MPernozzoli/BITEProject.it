@@ -10,6 +10,7 @@ import dogSailing from "@/assets/dog-sailing.jpeg";
 import godotSnow from "@/assets/godot-snow.jpeg";
 import snowSami from "@/assets/snow-sami.jpeg";
 import duodji from "@/assets/duodji.jpeg";
+import freya from "@/assets/freya.jpeg";
 
 const TheCrew = () => {
   const { t } = useI18n();
@@ -101,7 +102,7 @@ const TheCrew = () => {
             </div>
             <div className="space-y-12">
               <div className="aspect-[4/3] overflow-hidden">
-                <img src={dogSailing} alt="Dogs on board" className="img-cover hover:scale-105 transition-transform duration-700" />
+                <img src={freya} alt="Freya" className="img-cover hover:scale-105 transition-transform duration-700" />
               </div>
               <div>
                 <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.freya.title")}</h3>
