@@ -1,8 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Save, Camera, Globe } from "lucide-react";
+import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon } from "lucide-react";
 import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
+
+const TikTokIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
+
+const XIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
 
 const AdminProfile = () => {
   const navigate = useNavigate();
@@ -15,6 +27,15 @@ const AdminProfile = () => {
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
+  const [socials, setSocials] = useState({
+    social_instagram: "",
+    social_youtube: "",
+    social_tiktok: "",
+    social_facebook: "",
+    social_x: "",
+    social_linkedin: "",
+    social_website: "",
+  });
 
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as any);
 
@@ -33,6 +54,15 @@ const AdminProfile = () => {
       setAvatarUrl(data.avatar_url || "");
       if ((data as any).preferred_language) setPreferredLanguage((data as any).preferred_language);
       if ((data as any).secondary_language) setSecondaryLanguage((data as any).secondary_language);
+      setSocials({
+        social_instagram: (data as any).social_instagram || "",
+        social_youtube: (data as any).social_youtube || "",
+        social_tiktok: (data as any).social_tiktok || "",
+        social_facebook: (data as any).social_facebook || "",
+        social_x: (data as any).social_x || "",
+        social_linkedin: (data as any).social_linkedin || "",
+        social_website: (data as any).social_website || "",
+      });
     }
     const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", session.user.id).maybeSingle();
     if (sub) setNewsletterSubscribed(sub.subscribed);
@@ -66,6 +96,7 @@ const AdminProfile = () => {
       avatar_url: avatarUrl,
       preferred_language: preferredLanguage,
       secondary_language: isSiteNative ? null : secondaryLanguage,
+      ...socials,
     } as any).eq("id", session.user.id);
 
     const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", session.user.id).maybeSingle();
@@ -162,6 +193,35 @@ const AdminProfile = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Socials */}
+          <div className="border-t border-border pt-6">
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-4 flex items-center gap-2">
+              <LinkIcon size={14} /> Social & Link
+            </label>
+            <div className="space-y-3">
+              {[
+                { key: "social_instagram", icon: <Instagram size={16} />, placeholder: "username" },
+                { key: "social_youtube", icon: <Youtube size={16} />, placeholder: "@canale" },
+                { key: "social_tiktok", icon: <TikTokIcon size={16} />, placeholder: "@username" },
+                { key: "social_facebook", icon: <Facebook size={16} />, placeholder: "pagina o profilo" },
+                { key: "social_x", icon: <XIcon size={16} />, placeholder: "@username" },
+                { key: "social_linkedin", icon: <Linkedin size={16} />, placeholder: "username" },
+                { key: "social_website", icon: <Globe size={16} />, placeholder: "https://tuosito.com" },
+              ].map((s) => (
+                <div key={s.key} className="flex items-center gap-3">
+                  <span className="text-muted-foreground w-5 flex-shrink-0 flex items-center justify-center">{s.icon}</span>
+                  <input
+                    type="text"
+                    value={socials[s.key as keyof typeof socials]}
+                    onChange={(e) => setSocials((prev) => ({ ...prev, [s.key]: e.target.value }))}
+                    placeholder={s.placeholder}
+                    className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Newsletter */}
