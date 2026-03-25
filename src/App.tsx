@@ -20,6 +20,7 @@ import ArticleEditor from "./pages/ArticleEditor";
 import AdminProfile from "./pages/AdminProfile";
 import UserLogin from "./pages/UserLogin";
 import PublicProfile from "./pages/PublicProfile";
+import StoryPage from "./pages/StoryPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/collaborations" element={<Collaborations />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/logbook/:slug" element={<ArticlePage />} />
+              <Route path="/logbook/story/:slug" element={<StoryPage />} />
               <Route path="/profile/:id" element={<PublicProfile />} />
               <Route path="/login" element={<UserLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
