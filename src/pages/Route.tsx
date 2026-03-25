@@ -47,7 +47,7 @@ const Route = () => {
         .from("route_legs" as any)
         .select("*")
         .order("sort_order", { ascending: true });
-      return (data || []) as RouteLeg[];
+      return (data || []) as unknown as RouteLeg[];
     },
   });
 

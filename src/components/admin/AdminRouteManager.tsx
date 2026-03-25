@@ -18,10 +18,10 @@ interface RouteLeg {
   completed_at: string | null;
 }
 
-const emptyForm = {
+const emptyForm: Omit<RouteLeg, 'id'> & { started_at: string; completed_at: string } = {
   name: "", description: "",
   lat_start: 0, lng_start: 0, lat_end: 0, lng_end: 0,
-  nautical_miles: 0, status: "future" as const, sort_order: 0,
+  nautical_miles: 0, status: "future", sort_order: 0,
   started_at: "", completed_at: "",
 };
 
