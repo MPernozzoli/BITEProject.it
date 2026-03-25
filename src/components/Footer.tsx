@@ -25,8 +25,10 @@ const Footer = () => {
           </div>
 
           <div className="flex flex-col gap-3">
-            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">Instagram</a>
-            <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">YouTube</a>
+            <a href="https://www.instagram.com/better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">Instagram</a>
+            <a href="https://www.youtube.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">YouTube</a>
+            <a href="https://www.tiktok.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">TikTok</a>
+            <a href="https://dashboard.seapeopleapp.com/group/41a0ad62-7f71-4107-9269-878fa210f24c?utm_source=SP&utm_medium=usershare&utm_campaign=mpernozzoli" target="_blank" rel="noopener noreferrer" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">SeaPeople</a>
             <a href="mailto:hello@biteproject.com" className="text-sm text-primary-foreground/70 hover:text-primary-foreground transition-colors">hello@biteproject.com</a>
           </div>
         </div>
