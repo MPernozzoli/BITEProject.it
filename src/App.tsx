@@ -42,8 +42,8 @@ const App = () => (
               <Route path="/route" element={<RoutePage />} />
               <Route path="/collaborations" element={<Collaborations />} />
               <Route path="/contact" element={<Contact />} />
-              <Route path="/logbook/:slug" element={<ArticlePage />} />
               <Route path="/logbook/story/:slug" element={<StoryPage />} />
+              <Route path="/logbook/:slug" element={<ArticlePage />} />
               <Route path="/profile/:id" element={<PublicProfile />} />
               <Route path="/login" element={<UserLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
