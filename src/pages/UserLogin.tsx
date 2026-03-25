@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+const OTP_LENGTH = 8;
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 const UserLogin = () => {
@@ -76,7 +77,7 @@ const UserLogin = () => {
   };
 
   const handleVerify = async () => {
-    if (otp.length < 6 || !submittedEmail) return;
+    if (otp.length < OTP_LENGTH || !submittedEmail) return;
     setLoading(true);
     setError("");
 
@@ -171,7 +172,7 @@ const UserLogin = () => {
             </div>
 
             <div className="flex justify-center">
-              <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+              <InputOTP maxLength={OTP_LENGTH} value={otp} onChange={setOtp}>
                 <InputOTPGroup>
                   <InputOTPSlot index={0} />
                   <InputOTPSlot index={1} />
@@ -179,6 +180,8 @@ const UserLogin = () => {
                   <InputOTPSlot index={3} />
                   <InputOTPSlot index={4} />
                   <InputOTPSlot index={5} />
+                  <InputOTPSlot index={6} />
+                  <InputOTPSlot index={7} />
                 </InputOTPGroup>
               </InputOTP>
             </div>
@@ -194,7 +197,7 @@ const UserLogin = () => {
 
             <button
               onClick={handleVerify}
-              disabled={loading || otp.length < 6}
+              disabled={loading || otp.length < OTP_LENGTH}
               className="w-full bg-primary text-primary-foreground px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors disabled:opacity-50"
             >
               {loading ? "..." : "Verifica"}
