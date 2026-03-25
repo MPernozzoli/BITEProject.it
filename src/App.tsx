@@ -12,6 +12,10 @@ import Journal from "./pages/Journal";
 import RoutePage from "./pages/Route";
 import Collaborations from "./pages/Collaborations";
 import Contact from "./pages/Contact";
+import ArticlePage from "./pages/ArticlePage";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import ArticleEditor from "./pages/ArticleEditor";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,10 +32,14 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/about" element={<About />} />
               <Route path="/manifesto" element={<Manifesto />} />
-              <Route path="/journal" element={<Journal />} />
+              <Route path="/logbook" element={<Journal />} />
               <Route path="/route" element={<RoutePage />} />
               <Route path="/collaborations" element={<Collaborations />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/logbook/:slug" element={<ArticlePage />} />
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/article/:id" element={<ArticleEditor />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>
