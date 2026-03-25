@@ -83,7 +83,7 @@ const UserLogin = () => {
     const { error } = await supabase.auth.verifyOtp({
       email: submittedEmail,
       token: otp,
-      type: "magiclink",
+      type: "recovery",
     });
 
     if (error) {
