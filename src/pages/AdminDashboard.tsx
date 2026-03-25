@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User } from "lucide-react";
 import { format } from "date-fns";
 
 interface Article {
@@ -81,6 +81,9 @@ const AdminDashboard = () => {
               className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors"
             >
               <Plus size={16} /> New Article
+            </Link>
+            <Link to="/admin/profile" className="text-muted-foreground hover:text-foreground transition-colors" title="Profile">
+              <User size={20} />
             </Link>
             <button onClick={handleLogout} className="text-muted-foreground hover:text-foreground transition-colors" title="Logout">
               <LogOut size={20} />
