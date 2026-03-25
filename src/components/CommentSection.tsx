@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Heart, Reply, Send } from "lucide-react";
 import ProfileCard from "./ProfileCard";
@@ -127,15 +127,18 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
     <div key={comment.id} className={`${isReply ? "ml-8 pl-4 border-l border-border" : ""}`}>
       <div className="py-4">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 mt-0.5">
+          <Link to={`/profile/${comment.profile_id}`} className="flex-shrink-0 mt-0.5 hover:opacity-80 transition-opacity">
             <ProfileCard
               name={comment.profile?.name || ""}
               avatarUrl={comment.profile?.avatar_url || undefined}
               size="sm"
             />
-          </div>
+          </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
+              <Link to={`/profile/${comment.profile_id}`} className="text-xs font-sans font-medium text-foreground hover:text-accent transition-colors">
+                {comment.profile?.name || "Anonymous"}
+              </Link>
               <span className="text-xs text-muted-foreground">
                 {format(new Date(comment.created_at), "d MMM yyyy · HH:mm")}
               </span>
