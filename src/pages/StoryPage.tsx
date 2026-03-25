@@ -42,10 +42,10 @@ const StoryPage = () => {
     queryKey: ["story-chapters", story?.id],
     enabled: !!story?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from("logbook_articles")
-        .select("*")
-        .eq("story_id" as any, story!.id)
+        .select("*") as any)
+        .eq("story_id", story!.id)
         .eq("status", "published")
         .order("published_at", { ascending: true });
       if (error) throw error;
