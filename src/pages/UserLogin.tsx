@@ -13,6 +13,7 @@ const UserLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = (location.state as any)?.from || "/";
@@ -29,23 +30,31 @@ const UserLogin = () => {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  const sendOtp = useCallback(async () => {
-    const normalizedEmail = normalizeEmail(emailInput);
-    if (!normalizedEmail) return false;
+  // If "remember me" is unchecked, sign out on tab/window close
+  useEffect(() => {
+    const flag = localStorage.getItem("bite_ephemeral_session");
+    if (!flag) return;
 
+    const handleUnload = () => {
+      // navigator.sendBeacon can't call supabase, so we clear storage directly
+      localStorage.removeItem("sb-vdflrzcmlipvtardannd-auth-token");
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, []);
+
+  const sendOtp = useCallback(async () => {
+    const email = normalizeEmail(emailInput);
+    if (!email) return false;
     setLoading(true);
     setError("");
-
-    const { error } = await supabase.auth.signInWithOtp({ email: normalizedEmail });
-
+    const { error } = await supabase.auth.signInWithOtp({ email });
     setLoading(false);
-
     if (error) {
       setError(error.message);
       return false;
     }
-
-    setSubmittedEmail(normalizedEmail);
+    setSubmittedEmail(email);
     setResendCooldown(30);
     return true;
   }, [emailInput]);
@@ -68,11 +77,9 @@ const UserLogin = () => {
 
   const handleVerify = async () => {
     if (otp.length < 6 || !submittedEmail) return;
-
     setLoading(true);
     setError("");
 
-    // Single verify request only (avoid consuming/invalidating OTP with multiple attempts)
     const { error } = await supabase.auth.verifyOtp({
       email: submittedEmail,
       token: otp,
@@ -85,21 +92,25 @@ const UserLogin = () => {
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
+    // Handle "remember me" preference
+    if (!rememberMe) {
+      localStorage.setItem("bite_ephemeral_session", "true");
+    } else {
+      localStorage.removeItem("bite_ephemeral_session");
+    }
 
+    const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       const { data: isAdmin } = await supabase.rpc("has_role", {
         _user_id: session.user.id,
         _role: "admin",
       });
-
       if (redirectTo === "/" && isAdmin) {
         navigate("/admin", { replace: true });
       } else {
         navigate(redirectTo, { replace: true });
       }
     }
-
     setLoading(false);
   };
 
@@ -127,6 +138,16 @@ const UserLogin = () => {
                 className="w-full bg-transparent border border-border px-4 py-3 text-sm font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent transition-colors"
               />
             </div>
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-border accent-primary"
+              />
+              <span className="text-xs font-sans text-muted-foreground">Ricordami su questo dispositivo</span>
+            </label>
 
             {error && <p className="text-sm text-destructive text-center">{error}</p>}
 
@@ -181,11 +202,7 @@ const UserLogin = () => {
 
             <div className="flex items-center justify-between">
               <button
-                onClick={() => {
-                  setStep("email");
-                  setOtp("");
-                  setError("");
-                }}
+                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
                 className="text-xs font-sans text-muted-foreground hover:text-foreground transition-colors py-2"
               >
                 ← Cambia email
