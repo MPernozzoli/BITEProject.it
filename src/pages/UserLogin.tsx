@@ -3,9 +3,12 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
 const UserLogin = () => {
   const [step, setStep] = useState<"email" | "verify">("email");
-  const [email, setEmail] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [submittedEmail, setSubmittedEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +23,6 @@ const UserLogin = () => {
     });
   }, [navigate, redirectTo]);
 
-  // Cooldown timer
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
@@ -28,23 +30,33 @@ const UserLogin = () => {
   }, [resendCooldown]);
 
   const sendOtp = useCallback(async () => {
+    const normalizedEmail = normalizeEmail(emailInput);
+    if (!normalizedEmail) return false;
+
     setLoading(true);
     setError("");
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim() });
+
+    const { error } = await supabase.auth.signInWithOtp({ email: normalizedEmail });
+
     setLoading(false);
+
     if (error) {
       setError(error.message);
       return false;
     }
+
+    setSubmittedEmail(normalizedEmail);
     setResendCooldown(30);
     return true;
-  }, [email]);
+  }, [emailInput]);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
     const ok = await sendOtp();
-    if (ok) setStep("verify");
+    if (ok) {
+      setOtp("");
+      setStep("verify");
+    }
   };
 
   const handleResend = async () => {
@@ -55,44 +67,40 @@ const UserLogin = () => {
   };
 
   const handleVerify = async () => {
-    if (otp.length < 6) return;
+    if (otp.length < 6 || !submittedEmail) return;
+
     setLoading(true);
     setError("");
 
-    // Try multiple OTP types since Supabase may categorize the token differently
-    let verifyError: any = null;
-    for (const otpType of ["email", "magiclink", "recovery"] as const) {
-      const { error, data } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: otpType,
-      });
-      if (!error && data?.session) {
-        verifyError = null;
-        break;
-      }
-      verifyError = error;
-    }
+    // Single verify request only (avoid consuming/invalidating OTP with multiple attempts)
+    const { error } = await supabase.auth.verifyOtp({
+      email: submittedEmail,
+      token: otp,
+      type: "magiclink",
+    });
 
-    if (verifyError) {
-      setError(verifyError.message);
+    if (error) {
+      setError(error.message);
       setLoading(false);
       return;
     }
 
-    // Check if admin and redirect accordingly
     const { data: { session } } = await supabase.auth.getSession();
+
     if (session) {
       const { data: isAdmin } = await supabase.rpc("has_role", {
         _user_id: session.user.id,
         _role: "admin",
       });
+
       if (redirectTo === "/" && isAdmin) {
         navigate("/admin", { replace: true });
       } else {
         navigate(redirectTo, { replace: true });
       }
     }
+
+    setLoading(false);
   };
 
   return (
@@ -113,8 +121,8 @@ const UserLogin = () => {
                 id="email"
                 type="email"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
                 placeholder="la-tua@email.com"
                 className="w-full bg-transparent border border-border px-4 py-3 text-sm font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent transition-colors"
               />
@@ -124,7 +132,7 @@ const UserLogin = () => {
 
             <button
               type="submit"
-              disabled={loading || !email.trim()}
+              disabled={loading || !normalizeEmail(emailInput)}
               className="w-full bg-primary text-primary-foreground px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors disabled:opacity-50"
             >
               {loading ? "Invio in corso..." : "Invia codice"}
@@ -138,7 +146,7 @@ const UserLogin = () => {
               <p className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">
                 Codice inviato a
               </p>
-              <p className="text-sm font-sans font-medium text-foreground">{email}</p>
+              <p className="text-sm font-sans font-medium text-foreground">{submittedEmail}</p>
             </div>
 
             <div className="flex justify-center">
@@ -158,7 +166,7 @@ const UserLogin = () => {
               <div className="text-center space-y-2">
                 <p className="text-sm text-destructive">{error}</p>
                 <p className="text-xs text-muted-foreground">
-                  Prova a rinviare il codice e inseriscilo subito dopo averlo ricevuto.
+                  Se fallisce, rinvia il codice e usa solo l'ultima email ricevuta.
                 </p>
               </div>
             )}
@@ -173,7 +181,11 @@ const UserLogin = () => {
 
             <div className="flex items-center justify-between">
               <button
-                onClick={() => { setStep("email"); setOtp(""); setError(""); }}
+                onClick={() => {
+                  setStep("email");
+                  setOtp("");
+                  setError("");
+                }}
                 className="text-xs font-sans text-muted-foreground hover:text-foreground transition-colors py-2"
               >
                 ← Cambia email
