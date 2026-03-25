@@ -78,7 +78,7 @@ const Navbar = () => {
 
   const links = [
     { to: "/", label: t("nav.home") },
-    { to: "/about", label: t("nav.about") },
+    { to: "/crew", label: t("nav.about") },
     { to: "/manifesto", label: t("nav.manifesto") },
     { to: "/logbook", label: t("nav.journal") },
     { to: "/route", label: t("nav.route") },
