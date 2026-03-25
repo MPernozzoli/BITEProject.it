@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon } from "lucide-react";
+import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon, BookOpen, X } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
@@ -36,6 +37,8 @@ const AdminProfile = () => {
     social_linkedin: "",
     social_website: "",
   });
+  const [storySubscriptions, setStorySubscriptions] = useState<Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>>([]);
+  const { lang } = useI18n();
 
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as any);
 
@@ -52,20 +55,31 @@ const AdminProfile = () => {
       setBio(data.bio || "");
       setEmail(data.email || session.user.email || "");
       setAvatarUrl(data.avatar_url || "");
-      if ((data as any).preferred_language) setPreferredLanguage((data as any).preferred_language);
-      if ((data as any).secondary_language) setSecondaryLanguage((data as any).secondary_language);
+      if (data.preferred_language) setPreferredLanguage(data.preferred_language as ExtendedLanguage);
+      if (data.secondary_language) setSecondaryLanguage(data.secondary_language);
       setSocials({
-        social_instagram: (data as any).social_instagram || "",
-        social_youtube: (data as any).social_youtube || "",
-        social_tiktok: (data as any).social_tiktok || "",
-        social_facebook: (data as any).social_facebook || "",
-        social_x: (data as any).social_x || "",
-        social_linkedin: (data as any).social_linkedin || "",
-        social_website: (data as any).social_website || "",
+        social_instagram: data.social_instagram || "",
+        social_youtube: data.social_youtube || "",
+        social_tiktok: data.social_tiktok || "",
+        social_facebook: data.social_facebook || "",
+        social_x: data.social_x || "",
+        social_linkedin: data.social_linkedin || "",
+        social_website: data.social_website || "",
       });
     }
     const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", session.user.id).maybeSingle();
     if (sub) setNewsletterSubscribed(sub.subscribed);
+
+    // Load story subscriptions
+    const { data: storySubs } = await supabase
+      .from("story_subscriptions")
+      .select("id, story_id, stories(title_it, title_en, slug)")
+      .eq("profile_id", session.user.id);
+    if (storySubs) {
+      setStorySubscriptions(
+        storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
+      );
+    }
   };
 
   const handleAvatarUpload = async (file: File) => {
@@ -97,7 +111,7 @@ const AdminProfile = () => {
       preferred_language: preferredLanguage,
       secondary_language: isSiteNative ? null : secondaryLanguage,
       ...socials,
-    } as any).eq("id", session.user.id);
+    }).eq("id", session.user.id);
 
     const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", session.user.id).maybeSingle();
     if (existingSub) {
@@ -240,6 +254,34 @@ const AdminProfile = () => {
               </div>
             </label>
           </div>
+
+          {/* Story Subscriptions */}
+          {storySubscriptions.length > 0 && (
+            <div className="border-t border-border pt-6">
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                <BookOpen size={14} /> Iscrizioni alle storie
+              </label>
+              <div className="space-y-2">
+                {storySubscriptions.map((sub) => (
+                  <div key={sub.id} className="flex items-center justify-between border border-border px-4 py-3">
+                    <Link to={`/stories/${sub.story.slug}`} className="text-sm font-sans hover:text-accent transition-colors">
+                      {lang === "en" ? sub.story.title_en : sub.story.title_it}
+                    </Link>
+                    <button
+                      onClick={async () => {
+                        await supabase.from("story_subscriptions").delete().eq("id", sub.id);
+                        setStorySubscriptions((prev) => prev.filter((s) => s.id !== sub.id));
+                      }}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      title="Disiscriviti"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
             <Save size={14} /> {saving ? "Salvataggio..." : "Salva profilo"}
