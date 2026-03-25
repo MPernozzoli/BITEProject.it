@@ -76,8 +76,10 @@ const Contact = () => {
               <div>
                 <p className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">Social</p>
                 <div className="flex flex-col gap-2">
-                  <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">Instagram</a>
-                  <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">YouTube</a>
+                  <a href="https://www.instagram.com/better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">Instagram</a>
+                  <a href="https://www.youtube.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">YouTube</a>
+                  <a href="https://www.tiktok.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">TikTok</a>
+                  <a href="https://dashboard.seapeopleapp.com/group/41a0ad62-7f71-4107-9269-878fa210f24c?utm_source=SP&utm_medium=usershare&utm_campaign=mpernozzoli" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">SeaPeople Community</a>
                 </div>
               </div>
               <div className="border-t border-border pt-8">
