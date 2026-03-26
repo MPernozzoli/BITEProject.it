@@ -75,14 +75,15 @@ const AdminProfile = () => {
         social_website: data.social_website || "",
       });
     }
-    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", session.user.id).maybeSingle();
+    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", userId).maybeSingle();
     if (sub) setNewsletterSubscribed(sub.subscribed);
 
     // Load story subscriptions
     const { data: storySubs } = await supabase
       .from("story_subscriptions")
       .select("id, story_id, stories(title_it, title_en, slug)")
-      .eq("profile_id", session.user.id);
+      .eq("profile_id", userId);
+    setProfileLoaded(true);
     if (storySubs) {
       setStorySubscriptions(
         storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
