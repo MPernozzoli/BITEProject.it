@@ -46,13 +46,18 @@ const AdminProfile = () => {
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as any);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!session) {
+      navigate("/login", { state: { from: "/profile" }, replace: true });
+      return;
+    }
     loadProfile();
-  }, []);
+  }, [authLoading, session]);
 
   const loadProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate("/login"); return; }
-    const { data } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+    const userId = session?.user?.id;
+    if (!userId) return;
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     if (data) {
       setName(data.name || "");
       setBio(data.bio || "");
