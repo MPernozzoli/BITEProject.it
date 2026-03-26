@@ -194,7 +194,7 @@ const Navbar = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem asChild>
-                  <Link to={isAdmin ? "/admin/profile" : "/login"} className="flex items-center gap-2">
+                  <Link to="/profile" className="flex items-center gap-2">
                     <User size={14} />
                     <span>{lang === "it" ? "Profilo" : "Profile"}</span>
                   </Link>
@@ -234,7 +234,7 @@ const Navbar = () => {
           </button>
 
           {session && (
-            <Link to={isAdmin ? "/admin/profile" : "/login"} className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-medium">
+            <Link to="/profile" className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-medium">
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
               ) : (
@@ -267,7 +267,7 @@ const Navbar = () => {
             <div className="h-px bg-border my-2" />
             {session ? (
               <>
-                <Link to={isAdmin ? "/admin/profile" : "/login"} className="font-sans text-base text-muted-foreground hover:text-foreground transition-colors">
+                <Link to="/profile" className="font-sans text-base text-muted-foreground hover:text-foreground transition-colors">
                   {lang === "it" ? "Profilo" : "Profile"}
                 </Link>
                 {isAdmin && (

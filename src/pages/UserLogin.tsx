@@ -117,11 +117,7 @@ const UserLogin = () => {
         return;
       }
 
-      if (redirectTo === "/" && isAdmin) {
-        navigate("/admin", { replace: true });
-      } else {
-        navigate(redirectTo, { replace: true });
-      }
+      navigate(redirectTo, { replace: true });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Errore durante la verifica";
       setError(message);

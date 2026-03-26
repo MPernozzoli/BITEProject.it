@@ -52,7 +52,8 @@ const App = () => (
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/article/:id" element={<ArticleEditor />} />
-              <Route path="/admin/profile" element={<AdminProfile />} />
+              <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
+              <Route path="/profile" element={<AdminProfile />} />
               <Route path="/unsubscribe" element={<Unsubscribe />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
