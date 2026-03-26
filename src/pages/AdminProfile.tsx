@@ -110,9 +110,9 @@ const AdminProfile = () => {
   };
 
   const saveProfile = async () => {
-    setSaving(true);
-    const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    setSaving(true);
+    const userId = session.user.id;
     await supabase.from("profiles").update({
       name,
       bio,
