@@ -120,17 +120,27 @@ const AdminProfile = () => {
       preferred_language: preferredLanguage,
       secondary_language: isSiteNative ? null : secondaryLanguage,
       ...socials,
-    }).eq("id", session.user.id);
+    }).eq("id", userId);
 
-    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", session.user.id).maybeSingle();
+    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", userId).maybeSingle();
     if (existingSub) {
-      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email }).eq("profile_id", session.user.id);
+      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email }).eq("profile_id", userId);
     } else {
-      await supabase.from("newsletter_subscribers").insert({ profile_id: session.user.id, email, subscribed: newsletterSubscribed });
+      await supabase.from("newsletter_subscribers").insert({ profile_id: userId, email, subscribed: newsletterSubscribed });
     }
 
     setSaving(false);
   };
+
+  if (authLoading || (!profileLoaded && session)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Caricamento...</p>
+      </div>
+    );
+  }
+
+  if (!session) return null;
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
