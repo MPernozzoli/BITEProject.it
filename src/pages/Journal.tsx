@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { Search, TrendingUp, Clock, BookOpen, Eye } from "lucide-react";
+import { Search, TrendingUp, Clock, BookOpen, Eye, Plus, Edit } from "lucide-react";
 import ProfileCard from "@/components/ProfileCard";
 import { useArticleReads } from "@/hooks/useArticleReads";
+import { useAuth } from "@/hooks/useAuth";
 
 const Journal = () => {
   const { t, lang } = useI18n();
+  const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"recent" | "popular">("recent");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -125,12 +127,24 @@ const Journal = () => {
       {/* Header */}
       <section className="pt-32 pb-8 md:pt-40 md:pb-12 px-6 md:px-12">
         <div className="page-section-wide">
-          <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
-            {t("journal.page.title")}
-          </h1>
-          <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
-            {t("journal.page.subtitle")}
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
+                {t("journal.page.title")}
+              </h1>
+              <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
+                {t("journal.page.subtitle")}
+              </p>
+            </div>
+            {isAdmin && (
+              <Link
+                to="/admin/article/new"
+                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 text-sm font-sans font-medium tracking-wide hover:opacity-90 transition-opacity shrink-0 mt-2"
+              >
+                <Plus size={16} /> {lang === "it" ? "Nuovo articolo" : "New Article"}
+              </Link>
+            )}
+          </div>
         </div>
       </section>
 
@@ -285,9 +299,16 @@ const Journal = () => {
                           </span>
                         )}
                       </div>
-                      <h2 className="editorial-heading text-2xl md:text-3xl lg:text-4xl mb-3 group-hover:text-accent transition-colors">
-                        {lang === "en" ? featured.title_en : (featured.title_it || featured.title_en)}
-                      </h2>
+                      <div className="flex items-start gap-2">
+                        <h2 className="editorial-heading text-2xl md:text-3xl lg:text-4xl mb-3 group-hover:text-accent transition-colors flex-1">
+                          {lang === "en" ? featured.title_en : (featured.title_it || featured.title_en)}
+                        </h2>
+                        {isAdmin && (
+                          <Link to={`/admin/article/${featured.id}`} onClick={(e) => e.stopPropagation()} className="p-2 text-muted-foreground hover:text-accent transition-colors shrink-0" title="Edit">
+                            <Edit size={16} />
+                          </Link>
+                        )}
+                      </div>
                       <p className="editorial-body text-muted-foreground leading-relaxed line-clamp-3 mb-4">
                         {lang === "en" ? featured.excerpt_en : (featured.excerpt_it || featured.excerpt_en)}
                       </p>
@@ -335,9 +356,16 @@ const Journal = () => {
                               </span>
                             )}
                           </div>
-                          <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
-                            {title}
-                          </h3>
+                          <div className="flex items-start gap-1">
+                            <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2 flex-1">
+                              {title}
+                            </h3>
+                            {isAdmin && (
+                              <Link to={`/admin/article/${article.id}`} onClick={(e) => e.stopPropagation()} className="p-1 text-muted-foreground hover:text-accent transition-colors shrink-0" title="Edit">
+                                <Edit size={14} />
+                              </Link>
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground font-sans line-clamp-2 mb-3">{excerpt}</p>
                           <div className="flex items-center gap-3">
                             {article.authors?.slice(0, 2).map((a: any) => (

@@ -1,9 +1,11 @@
 import { useI18n } from "@/lib/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { MapPin, Navigation, Clock, Anchor, Ship } from "lucide-react";
+import { MapPin, Navigation, Clock, Anchor, Ship, Settings } from "lucide-react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from "react-leaflet";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import AdminRouteManager from "@/components/admin/AdminRouteManager";
 import "leaflet/dist/leaflet.css";
 
 interface RouteLeg {
@@ -39,6 +41,8 @@ const FitBounds = ({ legs }: { legs: RouteLeg[] }) => {
 
 const Route = () => {
   const { t, lang } = useI18n();
+  const { isAdmin } = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
 
   const { data: legs = [] } = useQuery({
     queryKey: ["route-legs"],
@@ -71,14 +75,39 @@ const Route = () => {
       {/* Header */}
       <section className="pt-32 pb-12 md:pt-40 md:pb-16 px-6 md:px-12">
         <div className="page-section-wide">
-          <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
-            {t("route.page.title")}
-          </h1>
-          <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
-            {t("route.page.subtitle")}
-          </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
+                {t("route.page.title")}
+              </h1>
+              <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
+                {t("route.page.subtitle")}
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAdmin(!showAdmin)}
+                className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-sans font-medium tracking-wide transition-all shrink-0 mt-2 ${
+                  showAdmin
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-primary text-primary-foreground hover:opacity-90"
+                }`}
+              >
+                <Settings size={16} /> {showAdmin ? (lang === "it" ? "Chiudi editor" : "Close editor") : (lang === "it" ? "Gestisci rotta" : "Manage route")}
+              </button>
+            )}
+          </div>
         </div>
       </section>
+
+      {/* Admin panel inline */}
+      {isAdmin && showAdmin && (
+        <section className="px-6 md:px-12 pb-8">
+          <div className="page-section-wide border border-border p-6 bg-muted/20">
+            <AdminRouteManager />
+          </div>
+        </section>
+      )}
 
       {/* Stats */}
       <section className="px-6 md:px-12 pb-8">
