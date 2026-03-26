@@ -48,7 +48,7 @@ const AdminProfile = () => {
 
   const loadProfile = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate("/admin/login"); return; }
+    if (!session) { navigate("/login"); return; }
     const { data } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
     if (data) {
       setName(data.name || "");
