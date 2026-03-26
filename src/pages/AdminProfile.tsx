@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon, BookOpen, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
+import { useAuth } from "@/hooks/useAuth";
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -18,9 +19,11 @@ const XIcon = ({ size = 16 }: { size?: number }) => (
 );
 
 const AdminProfile = () => {
+  const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
@@ -43,13 +46,18 @@ const AdminProfile = () => {
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as any);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!session) {
+      navigate("/login", { state: { from: "/profile" }, replace: true });
+      return;
+    }
     loadProfile();
-  }, []);
+  }, [authLoading, session]);
 
   const loadProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate("/login"); return; }
-    const { data } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+    const userId = session?.user?.id;
+    if (!userId) return;
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     if (data) {
       setName(data.name || "");
       setBio(data.bio || "");
@@ -67,14 +75,15 @@ const AdminProfile = () => {
         social_website: data.social_website || "",
       });
     }
-    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", session.user.id).maybeSingle();
+    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", userId).maybeSingle();
     if (sub) setNewsletterSubscribed(sub.subscribed);
 
     // Load story subscriptions
     const { data: storySubs } = await supabase
       .from("story_subscriptions")
       .select("id, story_id, stories(title_it, title_en, slug)")
-      .eq("profile_id", session.user.id);
+      .eq("profile_id", userId);
+    setProfileLoaded(true);
     if (storySubs) {
       setStorySubscriptions(
         storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
@@ -101,9 +110,9 @@ const AdminProfile = () => {
   };
 
   const saveProfile = async () => {
-    setSaving(true);
-    const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    setSaving(true);
+    const userId = session.user.id;
     await supabase.from("profiles").update({
       name,
       bio,
@@ -111,17 +120,27 @@ const AdminProfile = () => {
       preferred_language: preferredLanguage,
       secondary_language: isSiteNative ? null : secondaryLanguage,
       ...socials,
-    }).eq("id", session.user.id);
+    }).eq("id", userId);
 
-    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", session.user.id).maybeSingle();
+    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", userId).maybeSingle();
     if (existingSub) {
-      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email }).eq("profile_id", session.user.id);
+      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email }).eq("profile_id", userId);
     } else {
-      await supabase.from("newsletter_subscribers").insert({ profile_id: session.user.id, email, subscribed: newsletterSubscribed });
+      await supabase.from("newsletter_subscribers").insert({ profile_id: userId, email, subscribed: newsletterSubscribed });
     }
 
     setSaving(false);
   };
+
+  if (authLoading || (!profileLoaded && session)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Caricamento...</p>
+      </div>
+    );
+  }
+
+  if (!session) return null;
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
