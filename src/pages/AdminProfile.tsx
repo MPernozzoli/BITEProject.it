@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon, BookOpen, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
+import { useAuth } from "@/hooks/useAuth";
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -18,9 +19,11 @@ const XIcon = ({ size = 16 }: { size?: number }) => (
 );
 
 const AdminProfile = () => {
+  const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");

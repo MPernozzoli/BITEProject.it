@@ -85,7 +85,7 @@ const UserLogin = () => {
       const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
         email: submittedEmail,
         token: otp,
-        type: "recovery",
+        type: "email",
       });
 
       if (verifyError) {
