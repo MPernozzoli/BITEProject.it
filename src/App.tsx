@@ -12,7 +12,7 @@ import TheCrew from "./pages/About";
 import { Navigate } from "react-router-dom";
 import Manifesto from "./pages/Manifesto";
 import Journal from "./pages/Journal";
-import RoutePage from "./pages/Route";
+
 import Collaborations from "./pages/Collaborations";
 import Contact from "./pages/Contact";
 import ArticlePage from "./pages/ArticlePage";
