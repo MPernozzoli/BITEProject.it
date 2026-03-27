@@ -19,6 +19,7 @@ const Journal = () => {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
