@@ -39,7 +39,7 @@ const FitBounds = ({ legs }: { legs: RouteLeg[] }) => {
   return null;
 };
 
-const Route = () => {
+const RoutePage = () => {
   const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
   const [showAdmin, setShowAdmin] = useState(false);
@@ -335,4 +335,4 @@ const Route = () => {
   );
 };
 
-export default Route;
+export default RoutePage;
