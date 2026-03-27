@@ -162,24 +162,6 @@ const VoyageMap = ({
         ));
       })}
 
-      {/* Article markers */}
-      {geoArticles.map((article) => {
-        const isSelected = article.id === selectedArticleId;
-        const icon = createArticleIcon(article.cover_image, isSelected);
-        const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-
-        return (
-          <CircleMarker
-            key={`article-bg-${article.id}`}
-            center={[article.latitude!, article.longitude!]}
-            radius={0}
-            pathOptions={{ opacity: 0 }}
-          >
-            {/* Use a custom marker overlay via useEffect */}
-          </CircleMarker>
-        );
-      })}
-
       {/* Article markers as actual markers */}
       <ArticleMarkers
         articles={geoArticles}
