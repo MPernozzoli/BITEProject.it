@@ -139,7 +139,7 @@ const VoyageMap = ({
       })}
 
       {/* Waypoint dots */}
-      {voyages.map((voyage) => {
+      {voyages.flatMap((voyage) => {
         const wps = waypointsMap[voyage.id] || [];
         return wps.map((wp) => (
           <CircleMarker
