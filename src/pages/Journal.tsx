@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Navigation, Anchor } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Navigation, Anchor, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import VoyageMap from "@/components/voyage/VoyageMap";

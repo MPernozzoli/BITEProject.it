@@ -11,6 +11,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const PAGE_SUBTITLES: Record<string, { en: string; it: string }> = {
+  "/logbook": { en: "'s Logbook", it: "'s Diario" },
+  "/crew": { en: "'s Crew", it: "'s Ciurma" },
+  "/manifesto": { en: "'s Manifesto", it: "'s Manifesto" },
+  "/collaborations": { en: "'s Collabs", it: "'s Collabs" },
+  "/contact": { en: "'s Contact", it: "'s Contatti" },
+};
+
 const Navbar = () => {
   const { t, lang, setLang } = useI18n();
   const [scrolled, setScrolled] = useState(false);
@@ -21,6 +29,8 @@ const Navbar = () => {
   const [logoHovered, setLogoHovered] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const pageSubtitle = PAGE_SUBTITLES[location.pathname]?.[lang] || null;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -148,6 +158,18 @@ const Navbar = () => {
               !
             </span>
           </span>
+          {/* Dynamic page subtitle — hidden during hover expand */}
+          {pageSubtitle && (
+            <span
+              className={`inline-block font-sans font-normal text-[0.55em] tracking-wider uppercase transition-all duration-400 ease-out ${
+                logoHovered
+                  ? "max-w-0 opacity-0 scale-95"
+                  : "max-w-[12em] opacity-70 scale-100"
+              } overflow-hidden whitespace-nowrap`}
+            >
+              {pageSubtitle}
+            </span>
+          )}
         </Link>
 
         {/* Desktop Nav */}
