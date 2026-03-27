@@ -123,6 +123,37 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Voyage map custom styles */
+.voyage-article-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.voyage-article-tooltip {
+  background: hsl(220 40% 15% / 0.9) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 2px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  white-space: nowrap !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+}
+
+.voyage-article-tooltip::before {
+  border-bottom-color: hsl(220 40% 15% / 0.9) !important;
+}
+
 html {
   scroll-behavior: smooth;
 }

@@ -12,7 +12,7 @@ import TheCrew from "./pages/About";
 import { Navigate } from "react-router-dom";
 import Manifesto from "./pages/Manifesto";
 import Journal from "./pages/Journal";
-import RoutePage from "./pages/Route";
+
 import Collaborations from "./pages/Collaborations";
 import Contact from "./pages/Contact";
 import ArticlePage from "./pages/ArticlePage";
@@ -43,7 +43,7 @@ const App = () => (
               <Route path="/about" element={<Navigate to="/crew" replace />} />
               <Route path="/manifesto" element={<Manifesto />} />
               <Route path="/logbook" element={<Journal />} />
-              <Route path="/route" element={<RoutePage />} />
+              <Route path="/route" element={<Navigate to="/logbook" replace />} />
               <Route path="/collaborations" element={<Collaborations />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/logbook/story/:slug" element={<StoryPage />} />

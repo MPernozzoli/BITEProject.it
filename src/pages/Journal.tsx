@@ -1,24 +1,30 @@
 import { useI18n } from "@/lib/i18n";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { format } from "date-fns";
-import { Search, TrendingUp, Clock, BookOpen, Eye, Plus, Edit } from "lucide-react";
-import ProfileCard from "@/components/ProfileCard";
+import { Search, Plus, Map, List, Ship, Navigation, Anchor } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
+import VoyageMap from "@/components/voyage/VoyageMap";
+import ArticleListCard from "@/components/voyage/ArticleListCard";
+import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
+import { totalWaypointDistance } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 
 const Journal = () => {
   const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"recent" | "popular">("recent");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const { isRead } = useArticleReads();
+  const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  // Fetch articles with geo data
   const { data: articles = [], isLoading } = useQuery({
-    queryKey: ["logbook-articles-full"],
+    queryKey: ["logbook-articles-geo"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -27,7 +33,7 @@ const Journal = () => {
         .order("published_at", { ascending: false });
       if (error) throw error;
 
-      const ids = (data || []).map((a) => a.id);
+      const ids = (data || []).map((a: any) => a.id);
       if (!ids.length) return [];
 
       const [authorRes, tagRes, likeRes] = await Promise.all([
@@ -36,14 +42,14 @@ const Journal = () => {
         supabase.from("article_likes").select("article_id").in("article_id", ids),
       ]);
 
-      const profileIds = [...new Set((authorRes.data || []).map((a) => a.profile_id))];
+      const profileIds = [...new Set((authorRes.data || []).map((a: any) => a.profile_id))];
       const { data: profiles } = profileIds.length
         ? await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
         : { data: [] };
-      const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+      const profileMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p]));
 
       const articleAuthorsMap: Record<string, any[]> = {};
-      (authorRes.data || []).forEach((link) => {
+      (authorRes.data || []).forEach((link: any) => {
         if (!articleAuthorsMap[link.article_id]) articleAuthorsMap[link.article_id] = [];
         const profile = profileMap[link.profile_id];
         if (profile) articleAuthorsMap[link.article_id].push(profile);
@@ -56,335 +62,289 @@ const Journal = () => {
       });
 
       const likeCounts: Record<string, number> = {};
-      (likeRes.data || []).forEach((like) => {
+      (likeRes.data || []).forEach((like: any) => {
         likeCounts[like.article_id] = (likeCounts[like.article_id] || 0) + 1;
       });
 
-      return (data || []).map((article) => ({
+      return (data || []).map((article: any) => ({
         ...article,
         authors: articleAuthorsMap[article.id] || [],
         tags: articleTagsMap[article.id] || [],
         likeCount: likeCounts[article.id] || 0,
-      }));
+      })) as GeoArticle[];
     },
   });
 
-  const { data: allTags = [] } = useQuery({
-    queryKey: ["all-tags"],
+  // Fetch voyages
+  const { data: voyages = [] } = useQuery({
+    queryKey: ["voyages"],
     queryFn: async () => {
-      const { data } = await supabase.from("tags").select("*").order("name");
-      return data || [];
+      const { data } = await supabase
+        .from("voyages" as any)
+        .select("*")
+        .order("sort_order", { ascending: true });
+      return (data || []) as unknown as Voyage[];
     },
   });
 
-  const { data: stories = [] } = useQuery({
-    queryKey: ["stories-list"],
+  // Fetch waypoints for all voyages
+  const { data: allWaypoints = [] } = useQuery({
+    queryKey: ["voyage-waypoints"],
     queryFn: async () => {
-      const { data } = await supabase.from("stories").select("*").order("created_at", { ascending: false });
-      return data || [];
+      const { data } = await supabase
+        .from("voyage_waypoints" as any)
+        .select("*")
+        .order("sort_order", { ascending: true });
+      return (data || []) as unknown as VoyageWaypoint[];
     },
   });
 
+  const waypointsMap = useMemo(() => {
+    const map: Record<string, VoyageWaypoint[]> = {};
+    allWaypoints.forEach((wp) => {
+      if (!map[wp.voyage_id]) map[wp.voyage_id] = [];
+      map[wp.voyage_id].push(wp);
+    });
+    return map;
+  }, [allWaypoints]);
+
+  // Filter articles
   const filtered = useMemo(() => {
-    let result = [...articles];
+    if (!searchQuery.trim()) return articles;
+    const q = searchQuery.toLowerCase();
+    return articles.filter((a) => {
+      const title = (lang === "en" ? a.title_en : a.title_it || a.title_en).toLowerCase();
+      const excerpt = (lang === "en" ? a.excerpt_en : a.excerpt_it || a.excerpt_en || "").toLowerCase();
+      return title.includes(q) || excerpt.includes(q) || a.location_name?.toLowerCase().includes(q);
+    });
+  }, [articles, searchQuery, lang]);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((a) => {
-        const title = (lang === "en" ? a.title_en : a.title_it || a.title_en).toLowerCase();
-        const excerpt = (lang === "en" ? a.excerpt_en : a.excerpt_it || a.excerpt_en || "").toLowerCase();
-        const tagMatch = a.tags?.some((t: any) => t.name.toLowerCase().includes(q));
-        const authorMatch = a.authors?.some((au: any) => au.name.toLowerCase().includes(q));
-        return title.includes(q) || excerpt.includes(q) || tagMatch || authorMatch;
-      });
+  // Stats
+  const stats = useMemo(() => {
+    let totalNM = 0;
+    let voyageCount = voyages.length;
+    const activeVoyage = voyages.find((v) => v.status === "active");
+
+    voyages.forEach((v) => {
+      const wps = waypointsMap[v.id] || [];
+      if (wps.length >= 2) {
+        totalNM += totalWaypointDistance(wps);
+      }
+    });
+
+    return { totalNM: Math.round(totalNM), voyageCount, activeVoyage };
+  }, [voyages, waypointsMap]);
+
+  // Scroll to article in list
+  const scrollToArticle = useCallback((articleId: string) => {
+    const el = articleRefs.current[articleId];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+  }, []);
 
-    if (selectedTags.length > 0) {
-      result = result.filter((a) =>
-        selectedTags.every((tagId) => a.tags?.some((t: any) => t.id === tagId))
-      );
-    }
+  const handleArticleClick = useCallback((article: GeoArticle) => {
+    setSelectedArticleId(article.id);
+    setPanelArticle(article);
+    scrollToArticle(article.id);
+  }, [scrollToArticle]);
 
-    if (activeTab === "popular") {
-      result.sort((a, b) => b.likeCount - a.likeCount);
-    }
+  const handleListArticleClick = useCallback((article: GeoArticle) => {
+    setSelectedArticleId(article.id);
+    setPanelArticle(article);
+  }, []);
 
-    return result;
-  }, [articles, searchQuery, selectedTags, activeTab, lang]);
+  // Highlighted voyage based on selected article
+  const highlightedVoyageId = useMemo(() => {
+    if (!selectedArticleId) return null;
+    const article = articles.find((a) => a.id === selectedArticleId);
+    return article?.voyage_id || null;
+  }, [selectedArticleId, articles]);
 
-  const toggleTag = (tagId: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
-    );
-  };
-
-  // Split: featured (first article) + rest
-  const featured = filtered[0];
-  const rest = filtered.slice(1);
+  const geoArticleCount = articles.filter((a) => a.latitude && a.longitude).length;
 
   return (
-    <div>
-      {/* Header */}
-      <section className="pt-32 pb-8 md:pt-40 md:pb-12 px-6 md:px-12">
-        <div className="page-section-wide">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
+    <div className="min-h-screen flex flex-col">
+      {/* Compact header */}
+      <div className="pt-20 md:pt-24 px-4 md:px-8 pb-4 bg-background border-b border-border">
+        <div className="max-w-[1800px] mx-auto">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex items-center gap-4">
+              <h1 className="editorial-heading text-2xl md:text-3xl">
                 {t("journal.page.title")}
               </h1>
-              <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
-                {t("journal.page.subtitle")}
-              </p>
+              {/* Stats pills */}
+              {stats.totalNM > 0 && (
+                <div className="hidden md:flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground bg-muted px-2.5 py-1">
+                    <Ship size={10} /> {stats.totalNM.toLocaleString()} NM
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground bg-muted px-2.5 py-1">
+                    <Navigation size={10} /> {stats.voyageCount} {lang === "it" ? "viaggi" : "voyages"}
+                  </span>
+                  {stats.activeVoyage && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-accent bg-accent/10 px-2.5 py-1">
+                      <Anchor size={10} /> {stats.activeVoyage.name}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            {isAdmin && (
-              <Link
-                to="/admin/article/new"
-                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 text-sm font-sans font-medium tracking-wide hover:opacity-90 transition-opacity shrink-0 mt-2"
-              >
-                <Plus size={16} /> {lang === "it" ? "Nuovo articolo" : "New Article"}
-              </Link>
+
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex items-center bg-muted p-0.5">
+                <button
+                  onClick={() => setViewMode("map")}
+                  className={`p-2 transition-colors ${viewMode === "map" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+                >
+                  <Map size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-2 transition-colors ${viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+                >
+                  <List size={14} />
+                </button>
+              </div>
+
+              {isAdmin && (
+                <Link
+                  to="/admin/article/new"
+                  className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity"
+                >
+                  <Plus size={12} /> {lang === "it" ? "Nuovo" : "New"}
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="relative max-w-md">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={lang === "it" ? "Cerca articoli, luoghi..." : "Search articles, places..."}
+              className="w-full bg-transparent border border-border pl-9 pr-4 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      {viewMode === "map" ? (
+        <div className="flex-1 flex flex-col lg:flex-row" style={{ height: "calc(100vh - 140px)" }}>
+          {/* Article list - left panel */}
+          <div className="w-full lg:w-[380px] xl:w-[420px] border-r border-border overflow-y-auto shrink-0 order-2 lg:order-1 max-h-[40vh] lg:max-h-none">
+            {isLoading ? (
+              <div className="p-4 space-y-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="animate-pulse flex gap-3">
+                    <div className="w-20 h-20 bg-muted shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-3 bg-muted w-1/3 mb-2" />
+                      <div className="h-4 bg-muted w-3/4 mb-1" />
+                      <div className="h-3 bg-muted w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                {lang === "it" ? "Nessun risultato." : "No entries found."}
+              </div>
+            ) : (
+              filtered.map((article) => (
+                <ArticleListCard
+                  key={article.id}
+                  ref={(el) => { articleRefs.current[article.id] = el; }}
+                  article={article}
+                  lang={lang}
+                  isActive={selectedArticleId === article.id}
+                  isRead={isRead(article.id)}
+                  onClick={() => handleListArticleClick(article)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Map - right panel */}
+          <div className="flex-1 relative order-1 lg:order-2 min-h-[300px] lg:min-h-0">
+            <VoyageMap
+              voyages={voyages}
+              waypointsMap={waypointsMap}
+              articles={filtered}
+              selectedArticleId={selectedArticleId}
+              highlightedVoyageId={highlightedVoyageId}
+              onArticleClick={handleArticleClick}
+              lang={lang}
+            />
+          </div>
+        </div>
+      ) : (
+        /* List-only view — classic grid */
+        <div className="flex-1 px-6 md:px-12 py-8">
+          <div className="max-w-7xl mx-auto">
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="aspect-[16/10] bg-muted mb-4" />
+                    <div className="h-4 bg-muted w-3/4 mb-2" />
+                    <div className="h-3 bg-muted w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+                {filtered.map((article) => {
+                  const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
+                  const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+                  return (
+                    <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
+                      <article>
+                        <div className="aspect-[16/10] overflow-hidden bg-muted mb-4 relative">
+                          {article.cover_image ? (
+                            <img src={article.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {article.location_name && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-sans text-accent">
+                              <Map size={9} /> {article.location_name}
+                            </span>
+                          )}
+                          {article.tags?.slice(0, 2).map((tag: any) => (
+                            <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
+                          ))}
+                        </div>
+                        <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
+                          {title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground font-sans line-clamp-2">{excerpt}</p>
+                      </article>
+                    </Link>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
-      </section>
-
-      {/* Controls */}
-      <section className="px-6 md:px-12 pb-6">
-        <div className="page-section-wide">
-          <div className="flex flex-col md:flex-row gap-4 md:items-center md:justify-between mb-6">
-            {/* Search */}
-            <div className="relative flex-1 max-w-lg">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={lang === "it" ? "Cerca articoli..." : "Search articles..."}
-                className="w-full bg-transparent border border-border pl-10 pr-4 py-2.5 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-1 bg-muted p-1">
-              <button
-                onClick={() => setActiveTab("recent")}
-                className={`inline-flex items-center gap-1.5 text-xs font-sans tracking-wide px-4 py-2 transition-colors ${
-                  activeTab === "recent"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Clock size={12} />
-                {lang === "it" ? "Recenti" : "Recent"}
-              </button>
-              <button
-                onClick={() => setActiveTab("popular")}
-                className={`inline-flex items-center gap-1.5 text-xs font-sans tracking-wide px-4 py-2 transition-colors ${
-                  activeTab === "popular"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <TrendingUp size={12} />
-                {lang === "it" ? "Popolari" : "Popular"}
-              </button>
-            </div>
-          </div>
-
-          {/* Tags */}
-          {allTags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {allTags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
-                  className={`text-xs font-sans px-3 py-1.5 border transition-all ${
-                    selectedTags.includes(tag.id)
-                      ? "bg-accent text-accent-foreground border-accent"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-foreground"
-                  }`}
-                >
-                  #{tag.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Stories */}
-      {stories.length > 0 && !searchQuery && selectedTags.length === 0 && (
-        <section className="px-6 md:px-12 pb-10">
-          <div className="page-section-wide">
-            <div className="flex items-center gap-2 mb-5">
-              <BookOpen size={14} className="text-accent" />
-              <h2 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
-                {lang === "it" ? "Storie" : "Stories"}
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stories.map((story) => {
-                const title = lang === "en" ? story.title_en : (story.title_it || story.title_en);
-                const desc = lang === "en" ? story.description_en : (story.description_it || story.description_en);
-                return (
-                  <Link
-                    key={story.id}
-                    to={`/logbook/story/${story.slug}`}
-                    className="group border border-border hover:border-accent transition-all overflow-hidden"
-                  >
-                    {story.cover_image && (
-                      <div className="aspect-[21/9] overflow-hidden">
-                        <img src={story.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
-                      </div>
-                    )}
-                    <div className="p-5">
-                      <h3 className="editorial-heading text-base mb-1.5 group-hover:text-accent transition-colors">
-                        {title}
-                      </h3>
-                      {desc && (
-                        <p className="text-xs text-muted-foreground font-sans line-clamp-2">{desc}</p>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </section>
       )}
 
-      {/* Articles */}
-      <section className="px-6 md:px-12 pb-20 md:pb-32">
-        <div className="page-section-wide">
-          {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="aspect-[16/10] bg-muted mb-4" />
-                  <div className="h-4 bg-muted w-3/4 mb-2" />
-                  <div className="h-3 bg-muted w-1/2" />
-                </div>
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground text-center py-20">
-              {lang === "it" ? "Nessun risultato." : "No entries found."}
-            </p>
-          ) : (
-            <div className="space-y-12">
-              {/* Featured article */}
-              {featured && (
-                <Link to={`/logbook/${featured.slug}`} className="block group">
-                  <article className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-center">
-                    <div className="aspect-[16/10] overflow-hidden bg-muted relative">
-                      {featured.cover_image ? (
-                        <img src={featured.cover_image} alt="" className="img-cover group-hover:scale-105 transition-transform duration-700" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-4xl">BITE</div>
-                      )}
-                      {isRead(featured.id) && (
-                        <span className="absolute top-3 left-3 inline-flex items-center gap-1 text-[10px] font-sans bg-background/90 backdrop-blur-sm text-muted-foreground px-2 py-1">
-                          <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-3 mb-3 flex-wrap">
-                        {featured.tags?.map((tag: any) => (
-                          <span key={tag.id} className="text-xs font-sans text-accent">#{tag.name}</span>
-                        ))}
-                        {featured.published_at && (
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(featured.published_at), "MMM d, yyyy")}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <h2 className="editorial-heading text-2xl md:text-3xl lg:text-4xl mb-3 group-hover:text-accent transition-colors flex-1">
-                          {lang === "en" ? featured.title_en : (featured.title_it || featured.title_en)}
-                        </h2>
-                        {isAdmin && (
-                          <Link to={`/admin/article/${featured.id}`} onClick={(e) => e.stopPropagation()} className="p-2 text-muted-foreground hover:text-accent transition-colors shrink-0" title="Edit">
-                            <Edit size={16} />
-                          </Link>
-                        )}
-                      </div>
-                      <p className="editorial-body text-muted-foreground leading-relaxed line-clamp-3 mb-4">
-                        {lang === "en" ? featured.excerpt_en : (featured.excerpt_it || featured.excerpt_en)}
-                      </p>
-                      <div className="flex items-center gap-4">
-                        {featured.authors?.length > 0 && featured.authors.map((a: any) => (
-                          <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
-                        ))}
-                        {featured.likeCount > 0 && (
-                          <span className="text-xs text-muted-foreground">♥ {featured.likeCount}</span>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                </Link>
-              )}
-
-              {/* Grid of remaining articles */}
-              {rest.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
-                  {rest.map((article) => {
-                    const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-                    const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
-                    return (
-                      <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
-                        <article>
-                          <div className="aspect-[16/10] overflow-hidden bg-muted mb-4 relative">
-                            {article.cover_image ? (
-                              <img src={article.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>
-                            )}
-                            {isRead(article.id) && (
-                              <span className="absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] font-sans bg-background/90 backdrop-blur-sm text-muted-foreground px-2 py-0.5">
-                                <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {article.tags?.slice(0, 2).map((tag: any) => (
-                              <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
-                            ))}
-                            {article.published_at && (
-                              <span className="text-[11px] text-muted-foreground">
-                                {format(new Date(article.published_at), "MMM d")}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-start gap-1">
-                            <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2 flex-1">
-                              {title}
-                            </h3>
-                            {isAdmin && (
-                              <Link to={`/admin/article/${article.id}`} onClick={(e) => e.stopPropagation()} className="p-1 text-muted-foreground hover:text-accent transition-colors shrink-0" title="Edit">
-                                <Edit size={14} />
-                              </Link>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground font-sans line-clamp-2 mb-3">{excerpt}</p>
-                          <div className="flex items-center gap-3">
-                            {article.authors?.slice(0, 2).map((a: any) => (
-                              <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
-                            ))}
-                            {article.likeCount > 0 && (
-                              <span className="text-xs text-muted-foreground ml-auto">♥ {article.likeCount}</span>
-                            )}
-                          </div>
-                        </article>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
+      {/* Slide panel */}
+      <ArticleSlidePanel
+        article={panelArticle}
+        onClose={() => {
+          setPanelArticle(null);
+          setSelectedArticleId(null);
+        }}
+        lang={lang}
+      />
     </div>
   );
 };
