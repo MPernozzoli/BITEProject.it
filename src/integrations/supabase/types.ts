@@ -383,6 +383,9 @@ export type Database = {
           excerpt_en: string | null
           excerpt_it: string | null
           id: string
+          latitude: number | null
+          location_name: string | null
+          longitude: number | null
           published_at: string | null
           scheduled_at: string | null
           slug: string
@@ -391,6 +394,9 @@ export type Database = {
           title_en: string
           title_it: string
           updated_at: string
+          voyage_id: string | null
+          voyage_segment_end: number | null
+          voyage_segment_start: number | null
         }
         Insert: {
           category?: string
@@ -401,6 +407,9 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          latitude?: number | null
+          location_name?: string | null
+          longitude?: number | null
           published_at?: string | null
           scheduled_at?: string | null
           slug: string
@@ -409,6 +418,9 @@ export type Database = {
           title_en?: string
           title_it?: string
           updated_at?: string
+          voyage_id?: string | null
+          voyage_segment_end?: number | null
+          voyage_segment_start?: number | null
         }
         Update: {
           category?: string
@@ -419,6 +431,9 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          latitude?: number | null
+          location_name?: string | null
+          longitude?: number | null
           published_at?: string | null
           scheduled_at?: string | null
           slug?: string
@@ -427,6 +442,9 @@ export type Database = {
           title_en?: string
           title_it?: string
           updated_at?: string
+          voyage_id?: string | null
+          voyage_segment_end?: number | null
+          voyage_segment_start?: number | null
         }
         Relationships: [
           {
@@ -434,6 +452,13 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logbook_articles_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
             referencedColumns: ["id"]
           },
         ]
@@ -745,6 +770,80 @@ export type Database = {
         }
         Relationships: []
       }
+      voyage_waypoints: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string | null
+          sort_order: number
+          voyage_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string | null
+          sort_order?: number
+          voyage_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string | null
+          sort_order?: number
+          voyage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voyage_waypoints_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voyages: {
+        Row: {
+          cached_geometry: Json | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          sort_order: number
+          status: Database["public"]["Enums"]["voyage_status"]
+          type: Database["public"]["Enums"]["voyage_type"]
+          updated_at: string
+        }
+        Insert: {
+          cached_geometry?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          status?: Database["public"]["Enums"]["voyage_status"]
+          type?: Database["public"]["Enums"]["voyage_type"]
+          updated_at?: string
+        }
+        Update: {
+          cached_geometry?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number
+          status?: Database["public"]["Enums"]["voyage_status"]
+          type?: Database["public"]["Enums"]["voyage_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -786,6 +885,8 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user"
       article_status: "draft" | "scheduled" | "published"
+      voyage_status: "planned" | "active" | "completed"
+      voyage_type: "water" | "land"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -915,6 +1016,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user"],
       article_status: ["draft", "scheduled", "published"],
+      voyage_status: ["planned", "active", "completed"],
+      voyage_type: ["water", "land"],
     },
   },
 } as const
