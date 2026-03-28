@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation } from "lucide-react";
-import AdminRouteManager from "@/components/admin/AdminRouteManager";
+import AdminVoyageManager from "@/components/admin/AdminVoyageManager";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -333,7 +333,7 @@ const AdminDashboard = () => {
           </>
         )}
 
-        {activeSection === "route" && <AdminRouteManager />}
+        {activeSection === "route" && <AdminVoyageManager />}
       </div>
     </div>
   );

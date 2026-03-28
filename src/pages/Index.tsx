@@ -76,7 +76,7 @@ const Index = () => {
             </Link>
           </div>
         </div>
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 animate-bounce">
+        <div className="absolute bottom-8 left-0 right-0 z-10 flex flex-col items-center justify-center gap-2 animate-bounce">
           <span className="text-[10px] font-sans tracking-[0.3em] uppercase text-primary-foreground/50">
             {t("crew.scroll")}
           </span>

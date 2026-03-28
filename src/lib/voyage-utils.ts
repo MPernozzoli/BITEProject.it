@@ -79,6 +79,9 @@ export interface VoyageWaypoint {
   lng: number;
   name: string;
   sort_order: number;
+  waypoint_type: "technical" | "narrative";
+  date_start: string | null;
+  date_end: string | null;
   created_at: string;
 }
 
