@@ -12,6 +12,7 @@ interface VoyageMapProps {
   highlightedVoyageId?: string | null;
   onArticleClick?: (article: GeoArticle) => void;
   lang: "en" | "it";
+  initialFitReady?: boolean;
 }
 
 const VoyageMap = ({
@@ -22,6 +23,7 @@ const VoyageMap = ({
   highlightedVoyageId,
   onArticleClick,
   lang,
+  initialFitReady = true,
 }: VoyageMapProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -29,6 +31,7 @@ const VoyageMap = ({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const articlesRef = useRef(articles);
   const onArticleClickRef = useRef(onArticleClick);
+  const hasPerformedInitialFitRef = useRef(false);
   const [mapUnavailable, setMapUnavailable] = useState(false);
 
   // Keep refs in sync
@@ -396,10 +399,18 @@ const VoyageMap = ({
   // Fit bounds on initial load
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !initialFitReady || hasPerformedInitialFitRef.current) return;
 
     const fit = () => {
       const points: [number, number][] = [];
+      voyages.forEach((voyage) => {
+        const geometryCoordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+        geometryCoordinates?.forEach((coordinate) => {
+          if (Array.isArray(coordinate) && coordinate.length >= 2) {
+            points.push(coordinate);
+          }
+        });
+      });
       Object.values(waypointsMap).forEach((wps) =>
         wps.forEach((w) => { if (w.lat && w.lng) points.push([w.lng, w.lat]); })
       );
@@ -407,12 +418,14 @@ const VoyageMap = ({
         if (a.latitude && a.longitude) points.push([a.longitude, a.latitude]);
       });
       if (points.length >= 2) {
+        hasPerformedInitialFitRef.current = true;
         const bounds = points.reduce(
           (b, p) => b.extend(p),
           new maplibregl.LngLatBounds(points[0], points[0])
         );
         map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
       } else if (points.length === 1) {
+        hasPerformedInitialFitRef.current = true;
         map.flyTo({ center: points[0], zoom: 8 });
       }
     };
@@ -420,9 +433,9 @@ const VoyageMap = ({
     if (map.isStyleLoaded()) {
       fit();
     } else {
-      map.on("load", fit);
+      map.once("load", fit);
     }
-  }, [waypointsMap, articles]);
+  }, [initialFitReady, voyages, waypointsMap, articles]);
 
   if (mapUnavailable) {
     return (

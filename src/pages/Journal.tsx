@@ -74,7 +74,7 @@ const Journal = () => {
   }, [buildFallbackPanelRect]);
 
   // Fetch articles with geo data
-  const { data: articles = [], isLoading } = useQuery({
+  const { data: articles = [], isLoading: isArticlesLoading } = useQuery({
     queryKey: ["logbook-articles-geo"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -129,7 +129,7 @@ const Journal = () => {
   });
 
   // Fetch voyages
-  const { data: voyages = [] } = useQuery({
+  const { data: voyages = [], isLoading: isVoyagesLoading } = useQuery({
     queryKey: ["voyages"],
     queryFn: async () => {
       const { data } = await supabase
@@ -141,7 +141,7 @@ const Journal = () => {
   });
 
   // Fetch waypoints for all voyages
-  const { data: allWaypoints = [] } = useQuery({
+  const { data: allWaypoints = [], isLoading: isWaypointsLoading } = useQuery({
     queryKey: ["voyage-waypoints"],
     queryFn: async () => {
       const { data } = await supabase
@@ -288,6 +288,7 @@ const Journal = () => {
             highlightedVoyageId={highlightedVoyageId}
             onArticleClick={handleArticleClick}
             lang={lang}
+            initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
           />
 
           {/* Floating controls — top right */}
@@ -365,7 +366,7 @@ const Journal = () => {
 
             {/* Article list */}
             <div className="flex-1 overflow-y-auto pb-3">
-              {isLoading ? (
+              {isArticlesLoading ? (
                 <div className="p-3 space-y-3">
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className="animate-pulse flex gap-3">
@@ -434,7 +435,7 @@ const Journal = () => {
 
           <div className="flex-1 px-4 md:px-6 py-4">
             <div className="max-w-7xl mx-auto">
-              {isLoading ? (
+              {isArticlesLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {[...Array(6)].map((_, i) => (
                     <div key={i} className="animate-pulse">

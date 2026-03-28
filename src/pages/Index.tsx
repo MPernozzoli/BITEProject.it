@@ -1,13 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRight, Anchor, Wrench, Compass, Wifi, Pen, Eye } from "lucide-react";
+import { ArrowRight, Wrench, Compass, Wifi, Pen, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
+import VoyageMap from "@/components/voyage/VoyageMap";
+import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 import bowSunset from "@/assets/bow-sunset.jpeg";
 import boatSunset from "@/assets/boat-sunset.jpeg";
@@ -41,6 +43,7 @@ const Index = () => {
   const { t, lang } = useI18n();
   const { isRead } = useArticleReads();
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
 
@@ -73,6 +76,58 @@ const Index = () => {
       return (data || []).map((a) => ({ ...a, tags: [] })) as HomeArticle[];
     },
   });
+
+  const { data: mapArticles = [], isLoading: isMapArticlesLoading } = useQuery<GeoArticle[]>({
+    queryKey: ["home-logbook-map-articles"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("logbook_articles")
+        .select("id, title_en, title_it, slug, cover_image, excerpt_en, excerpt_it, published_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, location_name")
+        .eq("status", "published")
+        .order("published_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []) as GeoArticle[];
+    },
+  });
+
+  const { data: voyages = [], isLoading: isVoyagesLoading } = useQuery<Voyage[]>({
+    queryKey: ["home-voyages"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyages" as any)
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as unknown as Voyage[];
+    },
+  });
+
+  const { data: allWaypoints = [], isLoading: isWaypointsLoading } = useQuery<VoyageWaypoint[]>({
+    queryKey: ["home-voyage-waypoints"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_waypoints" as any)
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as unknown as VoyageWaypoint[];
+    },
+  });
+
+  const waypointsMap = useMemo(() => {
+    const map: Record<string, VoyageWaypoint[]> = {};
+    allWaypoints.forEach((waypoint) => {
+      if (!map[waypoint.voyage_id]) map[waypoint.voyage_id] = [];
+      map[waypoint.voyage_id].push(waypoint);
+    });
+    return map;
+  }, [allWaypoints]);
+
+  const isHomeMapReady = !isMapArticlesLoading && !isVoyagesLoading && !isWaypointsLoading;
 
   const handleNewsletterSubscribe = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -317,14 +372,22 @@ const Index = () => {
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="glass-frame rounded-[30px] p-2">
-              <div className="aspect-[16/10] overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_top_left,rgba(159,207,214,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))] flex items-center justify-center">
-                <div className="text-center p-8">
-                  <div className="glass-chip inline-flex h-14 w-14 items-center justify-center mb-4 text-muted-foreground">
-                    <Anchor size={24} className="text-accent" />
+              <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]">
+                <VoyageMap
+                  voyages={voyages}
+                  waypointsMap={waypointsMap}
+                  articles={mapArticles}
+                  lang={lang}
+                  initialFitReady={isHomeMapReady}
+                  onArticleClick={(article) => navigate(`/logbook/${article.slug}`)}
+                />
+                {!isHomeMapReady ? (
+                  <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-4">
+                    <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans text-muted-foreground">
+                      {lang === "it" ? "Caricamento mappa..." : "Loading map..."}
+                    </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">Interactive route map</p>
-                  <p className="text-xs text-muted-foreground/70 mt-1">Coming soon</p>
-                </div>
+                ) : null}
               </div>
             </div>
             <div>
