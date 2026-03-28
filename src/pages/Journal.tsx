@@ -10,23 +10,68 @@ import VoyageMap from "@/components/voyage/VoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
-import ExpandedArticleModal from "@/components/voyage/ExpandedArticleModal";
+import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import { totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
 const Journal = () => {
+  const EXPANDED_READER_MS = 560;
   const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
   const [panelProfileId, setPanelProfileId] = useState<string | null>(null);
-  const [expandedArticleSlug, setExpandedArticleSlug] = useState<string | null>(null);
+  const [expandedArticle, setExpandedArticle] = useState<{ slug: string; originRect: ExpandedArticleOrigin } | null>(null);
+  const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const articlePanelRef = useRef<HTMLDivElement | null>(null);
+
+  const buildFallbackPanelRect = useCallback((): ExpandedArticleOrigin => {
+    const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+    const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+    const top = 96;
+    const bottomInset = 16;
+
+    if (viewportWidth >= 640) {
+      const width = viewportWidth >= 1280 ? 460 : 440;
+      return {
+        top,
+        left: Math.max(16, viewportWidth - 16 - width),
+        width,
+        height: Math.max(320, viewportHeight - top - bottomInset),
+        borderRadius: 32,
+      };
+    }
+
+    return {
+      top,
+      left: 12,
+      width: Math.max(320, viewportWidth - 24),
+      height: Math.max(320, viewportHeight - top - bottomInset),
+      borderRadius: 32,
+    };
+  }, []);
+
+  const capturePanelOrigin = useCallback((): ExpandedArticleOrigin => {
+    const rect = articlePanelRef.current?.getBoundingClientRect();
+
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return buildFallbackPanelRect();
+    }
+
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      borderRadius: 32,
+    };
+  }, [buildFallbackPanelRect]);
 
   // Fetch articles with geo data
   const { data: articles = [], isLoading } = useQuery({
@@ -171,9 +216,19 @@ const Journal = () => {
   const handleOpenExpandedArticle = useCallback((article: GeoArticle) => {
     setPanelArticle(article);
     setPanelProfileId(null);
-    setExpandedArticleSlug(article.slug);
+    setExpandedArticle({
+      slug: article.slug,
+      originRect: capturePanelOrigin(),
+    });
+    setExpandedArticlePhase("opening");
     setSidebarOpen(false);
-  }, []);
+  }, [capturePanelOrigin]);
+
+  const handleCollapseExpandedArticle = useCallback(() => {
+    if (!expandedArticle) return;
+    setExpandedArticlePhase("closing");
+    setSidebarOpen(true);
+  }, [expandedArticle]);
 
   useEffect(() => {
     if (!panelArticle) return;
@@ -184,6 +239,31 @@ const Journal = () => {
     }
   }, [articles, panelArticle]);
 
+  useEffect(() => {
+    if (expandedArticlePhase !== "opening") return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      setExpandedArticlePhase("open");
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [expandedArticlePhase]);
+
+  useEffect(() => {
+    if (expandedArticlePhase !== "closing") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setExpandedArticle(null);
+      setExpandedArticlePhase(null);
+    }, EXPANDED_READER_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [expandedArticlePhase]);
+
   // Highlighted voyage based on selected article
   const highlightedVoyageId = useMemo(() => {
     if (!selectedArticleId) return null;
@@ -191,7 +271,9 @@ const Journal = () => {
     return article?.voyage_id || null;
   }, [selectedArticleId, articles]);
 
-  const sidePanelVisible = Boolean(panelArticle) && !expandedArticleSlug;
+  const articleReaderActive = Boolean(expandedArticle);
+  const showPreviewPanel = Boolean(panelArticle) && (!articleReaderActive || expandedArticlePhase === "closing");
+  const sidePanelVisible = showPreviewPanel || Boolean(panelProfileId);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -419,38 +501,44 @@ const Journal = () => {
         </>
       )}
 
-      {!expandedArticleSlug &&
-        (panelProfileId ? (
-          <ProfileSlidePanel
-            profileId={panelProfileId}
-            article={panelArticle}
-            lang={lang}
-            onBackToArticle={() => setPanelProfileId(null)}
-            onClose={() => {
-              setPanelProfileId(null);
-              setPanelArticle(null);
-              setSelectedArticleId(null);
-            }}
-          />
-        ) : (
-          <ArticleSlidePanel
-            article={panelArticle}
-            onClose={() => {
-              setPanelProfileId(null);
-              setPanelArticle(null);
-              setSelectedArticleId(null);
-            }}
-            onAuthorClick={handleProfilePreviewOpen}
-            onOpenArticle={handleOpenExpandedArticle}
-            lang={lang}
-          />
-        ))}
-
-      {expandedArticleSlug && (
-        <ExpandedArticleModal
-          slug={expandedArticleSlug}
+      {!articleReaderActive && panelProfileId ? (
+        <ProfileSlidePanel
+          profileId={panelProfileId}
+          article={panelArticle}
           lang={lang}
-          onClose={() => setExpandedArticleSlug(null)}
+          onBackToArticle={() => setPanelProfileId(null)}
+          onClose={() => {
+            setPanelProfileId(null);
+            setPanelArticle(null);
+            setSelectedArticleId(null);
+          }}
+        />
+      ) : null}
+
+      {showPreviewPanel && !panelProfileId ? (
+        <ArticleSlidePanel
+          article={panelArticle}
+          panelRef={articlePanelRef}
+          isSoftHidden={articleReaderActive && expandedArticlePhase !== "closing"}
+          disableEntranceAnimation={expandedArticlePhase === "closing"}
+          onClose={() => {
+            setPanelProfileId(null);
+            setPanelArticle(null);
+            setSelectedArticleId(null);
+          }}
+          onAuthorClick={handleProfilePreviewOpen}
+          onOpenArticle={handleOpenExpandedArticle}
+          lang={lang}
+        />
+      ) : null}
+
+      {expandedArticle && expandedArticlePhase && (
+        <ExpandedArticleModal
+          slug={expandedArticle.slug}
+          originRect={expandedArticle.originRect}
+          phase={expandedArticlePhase}
+          lang={lang}
+          onClose={handleCollapseExpandedArticle}
         />
       )}
     </div>

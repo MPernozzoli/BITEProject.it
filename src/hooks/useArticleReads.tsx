@@ -4,7 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getOrCreateVisitorKey } from "@/lib/visitor-key";
 
-const READ_QUALIFICATION_MS = 30_000;
+const READ_RETRY_MS = 5_000;
+
+function isLegacyIncrementRpcError(error: { code?: string; message?: string; details?: string } | null) {
+  if (!error) return false;
+
+  const haystack = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+  return haystack.includes("pgrst")
+    && (
+      haystack.includes("_visitor_key")
+      || haystack.includes("increment_article_view_count")
+      || haystack.includes("function")
+      || haystack.includes("signature")
+    );
+}
 
 function patchArticleViewCountInCache(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -69,8 +82,21 @@ export function useRegisterArticleRead(articleSlug?: string) {
         _article_id: articleId,
         _visitor_key: getOrCreateVisitorKey(),
       });
-      if (error) throw error;
-      return Number(data ?? 0);
+
+      if (!error) {
+        return Number(data ?? 0);
+      }
+
+      if (isLegacyIncrementRpcError(error)) {
+        const legacyResult = await supabase.rpc("increment_article_view_count", {
+          _article_id: articleId,
+        });
+
+        if (legacyResult.error) throw legacyResult.error;
+        return Number(legacyResult.data ?? 0);
+      }
+
+      throw error;
     },
     onSuccess: (count, articleId) => {
       patchArticleViewCountInCache(queryClient, articleId, count, articleSlug);
@@ -79,80 +105,51 @@ export function useRegisterArticleRead(articleSlug?: string) {
         queryClient.invalidateQueries({ queryKey: ["article-reads", userId] });
       }
     },
+    onError: (error, articleId) => {
+      console.error("Failed to register qualified article read", { articleId, error });
+    },
   });
 }
 
 export function useQualifiedArticleRead(articleId?: string | null, articleSlug?: string) {
-  const { mutate: registerArticleRead } = useRegisterArticleRead(articleSlug);
+  const { mutateAsync: registerArticleRead } = useRegisterArticleRead(articleSlug);
   const trackedReadFor = useRef<string | null>(null);
+  const readRequestInFlightFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (!articleId) return;
     trackedReadFor.current = null;
+    readRequestInFlightFor.current = null;
 
-    let timeoutId: number | null = null;
-    let activeSince: number | null = null;
-    let accumulatedMs = 0;
+    let retryTimeoutId: number | null = null;
 
-    const clearTimer = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-    };
-
-    const pauseTracking = () => {
-      if (activeSince !== null) {
-        accumulatedMs += Date.now() - activeSince;
-        activeSince = null;
-      }
-      clearTimer();
-    };
-
-    const registerRead = () => {
+    const registerRead = async () => {
       if (trackedReadFor.current === articleId) return;
-      trackedReadFor.current = articleId;
-      pauseTracking();
-      registerArticleRead(articleId);
-    };
+      if (readRequestInFlightFor.current === articleId) return;
 
-    const resumeTracking = () => {
-      if (trackedReadFor.current === articleId) return;
-      if (document.visibilityState !== "visible") return;
-      if (activeSince !== null) return;
+      readRequestInFlightFor.current = articleId;
 
-      const remainingMs = READ_QUALIFICATION_MS - accumulatedMs;
-      if (remainingMs <= 0) {
-        registerRead();
+      try {
+        await registerArticleRead(articleId);
+        trackedReadFor.current = articleId;
+      } catch {
+        readRequestInFlightFor.current = null;
+        retryTimeoutId = window.setTimeout(() => {
+          retryTimeoutId = null;
+          void registerRead();
+        }, READ_RETRY_MS);
         return;
       }
 
-      activeSince = Date.now();
-      timeoutId = window.setTimeout(() => {
-        accumulatedMs = READ_QUALIFICATION_MS;
-        activeSince = null;
-        timeoutId = null;
-        registerRead();
-      }, remainingMs);
+      readRequestInFlightFor.current = null;
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        resumeTracking();
-        return;
-      }
-
-      pauseTracking();
-    };
-
-    resumeTracking();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", pauseTracking);
+    void registerRead();
 
     return () => {
-      pauseTracking();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", pauseTracking);
+      if (retryTimeoutId !== null) {
+        window.clearTimeout(retryTimeoutId);
+      }
     };
   }, [articleId, registerArticleRead]);
 }

@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { X, MapPin, Heart, Eye, ArrowUpRight } from "lucide-react";
 import { format } from "date-fns";
 import type { GeoArticle } from "@/lib/voyage-utils";
@@ -10,9 +11,21 @@ interface ArticleSlidePanelProps {
   lang: "en" | "it";
   onAuthorClick?: (profileId: string) => void;
   onOpenArticle?: (article: GeoArticle) => void;
+  panelRef?: Ref<HTMLDivElement>;
+  isSoftHidden?: boolean;
+  disableEntranceAnimation?: boolean;
 }
 
-const ArticleSlidePanel = ({ article, onClose, lang, onAuthorClick, onOpenArticle }: ArticleSlidePanelProps) => {
+const ArticleSlidePanel = ({
+  article,
+  onClose,
+  lang,
+  onAuthorClick,
+  onOpenArticle,
+  panelRef,
+  isSoftHidden = false,
+  disableEntranceAnimation = false,
+}: ArticleSlidePanelProps) => {
   if (!article) return null;
 
   const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
@@ -37,7 +50,14 @@ const ArticleSlidePanel = ({ article, onClose, lang, onAuthorClick, onOpenArticl
         aria-hidden
       />
 
-      <div className="fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col">
+      <div
+        ref={panelRef}
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl flex flex-col transition-opacity duration-300 ${
+          disableEntranceAnimation ? "" : "animate-slide-in-right"
+        } ${
+          isSoftHidden ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+      >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
           <div className="min-w-0 flex items-center gap-2 text-xs font-sans text-muted-foreground">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">

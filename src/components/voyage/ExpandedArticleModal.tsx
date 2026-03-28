@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { generateHTML } from "@tiptap/react";
 import { ArrowLeft, MapPin, X } from "lucide-react";
@@ -13,13 +13,47 @@ import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArt
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
+export type ExpandedArticleOrigin = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  borderRadius: number;
+};
+
 type ExpandedArticleModalProps = {
   slug: string | null;
   lang: "it" | "en";
+  originRect: ExpandedArticleOrigin | null;
+  phase: "opening" | "open" | "closing";
   onClose: () => void;
 };
 
-const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps) => {
+const ANIMATION_MS = 560;
+const ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+const getViewportRect = () => ({
+  width: typeof window === "undefined" ? 1440 : window.innerWidth,
+  height: typeof window === "undefined" ? 900 : window.innerHeight,
+});
+
+const buildTargetRect = (viewportWidth: number, viewportHeight: number): ExpandedArticleOrigin => {
+  const inset = viewportWidth >= 1024 ? 28 : viewportWidth >= 768 ? 20 : 12;
+  const width = Math.min(1180, Math.max(320, viewportWidth - inset * 2));
+  const height = Math.max(420, viewportHeight - inset * 2);
+
+  return {
+    top: inset,
+    left: (viewportWidth - width) / 2,
+    width,
+    height,
+    borderRadius: viewportWidth >= 768 ? 36 : 30,
+  };
+};
+
+const ExpandedArticleModal = ({ slug, lang, originRect, phase, onClose }: ExpandedArticleModalProps) => {
+  const [viewport, setViewport] = useState(getViewportRect);
+
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
     enabled: Boolean(slug),
@@ -83,13 +117,26 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
       if (event.key === "Escape") onClose();
     };
 
+    const handleResize = () => setViewport(getViewportRect());
+
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
 
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
     };
   }, [onClose]);
+
+  const targetRect = useMemo(
+    () => buildTargetRect(viewport.width, viewport.height),
+    [viewport.height, viewport.width]
+  );
+
+  const shellRect = phase === "open" ? targetRect : (originRect || targetRect);
+  const overlayOpacity = phase === "closing" ? 0 : phase === "open" ? 1 : 0;
+  const contentVisible = phase === "open";
 
   const title = article
     ? lang === "en"
@@ -163,20 +210,52 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
 
   return (
     <>
-      <div className="fixed inset-0 z-[70] bg-black/45 backdrop-blur-xl" onClick={onClose} aria-hidden />
+      <div
+        className="fixed inset-0 z-[70] bg-black/28 backdrop-blur-xl"
+        style={{
+          opacity: overlayOpacity,
+          transition: `opacity ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+        }}
+        onClick={phase === "open" ? onClose : undefined}
+        aria-hidden
+      />
 
-      <div className="fixed inset-3 z-[71] md:inset-5 lg:inset-7">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={lang === "it" ? "Articolo completo" : "Full article"}
+        className="fixed z-[71] overflow-hidden border border-black/5 bg-[rgba(255,255,255,0.97)] shadow-[0_40px_120px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
+        style={{
+          top: `${shellRect.top}px`,
+          left: `${shellRect.left}px`,
+          width: `${shellRect.width}px`,
+          height: `${shellRect.height}px`,
+          borderRadius: `${shellRect.borderRadius}px`,
+          transition: [
+            `top ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `left ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `width ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `height ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `border-radius ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `box-shadow ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `background-color ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+          ].join(", "),
+        }}
+      >
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={lang === "it" ? "Articolo completo" : "Full article"}
-          className="mx-auto flex h-full w-full max-w-[1180px] flex-col overflow-hidden rounded-[36px] border border-white/55 bg-background/78 shadow-[0_40px_120px_rgba(15,23,42,0.3)] backdrop-blur-2xl"
+          className="flex h-full flex-col"
+          style={{
+            opacity: contentVisible ? 1 : 0.2,
+            transform: contentVisible ? "translateY(0px)" : "translateY(10px)",
+            transition: `opacity 280ms ease, transform 360ms ${ANIMATION_EASING}`,
+            transitionDelay: contentVisible ? "120ms" : "0ms",
+          }}
         >
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/62 px-4 py-4 backdrop-blur-xl md:px-5">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-black/6 bg-white/96 px-4 py-4 backdrop-blur-xl md:px-5">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/65 px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-white/80"
+              className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-white/90"
             >
               <ArrowLeft size={15} />
               {lang === "it" ? "Torna all'anteprima" : "Back to preview"}
@@ -185,7 +264,7 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/65 text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/8 bg-white text-muted-foreground transition-colors hover:text-foreground"
               aria-label={lang === "it" ? "Chiudi articolo" : "Close article"}
             >
               <X size={18} />
@@ -195,19 +274,19 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
           <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5">
             {isLoading ? (
               <div className="mx-auto max-w-4xl space-y-4 animate-pulse">
-                <div className="h-[34vh] rounded-[30px] bg-muted/70" />
-                <div className="h-12 w-3/4 rounded-full bg-muted/60" />
-                <div className="h-5 w-1/3 rounded-full bg-muted/60" />
-                <div className="rounded-[28px] bg-muted/60 p-6 space-y-3">
-                  <div className="h-4 w-full rounded-full bg-muted" />
-                  <div className="h-4 w-[92%] rounded-full bg-muted" />
-                  <div className="h-4 w-[88%] rounded-full bg-muted" />
-                  <div className="h-4 w-[76%] rounded-full bg-muted" />
+                <div className="h-[34vh] rounded-[30px] bg-neutral-100" />
+                <div className="h-12 w-3/4 rounded-full bg-neutral-100" />
+                <div className="h-5 w-1/3 rounded-full bg-neutral-100" />
+                <div className="rounded-[28px] bg-neutral-100 p-6 space-y-3">
+                  <div className="h-4 w-full rounded-full bg-neutral-200" />
+                  <div className="h-4 w-[92%] rounded-full bg-neutral-200" />
+                  <div className="h-4 w-[88%] rounded-full bg-neutral-200" />
+                  <div className="h-4 w-[76%] rounded-full bg-neutral-200" />
                 </div>
               </div>
             ) : !article ? (
               <div className="mx-auto flex h-full max-w-xl items-center justify-center">
-                <div className="rounded-[28px] border border-white/55 bg-white/55 px-6 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div className="rounded-[28px] border border-black/6 bg-white px-6 py-10 text-center shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                   <p className="mb-4 text-sm font-sans text-muted-foreground">
                     {lang === "it" ? "Articolo non trovato." : "Article not found."}
                   </p>
@@ -224,34 +303,34 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
             ) : (
               <div className="mx-auto max-w-4xl space-y-5">
                 {article.cover_image && (
-                  <div className="overflow-hidden rounded-[32px] border border-white/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                    <div className="aspect-[16/8.8] overflow-hidden bg-muted">
+                  <div className="overflow-hidden rounded-[32px] border border-black/6 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+                    <div className="aspect-[16/8.8] overflow-hidden bg-neutral-100">
                       <img src={article.cover_image} alt={title} className="h-full w-full max-w-none" style={coverStyle} />
                     </div>
                   </div>
                 )}
 
-                <section className="rounded-[32px] border border-white/55 bg-white/58 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] md:p-7">
+                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <div className="mb-5 flex flex-wrap items-center gap-2">
                     {article.location_name && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/75 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-black/7 bg-white px-3 py-1.5 text-xs font-sans text-muted-foreground">
                         <MapPin size={12} className="text-accent" />
                         {article.location_name}
                       </span>
                     )}
-                    <LiveReadCounter count={views} lang={lang} className="rounded-full border border-white/75 bg-background/75 px-3 py-1.5" />
+                    <LiveReadCounter count={views} lang={lang} className="rounded-full border border-black/7 bg-white px-3 py-1.5" />
                   </div>
 
                   <h1 className="editorial-heading text-3xl leading-tight text-balance md:text-5xl">{title}</h1>
 
                   {excerpt && (
-                    <div className="mt-5 rounded-[24px] border border-white/65 bg-background/70 px-4 py-4 md:px-5">
+                    <div className="mt-5 rounded-[24px] border border-black/6 bg-white px-4 py-4 md:px-5">
                       <p className="editorial-body whitespace-pre-wrap leading-[1.8] text-muted-foreground">{excerpt}</p>
                     </div>
                   )}
 
                   {(authors.length > 0 || dateLabel) && (
-                    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-border/60 pt-6">
+                    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-black/6 pt-6">
                       {authors.map((author) => (
                         <ProfileCard
                           key={author.id}
@@ -271,7 +350,7 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
                   )}
                 </section>
 
-                <section className="rounded-[32px] border border-white/55 bg-white/58 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] md:p-7">
+                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   {htmlContent && (
                     <div
                       className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
@@ -287,18 +366,18 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
                     </p>
                   )}
 
-                  <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-border/60 pt-6">
+                  <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
                     <LikeButton articleId={article.id} />
                     <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
                   </div>
                 </section>
 
-                <section className="rounded-[32px] border border-white/55 bg-white/52 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] md:p-7">
+                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <CommentSection articleId={article.id} />
                 </section>
 
                 {tags.length > 0 && (
-                  <section className="rounded-[32px] border border-white/55 bg-white/50 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                     <p className="mb-3 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
                       {lang === "it" ? "Hashtag" : "Tags"}
                     </p>
@@ -306,7 +385,7 @@ const ExpandedArticleModal = ({ slug, lang, onClose }: ExpandedArticleModalProps
                       {tags.map((tag) => (
                         <span
                           key={tag.id}
-                          className="rounded-full border border-white/70 bg-background/72 px-3 py-1.5 text-xs font-sans text-muted-foreground"
+                          className="rounded-full border border-black/7 bg-white px-3 py-1.5 text-xs font-sans text-muted-foreground"
                         >
                           #{tag.name}
                         </span>
