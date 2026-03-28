@@ -76,15 +76,15 @@ const ArticleMapAside = ({ latitude, longitude, title }: ArticleMapAsideProps) =
   }, [latitude, longitude, mapUnavailable]);
 
   return (
-    <div className="border border-border bg-muted/20 overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background/80">
+    <div className="glass-panel rounded-[28px] overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b glass-divider">
         <MapPin size={14} className="text-accent shrink-0" />
         <span className="text-[11px] font-sans text-muted-foreground tracking-wide truncate" title={title}>
           {lang === "it" ? "Posizione articolo" : "Article location"}
         </span>
       </div>
       {mapUnavailable ? (
-        <div className="w-full h-[280px] md:h-[320px] px-4 py-5 flex flex-col items-start justify-end gap-2 bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0%,transparent_55%)]">
+        <div className="w-full h-[280px] md:h-[320px] px-4 py-5 flex flex-col items-start justify-end gap-2 bg-[radial-gradient(circle_at_top_left,rgba(159,207,214,0.18)_0%,transparent_55%)]">
           <p className="text-sm font-sans text-foreground">
             {lang === "it" ? "Mappa non disponibile su questo dispositivo." : "Map unavailable on this device."}
           </p>

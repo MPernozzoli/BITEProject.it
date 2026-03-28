@@ -10,6 +10,15 @@ interface ArticleSidebarProps {
   storyId?: string | null;
 }
 
+type SidebarArticle = {
+  id: string;
+  slug: string;
+  title_en: string;
+  title_it: string | null;
+  cover_image?: string | null;
+  published_at?: string | null;
+};
+
 const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
   const { lang } = useI18n();
   const { isRead } = useArticleReads();
@@ -70,15 +79,15 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
     },
   });
 
-  const getTitle = (a: any) => lang === "en" ? a.title_en : (a.title_it || a.title_en);
+  const getTitle = (a: Pick<SidebarArticle, "title_en" | "title_it">) => lang === "en" ? a.title_en : (a.title_it || a.title_en);
 
-  const SidebarLink = ({ article, showReadBadge = true }: { article: any; showReadBadge?: boolean }) => (
+  const SidebarLink = ({ article, showReadBadge = true }: { article: SidebarArticle; showReadBadge?: boolean }) => (
     <Link
       to={`/logbook/${article.slug}`}
-      className={`flex items-start gap-3 group py-2 ${article.id === currentArticleId ? "opacity-50 pointer-events-none" : ""}`}
+      className={`glass-panel-soft rounded-[22px] flex items-start gap-3 group p-3 ${article.id === currentArticleId ? "opacity-50 pointer-events-none" : "transition-transform duration-300 hover:-translate-y-0.5"}`}
     >
       {article.cover_image && (
-        <div className="w-12 h-12 flex-shrink-0 overflow-hidden bg-muted">
+        <div className="glass-frame w-12 h-12 flex-shrink-0 rounded-[16px] p-1">
           <img src={article.cover_image} alt="" className="img-cover" />
         </div>
       )}
@@ -97,30 +106,29 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
 
   return (
     <aside className="space-y-8">
-      {/* Story chapters */}
       {storyId && storyChapters.length > 1 && (
-        <div>
+        <div className="glass-panel rounded-[28px] p-5">
           <div className="flex items-center gap-2 mb-4">
             <BookOpen size={14} className="text-accent" />
             <h3 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
               {lang === "it" ? "Capitoli" : "Chapters"}
             </h3>
           </div>
-          <div className="space-y-1 border-l-2 border-border pl-4">
+          <div className="space-y-2">
             {storyChapters.map((ch, i) => (
               <Link
                 key={ch.id}
                 to={`/logbook/${ch.slug}`}
-                className={`block text-sm py-1.5 transition-colors ${
+                className={`glass-panel-soft flex items-center gap-3 rounded-[20px] px-4 py-3 text-sm transition-colors ${
                   ch.id === currentArticleId
                     ? "text-accent font-medium"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <span className="text-xs text-muted-foreground mr-2">{i + 1}.</span>
-                {getTitle(ch)}
+                <span className="glass-chip inline-flex h-7 min-w-7 items-center justify-center text-[11px] text-muted-foreground">{i + 1}</span>
+                <span className="min-w-0 flex-1">{getTitle(ch)}</span>
                 {isRead(ch.id) && ch.id !== currentArticleId && (
-                  <Eye size={10} className="inline ml-1.5 text-muted-foreground" />
+                  <Eye size={10} className="text-muted-foreground" />
                 )}
               </Link>
             ))}
@@ -128,9 +136,8 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
         </div>
       )}
 
-      {/* Popular */}
       {popularArticles.length > 0 && (
-        <div>
+        <div className="glass-panel rounded-[28px] p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={14} className="text-accent" />
             <h3 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
@@ -145,9 +152,8 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
         </div>
       )}
 
-      {/* Recent */}
       {recentArticles.length > 0 && (
-        <div>
+        <div className="glass-panel rounded-[28px] p-5">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={14} className="text-accent" />
             <h3 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">

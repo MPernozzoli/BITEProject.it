@@ -46,30 +46,32 @@ const Footer = () => {
   const { t, lang } = useI18n();
 
   return (
-    <footer className="bg-primary text-primary-foreground">
-      <div className="max-w-7xl mx-auto px-6 md:px-12 py-12 md:py-16">
+    <footer className="px-4 pb-4 pt-8 md:px-6 md:pb-6 md:pt-10">
+      <div className="glass-panel max-w-7xl mx-auto rounded-[34px] px-6 py-10 md:px-10 md:py-12">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-10">
-          {/* Brand */}
           <div className="max-w-sm">
-            <h3 className="font-serif text-xl font-bold tracking-widest mb-3">BITE</h3>
-            <p className="text-primary-foreground/60 text-sm leading-relaxed italic font-serif">
+            <div className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-5">
+              <span className="h-2 w-2 rounded-full bg-accent" />
+              Better Is The End
+            </div>
+            <h3 className="font-serif text-2xl font-bold tracking-[0.18em] mb-3 text-foreground">BITE</h3>
+            <p className="text-foreground/68 text-sm leading-relaxed italic font-serif">
               {lang === "it"
                 ? "Due umani, due cani, una barca vecchia e il coraggio di mollare gli ormeggi. Storie vere da chi vive il mare ogni giorno."
                 : "Two humans, two dogs, an old boat, and the guts to cast off. Real stories from those who live the sea every day."}
             </p>
           </div>
 
-          {/* Nav + Social inline */}
-          <div className="flex gap-12 md:gap-16">
-            <nav className="flex flex-col gap-2">
-              <Link to="/crew" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.about")}</Link>
-              <Link to="/manifesto" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.manifesto")}</Link>
-              <Link to="/logbook" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.journal")}</Link>
-              <Link to="/route" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.route")}</Link>
-              <Link to="/collaborations" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.collaborations")}</Link>
-              <Link to="/contact" className="text-xs text-primary-foreground/50 hover:text-primary-foreground transition-colors">{t("nav.contact")}</Link>
+          <div className="flex flex-col gap-8 md:items-end">
+            <nav className="flex flex-wrap gap-2 md:justify-end">
+              <Link to="/crew" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.about")}</Link>
+              <Link to="/manifesto" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.manifesto")}</Link>
+              <Link to="/logbook" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.journal")}</Link>
+              <Link to="/route" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.route")}</Link>
+              <Link to="/collaborations" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.collaborations")}</Link>
+              <Link to="/contact" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.contact")}</Link>
             </nav>
-            <div className="flex flex-wrap items-center gap-3 self-start">
+            <div className="flex flex-wrap items-center gap-3 md:justify-end">
               {socialLinks.map(({ href, label, icon: Icon }) => (
                 <a
                   key={label}
@@ -78,7 +80,7 @@ const Footer = () => {
                   rel="noopener noreferrer"
                   aria-label={label}
                   title={label}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-primary-foreground/15 text-primary-foreground/50 transition-colors hover:border-primary-foreground/40 hover:text-primary-foreground"
+                  className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <Icon size={16} />
                   <span className="sr-only">{label}</span>
@@ -88,17 +90,17 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-primary-foreground/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p className="text-[11px] text-primary-foreground/30">
+        <div className="mt-10 pt-6 border-t glass-divider flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground/70">
             © {new Date().getFullYear()} BITE. {t("footer.rights")}
           </p>
-          <p className="text-[11px] text-primary-foreground/30">
+          <p className="text-[11px] text-muted-foreground/70">
             {lang === "it" ? "Realizzato da" : "Made by"}{" "}
             <a
               href="https://www.pynkstudio.it"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-pink-400 hover:text-pink-300 transition-colors font-medium"
+              className="text-foreground hover:text-accent transition-colors font-medium"
             >
               PynkStudio
             </a>

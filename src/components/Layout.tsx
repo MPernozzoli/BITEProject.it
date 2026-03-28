@@ -11,9 +11,14 @@ const Layout = ({ children }: { children: ReactNode }) => {
   }, [pathname]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="site-shell min-h-screen flex flex-col">
+      <div className="site-shell__ambient" aria-hidden>
+        <span className="site-shell__orb site-shell__orb--one" />
+        <span className="site-shell__orb site-shell__orb--two" />
+        <span className="site-shell__orb site-shell__orb--three" />
+      </div>
       <Navbar />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 relative">{children}</main>
       <Footer />
     </div>
   );

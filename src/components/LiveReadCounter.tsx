@@ -11,29 +11,29 @@ type LiveReadCounterProps = {
 const FLIP_ANIMATION_MS = 640;
 
 export default function LiveReadCounter({ count, lang, className }: LiveReadCounterProps) {
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const previousCountRef = useRef(count);
-  const animationTimeoutRef = useRef<number | null>(null);
+  const updateTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (previousCountRef.current === count) return;
 
     previousCountRef.current = count;
-    setIsAnimating(true);
+    setIsUpdating(true);
 
-    if (animationTimeoutRef.current !== null) {
-      window.clearTimeout(animationTimeoutRef.current);
+    if (updateTimeoutRef.current !== null) {
+      window.clearTimeout(updateTimeoutRef.current);
     }
 
-    animationTimeoutRef.current = window.setTimeout(() => {
-      setIsAnimating(false);
-      animationTimeoutRef.current = null;
+    updateTimeoutRef.current = window.setTimeout(() => {
+      setIsUpdating(false);
+      updateTimeoutRef.current = null;
     }, FLIP_ANIMATION_MS);
 
     return () => {
-      if (animationTimeoutRef.current !== null) {
-        window.clearTimeout(animationTimeoutRef.current);
-        animationTimeoutRef.current = null;
+      if (updateTimeoutRef.current !== null) {
+        window.clearTimeout(updateTimeoutRef.current);
+        updateTimeoutRef.current = null;
       }
     };
   }, [count]);
@@ -45,24 +45,25 @@ export default function LiveReadCounter({ count, lang, className }: LiveReadCoun
 
   return (
     <span
-      className={cn("inline-flex items-center gap-2 text-sm font-sans text-muted-foreground", className)}
+      className={cn("inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground/80", className)}
       title={lang === "it" ? "Letture totali" : "Total reads"}
     >
-      <Eye size={15} className={cn("shrink-0 opacity-80 transition-transform duration-500", isAnimating && "scale-110")} aria-hidden />
-      <span className="flex items-center gap-2">
+      <Eye
+        size={15}
+        className={cn(
+          "shrink-0 opacity-60 transition-opacity duration-500",
+          isUpdating && "opacity-80"
+        )}
+        aria-hidden
+      />
+      <span className="flex items-center gap-1.5">
         <span
           className={cn(
-            "read-counter-chip",
-            isAnimating && "read-counter-chip-active"
+            "tabular-nums transition-all duration-500",
+            isUpdating ? "opacity-100 -translate-y-px text-muted-foreground" : "opacity-75"
           )}
         >
-          <span className="read-counter-chip__hinge" aria-hidden />
-          <span
-            key={formattedCount}
-            className={cn("read-counter-chip__value", isAnimating && "read-counter-chip__value-active")}
-          >
-            {formattedCount}
-          </span>
+          {formattedCount}
         </span>
         <span>{lang === "it" ? "letture" : "reads"}</span>
       </span>

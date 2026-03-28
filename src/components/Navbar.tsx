@@ -159,10 +159,10 @@ const Navbar = () => {
   ];
 
   const navShellClass = mobileOpen
-    ? "bg-navy/90 border-b border-white/10 shadow-2xl backdrop-blur-xl"
+    ? "glass-panel-dark border-white/16 shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
     : scrolled
-      ? "bg-background/95 border-b border-border shadow-sm backdrop-blur-md"
-      : "bg-gradient-to-b from-black/60 via-black/30 to-transparent";
+      ? "glass-panel border-white/55 shadow-[0_26px_80px_rgba(15,23,42,0.14)]"
+      : "glass-panel-dark border-white/14 shadow-[0_28px_80px_rgba(0,0,0,0.28)]";
 
   const navTextClass = mobileOpen
     ? "text-white"
@@ -170,10 +170,10 @@ const Navbar = () => {
       ? "text-foreground"
       : "text-white";
   const mobileButtonClass = mobileOpen
-    ? "border-white/15 bg-white/10 text-white shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)]"
+    ? "glass-chip-dark border-white/16 text-white shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)]"
     : scrolled
-      ? "border-border bg-background/85 text-foreground shadow-sm"
-      : "border-white/20 bg-black/20 text-white backdrop-blur-md";
+      ? "glass-chip border-white/60 text-foreground shadow-sm"
+      : "glass-chip-dark border-white/18 text-white";
   const authCardText =
     lang === "it"
       ? "Accedi per gestire profilo, contenuti e impostazioni."
@@ -182,11 +182,15 @@ const Navbar = () => {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
-        navShellClass,
+        "fixed top-0 left-0 right-0 z-50 px-4 pt-3 transition-all duration-500 md:px-6 md:pt-4",
       )}
     >
-      <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16 md:h-20">
+      <div
+        className={cn(
+          "mx-auto flex h-16 max-w-7xl items-center justify-between rounded-[30px] px-5 md:h-[4.75rem] md:px-7",
+          navShellClass,
+        )}
+      >
         {/* Logo with hover expand */}
         <Link
           to="/"
@@ -231,10 +235,10 @@ const Navbar = () => {
               nd
             </span>
             <span
-              className={`inline-block transition-all duration-300 delay-500 ${
+              className={`inline-block overflow-hidden transition-all duration-300 delay-500 ${
                 logoHovered
-                  ? "opacity-100 translate-y-0 scale-110 text-current"
-                  : "opacity-0 -translate-y-2 scale-75"
+                  ? "max-w-[0.7em] opacity-100 translate-y-0 scale-110 text-current"
+                  : "max-w-0 opacity-0 -translate-y-2 scale-75"
               }`}
             >
               !
@@ -260,15 +264,16 @@ const Navbar = () => {
             <Link
               key={link.to}
               to={link.to}
-              className={`text-[13px] font-sans tracking-wide transition-colors duration-300 hover:text-accent ${
+              className={cn(
+                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-all duration-300 hover:text-accent",
                 scrolled
                   ? isLinkActive(link.to)
-                    ? "text-foreground font-medium"
+                    ? "glass-chip text-foreground font-medium"
                     : "text-muted-foreground"
                   : isLinkActive(link.to)
-                    ? "text-white font-medium"
-                    : "text-white/75"
-              }`}
+                    ? "glass-chip-dark text-white font-medium"
+                    : "text-white/75",
+              )}
             >
               {link.label}
             </Link>
@@ -282,11 +287,12 @@ const Navbar = () => {
             <button
               onClick={toggleLanguage}
               aria-label={languageToggleAriaLabel}
-              className={`text-xs font-sans tracking-widest transition-colors uppercase px-3 py-1 rounded-sm ${
+              className={cn(
+                "rounded-full px-3.5 py-2 text-xs font-sans uppercase tracking-[0.24em] transition-colors",
                 scrolled
-                  ? "text-muted-foreground hover:text-foreground border border-border"
-                  : "text-white/75 hover:text-white border border-white/30"
-              }`}
+                  ? "glass-chip text-muted-foreground hover:text-foreground"
+                  : "glass-chip-dark text-white/80 hover:text-white",
+              )}
             >
               {lang.toUpperCase()}
             </button>
@@ -303,7 +309,10 @@ const Navbar = () => {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity focus:outline-none overflow-hidden shrink-0"
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-sans font-medium tracking-wide transition-opacity focus:outline-none shrink-0",
+                    scrolled ? "glass-chip" : "glass-chip-dark text-white",
+                  )}
                 >
                   <ProfileAvatar
                     name={displayName}
@@ -313,7 +322,10 @@ const Navbar = () => {
                   />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent
+                align="end"
+                className="glass-panel mt-2 w-52 rounded-[1.5rem] border-white/55 p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
+              >
                 <DropdownMenuItem asChild>
                   <Link to="/profile" className="flex items-center gap-2">
                     <User size={14} />
@@ -346,7 +358,12 @@ const Navbar = () => {
           ) : (
             <Link
               to="/login"
-              className={`text-xs font-sans tracking-wide transition-colors ${scrolled ? "text-muted-foreground hover:text-foreground" : "text-white/75 hover:text-white"}`}
+              className={cn(
+                "rounded-full px-3.5 py-2 text-xs font-sans tracking-wide transition-colors",
+                scrolled
+                  ? "glass-chip text-muted-foreground hover:text-foreground"
+                  : "glass-chip-dark text-white/80 hover:text-white",
+              )}
             >
               {lang === "it" ? "Accedi" : "Login"}
             </Link>
@@ -437,11 +454,11 @@ const Navbar = () => {
                     <Link
                       key={link.to}
                       to={link.to}
-                      className={cn(
+                        className={cn(
                         "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-all duration-300",
                         active
-                          ? "border-white/0 bg-white text-navy shadow-[0_24px_60px_-36px_rgba(255,255,255,0.65)]"
-                          : "border-white/10 bg-white/[0.04] text-white hover:border-white/20 hover:bg-white/[0.07]",
+                          ? "glass-chip border-white/0 text-navy shadow-[0_24px_60px_-36px_rgba(255,255,255,0.65)]"
+                          : "glass-chip-dark border-white/12 text-white hover:border-white/22",
                       )}
                     >
                       <div className="min-w-0">
@@ -478,7 +495,7 @@ const Navbar = () => {
                 })}
               </div>
 
-              <div className="rounded-[1.75rem] border border-white/10 bg-black/10 p-4 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.95)]">
+              <div className="glass-panel-dark rounded-[1.75rem] border-white/12 p-4 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.95)]">
                 <p className="text-[0.65rem] font-sans uppercase tracking-[0.32em] text-white/55">
                   Account
                 </p>

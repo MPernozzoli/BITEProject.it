@@ -10,6 +10,7 @@ interface ProfileCardProps {
   size?: "sm" | "md" | "lg";
   showBio?: boolean;
   profileId?: string;
+  onProfileClick?: (profileId: string) => void;
 }
 
 const sizeClasses = {
@@ -18,12 +19,12 @@ const sizeClasses = {
   lg: "w-20 h-20 text-base",
 };
 
-const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profileId }: ProfileCardProps) => {
+const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profileId, onProfileClick }: ProfileCardProps) => {
   const displayName = name || "Anonymous";
 
   return (
     <div className="flex items-center gap-3">
-      <div className={`${sizeClasses[size]} rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0`}>
+      <div className={`${sizeClasses[size]} glass-frame rounded-full flex items-center justify-center flex-shrink-0`}>
         <ProfileAvatar
           name={displayName}
           avatarUrl={avatarUrl}
@@ -33,7 +34,15 @@ const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profi
       </div>
       <div className="min-w-0">
         <p className={`font-sans font-medium truncate ${size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-base"}`}>
-          {profileId ? (
+          {profileId && onProfileClick ? (
+            <button
+              type="button"
+              onClick={() => onProfileClick(profileId)}
+              className="bg-transparent p-0 text-inherit hover:text-accent transition-colors text-left"
+            >
+              {displayName}
+            </button>
+          ) : profileId ? (
             <Link to={`/profile/${profileId}`} className="hover:text-accent transition-colors">
               {displayName}
             </Link>

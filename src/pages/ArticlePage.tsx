@@ -1,17 +1,9 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { generateHTML } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import LinkExt from "@tiptap/extension-link";
-import Youtube from "@tiptap/extension-youtube";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
-import TextAlign from "@tiptap/extension-text-align";
-import Underline from "@tiptap/extension-underline";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
@@ -20,21 +12,11 @@ import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
-import { useRegisterArticleRead } from "@/hooks/useArticleReads";
-import { useEffect, useMemo, useRef } from "react";
+import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
+import { useMemo } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
-
-const extensions = [
-  StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-  Image,
-  LinkExt,
-  Youtube.configure({ width: 640, height: 360 }),
-  TextStyle,
-  Color,
-  TextAlign.configure({ types: ["heading", "paragraph"] }),
-  Underline,
-];
+import { articleContentExtensions } from "@/lib/article-content";
 
 type StoryChapter = {
   id: string;
@@ -44,14 +26,9 @@ type StoryChapter = {
   published_at: string | null;
 };
 
-const READ_QUALIFICATION_MS = 30_000;
-
 const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
-  const queryClient = useQueryClient();
-  const { mutate: registerArticleRead } = useRegisterArticleRead(slug);
-  const trackedReadFor = useRef<string | null>(null);
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -68,6 +45,8 @@ const ArticlePage = () => {
   });
 
   const storyId = (article as any)?.story_id as string | null | undefined;
+  useQualifiedArticleRead(article?.id ?? null, slug);
+  useSyncArticleViewCount(article?.id ?? null, slug);
 
   const { data: storyChapters = [] } = useQuery({
     queryKey: ["story-chapters-published", storyId],
@@ -83,111 +62,6 @@ const ArticlePage = () => {
       return (data || []) as StoryChapter[];
     },
   });
-
-  useEffect(() => {
-    if (!article?.id) return;
-    trackedReadFor.current = null;
-
-    let timeoutId: number | null = null;
-    let activeSince: number | null = null;
-    let accumulatedMs = 0;
-
-    const clearTimer = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-    };
-
-    const pauseTracking = () => {
-      if (activeSince !== null) {
-        accumulatedMs += Date.now() - activeSince;
-        activeSince = null;
-      }
-      clearTimer();
-    };
-
-    const registerRead = () => {
-      if (trackedReadFor.current === article.id) return;
-      trackedReadFor.current = article.id;
-      pauseTracking();
-      registerArticleRead(article.id);
-    };
-
-    const resumeTracking = () => {
-      if (trackedReadFor.current === article.id) return;
-      if (document.visibilityState !== "visible") return;
-      if (activeSince !== null) return;
-
-      const remainingMs = READ_QUALIFICATION_MS - accumulatedMs;
-      if (remainingMs <= 0) {
-        registerRead();
-        return;
-      }
-
-      activeSince = Date.now();
-      timeoutId = window.setTimeout(() => {
-        accumulatedMs = READ_QUALIFICATION_MS;
-        activeSince = null;
-        timeoutId = null;
-        registerRead();
-      }, remainingMs);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        resumeTracking();
-        return;
-      }
-
-      pauseTracking();
-    };
-
-    resumeTracking();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", pauseTracking);
-
-    return () => {
-      pauseTracking();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", pauseTracking);
-    };
-  }, [article?.id, registerArticleRead]);
-
-  useEffect(() => {
-    if (!article?.id || !slug) return;
-
-    const channel = supabase
-      .channel(`article-live-reads:${article.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "logbook_articles",
-          filter: `id=eq.${article.id}`,
-        },
-        (payload) => {
-          const nextViewCount =
-            typeof payload.new === "object" && payload.new !== null && "view_count" in payload.new
-              ? Number(payload.new.view_count ?? 0)
-              : null;
-
-          if (nextViewCount === null || Number.isNaN(nextViewCount)) return;
-
-          queryClient.setQueryData(["article", slug], (old: unknown) =>
-            old && typeof old === "object"
-              ? { ...(old as Record<string, unknown>), view_count: nextViewCount }
-              : old
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [article?.id, queryClient, slug]);
 
   const { data: authors = [] } = useQuery({
     queryKey: ["article-authors", article?.id],
@@ -292,7 +166,7 @@ const ArticlePage = () => {
 
   if (hasStructuredContent) {
     try {
-      htmlContent = generateHTML(content as any, extensions);
+      htmlContent = generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions);
     } catch (error) {
       contentRenderFailed = true;
       console.error("Failed to render article content", error);
@@ -332,33 +206,35 @@ const ArticlePage = () => {
     : "";
 
   return (
-    <div>
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       {article.cover_image && (
-        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden">
-          <img
-            src={article.cover_image}
-            alt=""
-            className="absolute inset-0 w-full max-w-none pointer-events-none"
-            style={coverStyle}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/25 to-transparent pointer-events-none" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
-            <div className="max-w-4xl">
-              <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-foreground drop-shadow-sm">
-                {title}
-              </h1>
+        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden mt-24 mx-4 md:mx-6 glass-frame rounded-[36px] p-2">
+          <div className="relative h-full overflow-hidden rounded-[30px]">
+            <img
+              src={article.cover_image}
+              alt=""
+              className="absolute inset-0 w-full max-w-none pointer-events-none"
+              style={coverStyle}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[rgba(12,20,31,0.72)] via-[rgba(12,20,31,0.18)] to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
+              <div className="glass-panel-dark inline-flex max-w-4xl rounded-[30px] px-6 py-5 md:px-8 md:py-6">
+                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-white drop-shadow-sm">
+                  {title}
+                </h1>
+              </div>
             </div>
           </div>
         </section>
       )}
 
-      <div className="page-section !pt-8 md:!pt-14">
+      <div className="page-section !pt-4 md:!pt-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-10 lg:gap-12">
-            <article className="min-w-0">
+            <article className="min-w-0 glass-panel rounded-[34px] p-6 md:p-8 lg:p-10">
               <Link
                 to="/logbook"
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
               >
                 <ArrowLeft size={14} /> {lang === "it" ? "Torna al diario" : "Back to Logbook"}
               </Link>
@@ -370,7 +246,7 @@ const ArticlePage = () => {
               {story && (
                 <Link
                   to={`/logbook/story/${story.slug}`}
-                  className="flex items-center gap-3 mb-6 p-4 border border-border hover:border-accent transition-colors group bg-card/30"
+                  className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group"
                 >
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
                   <div>
@@ -393,7 +269,7 @@ const ArticlePage = () => {
                     <Link
                       to={`/logbook/${chapterPrevNext.prev.slug}`}
                       title={prevTitle}
-                      className="flex-1 inline-flex items-center gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors"
+                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors"
                     >
                       <ChevronLeft size={18} className="shrink-0 text-accent" />
                       <span className="min-w-0">
@@ -410,7 +286,7 @@ const ArticlePage = () => {
                     <Link
                       to={`/logbook/${chapterPrevNext.next.slug}`}
                       title={nextTitle}
-                      className="flex-1 inline-flex items-center justify-end gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors sm:text-right"
+                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center justify-end gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors sm:text-right"
                     >
                       <span className="min-w-0 order-2 sm:order-1">
                         <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5 sm:text-right">
@@ -424,7 +300,7 @@ const ArticlePage = () => {
                 </nav>
               )}
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-8 mb-8 border-b border-border">
+              <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-x-4 gap-y-3 p-4 md:p-5 mb-8">
                   {authors.map((a: any) => (
                     <ProfileCard
                       key={a.id}
@@ -444,10 +320,12 @@ const ArticlePage = () => {
               </div>
 
               {htmlContent && (
-                <div
-                  className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-sm prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
-                  dangerouslySetInnerHTML={{ __html: htmlContent }}
-                />
+                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
+                  <div
+                    className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic"
+                    dangerouslySetInnerHTML={{ __html: htmlContent }}
+                  />
+                </div>
               )}
               {contentRenderFailed && (
                 <p className="text-sm font-sans text-muted-foreground">
@@ -457,7 +335,7 @@ const ArticlePage = () => {
                 </p>
               )}
 
-              <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">
+              <div className="glass-panel-soft rounded-[24px] flex items-center gap-6 mt-12 p-4 md:p-5">
                 <LikeButton articleId={article.id} />
                 <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
               </div>
@@ -465,15 +343,15 @@ const ArticlePage = () => {
               <CommentSection articleId={article.id} />
 
               {tags.length > 0 && (
-                <footer className="mt-14 pt-10 border-t border-border">
+                <footer className="mt-14">
                   <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
                     {lang === "it" ? "Hashtag" : "Tags"}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="glass-panel-soft rounded-[24px] flex flex-wrap gap-2 p-4">
                     {tags.map((tag: any) => (
                       <span
                         key={tag.id}
-                        className="text-xs font-sans px-2.5 py-1 border border-border text-muted-foreground bg-muted/40"
+                        className="glass-chip text-xs font-sans px-2.5 py-1 text-muted-foreground"
                       >
                         #{tag.name}
                       </span>

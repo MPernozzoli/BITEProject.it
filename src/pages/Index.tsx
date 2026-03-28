@@ -116,61 +116,74 @@ const Index = () => {
   };
 
   return (
-    <div>
-      {/* Hero */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
+      <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
           <img src={bowSunset} alt="View from the bow at sunset" className="img-cover" />
-          <div className="absolute inset-0 bg-primary/60" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.24)_0%,rgba(17,28,43,0.42)_34%,rgba(17,28,43,0.72)_100%)]" />
         </div>
-        <div className="relative z-10 text-center px-6 max-w-4xl mx-auto slide-up">
-          <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-primary-foreground mb-6 whitespace-pre-line">
-            {t("hero.title")}
-          </h1>
-          <p className="editorial-body text-primary-foreground/80 text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line">
-            {t("hero.subtitle")}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/logbook"
-              className="inline-flex items-center gap-2 bg-primary-foreground text-primary px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/90 transition-colors"
-            >
-              {t("hero.cta.journey")}
-              <ArrowRight size={16} />
-            </Link>
-            <Link
-              to="/collaborations"
-              className="inline-flex items-center gap-2 border border-primary-foreground/40 text-primary-foreground px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/10 transition-colors"
-            >
-              {t("hero.cta.collaborate")}
-            </Link>
+
+        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] max-w-6xl items-center justify-center">
+          <div className="glass-panel-dark w-full max-w-4xl rounded-[40px] px-6 py-8 text-center shadow-[0_40px_120px_rgba(0,0,0,0.28)] md:px-12 md:py-12 slide-up">
+            <div className="glass-chip-dark inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-white/78 mb-6">
+              <span className="h-2 w-2 rounded-full bg-white/70" />
+              {lang === "it" ? "Dal bordo di Spritz" : "From aboard Spritz"}
+            </div>
+            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-6 whitespace-pre-line">
+              {t("hero.title")}
+            </h1>
+            <p className="editorial-body text-white/76 text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line">
+              {t("hero.subtitle")}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                to="/logbook"
+                className="glass-button inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+              >
+                {t("hero.cta.journey")}
+                <ArrowRight size={16} />
+              </Link>
+              <Link
+                to="/collaborations"
+                className="glass-button-dark inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+              >
+                {t("hero.cta.collaborate")}
+              </Link>
+            </div>
           </div>
         </div>
-        <div className="absolute bottom-8 left-0 right-0 z-10 flex flex-col items-center justify-center gap-2 animate-bounce">
-          <span className="text-[10px] font-sans tracking-[0.3em] uppercase text-primary-foreground/50">
-            {t("crew.scroll")}
-          </span>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-primary-foreground/50">
-            <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
-          </svg>
+
+        <div className="absolute bottom-10 left-1/2 z-10 flex -translate-x-1/2 animate-bounce">
+          <div className="glass-chip-dark flex flex-col items-center justify-center gap-2 px-5 py-3">
+            <span className="text-[10px] font-sans tracking-[0.3em] uppercase text-white/55">
+              {t("crew.scroll")}
+            </span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/50">
+              <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+            </svg>
+          </div>
         </div>
       </section>
 
-      {/* Intro */}
-      <section className="page-section">
-        <div className="page-section-narrow">
-          <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("intro.label")}</p>
-          <p className="editorial-body text-lg md:text-xl text-foreground/80 leading-relaxed">{t("intro.text")}</p>
+      <section className="page-section pt-4 md:pt-6">
+        <div className="page-section-narrow glass-panel rounded-[34px] px-8 py-10 md:px-12 md:py-14">
+          <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
+            {t("intro.label")}
+          </p>
+          <p className="editorial-body text-lg md:text-xl text-foreground/82 leading-relaxed">{t("intro.text")}</p>
         </div>
       </section>
 
-      {/* Values */}
-      <section className="page-section bg-salt-warm">
-        <div className="page-section-wide">
-          <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent mb-16 text-center">{t("values.label")}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-16">
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <div className="flex items-center justify-center mb-12">
+            <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
+              {t("values.label")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="border-t border-border pt-8">
+              <div key={i} className="glass-panel-soft rounded-[28px] p-6 md:p-8">
                 <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
                 <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
               </div>
@@ -179,53 +192,67 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Life Aboard */}
-      <section className="page-section">
-        <div className="page-section-wide">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div>
-              <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("life.label")}</p>
+              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
+                {t("life.label")}
+              </p>
               <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line">{t("life.title")}</h2>
               <p className="editorial-body text-muted-foreground leading-relaxed text-lg">{t("life.text")}</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="aspect-[3/4] overflow-hidden">
-                <img src={boatSunset} alt="Spritz at sunset" className="img-cover hover:scale-105 transition-transform duration-700" />
+              <div className="glass-frame rounded-[28px] p-2 aspect-[3/4]">
+                <div className="overflow-hidden rounded-[22px] h-full">
+                  <img src={boatSunset} alt="Spritz at sunset" className="img-cover hover:scale-105 transition-transform duration-700" />
+                </div>
               </div>
-              <div className="aspect-[3/4] overflow-hidden mt-8">
-                <img src={dogsMarina} alt="Dogs at the marina" className="img-cover hover:scale-105 transition-transform duration-700" />
+              <div className="glass-frame rounded-[28px] p-2 aspect-[3/4] mt-8">
+                <div className="overflow-hidden rounded-[22px] h-full">
+                  <img src={dogsMarina} alt="Dogs at the marina" className="img-cover hover:scale-105 transition-transform duration-700" />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Topics */}
-      <section className="page-section bg-primary text-primary-foreground">
-        <div className="page-section-wide">
-          <p className="text-xs font-sans tracking-[0.3em] uppercase text-primary-foreground/60 mb-16 text-center">{t("topics.label")}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-white md:px-10 md:py-12">
+          <div className="flex items-center justify-center mb-12">
+            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/62">
+              {t("topics.label")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               { key: "refit", icon: Wrench },
               { key: "navigation", icon: Compass },
               { key: "remote", icon: Wifi },
               { key: "storytelling", icon: Pen },
             ].map(({ key, icon: Icon }) => (
-              <div key={key} className="border-t border-primary-foreground/20 pt-6">
-                <Icon size={20} className="text-primary-foreground/50 mb-4" />
-                <h3 className="editorial-heading text-xl mb-3">{t(`topics.${key}`)}</h3>
-                <p className="text-sm text-primary-foreground/60 leading-relaxed">{t(`topics.${key}.text`)}</p>
+              <div key={key} className="glass-chip-dark rounded-[28px] p-6">
+                <div className="glass-chip-dark inline-flex h-12 w-12 items-center justify-center mb-5 text-white/80">
+                  <Icon size={20} />
+                </div>
+                <h3 className="editorial-heading text-xl mb-3 text-white">{t(`topics.${key}`)}</h3>
+                <p className="text-sm text-white/64 leading-relaxed">{t(`topics.${key}.text`)}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Journal Preview — Real Data */}
-      <section className="page-section">
-        <div className="page-section-wide">
-          <div className="flex items-end justify-between mb-16">
-            <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent">{t("journal.label")}</p>
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <div className="flex items-end justify-between mb-12 gap-6">
+            <div>
+              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-4">{t("journal.label")}</p>
+              <h2 className="editorial-heading text-3xl md:text-4xl">
+                {lang === "it" ? "Ultime dal logbook" : "Latest from the logbook"}
+              </h2>
+            </div>
             <Link
               to="/logbook"
               className="hidden md:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -235,28 +262,30 @@ const Index = () => {
           </div>
 
           {latestArticles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {latestArticles.map((entry) => {
                 const title = lang === "en" ? entry.title_en : (entry.title_it || entry.title_en);
                 const excerpt = lang === "en" ? entry.excerpt_en : (entry.excerpt_it || entry.excerpt_en);
                 return (
                   <Link to={`/logbook/${entry.slug}`} key={entry.id} className="group block">
-                    <article>
-                      <div className="aspect-[4/3] overflow-hidden mb-5 bg-muted relative">
-                        {entry.cover_image ? (
-                          <img src={entry.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-2xl">BITE</div>
-                        )}
-                        {isRead(entry.id) && (
-                          <span className="absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] font-sans bg-background/90 backdrop-blur-sm text-muted-foreground px-2 py-0.5">
-                            <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
-                          </span>
-                        )}
+                    <article className="glass-panel-soft rounded-[30px] p-3 h-full transition-transform duration-300 group-hover:-translate-y-1">
+                      <div className="glass-frame rounded-[24px] p-1.5 mb-5">
+                        <div className="aspect-[4/3] overflow-hidden rounded-[19px] bg-muted relative">
+                          {entry.cover_image ? (
+                            <img src={entry.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-2xl">BITE</div>
+                          )}
+                          {isRead(entry.id) && (
+                            <span className="glass-chip absolute top-2 left-2 inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
+                              <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
                         {entry.tags?.slice(0, 2).map((tag) => (
-                          <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
+                          <span key={tag.id} className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans text-accent">#{tag.name}</span>
                         ))}
                         {entry.published_at && (
                           <span className="text-[11px] text-muted-foreground">
@@ -287,22 +316,25 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Route Preview */}
-      <section className="page-section bg-salt-warm">
-        <div className="page-section-wide">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-            <div className="aspect-[16/10] overflow-hidden bg-muted flex items-center justify-center">
-              <div className="text-center p-8">
-                <Anchor size={40} className="text-muted-foreground/40 mx-auto mb-4" />
-                <p className="text-sm text-muted-foreground">Interactive route map</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Coming soon</p>
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div className="glass-frame rounded-[30px] p-2">
+              <div className="aspect-[16/10] overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_top_left,rgba(159,207,214,0.22),transparent_55%),linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))] flex items-center justify-center">
+                <div className="text-center p-8">
+                  <div className="glass-chip inline-flex h-14 w-14 items-center justify-center mb-4 text-muted-foreground">
+                    <Anchor size={24} className="text-accent" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">Interactive route map</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Coming soon</p>
+                </div>
               </div>
             </div>
             <div>
-              <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("route.label")}</p>
+              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("route.label")}</p>
               <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line">{t("route.title")}</h2>
               <p className="editorial-body text-muted-foreground leading-relaxed mb-8">{t("route.text")}</p>
-              <Link to="/route" className="inline-flex items-center gap-2 text-sm font-sans font-medium text-foreground hover:text-accent transition-colors">
+              <Link to="/route" className="glass-button-secondary inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium">
                 {t("route.explore")} <ArrowRight size={14} />
               </Link>
             </div>
@@ -310,51 +342,54 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Collaborations Preview */}
-      <section className="page-section">
-        <div className="page-section-wide">
+      <section className="page-section pt-0">
+        <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-white md:px-10 md:py-12">
           <div className="max-w-3xl">
-            <p className="text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("collab.label")}</p>
-            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line">{t("collab.title")}</h2>
-            <p className="editorial-body text-muted-foreground leading-relaxed text-lg mb-10">{t("collab.text")}</p>
-            <Link to="/collaborations" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors">
+            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/60 mb-8">{t("collab.label")}</p>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-white">{t("collab.title")}</h2>
+            <p className="editorial-body text-white/70 leading-relaxed text-lg mb-10">{t("collab.text")}</p>
+            <Link to="/collaborations" className="glass-button inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide">
               {t("collab.cta")} <ArrowRight size={16} />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Full Width Image */}
-      <section className="h-[50vh] md:h-[60vh] overflow-hidden">
-        <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" />
+      <section className="px-4 md:px-6">
+        <div className="glass-frame rounded-[34px] p-2 h-[50vh] md:h-[60vh] overflow-hidden">
+          <div className="overflow-hidden rounded-[28px] h-full">
+            <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" />
+          </div>
+        </div>
       </section>
 
-      {/* Newsletter */}
-      <section className="page-section bg-primary text-primary-foreground">
-        <div className="page-section-narrow text-center">
-          <p className="text-xs font-sans tracking-[0.3em] uppercase text-primary-foreground/60 mb-8">{t("newsletter.label")}</p>
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-6">{t("newsletter.title")}</h2>
-          <p className="editorial-body text-primary-foreground/70 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
-          <form onSubmit={handleNewsletterSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
+          <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/60 mb-8">{t("newsletter.label")}</p>
+          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
+          <p className="editorial-body text-white/70 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
+          <form onSubmit={handleNewsletterSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto">
             {session?.user.email ? (
-              <div className="flex-1 bg-primary-foreground/10 border border-primary-foreground/20 px-5 py-3 text-sm text-primary-foreground/75 text-left">
+              <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/78 text-left">
                 {lang === "it"
                   ? `Ti iscriveremo con ${session.user.email}`
                   : `We'll subscribe you with ${session.user.email}`}
               </div>
             ) : (
-              <input
-                type="email"
-                value={newsletterEmail}
-                onChange={(event) => setNewsletterEmail(event.target.value)}
-                placeholder={t("newsletter.placeholder")}
-                className="flex-1 bg-primary-foreground/10 border border-primary-foreground/20 px-5 py-3 text-sm text-primary-foreground placeholder:text-primary-foreground/40 focus:outline-none focus:border-primary-foreground/40 transition-colors"
-              />
+              <div className="glass-input flex-1 rounded-full px-1.5">
+                <input
+                  type="email"
+                  value={newsletterEmail}
+                  onChange={(event) => setNewsletterEmail(event.target.value)}
+                  placeholder={t("newsletter.placeholder")}
+                  className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                />
+              </div>
             )}
             <button
               type="submit"
               disabled={newsletterLoading}
-              className="bg-primary-foreground text-primary px-8 py-3 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/90 transition-colors disabled:opacity-60"
+              className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
             >
               {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
             </button>

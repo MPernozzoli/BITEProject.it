@@ -2,16 +2,17 @@ import { X, MapPin, Heart, Eye, ArrowUpRight } from "lucide-react";
 import { format } from "date-fns";
 import type { GeoArticle } from "@/lib/voyage-utils";
 import ProfileCard from "@/components/ProfileCard";
-import { Link } from "react-router-dom";
 import { coverImageStyle, clampCoverFocal } from "@/lib/article-cover";
 
 interface ArticleSlidePanelProps {
   article: GeoArticle | null;
   onClose: () => void;
   lang: "en" | "it";
+  onAuthorClick?: (profileId: string) => void;
+  onOpenArticle?: (article: GeoArticle) => void;
 }
 
-const ArticleSlidePanel = ({ article, onClose, lang }: ArticleSlidePanelProps) => {
+const ArticleSlidePanel = ({ article, onClose, lang, onAuthorClick, onOpenArticle }: ArticleSlidePanelProps) => {
   if (!article) return null;
 
   const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
@@ -73,6 +74,7 @@ const ArticleSlidePanel = ({ article, onClose, lang }: ArticleSlidePanelProps) =
                     <ProfileCard
                       key={a.id}
                       profileId={a.id}
+                      onProfileClick={onAuthorClick}
                       name={a.name}
                       avatarUrl={a.avatar_url || undefined}
                       size="sm"
@@ -104,13 +106,14 @@ const ArticleSlidePanel = ({ article, onClose, lang }: ArticleSlidePanelProps) =
                 </div>
               )}
 
-              <Link
-                to={`/logbook/${article.slug}`}
+              <button
+                type="button"
+                onClick={() => onOpenArticle?.(article)}
                 className="inline-flex w-full justify-center items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-3 text-sm font-sans font-medium tracking-wide hover:opacity-90 transition-opacity"
               >
                 {lang === "it" ? "Leggi l'articolo completo" : "Read full article"}
                 <ArrowUpRight size={15} />
-              </Link>
+              </button>
             </div>
 
             {article.tags && article.tags.length > 0 && (

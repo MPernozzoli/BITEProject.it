@@ -9,6 +9,8 @@ import { useAuth } from "@/hooks/useAuth";
 import VoyageMap from "@/components/voyage/VoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
+import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
+import ExpandedArticleModal from "@/components/voyage/ExpandedArticleModal";
 import { totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
@@ -19,6 +21,8 @@ const Journal = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
+  const [panelProfileId, setPanelProfileId] = useState<string | null>(null);
+  const [expandedArticleSlug, setExpandedArticleSlug] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { isRead } = useArticleReads();
@@ -126,7 +130,7 @@ const Journal = () => {
   // Stats
   const stats = useMemo(() => {
     let totalNM = 0;
-    let voyageCount = voyages.length;
+    const voyageCount = voyages.length;
     const activeVoyage = voyages.find((v) => v.status === "active");
 
     voyages.forEach((v) => {
@@ -150,13 +154,35 @@ const Journal = () => {
   const handleArticleClick = useCallback((article: GeoArticle) => {
     setSelectedArticleId(article.id);
     setPanelArticle(article);
+    setPanelProfileId(null);
     scrollToArticle(article.id);
   }, [scrollToArticle]);
 
   const handleListArticleClick = useCallback((article: GeoArticle) => {
     setSelectedArticleId(article.id);
     setPanelArticle(article);
+    setPanelProfileId(null);
   }, []);
+
+  const handleProfilePreviewOpen = useCallback((profileId: string) => {
+    setPanelProfileId(profileId);
+  }, []);
+
+  const handleOpenExpandedArticle = useCallback((article: GeoArticle) => {
+    setPanelArticle(article);
+    setPanelProfileId(null);
+    setExpandedArticleSlug(article.slug);
+    setSidebarOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!panelArticle) return;
+
+    const nextPanelArticle = articles.find((article) => article.id === panelArticle.id);
+    if (nextPanelArticle && nextPanelArticle !== panelArticle) {
+      setPanelArticle(nextPanelArticle);
+    }
+  }, [articles, panelArticle]);
 
   // Highlighted voyage based on selected article
   const highlightedVoyageId = useMemo(() => {
@@ -164,6 +190,8 @@ const Journal = () => {
     const article = articles.find((a) => a.id === selectedArticleId);
     return article?.voyage_id || null;
   }, [selectedArticleId, articles]);
+
+  const sidePanelVisible = Boolean(panelArticle) && !expandedArticleSlug;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -183,7 +211,7 @@ const Journal = () => {
           {/* Floating controls — top right */}
           <div
             className={`absolute top-24 z-20 flex flex-col gap-2 transition-all duration-300 ${
-              panelArticle ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
+              sidePanelVisible ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
             }`}
           >
             <button
@@ -291,29 +319,29 @@ const Journal = () => {
       ) : (
         /* List-only view — classic grid */
         <>
-          <div className="pt-20 md:pt-24 px-6 md:px-12 pb-4 bg-background border-b border-border">
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-              <div className="relative max-w-md flex-1">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <div className="pt-24 md:pt-28 px-4 md:px-6 pb-4">
+            <div className="glass-panel max-w-7xl mx-auto rounded-[30px] px-4 py-4 md:px-6 md:py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="glass-input relative rounded-full max-w-md flex-1 px-1.5">
+                <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={lang === "it" ? "Cerca articoli, luoghi..." : "Search articles, places..."}
-                  className="w-full bg-transparent border border-border pl-9 pr-4 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  className="w-full bg-transparent pl-9 pr-4 py-3 text-sm font-sans focus:outline-none"
                 />
               </div>
-              <div className="flex items-center gap-2 ml-4">
+              <div className="flex items-center gap-2 md:ml-4">
                 <button
                   onClick={() => setViewMode("map")}
-                  className="p-2 bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Map size={14} />
                 </button>
                 {isAdmin && (
                   <Link
                     to="/admin/article/new"
-                    className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity"
+                    className="glass-button inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-sans font-medium tracking-wide"
                   >
                     <Plus size={12} /> {lang === "it" ? "Nuovo" : "New"}
                   </Link>
@@ -322,7 +350,7 @@ const Journal = () => {
             </div>
           </div>
 
-          <div className="flex-1 px-6 md:px-12 py-8">
+          <div className="flex-1 px-4 md:px-6 py-4">
             <div className="max-w-7xl mx-auto">
               {isLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -349,10 +377,11 @@ const Journal = () => {
                           Number(article.cover_zoom ?? 1)
                         )
                       );
-                    return (
-                      <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
-                        <article>
-                          <div className="aspect-[16/10] overflow-hidden bg-muted mb-4 relative">
+                  return (
+                    <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
+                        <article className="glass-panel-soft rounded-[30px] p-3 h-full transition-transform duration-300 group-hover:-translate-y-1">
+                          <div className="glass-frame rounded-[24px] p-1.5 mb-4">
+                            <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
                             {article.cover_image ? (
                               <img
                                 src={article.cover_image}
@@ -363,15 +392,16 @@ const Journal = () => {
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>
                             )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
                             {article.location_name && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-sans text-accent">
+                              <span className="glass-chip inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-sans text-accent">
                                 <Map size={9} /> {article.location_name}
                               </span>
                             )}
                             {article.tags?.slice(0, 2).map((tag: any) => (
-                              <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
+                              <span key={tag.id} className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans text-accent">#{tag.name}</span>
                             ))}
                           </div>
                           <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
@@ -389,15 +419,40 @@ const Journal = () => {
         </>
       )}
 
-      {/* Slide panel */}
-      <ArticleSlidePanel
-        article={panelArticle}
-        onClose={() => {
-          setPanelArticle(null);
-          setSelectedArticleId(null);
-        }}
-        lang={lang}
-      />
+      {!expandedArticleSlug &&
+        (panelProfileId ? (
+          <ProfileSlidePanel
+            profileId={panelProfileId}
+            article={panelArticle}
+            lang={lang}
+            onBackToArticle={() => setPanelProfileId(null)}
+            onClose={() => {
+              setPanelProfileId(null);
+              setPanelArticle(null);
+              setSelectedArticleId(null);
+            }}
+          />
+        ) : (
+          <ArticleSlidePanel
+            article={panelArticle}
+            onClose={() => {
+              setPanelProfileId(null);
+              setPanelArticle(null);
+              setSelectedArticleId(null);
+            }}
+            onAuthorClick={handleProfilePreviewOpen}
+            onOpenArticle={handleOpenExpandedArticle}
+            lang={lang}
+          />
+        ))}
+
+      {expandedArticleSlug && (
+        <ExpandedArticleModal
+          slug={expandedArticleSlug}
+          lang={lang}
+          onClose={() => setExpandedArticleSlug(null)}
+        />
+      )}
     </div>
   );
 };

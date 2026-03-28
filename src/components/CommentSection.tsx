@@ -124,8 +124,8 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
   };
 
   const renderComment = (comment: Comment, isReply = false) => (
-    <div key={comment.id} className={`${isReply ? "ml-8 pl-4 border-l border-border" : ""}`}>
-      <div className="py-4">
+    <div key={comment.id} className={`${isReply ? "ml-8 mt-3" : ""}`}>
+      <div className={`glass-panel-soft rounded-[24px] p-4 ${isReply ? "" : ""}`}>
         <div className="flex items-start gap-3">
           <Link to={`/profile/${comment.profile_id}`} className="flex-shrink-0 mt-0.5 hover:opacity-80 transition-opacity">
             <ProfileCard
@@ -165,17 +165,19 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
               </button>
             </div>
             {replyTo === comment.id && (
-              <div className="flex gap-2 mt-3">
-                <input
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Scrivi una risposta..."
-                  className="flex-1 bg-transparent border-b border-border py-1.5 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                  onKeyDown={(e) => e.key === "Enter" && submitComment(comment.id, replyText)}
-                />
+              <div className="flex gap-2 mt-3 items-end">
+                <div className="glass-input rounded-[18px] flex-1 px-1.5">
+                  <input
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Scrivi una risposta..."
+                    className="w-full bg-transparent px-3 py-2.5 text-sm font-sans focus:outline-none"
+                    onKeyDown={(e) => e.key === "Enter" && submitComment(comment.id, replyText)}
+                  />
+                </div>
                 <button
                   onClick={() => submitComment(comment.id, replyText)}
-                  className="text-accent hover:text-foreground transition-colors"
+                  className="glass-button inline-flex h-10 w-10 items-center justify-center"
                 >
                   <Send size={14} />
                 </button>
@@ -189,24 +191,26 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
   );
 
   return (
-    <div className="border-t border-border pt-8 mt-12">
+    <div className="border-t glass-divider pt-8 mt-12">
       <h3 className="editorial-heading text-xl mb-6">
         Commenti {comments.length > 0 && `(${comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})`}
       </h3>
 
       {userId ? (
-        <div className="flex gap-3 mb-8">
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Scrivi un commento..."
-            rows={2}
-            className="flex-1 bg-transparent border border-border px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
-          />
+        <div className="glass-panel rounded-[28px] p-4 flex gap-3 mb-8">
+          <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Scrivi un commento..."
+              rows={2}
+              className="w-full bg-transparent px-4 py-3 text-sm font-sans focus:outline-none resize-none"
+            />
+          </div>
           <button
             onClick={() => submitComment(null, newComment)}
             disabled={!newComment.trim()}
-            className="self-end bg-primary text-primary-foreground px-4 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50"
+            className="glass-button self-end px-4 py-2.5 text-sm font-sans font-medium disabled:opacity-50"
           >
             <Send size={14} />
           </button>
@@ -225,7 +229,7 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
       ) : comments.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nessun commento. Sii il primo a condividere il tuo pensiero.</p>
       ) : (
-        <div className="divide-y divide-border">
+        <div className="space-y-4">
           {comments.map((c) => renderComment(c))}
         </div>
       )}

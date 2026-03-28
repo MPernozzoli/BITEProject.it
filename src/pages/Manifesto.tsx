@@ -43,9 +43,12 @@ const Manifesto = () => {
   const { lang, t } = useI18n();
 
   return (
-    <div>
-      <section className="pt-32 pb-20 md:pt-40 md:pb-32 px-6 md:px-12">
-        <div className="page-section-narrow">
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
+      <section className="pt-28 pb-0 md:pt-32 px-6 md:px-12">
+        <div className="page-section-narrow glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <p className="glass-chip inline-flex px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-accent mb-6">
+            {t("nav.manifesto")}
+          </p>
           <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-8">
             {t("manifesto.title")}
           </h1>
@@ -55,12 +58,12 @@ const Manifesto = () => {
         </div>
       </section>
 
-      <section className="px-6 md:px-12 pb-20 md:pb-32">
-        <div className="page-section-narrow">
+      <section className="px-6 md:px-12 pb-0">
+        <div className="page-section-narrow space-y-4">
           {principles.map((p, i) => (
-            <div key={i} className="border-t border-border py-12 md:py-16">
+            <div key={i} className="glass-panel-soft rounded-[30px] px-6 py-8 md:px-8 md:py-10">
               <div className="flex gap-6 md:gap-12">
-                <span className="text-xs font-sans tracking-widest text-muted-foreground/40 pt-2 select-none">
+                <span className="glass-chip inline-flex h-10 min-w-10 items-center justify-center px-3 text-xs font-sans tracking-widest text-muted-foreground select-none">
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <div>

@@ -16,9 +16,12 @@ const Collaborations = () => {
   const { t, lang } = useI18n();
 
   return (
-    <div>
-      <section className="pt-32 pb-20 md:pt-40 md:pb-32 px-6 md:px-12">
-        <div className="page-section-narrow">
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
+      <section className="pt-28 pb-0 md:pt-32 px-6 md:px-12">
+        <div className="page-section-narrow glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <p className="glass-chip inline-flex px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-accent mb-6">
+            {t("nav.collaborations")}
+          </p>
           <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
             {t("collab.page.title")}
           </h1>
@@ -29,8 +32,8 @@ const Collaborations = () => {
       </section>
 
       {/* Who */}
-      <section className="page-section bg-salt-warm">
-        <div className="page-section-narrow">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel rounded-[34px] px-6 py-10 md:px-10 md:py-12">
           <h2 className="editorial-heading text-3xl md:text-4xl mb-6">{t("collab.who.title")}</h2>
           <p className="editorial-body text-muted-foreground text-lg leading-relaxed">
             {t("collab.who.text")}
@@ -39,8 +42,8 @@ const Collaborations = () => {
       </section>
 
       {/* Content */}
-      <section className="page-section">
-        <div className="page-section-narrow">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel rounded-[34px] px-6 py-10 md:px-10 md:py-12">
           <h2 className="editorial-heading text-3xl md:text-4xl mb-6">{t("collab.content.title")}</h2>
           <p className="editorial-body text-muted-foreground text-lg leading-relaxed">
             {t("collab.content.text")}
@@ -49,23 +52,22 @@ const Collaborations = () => {
       </section>
 
       {/* Values */}
-      <section className="page-section bg-primary text-primary-foreground">
-        <div className="page-section-narrow">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel-dark rounded-[34px] px-6 py-10 text-white md:px-10 md:py-12">
           <h2 className="editorial-heading text-3xl md:text-4xl mb-6">{t("collab.values.title")}</h2>
-          <p className="editorial-body text-primary-foreground/80 text-lg leading-relaxed">
+          <p className="editorial-body text-white/74 text-lg leading-relaxed">
             {t("collab.values.text")}
           </p>
         </div>
       </section>
 
-      {/* Areas */}
-      <section className="page-section">
-        <div className="page-section-narrow">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel rounded-[34px] px-6 py-10 md:px-10 md:py-12">
           <h2 className="editorial-heading text-3xl md:text-4xl mb-12">{t("collab.areas.title")}</h2>
-          <div className="space-y-0">
+          <div className="space-y-3">
             {areas.map((area, i) => (
-              <div key={i} className="py-5 border-b border-border flex items-center gap-4">
-                <span className="text-xs text-muted-foreground/40 w-8">{String(i + 1).padStart(2, "0")}</span>
+              <div key={i} className="glass-panel-soft rounded-[24px] px-4 py-4 flex items-center gap-4">
+                <span className="glass-chip inline-flex h-9 min-w-9 items-center justify-center text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>
                 <p className="editorial-body text-lg">{lang === "en" ? area.en : area.it}</p>
               </div>
             ))}
@@ -73,18 +75,17 @@ const Collaborations = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="page-section bg-salt-warm">
-        <div className="page-section-narrow text-center">
+      <section className="page-section pt-0">
+        <div className="page-section-narrow glass-panel-dark rounded-[34px] px-6 py-10 text-center text-white md:px-10 md:py-12">
           <h2 className="editorial-heading text-3xl md:text-5xl mb-6 whitespace-pre-line">
             {t("collab.title")}
           </h2>
-          <p className="editorial-body text-muted-foreground text-lg mb-10 max-w-lg mx-auto">
+          <p className="editorial-body text-white/70 text-lg mb-10 max-w-lg mx-auto">
             {t("collab.text")}
           </p>
           <Link
             to="/contact"
-            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors"
+            className="glass-button inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
           >
             {t("collab.cta")} <ArrowRight size={16} />
           </Link>
