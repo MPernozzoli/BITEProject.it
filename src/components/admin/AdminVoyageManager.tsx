@@ -478,9 +478,9 @@ const AdminVoyageManager = () => {
                 <div key={wp.id} className="flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs">
                   <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">{String(i + 1).padStart(2, "0")}</span>
                   {wp.waypoint_type === "technical" ? (
-                    <EyeOff size={10} className="text-muted-foreground shrink-0" title="Technical (hidden)" />
+                    <span title="Technical (hidden)"><EyeOff size={10} className="text-muted-foreground shrink-0" /></span>
                   ) : (
-                    <Eye size={10} className="text-accent shrink-0" title="Narrative (visible)" />
+                    <span title="Narrative (visible)"><Eye size={10} className="text-accent shrink-0" /></span>
                   )}
                   <div className="flex-1 min-w-0">
                     <span className="font-sans truncate block">{wp.name || `${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}`}</span>
