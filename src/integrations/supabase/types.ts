@@ -773,30 +773,39 @@ export type Database = {
       voyage_waypoints: {
         Row: {
           created_at: string
+          date_end: string | null
+          date_start: string | null
           id: string
           lat: number
           lng: number
           name: string | null
           sort_order: number
           voyage_id: string
+          waypoint_type: string
         }
         Insert: {
           created_at?: string
+          date_end?: string | null
+          date_start?: string | null
           id?: string
           lat?: number
           lng?: number
           name?: string | null
           sort_order?: number
           voyage_id: string
+          waypoint_type?: string
         }
         Update: {
           created_at?: string
+          date_end?: string | null
+          date_start?: string | null
           id?: string
           lat?: number
           lng?: number
           name?: string | null
           sort_order?: number
           voyage_id?: string
+          waypoint_type?: string
         }
         Relationships: [
           {
