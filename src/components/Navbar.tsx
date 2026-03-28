@@ -87,7 +87,6 @@ const Navbar = () => {
   };
 
   const links = [
-    { to: "/", label: t("nav.home") },
     { to: "/crew", label: t("nav.about") },
     { to: "/manifesto", label: t("nav.manifesto") },
     { to: "/logbook", label: t("nav.journal") },

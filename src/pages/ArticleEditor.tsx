@@ -4,7 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
 import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon } from "lucide-react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { geocodePlace } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 const ArticleEditor = () => {
   const { id } = useParams();
@@ -36,6 +40,23 @@ const ArticleEditor = () => {
   const [allStories, setAllStories] = useState<{ id: string; title_en: string; title_it: string; slug: string }[]>([]);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
 
+  // Geo / Voyage
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationName, setLocationName] = useState("");
+  const [selectedVoyageId, setSelectedVoyageId] = useState<string | null>(null);
+  const [voyageSegStart, setVoyageSegStart] = useState<number | null>(null);
+  const [voyageSegEnd, setVoyageSegEnd] = useState<number | null>(null);
+  const [allVoyages, setAllVoyages] = useState<Voyage[]>([]);
+  const [voyageWaypoints, setVoyageWaypoints] = useState<VoyageWaypoint[]>([]);
+  const [geoSearchQuery, setGeoSearchQuery] = useState("");
+  const [geoSearching, setGeoSearching] = useState(false);
+  const geoMapRef = useRef<HTMLDivElement>(null);
+  const geoMapInstanceRef = useRef<maplibregl.Map | null>(null);
+  const geoMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const [associationMode, setAssociationMode] = useState<"point" | "segment" | "full">("point");
+  const segmentClicksRef = useRef<number[]>([]);
+
   useEffect(() => { init(); }, [id]);
 
   const init = async () => {
@@ -43,13 +64,15 @@ const ArticleEditor = () => {
     if (!session) { navigate("/admin/login"); return; }
     setCurrentUserId(session.user.id);
 
-    // Load tags and stories
-    const [tagsRes, storiesRes] = await Promise.all([
+    // Load tags, stories, and voyages
+    const [tagsRes, storiesRes, voyagesRes] = await Promise.all([
       supabase.from("tags").select("*").order("name"),
       supabase.from("stories").select("id, title_en, title_it, slug").order("title_en"),
+      supabase.from("voyages").select("*").order("sort_order", { ascending: true }),
     ]);
     setAllTags(tagsRes.data || []);
     setAllStories(storiesRes.data || []);
+    setAllVoyages((voyagesRes.data || []) as unknown as Voyage[]);
 
     if (isNew) {
       setAuthorIds([session.user.id]);
@@ -73,6 +96,18 @@ const ArticleEditor = () => {
     setCategory(data.category || "Notes from the Boat");
     setPublishDate(data.published_at ? new Date(data.published_at).toISOString().slice(0, 16) : data.scheduled_at ? new Date(data.scheduled_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
     setSelectedStoryId((data as any).story_id || null);
+    setLatitude((data as any).latitude || null);
+    setLongitude((data as any).longitude || null);
+    setLocationName((data as any).location_name || "");
+    setSelectedVoyageId((data as any).voyage_id || null);
+    setVoyageSegStart((data as any).voyage_segment_start ?? null);
+    setVoyageSegEnd((data as any).voyage_segment_end ?? null);
+
+    // Load waypoints if voyage selected
+    if ((data as any).voyage_id) {
+      const { data: wps } = await supabase.from("voyage_waypoints").select("*").eq("voyage_id", (data as any).voyage_id).order("sort_order", { ascending: true });
+      setVoyageWaypoints((wps || []) as unknown as VoyageWaypoint[]);
+    }
 
     // Load authors and tags
     const [authorsRes, tagsRes] = await Promise.all([
@@ -153,6 +188,12 @@ const ArticleEditor = () => {
       published_at: publishedAt,
       scheduled_at: scheduledAt,
       story_id: selectedStoryId || null,
+      latitude,
+      longitude,
+      location_name: locationName || null,
+      voyage_id: selectedVoyageId || null,
+      voyage_segment_start: voyageSegStart,
+      voyage_segment_end: voyageSegEnd,
     };
 
     let articleId = id;
@@ -228,7 +269,96 @@ const ArticleEditor = () => {
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, category, publishDate, authorIds, selectedTagIds, selectedStoryId, id, isNew, navigate]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate]);
+
+  // Geo map initialization
+  useEffect(() => {
+    if (!geoMapRef.current || geoMapInstanceRef.current) return;
+    const map = new maplibregl.Map({
+      container: geoMapRef.current,
+      style: {
+        version: 8,
+        sources: { carto: { type: "raster", tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], tileSize: 256 } },
+        layers: [{ id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 }],
+      },
+      center: [longitude || 15, latitude || 40],
+      zoom: latitude ? 10 : 5,
+      attributionControl: false,
+    });
+    geoMapInstanceRef.current = map;
+
+    // Add existing pin if any
+    if (latitude && longitude) {
+      geoMarkerRef.current = new maplibregl.Marker({ color: "hsl(210,60%,45%)" })
+        .setLngLat([longitude, latitude])
+        .addTo(map);
+    }
+
+    map.on("click", (e) => {
+      const lat = e.lngLat.lat;
+      const lng = e.lngLat.lng;
+      setLatitude(lat);
+      setLongitude(lng);
+      geoMarkerRef.current?.remove();
+      geoMarkerRef.current = new maplibregl.Marker({ color: "hsl(210,60%,45%)" })
+        .setLngLat([lng, lat])
+        .addTo(map);
+    });
+
+    return () => { map.remove(); geoMapInstanceRef.current = null; };
+  }, []);
+
+  // Load voyage waypoints when voyage changes
+  useEffect(() => {
+    if (!selectedVoyageId) { setVoyageWaypoints([]); return; }
+    (async () => {
+      const { data } = await supabase.from("voyage_waypoints").select("*").eq("voyage_id", selectedVoyageId).order("sort_order", { ascending: true });
+      setVoyageWaypoints((data || []) as unknown as VoyageWaypoint[]);
+    })();
+  }, [selectedVoyageId]);
+
+  // Draw voyage route on geo map
+  useEffect(() => {
+    const map = geoMapInstanceRef.current;
+    if (!map) return;
+    const draw = () => {
+      if (map.getLayer("editor-route")) map.removeLayer("editor-route");
+      if (map.getSource("editor-route")) map.removeSource("editor-route");
+      if (voyageWaypoints.length < 2) return;
+      map.addSource("editor-route", {
+        type: "geojson",
+        data: { type: "Feature", geometry: { type: "LineString", coordinates: voyageWaypoints.map((w) => [w.lng, w.lat]) }, properties: {} },
+      });
+      map.addLayer({
+        id: "editor-route",
+        type: "line",
+        source: "editor-route",
+        paint: { "line-color": "hsl(210,60%,45%)", "line-width": 3, "line-opacity": 0.6 },
+      });
+    };
+    if (map.isStyleLoaded()) draw();
+    else map.on("load", draw);
+  }, [voyageWaypoints]);
+
+  const handleGeoSearch = async () => {
+    if (!geoSearchQuery.trim()) return;
+    setGeoSearching(true);
+    const result = await geocodePlace(geoSearchQuery);
+    setGeoSearching(false);
+    if (result) {
+      setLatitude(result.lat);
+      setLongitude(result.lng);
+      setLocationName(result.name.split(",")[0]);
+      const map = geoMapInstanceRef.current;
+      if (map) {
+        geoMarkerRef.current?.remove();
+        geoMarkerRef.current = new maplibregl.Marker({ color: "hsl(210,60%,45%)" })
+          .setLngLat([result.lng, result.lat])
+          .addTo(map);
+        map.flyTo({ center: [result.lng, result.lat], zoom: 12 });
+      }
+    }
+  };
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
@@ -362,6 +492,114 @@ const ArticleEditor = () => {
               </label>
               <input type="datetime-local" value={publishDate} onChange={(e) => setPublishDate(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
               {isFuture && <p className="text-xs text-amber-600 mt-1">This article will be scheduled for future publication.</p>}
+            </div>
+
+            {/* Location & Voyage */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
+                <MapPin size={12} className="inline mr-1" /> Location & Voyage
+              </label>
+
+              {/* Geo search */}
+              <div className="flex gap-1.5 mb-2">
+                <input
+                  type="text"
+                  value={geoSearchQuery}
+                  onChange={(e) => setGeoSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleGeoSearch())}
+                  placeholder="Search place..."
+                  className="flex-1 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
+                />
+                <button onClick={handleGeoSearch} disabled={geoSearching} className="border border-border px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors">
+                  <SearchIcon size={12} />
+                </button>
+              </div>
+
+              {/* Mini map */}
+              <div ref={geoMapRef} className="w-full aspect-[4/3] border border-border mb-2" />
+
+              {/* Location name */}
+              <input
+                type="text"
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
+                placeholder="Location name (e.g. Porto di Bari)"
+                className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors mb-2"
+              />
+
+              {/* Coordinates display */}
+              {latitude && longitude && (
+                <p className="text-[10px] font-sans text-muted-foreground mb-2">
+                  📍 {latitude.toFixed(4)}, {longitude.toFixed(4)}
+                  <button onClick={() => { setLatitude(null); setLongitude(null); geoMarkerRef.current?.remove(); }} className="ml-2 text-destructive hover:underline">Clear</button>
+                </p>
+              )}
+
+              {/* Voyage selector */}
+              <div className="mt-3">
+                <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                  <Navigation size={10} className="inline mr-1" /> Voyage
+                </label>
+                <select
+                  value={selectedVoyageId || ""}
+                  onChange={(e) => {
+                    setSelectedVoyageId(e.target.value || null);
+                    setVoyageSegStart(null);
+                    setVoyageSegEnd(null);
+                  }}
+                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
+                >
+                  <option value="">No voyage</option>
+                  {allVoyages.map((v) => (
+                    <option key={v.id} value={v.id}>{v.type === "water" ? "🚢" : "🚐"} {v.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Association mode */}
+              {selectedVoyageId && (
+                <div className="mt-2 space-y-1.5">
+                  <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground block">Association</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => { setAssociationMode("full"); setVoyageSegStart(null); setVoyageSegEnd(null); }}
+                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "full" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Full voyage
+                    </button>
+                    <button
+                      onClick={() => setAssociationMode("point")}
+                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "point" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Point
+                    </button>
+                    <button
+                      onClick={() => setAssociationMode("segment")}
+                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "segment" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
+                    >
+                      Segment
+                    </button>
+                  </div>
+
+                  {associationMode === "point" && latitude && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Point set at {latitude.toFixed(4)}, {longitude?.toFixed(4)}
+                    </p>
+                  )}
+                  {associationMode === "segment" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-sans text-muted-foreground block">Start WP #</label>
+                        <input type="number" min={0} value={voyageSegStart ?? ""} onChange={(e) => setVoyageSegStart(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-sans text-muted-foreground block">End WP #</label>
+                        <input type="number" min={0} value={voyageSegEnd ?? ""} onChange={(e) => setVoyageSegEnd(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Authors */}

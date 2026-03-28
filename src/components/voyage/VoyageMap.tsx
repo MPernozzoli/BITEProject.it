@@ -195,12 +195,38 @@ const VoyageMap = ({
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
 
-      const geoArticles = articles.filter((a) => a.latitude && a.longitude);
+      // Compute article positions: use lat/lng if present, else derive from voyage
+      const positionedArticles = articles.map((article) => {
+        if (article.latitude && article.longitude) {
+          return { ...article, displayLat: article.latitude, displayLng: article.longitude };
+        }
+        // If associated to a voyage with segments
+        if (article.voyage_id) {
+          const wps = waypointsMap[article.voyage_id] || [];
+          if (wps.length < 1) return null;
+          if (article.voyage_segment_start != null && article.voyage_segment_end != null) {
+            // Segment midpoint
+            const start = Math.min(article.voyage_segment_start, wps.length - 1);
+            const end = Math.min(article.voyage_segment_end, wps.length - 1);
+            const midIdx = Math.round((start + end) / 2);
+            const wp = wps[midIdx] || wps[0];
+            return { ...article, displayLat: wp.lat, displayLng: wp.lng };
+          }
+          if (article.voyage_segment_start != null) {
+            const wp = wps[Math.min(article.voyage_segment_start, wps.length - 1)];
+            return { ...article, displayLat: wp.lat, displayLng: wp.lng };
+          }
+          // Full voyage - use midpoint
+          const mid = wps[Math.floor(wps.length / 2)];
+          return { ...article, displayLat: mid.lat, displayLng: mid.lng };
+        }
+        return null;
+      }).filter(Boolean) as (GeoArticle & { displayLat: number; displayLng: number })[];
 
-      geoArticles.forEach((article) => {
-        const isSelected = article.id === selectedArticleId;
-        const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-        const size = isSelected ? 56 : 44;
+      positionedArticles.forEach((article) => {
+      const isSelected = article.id === selectedArticleId;
+      const title = lang === "en" ? article.title_en : ((article as any).title_it || article.title_en);
+      const size = isSelected ? 56 : 44;
 
         const el = document.createElement("div");
         el.className = "voyage-marker-wrap";
@@ -245,7 +271,7 @@ const VoyageMap = ({
         });
 
         const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-          .setLngLat([article.longitude!, article.latitude!])
+          .setLngLat([article.displayLng, article.displayLat])
           .addTo(map);
 
         markersRef.current.push(marker);
@@ -259,15 +285,47 @@ const VoyageMap = ({
     }
   }, [articles, selectedArticleId, lang]);
 
-  // Fly to selected article
+  // Fly to selected article with smart bounds
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !selectedArticleId) return;
     const article = articles.find((a) => a.id === selectedArticleId);
-    if (article?.latitude && article?.longitude) {
+    if (!article) return;
+
+    // If article has segment bounds, fit to segment
+    if (article.voyage_id && article.voyage_segment_start != null && article.voyage_segment_end != null) {
+      const wps = waypointsMap[article.voyage_id] || [];
+      const start = Math.min(article.voyage_segment_start, wps.length - 1);
+      const end = Math.min(article.voyage_segment_end, wps.length - 1);
+      const segWps = wps.slice(start, end + 1);
+      if (segWps.length >= 2) {
+        const bounds = segWps.reduce(
+          (b, w) => b.extend([w.lng, w.lat]),
+          new maplibregl.LngLatBounds([segWps[0].lng, segWps[0].lat], [segWps[0].lng, segWps[0].lat])
+        );
+        map.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 1200 });
+        return;
+      }
+    }
+
+    // If full voyage
+    if (article.voyage_id && article.voyage_segment_start == null && article.voyage_segment_end == null) {
+      const wps = waypointsMap[article.voyage_id] || [];
+      if (wps.length >= 2) {
+        const bounds = wps.reduce(
+          (b, w) => b.extend([w.lng, w.lat]),
+          new maplibregl.LngLatBounds([wps[0].lng, wps[0].lat], [wps[0].lng, wps[0].lat])
+        );
+        map.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 1200 });
+        return;
+      }
+    }
+
+    // Single point
+    if (article.latitude && article.longitude) {
       map.flyTo({ center: [article.longitude, article.latitude], zoom: 10, duration: 1200 });
     }
-  }, [selectedArticleId, articles]);
+  }, [selectedArticleId, articles, waypointsMap]);
 
   // Fit bounds on initial load
   useEffect(() => {
