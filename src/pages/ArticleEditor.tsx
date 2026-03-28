@@ -9,6 +9,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import { toast } from "sonner";
+import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
 
 const ArticleEditor = () => {
   const { id } = useParams();
@@ -59,9 +61,14 @@ const ArticleEditor = () => {
 
   useEffect(() => { init(); }, [id]);
 
+  const loginPath = () => navigate("/login", { state: { from: `/admin/article/${id}` } });
+
   const init = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate("/admin/login"); return; }
+    const { session } = await validateSessionOrSignOut();
+    if (!session) {
+      loginPath();
+      return;
+    }
     setCurrentUserId(session.user.id);
 
     // Load tags, stories, and voyages
@@ -84,7 +91,15 @@ const ArticleEditor = () => {
 
   const loadArticle = async (userId: string) => {
     const { data, error } = await supabase.from("logbook_articles").select("*").eq("id", id).single();
-    if (error || !data) { navigate("/admin"); return; }
+    if (error && isAuthFailureError(error)) {
+      await supabase.auth.signOut();
+      loginPath();
+      return;
+    }
+    if (error || !data) {
+      navigate("/admin");
+      return;
+    }
     setTitleEn(data.title_en || "");
     setTitleIt(data.title_it || "");
     setSlug(data.slug || "");
@@ -128,26 +143,66 @@ const ArticleEditor = () => {
   };
 
   const handleCoverUpload = async (file: File) => {
+    const previewUrl = URL.createObjectURL(file);
+    setCoverImage(previewUrl);
     const ext = file.name.split(".").pop();
     const path = `covers/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from("logbook-media").upload(path, file);
-    if (error) { console.error("Cover upload error:", error); return; }
+    if (error) {
+      URL.revokeObjectURL(previewUrl);
+      console.error("Cover upload error:", error);
+      setCoverImage("");
+      toast.error("Upload copertina non riuscito.");
+      if (isAuthFailureError(error)) {
+        await supabase.auth.signOut();
+        loginPath();
+      }
+      return;
+    }
     const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
+    URL.revokeObjectURL(previewUrl);
     setCoverImage(urlData.publicUrl);
   };
 
   const addNewTag = async () => {
-    const name = newTagInput.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-    if (!name) return;
-    // Check if exists
-    const existing = allTags.find((t) => t.name === name);
+    const raw = newTagInput.trim();
+    const name = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    if (!name) {
+      toast.message("Inserisci un tag valido (lettere e numeri).");
+      return;
+    }
+    const existing = allTags.find((t) => t.name.toLowerCase() === name);
     if (existing) {
       if (!selectedTagIds.includes(existing.id)) setSelectedTagIds((prev) => [...prev, existing.id]);
       setNewTagInput("");
       return;
     }
     const { data, error } = await supabase.from("tags").insert({ name }).select().single();
-    if (!error && data) {
+    if (error) {
+      if (error.code === "23505") {
+        const { data: refreshed } = await supabase.from("tags").select("*").order("name");
+        if (refreshed?.length) {
+          setAllTags(refreshed);
+          const t = refreshed.find((x) => x.name.toLowerCase() === name);
+          if (t && !selectedTagIds.includes(t.id)) setSelectedTagIds((prev) => [...prev, t.id]);
+        }
+        setNewTagInput("");
+        return;
+      }
+      console.error(error);
+      toast.error("Impossibile aggiungere il tag. Controlla di essere autenticato.");
+      if (isAuthFailureError(error)) {
+        await supabase.auth.signOut();
+        loginPath();
+      }
+      return;
+    }
+    if (data) {
       setAllTags((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedTagIds((prev) => [...prev, data.id]);
     }
@@ -156,6 +211,13 @@ const ArticleEditor = () => {
 
   const saveArticle = useCallback(async (action: "draft" | "publish") => {
     setSaving(true);
+    const { session: live } = await validateSessionOrSignOut();
+    if (!live) {
+      toast.error("Sessione non valida. Effettua di nuovo l’accesso.");
+      navigate("/login", { state: { from: `/admin/article/${id}` } });
+      setSaving(false);
+      return;
+    }
     const selectedDate = publishDate ? new Date(publishDate) : new Date();
     const now = new Date();
     const isFuture = selectedDate > now;
@@ -199,12 +261,28 @@ const ArticleEditor = () => {
     let articleId = id;
     if (isNew) {
       const { data, error } = await supabase.from("logbook_articles").insert(articleData).select().single();
-      if (!error && data) {
+      if (error) {
+        if (isAuthFailureError(error)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: `/admin/article/new` } });
+        } else toast.error("Salvataggio non riuscito.");
+        setSaving(false);
+        return;
+      }
+      if (data) {
         articleId = data.id;
         navigate(`/admin/article/${data.id}`, { replace: true });
       }
     } else {
-      await supabase.from("logbook_articles").update(articleData).eq("id", id);
+      const { error: upErr } = await supabase.from("logbook_articles").update(articleData).eq("id", id);
+      if (upErr) {
+        if (isAuthFailureError(upErr)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: `/admin/article/${id}` } });
+        } else toast.error("Salvataggio non riuscito.");
+        setSaving(false);
+        return;
+      }
     }
 
     // Save authors and tags
@@ -286,6 +364,7 @@ const ArticleEditor = () => {
       attributionControl: false,
     });
     geoMapInstanceRef.current = map;
+    map.once("load", () => requestAnimationFrame(() => map.resize()));
 
     // Add existing pin if any
     if (latitude && longitude) {
@@ -414,8 +493,8 @@ const ArticleEditor = () => {
             <div>
               <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 block">Cover Image</label>
               {coverImage ? (
-                <div className="relative aspect-[16/10] overflow-hidden mb-2 group">
-                  <img src={coverImage} alt="Cover" className="img-cover" />
+                <div className="relative aspect-[16/10] overflow-hidden mb-2 group bg-muted">
+                  <img src={coverImage} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
                   <button onClick={() => setCoverImage("")} className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity">Remove</button>
                 </div>
               ) : (
@@ -464,7 +543,7 @@ const ArticleEditor = () => {
                     <option key={t.id} value={t.name} />
                   ))}
                 </datalist>
-                <button onClick={addNewTag} className="border border-border px-2 py-2 text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                <button type="button" onClick={() => void addNewTag()} className="border border-border px-2 py-2 text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
                   <Plus size={14} />
                 </button>
               </div>

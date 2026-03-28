@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { getSupabaseAuthStorageKey } from "@/lib/supabase-auth";
 import { lovable } from "@/integrations/lovable/index";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
@@ -38,8 +39,8 @@ const UserLogin = () => {
     if (!flag) return;
 
     const handleUnload = () => {
-      // navigator.sendBeacon can't call supabase, so we clear storage directly
-      localStorage.removeItem("sb-vdflrzcmlipvtardannd-auth-token");
+      const key = getSupabaseAuthStorageKey();
+      if (key) localStorage.removeItem(key);
     };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);

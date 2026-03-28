@@ -78,6 +78,10 @@ const AdminVoyageManager = () => {
 
     mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
+    mapRef.current.once("load", () => {
+      requestAnimationFrame(() => mapRef.current?.resize());
+    });
+
     // Click handler for placing waypoints
     mapRef.current.on("click", (e) => {
       if (!placingModeRef.current || !selectedVoyageRef.current) return;
@@ -388,22 +392,22 @@ const AdminVoyageManager = () => {
         ))}
       </div>
 
-      {/* Selected voyage editor */}
-      {selectedVoyageId && (
-        <div className="border border-border">
-          {/* Map */}
-          <div className="relative" style={{ height: "400px" }}>
-            <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
-            {/* Placing mode overlay */}
-            {placingMode && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-accent text-accent-foreground px-4 py-2 text-xs font-sans font-medium shadow-lg z-10 flex items-center gap-2">
-                <MapPin size={12} /> Click on map to place waypoint
-                <button onClick={() => setPlacingMode(false)} className="ml-2 hover:opacity-70"><X size={12} /></button>
-              </div>
-            )}
-          </div>
+      <div className="border border-border">
+        <div className="relative" style={{ height: "400px" }}>
+          <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[200px]" />
+          {selectedVoyageId && placingMode && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-accent text-accent-foreground px-4 py-2 text-xs font-sans font-medium shadow-lg z-10 flex items-center gap-2">
+              <MapPin size={12} /> Click on map to place waypoint
+              <button type="button" onClick={() => setPlacingMode(false)} className="ml-2 hover:opacity-70"><X size={12} /></button>
+            </div>
+          )}
+        </div>
 
-          {/* Waypoint controls */}
+        {!selectedVoyageId && (
+          <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">Seleziona un voyage dalla lista per aggiungere waypoint sulla mappa.</p>
+        )}
+
+        {selectedVoyageId && (
           <div className="p-4 border-t border-border">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-4">
@@ -501,8 +505,8 @@ const AdminVoyageManager = () => {
               </p>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {voyages.length === 0 && !showVoyageForm && (
         <div className="text-center py-12">

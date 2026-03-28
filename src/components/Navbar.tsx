@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/hooks/useAuth";
 import { Menu, X, User, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -21,11 +22,10 @@ const PAGE_SUBTITLES: Record<string, { en: string; it: string }> = {
 
 const Navbar = () => {
   const { t, lang, setLang } = useI18n();
+  const { session, isAdmin } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<{ name: string; avatar_url: string | null } | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,25 +42,14 @@ const Navbar = () => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  // Persistent auth
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) loadProfile(session.user.id);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setIsAdmin(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+    const userId = session?.user?.id;
+    if (!userId) {
+      setProfile(null);
+      return;
+    }
+    void loadProfile(userId);
+  }, [session?.user?.id]);
 
   const loadProfile = async (userId: string) => {
     const { data } = await supabase
@@ -69,20 +58,11 @@ const Navbar = () => {
       .eq("id", userId)
       .single();
     if (data) setProfile(data);
-
-    // Check admin role
-    const { data: roles } = await supabase
-      .from("user_roles" as any)
-      .select("role")
-      .eq("user_id", userId);
-    setIsAdmin(Array.isArray(roles) && roles.some((r: any) => r.role === "admin"));
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setSession(null);
     setProfile(null);
-    setIsAdmin(false);
     navigate("/");
   };
 

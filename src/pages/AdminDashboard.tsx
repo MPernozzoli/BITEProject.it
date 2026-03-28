@@ -5,6 +5,7 @@ import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen,
 import AdminVoyageManager from "@/components/admin/AdminVoyageManager";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
 
 interface Article {
   id: string;
@@ -63,7 +64,7 @@ const AdminDashboard = () => {
   }, []);
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { session } = await validateSessionOrSignOut();
     if (!session) {
       navigate("/login", { state: { from: "/admin" } });
       return;
@@ -87,6 +88,13 @@ const AdminDashboard = () => {
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
     ]);
+    const err = articlesRes.error || storiesRes.error;
+    if (err && isAuthFailureError(err)) {
+      await supabase.auth.signOut();
+      navigate("/login", { state: { from: "/admin" } });
+      setLoading(false);
+      return;
+    }
     if (articlesRes.data) setArticles(articlesRes.data as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     setLoading(false);
