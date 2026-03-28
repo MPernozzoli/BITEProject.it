@@ -21,3 +21,5 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.newsletter-track-click]
     verify_jwt = false
+  [functions.notify-story-subscribers]
+    verify_jwt = true

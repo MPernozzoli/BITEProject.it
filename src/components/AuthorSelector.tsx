@@ -7,7 +7,6 @@ interface Profile {
   id: string;
   name: string;
   avatar_url: string | null;
-  email: string;
 }
 
 interface AuthorSelectorProps {
@@ -20,7 +19,7 @@ const AuthorSelector = ({ selectedIds, onChange }: AuthorSelectorProps) => {
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const { data } = await supabase.from("profiles").select("id, name, avatar_url, email");
+      const { data } = await supabase.from("public_profiles").select("id, name, avatar_url");
       if (data) setProfiles(data);
     };
     fetchProfiles();
@@ -37,7 +36,7 @@ const AuthorSelector = ({ selectedIds, onChange }: AuthorSelectorProps) => {
       <div className="space-y-2">
         {selected.map((p) => (
           <div key={p.id} className="flex items-center justify-between border border-border px-3 py-2">
-            <ProfileCard name={p.name || p.email} avatarUrl={p.avatar_url || undefined} size="sm" />
+            <ProfileCard name={p.name || "Unnamed author"} avatarUrl={p.avatar_url || undefined} size="sm" />
             <button onClick={() => onChange(selectedIds.filter((id) => id !== p.id))} className="text-muted-foreground hover:text-destructive">
               <X size={14} />
             </button>
@@ -53,7 +52,7 @@ const AuthorSelector = ({ selectedIds, onChange }: AuthorSelectorProps) => {
           >
             <option value="">+ Add author...</option>
             {available.map((p) => (
-              <option key={p.id} value={p.id}>{p.name || p.email}</option>
+              <option key={p.id} value={p.id}>{p.name || "Unnamed author"}</option>
             ))}
           </select>
         )}

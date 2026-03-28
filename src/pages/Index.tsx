@@ -120,19 +120,18 @@ const Index = () => {
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
           <img src={bowSunset} alt="View from the bow at sunset" className="img-cover" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.24)_0%,rgba(17,28,43,0.42)_34%,rgba(17,28,43,0.72)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.12)_0%,rgba(17,28,43,0.26)_36%,rgba(17,28,43,0.62)_100%)]" />
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] max-w-6xl items-center justify-center">
-          <div className="glass-panel-dark w-full max-w-4xl rounded-[40px] px-6 py-8 text-center shadow-[0_40px_120px_rgba(0,0,0,0.28)] md:px-12 md:py-12 slide-up">
-            <div className="glass-chip-dark inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-white/78 mb-6">
-              <span className="h-2 w-2 rounded-full bg-white/70" />
+          <div className="w-full max-w-4xl px-4 text-center slide-up md:px-10">
+            <p className="mb-6 text-[11px] font-sans uppercase tracking-[0.34em] text-white/72 [text-shadow:0_6px_22px_rgba(0,0,0,0.28)]">
               {lang === "it" ? "Dal bordo di Spritz" : "From aboard Spritz"}
-            </div>
-            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-6 whitespace-pre-line">
+            </p>
+            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-6 whitespace-pre-line [text-shadow:0_10px_34px_rgba(0,0,0,0.30)]">
               {t("hero.title")}
             </h1>
-            <p className="editorial-body text-white/76 text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line">
+            <p className="editorial-body text-white/82 text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line [text-shadow:0_8px_26px_rgba(0,0,0,0.24)]">
               {t("hero.subtitle")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -153,14 +152,12 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="absolute bottom-10 left-1/2 z-10 flex -translate-x-1/2 animate-bounce">
-          <div className="glass-chip-dark flex flex-col items-center justify-center gap-2 px-5 py-3">
-            <span className="text-[10px] font-sans tracking-[0.3em] uppercase text-white/55">
-              {t("crew.scroll")}
+        <div className="absolute bottom-10 left-1/2 z-10 flex -translate-x-1/2">
+          <div className="hero-scroll-cue">
+            <span className="hero-scroll-cue__label">{t("crew.scroll")}</span>
+            <span className="hero-scroll-cue__line" aria-hidden="true">
+              <span className="hero-scroll-cue__dot" />
             </span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/50">
-              <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
-            </svg>
           </div>
         </div>
       </section>

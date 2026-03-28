@@ -368,29 +368,17 @@ const ArticleEditor = () => {
             .select("profile_id")
             .eq("story_id", selectedStoryId);
           if (subs && subs.length > 0) {
-            const subProfileIds = subs.map((s) => s.profile_id);
-            const { data: subProfiles } = await supabase
-              .from("profiles")
-              .select("id, email")
-              .in("id", subProfileIds);
             const origin = window.location.origin;
-            for (const profile of subProfiles || []) {
-              if (profile.email) {
-                await supabase.functions.invoke("send-transactional-email", {
-                  body: {
-                    templateName: "new-chapter-notification",
-                    recipientEmail: profile.email,
-                    idempotencyKey: `new-chapter-${articleId}-${profile.id}`,
-                    templateData: {
-                      storyTitle: story?.title_en || "",
-                      chapterTitle: titleEn,
-                      chapterUrl: `${origin}/logbook/${slug}`,
-                      storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
-                    },
-                  },
-                });
-              }
-            }
+            await supabase.functions.invoke("notify-story-subscribers", {
+              body: {
+                storyId: selectedStoryId,
+                articleId,
+                storyTitle: story?.title_en || "",
+                chapterTitle: titleEn,
+                chapterUrl: `${origin}/logbook/${slug}`,
+                storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
+              },
+            });
           }
         } catch (e) {
           console.error("Failed to send story notifications:", e);

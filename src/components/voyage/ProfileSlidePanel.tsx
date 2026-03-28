@@ -138,7 +138,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
     queryFn: async () => {
       const [profileRes, badgeRes, authorRes] = await Promise.all([
         supabase
-          .from("profiles")
+          .from("public_profiles")
           .select(
             "id, name, bio, avatar_url, created_at, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website"
           )

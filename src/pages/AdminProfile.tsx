@@ -77,7 +77,13 @@ const AdminProfile = () => {
     }
 
     try {
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+      setEmail(session?.user.email || "");
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website")
+        .eq("id", userId)
+        .single();
       if (error) {
         if (isAuthFailureError(error)) {
           await supabase.auth.signOut();
@@ -90,7 +96,6 @@ const AdminProfile = () => {
       if (data) {
         setName(data.name || "");
         setBio(data.bio || "");
-        setEmail(data.email || session?.user.email || "");
         setAvatarUrl(data.avatar_url || "");
         if (data.preferred_language) setPreferredLanguage(data.preferred_language as ExtendedLanguage);
         if (data.secondary_language) setSecondaryLanguage(data.secondary_language);
@@ -105,7 +110,7 @@ const AdminProfile = () => {
         });
       }
 
-      const currentEmail = (data?.email || session?.user.email || "").trim().toLowerCase();
+      const currentEmail = (session?.user.email || "").trim().toLowerCase();
       const newsletterQuery = supabase
         .from("newsletter_subscribers")
         .select("*");

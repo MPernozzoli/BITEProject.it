@@ -1121,7 +1121,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          id: string | null
+          name: string | null
+          preferred_language: string | null
+          secondary_language: string | null
+          social_facebook: string | null
+          social_instagram: string | null
+          social_linkedin: string | null
+          social_tiktok: string | null
+          social_website: string | null
+          social_x: string | null
+          social_youtube: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       delete_email: {
