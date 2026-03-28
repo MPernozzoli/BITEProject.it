@@ -74,6 +74,7 @@ const Journal = () => {
         authors: articleAuthorsMap[article.id] || [],
         tags: articleTagsMap[article.id] || [],
         likeCount: likeCounts[article.id] || 0,
+        viewCount: Number(article.view_count ?? 0),
       })) as GeoArticle[];
     },
   });
@@ -180,17 +181,21 @@ const Journal = () => {
           />
 
           {/* Floating controls — top right */}
-          <div className="absolute top-24 right-4 z-20 flex flex-col gap-2">
+          <div
+            className={`absolute top-24 z-20 flex flex-col gap-2 transition-all duration-300 ${
+              panelArticle ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
+            }`}
+          >
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="bg-background/90 backdrop-blur-md border border-border shadow-lg p-2.5 hover:bg-background transition-colors"
+              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
               title={sidebarOpen ? "Hide list" : "Show list"}
             >
               {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className="bg-background/90 backdrop-blur-md border border-border shadow-lg p-2.5 hover:bg-background transition-colors"
+              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
               title="Grid view"
             >
               <List size={16} />
@@ -198,7 +203,7 @@ const Journal = () => {
             {isAdmin && (
               <Link
                 to="/admin/article/new"
-                className="bg-primary text-primary-foreground shadow-lg p-2.5 hover:opacity-90 transition-opacity flex items-center justify-center"
+                className="rounded-full bg-primary text-primary-foreground shadow-lg p-2.5 hover:opacity-90 transition-opacity flex items-center justify-center"
               >
                 <Plus size={16} />
               </Link>
@@ -207,7 +212,7 @@ const Journal = () => {
 
           {/* Floating stats bar — top center */}
           {stats.totalNM > 0 && (
-            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 bg-background/90 backdrop-blur-md border border-border shadow-lg px-4 py-2">
+            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground">
                 <Ship size={10} /> {stats.totalNM.toLocaleString()} NM
               </span>
@@ -228,28 +233,28 @@ const Journal = () => {
 
           {/* Floating sidebar — article list */}
           <div
-            className={`absolute top-24 left-4 bottom-4 z-20 w-[340px] xl:w-[380px] bg-background/95 backdrop-blur-md border border-border shadow-2xl flex flex-col transition-all duration-300 ease-out ${
+            className={`absolute top-24 left-4 bottom-4 z-20 w-[340px] xl:w-[390px] rounded-[32px] bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] overflow-hidden flex flex-col transition-all duration-300 ease-out ${
               sidebarOpen
                 ? "translate-x-0 opacity-100"
                 : "-translate-x-[calc(100%+1rem)] opacity-0 pointer-events-none"
             }`}
           >
             {/* Search inside sidebar */}
-            <div className="p-3 border-b border-border shrink-0">
-              <div className="relative">
+            <div className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl">
+              <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={lang === "it" ? "Cerca..." : "Search..."}
-                  className="w-full bg-transparent border border-border pl-8 pr-3 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
+                  className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Article list */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto pb-3">
               {isLoading ? (
                 <div className="p-3 space-y-3">
                   {[...Array(5)].map((_, i) => (

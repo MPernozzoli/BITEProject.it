@@ -5,6 +5,10 @@ import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as Li
 import { useI18n } from "@/lib/i18n";
 import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
+import { isAuthFailureError } from "@/lib/supabase-auth";
+import { toast } from "sonner";
+import ProfileAvatar from "@/components/ProfileAvatar";
+import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -28,6 +32,9 @@ const AdminProfile = () => {
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarCropOpen, setAvatarCropOpen] = useState(false);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
@@ -54,50 +61,129 @@ const AdminProfile = () => {
     loadProfile();
   }, [authLoading, session]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingAvatarUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(pendingAvatarUrl);
+      }
+    };
+  }, [pendingAvatarUrl]);
+
   const loadProfile = async () => {
     const userId = session?.user?.id;
-    if (!userId) return;
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
-    if (data) {
-      setName(data.name || "");
-      setBio(data.bio || "");
-      setEmail(data.email || session.user.email || "");
-      setAvatarUrl(data.avatar_url || "");
-      if (data.preferred_language) setPreferredLanguage(data.preferred_language as ExtendedLanguage);
-      if (data.secondary_language) setSecondaryLanguage(data.secondary_language);
-      setSocials({
-        social_instagram: data.social_instagram || "",
-        social_youtube: data.social_youtube || "",
-        social_tiktok: data.social_tiktok || "",
-        social_facebook: data.social_facebook || "",
-        social_x: data.social_x || "",
-        social_linkedin: data.social_linkedin || "",
-        social_website: data.social_website || "",
-      });
+    if (!userId) {
+      setProfileLoaded(true);
+      return;
     }
-    const { data: sub } = await supabase.from("newsletter_subscribers").select("*").eq("profile_id", userId).maybeSingle();
-    if (sub) setNewsletterSubscribed(sub.subscribed);
 
-    // Load story subscriptions
-    const { data: storySubs } = await supabase
-      .from("story_subscriptions")
-      .select("id, story_id, stories(title_it, title_en, slug)")
-      .eq("profile_id", userId);
-    setProfileLoaded(true);
-    if (storySubs) {
-      setStorySubscriptions(
-        storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
-      );
+    try {
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).single();
+      if (error) {
+        if (isAuthFailureError(error)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: "/profile" }, replace: true });
+          return;
+        }
+        console.error("Profile load error:", error);
+      }
+
+      if (data) {
+        setName(data.name || "");
+        setBio(data.bio || "");
+        setEmail(data.email || session?.user.email || "");
+        setAvatarUrl(data.avatar_url || "");
+        if (data.preferred_language) setPreferredLanguage(data.preferred_language as ExtendedLanguage);
+        if (data.secondary_language) setSecondaryLanguage(data.secondary_language);
+        setSocials({
+          social_instagram: data.social_instagram || "",
+          social_youtube: data.social_youtube || "",
+          social_tiktok: data.social_tiktok || "",
+          social_facebook: data.social_facebook || "",
+          social_x: data.social_x || "",
+          social_linkedin: data.social_linkedin || "",
+          social_website: data.social_website || "",
+        });
+      }
+
+      const currentEmail = (data?.email || session?.user.email || "").trim().toLowerCase();
+      const newsletterQuery = supabase
+        .from("newsletter_subscribers")
+        .select("*");
+      const { data: sub, error: subError } = await (currentEmail
+        ? newsletterQuery.or(`profile_id.eq.${userId},email.eq.${currentEmail}`)
+        : newsletterQuery.eq("profile_id", userId))
+        .maybeSingle();
+      if (subError) {
+        if (isAuthFailureError(subError)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: "/profile" }, replace: true });
+          return;
+        }
+        console.error("Newsletter subscription load error:", subError);
+      }
+      if (sub) setNewsletterSubscribed(sub.subscribed);
+
+      const { data: storySubs, error: storySubsError } = await supabase
+        .from("story_subscriptions")
+        .select("id, story_id, stories(title_it, title_en, slug)")
+        .eq("profile_id", userId);
+      if (storySubsError) {
+        if (isAuthFailureError(storySubsError)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: "/profile" }, replace: true });
+          return;
+        }
+        console.error("Story subscriptions load error:", storySubsError);
+        return;
+      }
+
+      if (storySubs) {
+        setStorySubscriptions(
+          storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
+        );
+      }
+    } finally {
+      setProfileLoaded(true);
     }
   };
 
-  const handleAvatarUpload = async (file: File) => {
-    const ext = file.name.split(".").pop();
-    const path = `avatars/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from("logbook-media").upload(path, file);
-    if (error) { console.error("Avatar upload error:", error); return; }
-    const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
-    setAvatarUrl(urlData.publicUrl);
+  const resetPendingAvatar = () => {
+    setPendingAvatarUrl(null);
+    setAvatarCropOpen(false);
+  };
+
+  const handleAvatarSelected = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Seleziona un file immagine valido.");
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    setPendingAvatarUrl(nextUrl);
+    setAvatarCropOpen(true);
+  };
+
+  const handleAvatarUpload = async (blob: Blob) => {
+    setUploadingAvatar(true);
+
+    try {
+      const path = `avatars/${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
+      const { error } = await supabase.storage.from("logbook-media").upload(path, blob, {
+        contentType: blob.type || "image/png",
+      });
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
+      setAvatarUrl(urlData.publicUrl);
+      resetPendingAvatar();
+      toast.success("Foto profilo pronta. Salva il profilo per pubblicarla.");
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      toast.error("Impossibile caricare la foto profilo.");
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   const handleLanguageChange = (lang: ExtendedLanguage) => {
@@ -122,11 +208,33 @@ const AdminProfile = () => {
       ...socials,
     }).eq("id", userId);
 
-    const { data: existingSub } = await supabase.from("newsletter_subscribers").select("id").eq("profile_id", userId).maybeSingle();
+    const normalizedEmail = email.trim().toLowerCase();
+    const subscriptionQuery = supabase
+      .from("newsletter_subscribers")
+      .select("id");
+    const { data: existingSub } = await (normalizedEmail
+      ? subscriptionQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
+      : subscriptionQuery.eq("profile_id", userId))
+      .maybeSingle();
     if (existingSub) {
-      await supabase.from("newsletter_subscribers").update({ subscribed: newsletterSubscribed, email }).eq("profile_id", userId);
+      await supabase
+        .from("newsletter_subscribers")
+        .update({
+          profile_id: userId,
+          subscribed: newsletterSubscribed,
+          email: normalizedEmail,
+          preferred_language: preferredLanguage,
+          source: "profile",
+        })
+        .eq("id", existingSub.id);
     } else {
-      await supabase.from("newsletter_subscribers").insert({ profile_id: userId, email, subscribed: newsletterSubscribed });
+      await supabase.from("newsletter_subscribers").insert({
+        profile_id: userId,
+        email: normalizedEmail,
+        subscribed: newsletterSubscribed,
+        preferred_language: preferredLanguage,
+        source: "profile",
+      });
     }
 
     setSaving(false);
@@ -150,20 +258,36 @@ const AdminProfile = () => {
         {/* Avatar */}
         <div className="flex items-center gap-6 mb-8">
           <div className="relative w-24 h-24 rounded-full overflow-hidden bg-muted flex items-center justify-center group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" className="img-cover" />
-            ) : (
-              <Camera className="text-muted-foreground" size={32} />
-            )}
+            <ProfileAvatar
+              name={name || "Avatar"}
+              avatarUrl={avatarUrl}
+              imgClassName="img-cover"
+              fallback={<Camera className="text-muted-foreground" size={32} />}
+            />
             <div className="absolute inset-0 bg-primary/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="text-primary-foreground" size={20} />
             </div>
+            {uploadingAvatar && (
+              <div className="absolute inset-0 bg-background/75 backdrop-blur-sm flex items-center justify-center text-[11px] font-sans text-foreground">
+                Upload...
+              </div>
+            )}
           </div>
           <div>
             <p className="font-sans font-medium">{name || "Il tuo nome"}</p>
             <p className="text-sm text-muted-foreground">{email}</p>
           </div>
-          <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleAvatarSelected(file);
+              e.target.value = "";
+            }}
+          />
         </div>
 
         {/* Fields */}
@@ -302,11 +426,23 @@ const AdminProfile = () => {
             </div>
           )}
 
-          <button onClick={saveProfile} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
+          <button onClick={saveProfile} disabled={saving || uploadingAvatar} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
             <Save size={14} /> {saving ? "Salvataggio..." : "Salva profilo"}
           </button>
         </div>
       </div>
+
+      <AvatarCropDialog
+        open={avatarCropOpen}
+        imageUrl={pendingAvatarUrl}
+        loading={uploadingAvatar}
+        onOpenChange={(open) => {
+          if (!open) resetPendingAvatar();
+          else setAvatarCropOpen(true);
+        }}
+        onCancel={resetPendingAvatar}
+        onConfirm={handleAvatarUpload}
+      />
     </div>
   );
 };

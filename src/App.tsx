@@ -50,6 +50,7 @@ const App = () => (
               <Route path="/logbook/:slug" element={<ArticlePage />} />
               <Route path="/profile/:id" element={<PublicProfile />} />
               <Route path="/login" element={<UserLogin />} />
+              <Route path="/signup" element={<UserLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/article/:id" element={<ArticleEditor />} />

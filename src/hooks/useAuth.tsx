@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, createContext, useContext, ReactNode, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
-import { validateSessionOrSignOut } from "@/lib/supabase-auth";
+import {
+  deferSupabaseAuthWork,
+  getSupabaseAuthStorageKey,
+  validateSessionOrSignOut,
+} from "@/lib/supabase-auth";
 
 interface AuthContext {
   session: Session | null;
@@ -23,17 +27,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const authBootstrapDoneRef = useRef(false);
+  const authStateVersionRef = useRef(0);
 
-  const checkAdmin = useCallback(async (userId: string) => {
-    const { data } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
-    setIsAdmin(!!data);
+  const checkAdmin = useCallback(async (userId: string, version: number) => {
+    try {
+      const { data, error } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+      if (version !== authStateVersionRef.current) return;
+      if (error) {
+        console.error("Failed to resolve admin role", error);
+        setIsAdmin(false);
+        return;
+      }
+      setIsAdmin(!!data);
+    } catch (error) {
+      if (version !== authStateVersionRef.current) return;
+      console.error("Failed to resolve admin role", error);
+      setIsAdmin(false);
+    }
   }, []);
 
   const applySession = useCallback(
-    async (next: Session | null) => {
+    (next: Session | null) => {
+      const version = ++authStateVersionRef.current;
       setSession(next);
       if (next?.user) {
-        await checkAdmin(next.user.id);
+        setIsAdmin(false);
+        void checkAdmin(next.user.id, version);
       } else {
         setIsAdmin(false);
       }
@@ -42,9 +61,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const revalidateSession = useCallback(async () => {
-    const { session: next } = await validateSessionOrSignOut();
-    await applySession(next);
+    try {
+      const { session: next } = await validateSessionOrSignOut();
+      applySession(next);
+    } catch (error) {
+      console.error("Session revalidation failed", error);
+      applySession(null);
+    }
   }, [applySession]);
+
+  useEffect(() => {
+    const clearEphemeralSession = () => {
+      if (!localStorage.getItem("bite_ephemeral_session")) return;
+      const key = getSupabaseAuthStorageKey();
+      if (key) localStorage.removeItem(key);
+    };
+
+    window.addEventListener("beforeunload", clearEphemeralSession);
+    window.addEventListener("pagehide", clearEphemeralSession);
+
+    return () => {
+      window.removeEventListener("beforeunload", clearEphemeralSession);
+      window.removeEventListener("pagehide", clearEphemeralSession);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,19 +92,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const bootstrap = async () => {
       setLoading(true);
-      const { session: next } = await validateSessionOrSignOut();
-      if (cancelled) return;
-      await applySession(next);
-      if (!cancelled) setLoading(false);
-      authBootstrapDoneRef.current = true;
+      try {
+        const { session: next } = await validateSessionOrSignOut();
+        if (cancelled) return;
+        applySession(next);
+      } catch (error) {
+        console.error("Auth bootstrap failed", error);
+        if (cancelled) return;
+        applySession(null);
+      } finally {
+        authBootstrapDoneRef.current = true;
+        if (!cancelled) setLoading(false);
+      }
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, next) => {
+      (event, next) => {
         // Evita di applicare subito la sessione da storage prima della validazione JWT (stato “loggato” fantasma).
         if (!authBootstrapDoneRef.current && event === "INITIAL_SESSION") return;
-        await applySession(next);
-        if (!cancelled && authBootstrapDoneRef.current) setLoading(false);
+        deferSupabaseAuthWork(() => {
+          if (cancelled) return;
+          applySession(next);
+          if (authBootstrapDoneRef.current) setLoading(false);
+        });
       }
     );
 
@@ -76,8 +126,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!authBootstrapDoneRef.current) return;
         const { data: { session: cur } } = await supabase.auth.getSession();
         if (!cur) return;
-        const { session: next } = await validateSessionOrSignOut();
-        if (!cancelled) await applySession(next);
+        try {
+          const { session: next } = await validateSessionOrSignOut();
+          if (!cancelled) applySession(next);
+        } catch (error) {
+          console.error("Visibility session revalidation failed", error);
+          if (!cancelled) applySession(null);
+        }
       })();
     };
     document.addEventListener("visibilitychange", onVisible);

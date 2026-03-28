@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { format } from "date-fns";
-import { MapPin, Eye } from "lucide-react";
+import { MapPin, Eye, Heart } from "lucide-react";
 import type { GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -16,6 +16,8 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
   ({ article, lang, isActive, isRead, onClick }, ref) => {
     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+    const views = Number(article.viewCount ?? 0).toLocaleString(lang === "it" ? "it-IT" : "en-US");
+    const likes = Number(article.likeCount ?? 0).toLocaleString(lang === "it" ? "it-IT" : "en-US");
     const thumbStyle =
       article.cover_image &&
       coverImageStyle(
@@ -31,16 +33,16 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
       <div
         ref={ref}
         onClick={onClick}
-        className={`group cursor-pointer border-b border-border p-4 transition-all duration-300 ${
+        className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-all duration-300 ${
           isActive
-            ? "bg-accent/10 border-l-2 border-l-accent"
-            : "hover:bg-muted/50 border-l-2 border-l-transparent"
+            ? "border-accent/50 bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
+            : "border-white/55 bg-white/48 hover:bg-white/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
         }`}
       >
         <div className="flex gap-3">
           {/* Thumbnail */}
           {article.cover_image && (
-            <div className="w-20 h-20 shrink-0 overflow-hidden rounded-sm relative bg-muted">
+            <div className="w-20 h-20 shrink-0 overflow-hidden rounded-[18px] relative bg-muted">
               <img
                 src={article.cover_image}
                 alt={title}
@@ -83,6 +85,16 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
             {excerpt && (
               <p className="text-[11px] text-muted-foreground line-clamp-2 font-sans">{excerpt}</p>
             )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
+                <Eye size={10} className="text-accent" />
+                {views}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
+                <Heart size={10} className="text-accent" />
+                {likes}
+              </span>
+            </div>
           </div>
         </div>
       </div>

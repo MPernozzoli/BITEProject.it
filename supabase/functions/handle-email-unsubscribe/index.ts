@@ -124,6 +124,22 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to process unsubscribe' }, 500)
   }
 
+  const { error: subscriberError } = await supabase
+    .from('newsletter_subscribers')
+    .update({
+      subscribed: false,
+      source: 'unsubscribe_page',
+      unsubscribed_at: new Date().toISOString(),
+    })
+    .eq('email', tokenRecord.email.toLowerCase())
+
+  if (subscriberError) {
+    console.error('Failed to update newsletter subscriber after unsubscribe', {
+      error: subscriberError,
+      email: tokenRecord.email,
+    })
+  }
+
   console.log('Email unsubscribed', { email: tokenRecord.email })
 
   return jsonResponse({ success: true })

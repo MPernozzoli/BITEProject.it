@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
-import { Menu, X, User, LogOut } from "lucide-react";
+import { ArrowRight, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import ProfileAvatar from "@/components/ProfileAvatar";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,12 +14,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const PAGE_SUBTITLES: Record<string, { en: string; it: string }> = {
-  "/logbook": { en: "'s Logbook", it: "'s Diario" },
-  "/crew": { en: "'s Crew", it: "'s Ciurma" },
-  "/manifesto": { en: "'s Manifesto", it: "'s Manifesto" },
-  "/collaborations": { en: "'s Collabs", it: "'s Collabs" },
-  "/contact": { en: "'s Contact", it: "'s Contatti" },
+const PAGE_SUBTITLES: Record<string, string> = {
+  "/logbook": "'s logbook",
+  "/crew": "'s crew",
+  "/manifesto": "'s manifesto",
+  "/collaborations": "'s collabs",
+  "/contact": "'s contact",
 };
 
 const Navbar = () => {
@@ -25,12 +27,20 @@ const Navbar = () => {
   const { session, isAdmin, loading: authLoading } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [profile, setProfile] = useState<{ name: string; avatar_url: string | null } | null>(null);
+  const [profile, setProfile] = useState<{
+    name: string;
+    avatar_url: string | null;
+  } | null>(null);
   const [logoHovered, setLogoHovered] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const pageSubtitle = PAGE_SUBTITLES[location.pathname]?.[lang] || null;
+  const pageSubtitle =
+    PAGE_SUBTITLES[location.pathname] ||
+    Object.entries(PAGE_SUBTITLES).find(([path]) =>
+      location.pathname.startsWith(`${path}/`),
+    )?.[1] ||
+    null;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -41,6 +51,15 @@ const Navbar = () => {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = mobileOpen ? "hidden" : previousOverflow;
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
 
   useEffect(() => {
     const userId = session?.user?.id;
@@ -61,13 +80,31 @@ const Navbar = () => {
     if (!error && data) setProfile(data);
   };
 
-  const meta = session?.user?.user_metadata as Record<string, string | undefined> | undefined;
-  const displayAvatarUrl = profile?.avatar_url || meta?.avatar_url || meta?.picture;
+  const meta = session?.user?.user_metadata as
+    | Record<string, string | undefined>
+    | undefined;
+  const displayAvatarUrl =
+    profile?.avatar_url || meta?.avatar_url || meta?.picture;
   const displayName =
-    profile?.name?.trim() || meta?.full_name || meta?.name || session?.user?.email?.split("@")[0] || "";
+    profile?.name?.trim() ||
+    meta?.full_name ||
+    meta?.name ||
+    session?.user?.email?.split("@")[0] ||
+    "";
   const initials = displayName
-    ? displayName.split(/\s+/).map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    ? displayName
+        .split(/\s+/)
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
     : (session?.user?.email?.[0]?.toUpperCase() ?? "?");
+  const isGuest = !authLoading && !session;
+  const toggleLanguage = () => setLang(lang === "en" ? "it" : "en");
+  const languageToggleAriaLabel =
+    lang === "en" ? "Switch to Italian" : "Passa all'inglese";
+  const languageToggleMenuLabel =
+    lang === "en" ? "Switch to Italian" : "Passa all'inglese";
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -75,27 +112,88 @@ const Navbar = () => {
     navigate("/");
   };
 
+  const isLinkActive = (to: string) =>
+    location.pathname === to || location.pathname.startsWith(`${to}/`);
+
   const links = [
-    { to: "/crew", label: t("nav.about") },
-    { to: "/manifesto", label: t("nav.manifesto") },
-    { to: "/logbook", label: t("nav.journal") },
-    { to: "/collaborations", label: t("nav.collaborations") },
-    { to: "/contact", label: t("nav.contact") },
+    {
+      to: "/crew",
+      label: t("nav.about"),
+      description:
+        lang === "it"
+          ? "Chi siamo, come viviamo e cosa stiamo costruendo."
+          : "Who we are, how we live, and what we are building.",
+    },
+    {
+      to: "/manifesto",
+      label: t("nav.manifesto"),
+      description:
+        lang === "it"
+          ? "Principi, metodo e scelte che guidano il progetto."
+          : "Principles, methods, and choices that guide the project.",
+    },
+    {
+      to: "/logbook",
+      label: t("nav.journal"),
+      description:
+        lang === "it"
+          ? "Articoli, note tecniche e storie dal bordo."
+          : "Articles, technical notes, and stories from aboard.",
+    },
+    {
+      to: "/collaborations",
+      label: t("nav.collaborations"),
+      description:
+        lang === "it"
+          ? "Brand fit, partnership e lavori che hanno senso."
+          : "Brand fit, partnerships, and work that actually make sense.",
+    },
+    {
+      to: "/contact",
+      label: t("nav.contact"),
+      description:
+        lang === "it"
+          ? "Messaggi, collaborazioni e richieste dirette."
+          : "Messages, partnerships, and direct requests.",
+    },
   ];
+
+  const navShellClass = mobileOpen
+    ? "bg-navy/90 border-b border-white/10 shadow-2xl backdrop-blur-xl"
+    : scrolled
+      ? "bg-background/95 border-b border-border shadow-sm backdrop-blur-md"
+      : "bg-gradient-to-b from-black/60 via-black/30 to-transparent";
+
+  const navTextClass = mobileOpen
+    ? "text-white"
+    : scrolled
+      ? "text-foreground"
+      : "text-white";
+  const mobileButtonClass = mobileOpen
+    ? "border-white/15 bg-white/10 text-white shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)]"
+    : scrolled
+      ? "border-border bg-background/85 text-foreground shadow-sm"
+      : "border-white/20 bg-black/20 text-white backdrop-blur-md";
+  const authCardText =
+    lang === "it"
+      ? "Accedi per gestire profilo, contenuti e impostazioni."
+      : "Sign in to manage profile, content, and settings.";
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled
-          ? "bg-background/95 backdrop-blur-md border-b border-border shadow-sm"
-          : "bg-gradient-to-b from-black/60 via-black/30 to-transparent"
-      }`}
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        navShellClass,
+      )}
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between h-16 md:h-20">
         {/* Logo with hover expand */}
         <Link
           to="/"
-          className={`relative font-serif text-xl md:text-2xl font-bold tracking-widest overflow-hidden transition-colors duration-500 ${scrolled ? "text-foreground" : "text-white"}`}
+          className={cn(
+            "relative inline-flex items-baseline gap-0 overflow-hidden font-serif text-xl font-bold tracking-widest transition-colors duration-500 md:text-2xl",
+            navTextClass,
+          )}
           onMouseEnter={() => setLogoHovered(true)}
           onMouseLeave={() => setLogoHovered(false)}
         >
@@ -135,7 +233,7 @@ const Navbar = () => {
             <span
               className={`inline-block transition-all duration-300 delay-500 ${
                 logoHovered
-                  ? "opacity-100 translate-y-0 scale-110 text-accent"
+                  ? "opacity-100 translate-y-0 scale-110 text-current"
                   : "opacity-0 -translate-y-2 scale-75"
               }`}
             >
@@ -145,7 +243,7 @@ const Navbar = () => {
           {/* Dynamic page subtitle — hidden during hover expand */}
           {pageSubtitle && (
             <span
-              className={`inline-block font-sans font-normal text-[0.55em] tracking-wider uppercase transition-all duration-400 ease-out ${
+              className={`inline-block font-sans font-normal text-[0.55em] tracking-wider transition-all duration-400 ease-out ${
                 logoHovered
                   ? "max-w-0 opacity-0 scale-95"
                   : "max-w-[12em] opacity-70 scale-100"
@@ -164,30 +262,42 @@ const Navbar = () => {
               to={link.to}
               className={`text-[13px] font-sans tracking-wide transition-colors duration-300 hover:text-accent ${
                 scrolled
-                  ? location.pathname === link.to ? "text-foreground font-medium" : "text-muted-foreground"
-                  : location.pathname === link.to ? "text-white font-medium" : "text-white/75"
+                  ? isLinkActive(link.to)
+                    ? "text-foreground font-medium"
+                    : "text-muted-foreground"
+                  : isLinkActive(link.to)
+                    ? "text-white font-medium"
+                    : "text-white/75"
               }`}
             >
               {link.label}
             </Link>
           ))}
 
-          <div className={`w-px h-5 mx-1 ${scrolled ? "bg-border" : "bg-white/30"}`} />
+          <div
+            className={`w-px h-5 mx-1 ${scrolled ? "bg-border" : "bg-white/30"}`}
+          />
 
-          <button
-            onClick={() => setLang(lang === "en" ? "it" : "en")}
-            className={`text-xs font-sans tracking-widest transition-colors uppercase px-3 py-1 rounded-sm ${
-              scrolled
-                ? "text-muted-foreground hover:text-foreground border border-border"
-                : "text-white/75 hover:text-white border border-white/30"
-            }`}
-          >
-            {lang === "en" ? "IT" : "EN"}
-          </button>
+          {isGuest && (
+            <button
+              onClick={toggleLanguage}
+              aria-label={languageToggleAriaLabel}
+              className={`text-xs font-sans tracking-widest transition-colors uppercase px-3 py-1 rounded-sm ${
+                scrolled
+                  ? "text-muted-foreground hover:text-foreground border border-border"
+                  : "text-white/75 hover:text-white border border-white/30"
+              }`}
+            >
+              {lang.toUpperCase()}
+            </button>
+          )}
 
           {/* User menu — in attesa del bootstrap auth non mostrare uno stato “loggato” incoerente */}
           {authLoading ? (
-            <div className="w-8 h-8 rounded-full bg-muted animate-pulse shrink-0" aria-hidden />
+            <div
+              className="w-8 h-8 rounded-full bg-muted animate-pulse shrink-0"
+              aria-hidden
+            />
           ) : session ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -195,11 +305,12 @@ const Navbar = () => {
                   type="button"
                   className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity focus:outline-none overflow-hidden shrink-0"
                 >
-                  {displayAvatarUrl ? (
-                    <img src={displayAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    initials
-                  )}
+                  <ProfileAvatar
+                    name={displayName}
+                    avatarUrl={displayAvatarUrl}
+                    imgClassName="w-8 h-8 rounded-full object-cover"
+                    fallback={initials}
+                  />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -212,13 +323,21 @@ const Navbar = () => {
                 {isAdmin && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin" className="flex items-center gap-2">
-                      <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">⚙</span>
+                      <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
+                        ⚙
+                      </span>
                       <span>Dashboard</span>
                     </Link>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={toggleLanguage}>
+                  <span>{languageToggleMenuLabel}</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-destructive focus:text-destructive">
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
                   <LogOut size={14} />
                   <span>{lang === "it" ? "Esci" : "Logout"}</span>
                 </DropdownMenuItem>
@@ -235,67 +354,225 @@ const Navbar = () => {
         </div>
 
         {/* Mobile Toggle */}
-        <div className="flex items-center gap-3 lg:hidden">
-          <button
-            onClick={() => setLang(lang === "en" ? "it" : "en")}
-            className={`text-xs font-sans tracking-widest uppercase ${scrolled ? "text-muted-foreground" : "text-white/75"}`}
-          >
-            {lang === "en" ? "IT" : "EN"}
-          </button>
+        <div className="flex items-center gap-2.5 lg:hidden">
+          {isGuest && (
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              aria-label={languageToggleAriaLabel}
+              className={cn(
+                "inline-flex h-9 items-center rounded-full border px-3 text-[11px] font-semibold tracking-[0.24em] uppercase transition-all duration-300",
+                mobileButtonClass,
+              )}
+            >
+              {lang.toUpperCase()}
+            </button>
+          )}
 
           {!authLoading && session && (
-            <Link to="/profile" className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-medium overflow-hidden">
-              {displayAvatarUrl ? (
-                <img src={displayAvatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
-              ) : (
-                initials
+            <Link
+              to="/profile"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[10px] font-sans font-medium transition-all duration-300",
+                mobileButtonClass,
               )}
+            >
+              <ProfileAvatar
+                name={displayName}
+                avatarUrl={displayAvatarUrl}
+                imgClassName="h-9 w-9 rounded-full object-cover"
+                fallback={initials}
+              />
             </Link>
           )}
 
-          <button onClick={() => setMobileOpen(!mobileOpen)} className={scrolled ? "text-foreground" : "text-white"}>
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          <button
+            type="button"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-navigation"
+            aria-label={
+              mobileOpen
+                ? lang === "it"
+                  ? "Chiudi menu"
+                  : "Close menu"
+                : lang === "it"
+                  ? "Apri menu"
+                  : "Open menu"
+            }
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className={cn(
+              "inline-flex h-11 w-11 items-center justify-center rounded-full border transition-all duration-300",
+              mobileButtonClass,
+            )}
+          >
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </div>
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="lg:hidden bg-background/98 backdrop-blur-md border-b border-border">
-          <div className="px-6 py-8 flex flex-col gap-5">
-            {links.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`font-serif text-2xl transition-colors ${
-                  location.pathname === link.to ? "text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-            <div className="h-px bg-border my-2" />
-            {authLoading ? (
-              <div className="h-10 bg-muted animate-pulse rounded-md" />
-            ) : session ? (
-              <>
-                <Link to="/profile" className="font-sans text-base text-muted-foreground hover:text-foreground transition-colors">
-                  {lang === "it" ? "Profilo" : "Profile"}
-                </Link>
-                {isAdmin && (
-                  <Link to="/admin" className="font-sans text-base text-muted-foreground hover:text-foreground transition-colors">
-                    Dashboard
-                  </Link>
+        <div
+          id="mobile-navigation"
+          className="absolute inset-x-0 top-full z-40 h-[calc(100dvh-4rem)] lg:hidden md:h-[calc(100dvh-5rem)]"
+        >
+          <button
+            type="button"
+            aria-label={
+              lang === "it"
+                ? "Chiudi il pannello di navigazione"
+                : "Close navigation panel"
+            }
+            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            onClick={() => setMobileOpen(false)}
+          />
+
+          <div className="relative h-full overflow-y-auto border-t border-white/10 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16),_transparent_38%),linear-gradient(180deg,rgba(25,37,58,0.98)_0%,rgba(17,27,42,0.98)_55%,rgba(12,21,34,1)_100%)] px-5 pb-6 pt-5 text-white shadow-2xl">
+            <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+              <div className="flex flex-col gap-3">
+                {links.map((link) => {
+                  const active = isLinkActive(link.to);
+
+                  return (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className={cn(
+                        "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-all duration-300",
+                        active
+                          ? "border-white/0 bg-white text-navy shadow-[0_24px_60px_-36px_rgba(255,255,255,0.65)]"
+                          : "border-white/10 bg-white/[0.04] text-white hover:border-white/20 hover:bg-white/[0.07]",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className={cn(
+                            "font-serif text-[1.85rem] leading-none",
+                            active ? "text-navy" : "text-white",
+                          )}
+                        >
+                          {link.label}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-2 max-w-[18rem] text-sm leading-relaxed",
+                            active ? "text-navy/70" : "text-white/65",
+                          )}
+                        >
+                          {link.description}
+                        </p>
+                      </div>
+
+                      <span
+                        className={cn(
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-all duration-300 group-hover:translate-x-0.5",
+                          active
+                            ? "border-navy/10 bg-navy text-white"
+                            : "border-white/10 bg-white/[0.06] text-white/82 group-hover:border-white/20 group-hover:bg-white/[0.1]",
+                        )}
+                      >
+                        <ArrowRight size={18} />
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-[1.75rem] border border-white/10 bg-black/10 p-4 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.95)]">
+                <p className="text-[0.65rem] font-sans uppercase tracking-[0.32em] text-white/55">
+                  Account
+                </p>
+
+                {authLoading ? (
+                  <div className="mt-4 h-24 animate-pulse rounded-2xl bg-white/10" />
+                ) : session ? (
+                  <>
+                    <div className="mt-4 flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10">
+                        <ProfileAvatar
+                          name={displayName}
+                          avatarUrl={displayAvatarUrl}
+                          imgClassName="h-12 w-12 rounded-full object-cover"
+                          fallback={initials}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-sans text-sm font-medium tracking-wide text-white">
+                          {displayName}
+                        </p>
+                        <p className="truncate text-sm text-white/58">
+                          {session.user.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-2">
+                      <Link
+                        to="/profile"
+                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                      >
+                        <span className="flex items-center gap-3">
+                          <User size={16} />
+                          {lang === "it" ? "Profilo" : "Profile"}
+                        </span>
+                        <ArrowRight size={16} className="text-white/55" />
+                      </Link>
+
+                      {isAdmin && (
+                        <Link
+                          to="/admin"
+                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                        >
+                          <span className="flex items-center gap-3">
+                            <Shield size={16} />
+                            Dashboard
+                          </span>
+                          <ArrowRight size={16} className="text-white/55" />
+                        </Link>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={toggleLanguage}
+                        aria-label={languageToggleAriaLabel}
+                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-left font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                      >
+                        <span>{languageToggleMenuLabel}</span>
+                        <ArrowRight size={16} className="text-white/55" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex items-center justify-between rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-left font-sans text-sm text-red-100 transition-colors hover:bg-red-500/15"
+                      >
+                        <span className="flex items-center gap-3">
+                          <LogOut size={16} />
+                          {lang === "it" ? "Esci" : "Logout"}
+                        </span>
+                        <ArrowRight size={16} className="text-red-100/70" />
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm leading-relaxed text-white/68">
+                      {authCardText}
+                    </p>
+                    <Link
+                      to="/login"
+                      className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white px-4 py-3 font-sans text-sm font-medium text-navy transition-colors hover:bg-white/90"
+                    >
+                      <span className="flex items-center gap-3">
+                        <LogIn size={16} />
+                        {lang === "it" ? "Accedi" : "Login"}
+                      </span>
+                      <ArrowRight size={16} />
+                    </Link>
+                  </>
                 )}
-                <button type="button" onClick={handleLogout} className="font-sans text-base text-destructive text-left">
-                  {lang === "it" ? "Esci" : "Logout"}
-                </button>
-              </>
-            ) : (
-              <Link to="/login" className="font-sans text-base text-accent hover:text-foreground transition-colors">
-                {lang === "it" ? "Accedi" : "Login"}
-              </Link>
-            )}
+              </div>
+            </div>
           </div>
         </div>
       )}

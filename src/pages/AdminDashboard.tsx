@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation, Mail } from "lucide-react";
 import AdminVoyageManager from "@/components/admin/AdminVoyageManager";
+import AdminNewsletterManager from "@/components/admin/AdminNewsletterManager";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
@@ -53,37 +54,17 @@ const AdminDashboard = () => {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
-  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route">("articles");
+  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route" | "newsletter">("articles");
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
   const navigate = useNavigate();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    void checkAuth();
+  }, [checkAuth]);
 
-  const checkAuth = async () => {
-    const { session } = await validateSessionOrSignOut();
-    if (!session) {
-      navigate("/login", { state: { from: "/admin" } });
-      return;
-    }
-    // Check admin role from DB
-    const { data: isAdmin } = await supabase.rpc("has_role", {
-      _user_id: session.user.id,
-      _role: "admin",
-    });
-    if (!isAdmin) {
-      toast.error("Accesso non autorizzato");
-      navigate("/", { replace: true });
-      return;
-    }
-    setAuthChecked(true);
-    fetchData();
-  };
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const [articlesRes, storiesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
@@ -98,7 +79,43 @@ const AdminDashboard = () => {
     if (articlesRes.data) setArticles(articlesRes.data as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     setLoading(false);
-  };
+  }, [navigate]);
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const { session } = await validateSessionOrSignOut();
+      if (!session) {
+        navigate("/login", { state: { from: "/admin" } });
+        return;
+      }
+
+      const { data: isAdmin, error } = await supabase.rpc("has_role", {
+        _user_id: session.user.id,
+        _role: "admin",
+      });
+      if (error) {
+        if (isAuthFailureError(error)) {
+          await supabase.auth.signOut();
+          navigate("/login", { state: { from: "/admin" }, replace: true });
+          return;
+        }
+        throw error;
+      }
+
+      if (!isAdmin) {
+        toast.error("Accesso non autorizzato");
+        navigate("/", { replace: true });
+        return;
+      }
+
+      setAuthChecked(true);
+      await fetchData();
+    } catch (error) {
+      console.error("Admin auth check failed", error);
+      await supabase.auth.signOut();
+      navigate("/login", { state: { from: "/admin" }, replace: true });
+    }
+  }, [fetchData, navigate]);
 
   const deleteArticle = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
@@ -200,6 +217,14 @@ const AdminDashboard = () => {
             }`}
           >
             <Navigation size={14} /> Route
+          </button>
+          <button
+            onClick={() => setActiveSection("newsletter")}
+            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors inline-flex items-center gap-2 ${
+              activeSection === "newsletter" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
+            }`}
+          >
+            <Mail size={14} /> Newsletter
           </button>
         </div>
 
@@ -342,6 +367,8 @@ const AdminDashboard = () => {
         )}
 
         {activeSection === "route" && <AdminVoyageManager />}
+
+        {activeSection === "newsletter" && <AdminNewsletterManager />}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { User, Instagram, Youtube, Facebook, Linkedin, Globe, ExternalLink } from "lucide-react";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 interface ProfileData {
   id: string;
@@ -109,11 +110,12 @@ const PublicProfile = () => {
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-10">
           <div className="w-24 h-24 rounded-full overflow-hidden bg-muted flex items-center justify-center mb-4">
-            {profile.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.name} className="img-cover" />
-            ) : (
-              <User className="text-muted-foreground" size={40} />
-            )}
+            <ProfileAvatar
+              name={profile.name || "Anonymous"}
+              avatarUrl={profile.avatar_url}
+              imgClassName="img-cover"
+              fallback={<User className="text-muted-foreground" size={40} />}
+            />
           </div>
           <h1 className="editorial-heading text-2xl md:text-3xl mb-2">{profile.name || "Anonymous"}</h1>
           {profile.bio && (

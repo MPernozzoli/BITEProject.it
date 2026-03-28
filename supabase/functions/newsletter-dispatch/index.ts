@@ -1,0 +1,653 @@
+import * as React from 'npm:react@18.3.1'
+import { renderAsync } from 'npm:@react-email/components@0.0.22'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  buildFromAddress,
+  PUBLIC_SITE_URL,
+  SENDER_DOMAIN,
+} from '../_shared/email-config.ts'
+import { NewsletterEmail } from '../_shared/newsletter-email.tsx'
+import {
+  resolveTranslatedEntry,
+  rewriteTrackedLinks,
+  stripHtml,
+} from '../_shared/newsletter-helpers.ts'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+}
+
+type Claims = Record<string, unknown> | null
+
+type NewsletterMessage = {
+  id: string
+  name: string
+  kind: 'campaign' | 'automation'
+  status: string
+  automation_trigger: 'subscribed' | 'unsubscribed' | null
+  automation_delay_minutes: number
+  scheduled_at: string | null
+  from_name: string | null
+  subject_translations: Record<string, string> | null
+  preheader_translations: Record<string, string> | null
+  body_html_translations: Record<string, string> | null
+  body_json_translations: Record<string, unknown> | null
+}
+
+type RecipientProfile = {
+  preferred_language: string | null
+  secondary_language: string | null
+}
+
+type Recipient = {
+  id: string
+  email: string
+  profile_id: string | null
+  preferred_language: string | null
+  subscribed: boolean
+  profiles?: RecipientProfile | RecipientProfile[] | null
+}
+
+type NewsletterEvent = {
+  id: string
+  subscriber_id: string | null
+  email: string
+  event_type: 'subscribed' | 'unsubscribed'
+  preferred_language: string | null
+  occurred_at: string
+}
+
+function jsonResponse(data: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+function parseJwtClaims(token: string): Claims {
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    return null
+  }
+
+  try {
+    const payload = parts[1]
+      .replaceAll('-', '+')
+      .replaceAll('_', '/')
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
+
+    return JSON.parse(atob(payload)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function getRecipientProfile(
+  value: Recipient['profiles']
+): RecipientProfile | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+async function authorizeRequest(
+  req: Request,
+  supabase: ReturnType<typeof createClient>
+): Promise<{ ok: true } | { ok: false; response: Response }> {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return {
+      ok: false,
+      response: jsonResponse({ error: 'Unauthorized' }, 401),
+    }
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim()
+  const claims = parseJwtClaims(token)
+
+  if (claims?.role === 'service_role') {
+    return { ok: true }
+  }
+
+  const userId = typeof claims?.sub === 'string' ? claims.sub : null
+  if (!userId) {
+    return {
+      ok: false,
+      response: jsonResponse({ error: 'Unauthorized' }, 401),
+    }
+  }
+
+  const { data: isAdmin, error } = await supabase.rpc('has_role', {
+    _user_id: userId,
+    _role: 'admin',
+  })
+
+  if (error || !isAdmin) {
+    return {
+      ok: false,
+      response: jsonResponse({ error: 'Forbidden' }, 403),
+    }
+  }
+
+  return { ok: true }
+}
+
+async function ensureUnsubscribeToken(
+  supabase: ReturnType<typeof createClient>,
+  email: string
+): Promise<string> {
+  const normalizedEmail = email.trim().toLowerCase()
+  const { data: existingToken, error: lookupError } = await supabase
+    .from('email_unsubscribe_tokens')
+    .select('id, token, used_at')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  if (lookupError) {
+    throw lookupError
+  }
+
+  if (existingToken && !existingToken.used_at) {
+    return existingToken.token
+  }
+
+  const token = crypto.randomUUID().replaceAll('-', '')
+
+  if (existingToken) {
+    const { error: updateError } = await supabase
+      .from('email_unsubscribe_tokens')
+      .update({ token, used_at: null })
+      .eq('id', existingToken.id)
+
+    if (updateError) throw updateError
+    return token
+  }
+
+  const { error: insertError } = await supabase
+    .from('email_unsubscribe_tokens')
+    .insert({ email: normalizedEmail, token, used_at: null })
+
+  if (insertError) throw insertError
+
+  return token
+}
+
+async function markEventProcessed(
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+  processingNote: string
+): Promise<void> {
+  await supabase
+    .from('newsletter_events')
+    .update({
+      processed_at: new Date().toISOString(),
+      processing_note: processingNote,
+    })
+    .eq('id', eventId)
+}
+
+async function createDeliveryRecord(
+  supabase: ReturnType<typeof createClient>,
+  values: Record<string, unknown>
+): Promise<boolean> {
+  const { error } = await supabase.from('newsletter_deliveries').insert(values)
+
+  if (!error) return true
+
+  if (error.code === '23505') {
+    return false
+  }
+
+  throw error
+}
+
+async function queueNewsletterDelivery(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    message: NewsletterMessage
+    recipientEmail: string
+    recipientLanguage: string | null
+    secondaryLanguage: string | null
+    subscriberId: string | null
+    eventId: string | null
+    deliveryType: 'campaign' | 'automation'
+    suppressedEmails: Set<string>
+    supabaseUrl: string
+  }
+): Promise<'queued' | 'suppressed' | 'skipped' | 'failed'> {
+  const normalizedEmail = params.recipientEmail.trim().toLowerCase()
+  const deliveryId = crypto.randomUUID()
+  const messageId = crypto.randomUUID()
+  const trackerToken = crypto.randomUUID().replaceAll('-', '')
+  const trackingBaseUrl = `${params.supabaseUrl}/functions/v1`
+  const clickTrackingBase = `${trackingBaseUrl}/newsletter-track-click?delivery=${deliveryId}&token=${trackerToken}`
+  const openTrackingUrl = `${trackingBaseUrl}/newsletter-track-open?delivery=${deliveryId}&token=${trackerToken}`
+
+  if (params.suppressedEmails.has(normalizedEmail)) {
+    const inserted = await createDeliveryRecord(supabase, {
+      id: deliveryId,
+      newsletter_message_id: params.message.id,
+      newsletter_event_id: params.eventId,
+      subscriber_id: params.subscriberId,
+      delivery_type: params.deliveryType,
+      recipient_email: normalizedEmail,
+      recipient_language: params.recipientLanguage ?? 'it',
+      status: 'suppressed',
+      tracker_token: trackerToken,
+      message_id: messageId,
+      error_message: 'Recipient is suppressed or unsubscribed.',
+      metadata: {
+        reason: 'suppressed_recipient',
+      },
+    })
+
+    return inserted ? 'suppressed' : 'skipped'
+  }
+
+  const unsubscribeToken = await ensureUnsubscribeToken(supabase, normalizedEmail)
+  const unsubscribeUrl = `${PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`
+
+  const subjectEntry = resolveTranslatedEntry(
+    params.message.subject_translations,
+    params.recipientLanguage,
+    params.secondaryLanguage
+  )
+  const preheaderEntry = resolveTranslatedEntry(
+    params.message.preheader_translations,
+    params.recipientLanguage,
+    params.secondaryLanguage
+  )
+  const bodyEntry = resolveTranslatedEntry(
+    params.message.body_html_translations,
+    params.recipientLanguage,
+    params.secondaryLanguage
+  )
+
+  if (!subjectEntry.value.trim() || !bodyEntry.value.trim()) {
+    const inserted = await createDeliveryRecord(supabase, {
+      id: deliveryId,
+      newsletter_message_id: params.message.id,
+      newsletter_event_id: params.eventId,
+      subscriber_id: params.subscriberId,
+      delivery_type: params.deliveryType,
+      recipient_email: normalizedEmail,
+      recipient_language: bodyEntry.language,
+      status: 'failed',
+      tracker_token: trackerToken,
+      message_id: messageId,
+      error_message: 'Missing translated subject or body for recipient language.',
+      metadata: {
+        reason: 'missing_translation',
+      },
+    })
+
+    return inserted ? 'failed' : 'skipped'
+  }
+
+  const trackedBodyHtml = rewriteTrackedLinks(bodyEntry.value, clickTrackingBase)
+  const html = await renderAsync(
+    React.createElement(NewsletterEmail, {
+      lang: bodyEntry.language,
+      preheader: preheaderEntry.value,
+      bodyHtml: trackedBodyHtml,
+      unsubscribeUrl,
+      trackingPixelUrl: openTrackingUrl,
+    })
+  )
+
+  const text = `${stripHtml(bodyEntry.value)}\n\n${unsubscribeUrl}`
+
+  const inserted = await createDeliveryRecord(supabase, {
+    id: deliveryId,
+    newsletter_message_id: params.message.id,
+    newsletter_event_id: params.eventId,
+    subscriber_id: params.subscriberId,
+    delivery_type: params.deliveryType,
+    recipient_email: normalizedEmail,
+    recipient_language: bodyEntry.language,
+    status: 'queued',
+    tracker_token: trackerToken,
+    message_id: messageId,
+    metadata: {
+      subject: subjectEntry.value,
+      preheader: preheaderEntry.value,
+    },
+  })
+
+  if (!inserted) {
+    return 'skipped'
+  }
+
+  const { error: enqueueError } = await supabase.rpc('enqueue_email', {
+    queue_name: 'transactional_emails',
+    payload: {
+      run_id: crypto.randomUUID(),
+      to: normalizedEmail,
+      from: buildFromAddress(params.message.from_name),
+      sender_domain: SENDER_DOMAIN,
+      subject: subjectEntry.value,
+      html,
+      text,
+      purpose: 'newsletter',
+      label: `newsletter:${params.message.name}`,
+      idempotency_key: deliveryId,
+      unsubscribe_token: unsubscribeToken,
+      message_id: messageId,
+      metadata: {
+        newsletter_delivery_id: deliveryId,
+        newsletter_message_id: params.message.id,
+      },
+      queued_at: new Date().toISOString(),
+    },
+  })
+
+  if (enqueueError) {
+    console.error('Failed to enqueue newsletter email', enqueueError)
+    await supabase
+      .from('newsletter_deliveries')
+      .update({
+        status: 'failed',
+        error_message: 'Failed to enqueue email.',
+      })
+      .eq('id', deliveryId)
+
+    return 'failed'
+  }
+
+  return 'queued'
+}
+
+async function loadActiveRecipients(
+  supabase: ReturnType<typeof createClient>
+): Promise<Recipient[]> {
+  const { data, error } = await supabase
+    .from('newsletter_subscribers')
+    .select(
+      'id, email, profile_id, preferred_language, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(preferred_language, secondary_language)'
+    )
+    .eq('subscribed', true)
+
+  if (error) throw error
+
+  return (data ?? []) as Recipient[]
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ error: 'Server configuration error' }, 500)
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const authorization = await authorizeRequest(req, supabase)
+  if (!authorization.ok) {
+    return authorization.response
+  }
+
+  let body: Record<string, unknown> = {}
+  try {
+    body = await req.json()
+  } catch {
+    body = {}
+  }
+
+  const targetMessageId =
+    typeof body.messageId === 'string' ? body.messageId : null
+  const processEvents =
+    typeof body.processEvents === 'boolean'
+      ? body.processEvents
+      : !targetMessageId
+
+  const now = new Date()
+  const nowIso = now.toISOString()
+  const summary = {
+    campaignsQueued: 0,
+    automationsQueued: 0,
+    suppressed: 0,
+    failed: 0,
+    skipped: 0,
+    processedEvents: 0,
+  }
+
+  const { data: suppressedRows } = await supabase
+    .from('suppressed_emails')
+    .select('email')
+
+  const suppressedEmails = new Set(
+    (suppressedRows ?? []).map((row) => row.email.toLowerCase())
+  )
+
+  const dueCampaignsQuery = supabase
+    .from('newsletter_messages')
+    .select('*')
+    .eq('kind', 'campaign')
+    .in('status', ['scheduled', 'sending'])
+    .lte('scheduled_at', nowIso)
+    .order('scheduled_at', { ascending: true })
+
+  if (targetMessageId) {
+    dueCampaignsQuery.eq('id', targetMessageId)
+  }
+
+  const { data: dueCampaigns, error: campaignsError } = await dueCampaignsQuery
+  if (campaignsError) {
+    console.error('Failed to load scheduled campaigns', campaignsError)
+    return jsonResponse({ error: 'Failed to load campaigns' }, 500)
+  }
+
+  const recipients = await loadActiveRecipients(supabase)
+
+  for (const campaign of (dueCampaigns ?? []) as NewsletterMessage[]) {
+    await supabase
+      .from('newsletter_messages')
+      .update({ status: 'sending', last_queued_at: nowIso })
+      .eq('id', campaign.id)
+
+    const { data: existingDeliveries } = await supabase
+      .from('newsletter_deliveries')
+      .select('recipient_email')
+      .eq('newsletter_message_id', campaign.id)
+      .is('newsletter_event_id', null)
+
+    const alreadyQueued = new Set(
+      (existingDeliveries ?? []).map((row) => row.recipient_email.toLowerCase())
+    )
+
+    for (const recipient of recipients) {
+      const normalizedEmail = recipient.email.toLowerCase()
+      if (alreadyQueued.has(normalizedEmail)) {
+        summary.skipped++
+        continue
+      }
+
+      const profile = getRecipientProfile(recipient.profiles)
+      const result = await queueNewsletterDelivery(supabase, {
+        message: campaign,
+        recipientEmail: normalizedEmail,
+        recipientLanguage:
+          profile?.preferred_language ?? recipient.preferred_language,
+        secondaryLanguage: profile?.secondary_language ?? null,
+        subscriberId: recipient.id,
+        eventId: null,
+        deliveryType: 'campaign',
+        suppressedEmails,
+        supabaseUrl,
+      })
+
+      if (result === 'queued') summary.campaignsQueued++
+      if (result === 'suppressed') summary.suppressed++
+      if (result === 'failed') summary.failed++
+      if (result === 'skipped') summary.skipped++
+    }
+
+    await supabase
+      .from('newsletter_messages')
+      .update({
+        status: 'sent',
+        sent_at: nowIso,
+        last_queued_at: nowIso,
+      })
+      .eq('id', campaign.id)
+  }
+
+  if (processEvents) {
+    const { data: activeAutomations, error: automationError } = await supabase
+      .from('newsletter_messages')
+      .select('*')
+      .eq('kind', 'automation')
+      .eq('status', 'active')
+
+    if (automationError) {
+      console.error('Failed to load newsletter automations', automationError)
+      return jsonResponse({ error: 'Failed to load automations' }, 500)
+    }
+
+    const { data: pendingEvents, error: eventsError } = await supabase
+      .from('newsletter_events')
+      .select('id, subscriber_id, email, event_type, preferred_language, occurred_at')
+      .is('processed_at', null)
+      .order('occurred_at', { ascending: true })
+      .limit(200)
+
+    if (eventsError) {
+      console.error('Failed to load pending newsletter events', eventsError)
+      return jsonResponse({ error: 'Failed to load events' }, 500)
+    }
+
+    for (const event of (pendingEvents ?? []) as NewsletterEvent[]) {
+      const matchingAutomations = ((activeAutomations ?? []) as NewsletterMessage[]).filter(
+        (automation) => automation.automation_trigger === event.event_type
+      )
+
+      if (matchingAutomations.length === 0) {
+        await markEventProcessed(supabase, event.id, 'No active automation.')
+        summary.processedEvents++
+        continue
+      }
+
+      const { data: existingEventDeliveries } = await supabase
+        .from('newsletter_deliveries')
+        .select('newsletter_message_id')
+        .eq('newsletter_event_id', event.id)
+
+      const existingAutomationIds = new Set(
+        (existingEventDeliveries ?? []).map(
+          (delivery) => delivery.newsletter_message_id
+        )
+      )
+
+      const { data: subscriber } = await supabase
+        .from('newsletter_subscribers')
+        .select(
+          'id, email, profile_id, preferred_language, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(preferred_language, secondary_language)'
+        )
+        .eq('email', event.email.toLowerCase())
+        .maybeSingle()
+
+      let hasPendingAutomation = false
+      let processedForEvent = 0
+
+      for (const automation of matchingAutomations) {
+        if (existingAutomationIds.has(automation.id)) {
+          processedForEvent++
+          continue
+        }
+
+        const scheduledFor = new Date(event.occurred_at)
+        scheduledFor.setMinutes(
+          scheduledFor.getMinutes() + (automation.automation_delay_minutes ?? 0)
+        )
+
+        if (scheduledFor > now) {
+          hasPendingAutomation = true
+          continue
+        }
+
+        if (
+          event.event_type === 'unsubscribed' ||
+          suppressedEmails.has(event.email.toLowerCase()) ||
+          !subscriber?.subscribed
+        ) {
+          const inserted = await createDeliveryRecord(supabase, {
+            id: crypto.randomUUID(),
+            newsletter_message_id: automation.id,
+            newsletter_event_id: event.id,
+            subscriber_id: subscriber?.id ?? null,
+            delivery_type: 'automation',
+            recipient_email: event.email.toLowerCase(),
+            recipient_language:
+              subscriber?.preferred_language ?? event.preferred_language ?? 'it',
+            status: 'suppressed',
+            tracker_token: crypto.randomUUID().replaceAll('-', ''),
+            message_id: crypto.randomUUID(),
+            error_message: 'Automation skipped for unsubscribed or suppressed recipient.',
+            metadata: {
+              reason: 'recipient_not_sendable',
+            },
+          })
+
+          if (inserted) {
+            summary.suppressed++
+            processedForEvent++
+          }
+          continue
+        }
+
+        const profile = getRecipientProfile(subscriber.profiles)
+        const result = await queueNewsletterDelivery(supabase, {
+          message: automation,
+          recipientEmail: event.email.toLowerCase(),
+          recipientLanguage:
+            profile?.preferred_language ??
+            subscriber.preferred_language ??
+            event.preferred_language,
+          secondaryLanguage: profile?.secondary_language ?? null,
+          subscriberId: subscriber.id,
+          eventId: event.id,
+          deliveryType: 'automation',
+          suppressedEmails,
+          supabaseUrl,
+        })
+
+        if (result === 'queued') {
+          summary.automationsQueued++
+          processedForEvent++
+        }
+        if (result === 'suppressed') {
+          summary.suppressed++
+          processedForEvent++
+        }
+        if (result === 'failed') {
+          summary.failed++
+          processedForEvent++
+        }
+        if (result === 'skipped') {
+          summary.skipped++
+          processedForEvent++
+        }
+      }
+
+      if (!hasPendingAutomation) {
+        await markEventProcessed(
+          supabase,
+          event.id,
+          `Processed ${processedForEvent} automation(s).`
+        )
+        summary.processedEvents++
+      }
+    }
+  }
+
+  return jsonResponse({ success: true, ...summary })
+})

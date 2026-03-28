@@ -1,4 +1,6 @@
 import { User } from "lucide-react";
+import { Link } from "react-router-dom";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 interface ProfileCardProps {
   name: string;
@@ -7,6 +9,7 @@ interface ProfileCardProps {
   email?: string;
   size?: "sm" | "md" | "lg";
   showBio?: boolean;
+  profileId?: string;
 }
 
 const sizeClasses = {
@@ -15,19 +18,28 @@ const sizeClasses = {
   lg: "w-20 h-20 text-base",
 };
 
-const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false }: ProfileCardProps) => {
+const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profileId }: ProfileCardProps) => {
+  const displayName = name || "Anonymous";
+
   return (
     <div className="flex items-center gap-3">
       <div className={`${sizeClasses[size]} rounded-full overflow-hidden bg-muted flex items-center justify-center flex-shrink-0`}>
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={name} className="img-cover" />
-        ) : (
-          <User className="text-muted-foreground" size={size === "sm" ? 14 : size === "md" ? 20 : 32} />
-        )}
+        <ProfileAvatar
+          name={displayName}
+          avatarUrl={avatarUrl}
+          imgClassName="img-cover"
+          fallback={<User className="text-muted-foreground" size={size === "sm" ? 14 : size === "md" ? 20 : 32} />}
+        />
       </div>
       <div className="min-w-0">
         <p className={`font-sans font-medium truncate ${size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-base"}`}>
-          {name || "Anonymous"}
+          {profileId ? (
+            <Link to={`/profile/${profileId}`} className="hover:text-accent transition-colors">
+              {displayName}
+            </Link>
+          ) : (
+            displayName
+          )}
         </p>
         {showBio && bio && (
           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{bio}</p>

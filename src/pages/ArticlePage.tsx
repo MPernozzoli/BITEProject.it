@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { generateHTML } from "@tiptap/react";
@@ -20,9 +20,10 @@ import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
-import { useMarkAsRead } from "@/hooks/useArticleReads";
+import { useRegisterArticleRead } from "@/hooks/useArticleReads";
 import { useEffect, useMemo, useRef } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import LiveReadCounter from "@/components/LiveReadCounter";
 
 const extensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
@@ -43,12 +44,14 @@ type StoryChapter = {
   published_at: string | null;
 };
 
+const READ_QUALIFICATION_MS = 30_000;
+
 const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
-  const markAsRead = useMarkAsRead();
   const queryClient = useQueryClient();
-  const viewIncrementedFor = useRef<string | null>(null);
+  const { mutate: registerArticleRead } = useRegisterArticleRead(slug);
+  const trackedReadFor = useRef<string | null>(null);
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -81,36 +84,110 @@ const ArticlePage = () => {
     },
   });
 
-  const incrementViews = useMutation({
-    mutationFn: async (articleId: string) => {
-      const { data, error } = await supabase.rpc("increment_article_view_count", {
-        _article_id: articleId,
-      });
-      if (error) throw error;
-      return Number(data ?? 0);
-    },
-    onSuccess: (count) => {
-      queryClient.setQueryData(["article", slug], (old: unknown) =>
-        old && typeof old === "object" ? { ...(old as Record<string, unknown>), view_count: count } : old
-      );
-    },
-    onError: () => {
-      /* RPC assente finché non è applicata la migration */
-    },
-  });
-
   useEffect(() => {
     if (!article?.id) return;
-    if (viewIncrementedFor.current === article.id) return;
-    viewIncrementedFor.current = article.id;
-    incrementViews.mutate(article.id);
-  }, [article?.id]);
+    trackedReadFor.current = null;
+
+    let timeoutId: number | null = null;
+    let activeSince: number | null = null;
+    let accumulatedMs = 0;
+
+    const clearTimer = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const pauseTracking = () => {
+      if (activeSince !== null) {
+        accumulatedMs += Date.now() - activeSince;
+        activeSince = null;
+      }
+      clearTimer();
+    };
+
+    const registerRead = () => {
+      if (trackedReadFor.current === article.id) return;
+      trackedReadFor.current = article.id;
+      pauseTracking();
+      registerArticleRead(article.id);
+    };
+
+    const resumeTracking = () => {
+      if (trackedReadFor.current === article.id) return;
+      if (document.visibilityState !== "visible") return;
+      if (activeSince !== null) return;
+
+      const remainingMs = READ_QUALIFICATION_MS - accumulatedMs;
+      if (remainingMs <= 0) {
+        registerRead();
+        return;
+      }
+
+      activeSince = Date.now();
+      timeoutId = window.setTimeout(() => {
+        accumulatedMs = READ_QUALIFICATION_MS;
+        activeSince = null;
+        timeoutId = null;
+        registerRead();
+      }, remainingMs);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        resumeTracking();
+        return;
+      }
+
+      pauseTracking();
+    };
+
+    resumeTracking();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", pauseTracking);
+
+    return () => {
+      pauseTracking();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", pauseTracking);
+    };
+  }, [article?.id, registerArticleRead]);
 
   useEffect(() => {
-    if (article?.id) {
-      markAsRead.mutate(article.id);
-    }
-  }, [article?.id]);
+    if (!article?.id || !slug) return;
+
+    const channel = supabase
+      .channel(`article-live-reads:${article.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "logbook_articles",
+          filter: `id=eq.${article.id}`,
+        },
+        (payload) => {
+          const nextViewCount =
+            typeof payload.new === "object" && payload.new !== null && "view_count" in payload.new
+              ? Number(payload.new.view_count ?? 0)
+              : null;
+
+          if (nextViewCount === null || Number.isNaN(nextViewCount)) return;
+
+          queryClient.setQueryData(["article", slug], (old: unknown) =>
+            old && typeof old === "object"
+              ? { ...(old as Record<string, unknown>), view_count: nextViewCount }
+              : old
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [article?.id, queryClient, slug]);
 
   const { data: authors = [] } = useQuery({
     queryKey: ["article-authors", article?.id],
@@ -214,9 +291,20 @@ const ArticlePage = () => {
   const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
   const dateLabel = article.published_at ? format(new Date(article.published_at), dateFmt) : null;
   const views = Number((article as any).view_count ?? 0);
-  const viewsFmt = views.toLocaleString(lang === "it" ? "it-IT" : "en-US");
 
   const coverStyle = article.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
+  const instagramStoryImage = lang === "en"
+    ? ((article as any).instagram_story_use_cover_en ?? true)
+      ? article.cover_image
+      : (article as any).instagram_story_image_en || article.cover_image
+    : ((article as any).instagram_story_use_cover_it ?? true)
+      ? article.cover_image
+      : (article as any).instagram_story_image_it || article.cover_image;
+  const shareUrl = useMemo(() => {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("lang", lang);
+    return nextUrl.toString();
+  }, [lang]);
 
   const prevTitle = chapterPrevNext.prev
     ? lang === "en"
@@ -324,7 +412,13 @@ const ArticlePage = () => {
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-8 mb-8 border-b border-border">
                   {authors.map((a: any) => (
-                    <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+                    <ProfileCard
+                      key={a.id}
+                      profileId={a.id}
+                      name={a.name}
+                      avatarUrl={a.avatar_url || undefined}
+                      size="sm"
+                    />
                   ))}
                   {dateLabel && (
                     <span className="text-sm font-sans text-muted-foreground">
@@ -332,15 +426,7 @@ const ArticlePage = () => {
                       <time dateTime={article.published_at || undefined}>{dateLabel}</time>
                     </span>
                   )}
-                <span
-                  className="inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground"
-                  title={lang === "it" ? "Visualizzazioni totali" : "Total views"}
-                >
-                  <Eye size={15} className="shrink-0 opacity-80" aria-hidden />
-                  <span>
-                    {viewsFmt} {lang === "it" ? "visualizzazioni" : "views"}
-                  </span>
-                </span>
+                <LiveReadCounter count={views} lang={lang} />
               </div>
 
               {htmlContent && (
@@ -352,7 +438,7 @@ const ArticlePage = () => {
 
               <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">
                 <LikeButton articleId={article.id} />
-                <ShareButton title={title} />
+                <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
               </div>
 
               <CommentSection articleId={article.id} />

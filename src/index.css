@@ -140,6 +140,102 @@
   animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes readCounterFlip {
+  0% {
+    transform: perspective(700px) rotateX(92deg) translateY(-14%);
+    opacity: 0;
+    filter: blur(3px);
+  }
+  52% {
+    transform: perspective(700px) rotateX(-14deg) translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: perspective(700px) rotateX(0deg) translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes readCounterGlow {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--accent) / 0);
+    border-color: hsl(var(--border));
+  }
+  38% {
+    box-shadow: 0 10px 28px -14px hsl(var(--accent) / 0.55);
+    border-color: hsl(var(--accent) / 0.72);
+  }
+  100% {
+    box-shadow: 0 6px 18px -16px hsl(var(--navy) / 0.3);
+    border-color: hsl(var(--border));
+  }
+}
+
+.read-counter-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.25ch;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.7rem 0.32rem;
+  background:
+    linear-gradient(180deg, hsl(var(--salt)) 0%, hsl(var(--salt-warm)) 47%, hsl(var(--secondary)) 47%, hsl(var(--secondary)) 100%);
+  box-shadow: 0 6px 18px -16px hsl(var(--navy) / 0.3);
+  transform-style: preserve-3d;
+}
+
+.read-counter-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, hsl(var(--accent) / 0.08) 35%, transparent 62%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.read-counter-chip-active {
+  animation: readCounterGlow 0.64s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.read-counter-chip-active::before {
+  opacity: 1;
+  transition: opacity 0.2s ease-out;
+}
+
+.read-counter-chip__hinge {
+  position: absolute;
+  left: 0.45rem;
+  right: 0.45rem;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--border)), transparent);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.read-counter-chip__value {
+  position: relative;
+  z-index: 1;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--foreground));
+}
+
+.read-counter-chip__value-active {
+  transform-origin: center top;
+  animation: readCounterFlip 0.64s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity, filter;
+}
+
 
 html {
   scroll-behavior: smooth;

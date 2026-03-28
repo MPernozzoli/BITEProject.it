@@ -1,6 +1,7 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { getStraightVoyageGeometry } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 
 interface VoyageMapProps {
@@ -76,6 +77,11 @@ const VoyageMap = ({
     if (!map) return;
 
     const draw = () => {
+      const getCachedGeometryCoordinates = (voyage: Voyage) => {
+        const coordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+        return Array.isArray(coordinates) ? coordinates : [];
+      };
+
       // Remove old sources/layers
       voyages.forEach((v) => {
         const lineId = `voyage-line-${v.id}`;
@@ -98,7 +104,7 @@ const VoyageMap = ({
 
       voyages.forEach((voyage) => {
         const wps = waypointsMap[voyage.id] || [];
-        if (wps.length < 2) return;
+        if (!wps.length) return;
 
         const isWater = voyage.type === "water";
         const isHighlighted = highlightedVoyageId === voyage.id;
@@ -109,42 +115,59 @@ const VoyageMap = ({
           ? isCompleted ? "hsl(220, 40%, 15%)" : isActive ? "hsl(210, 60%, 45%)" : "hsl(210, 30%, 65%)"
           : isCompleted ? "hsl(30, 30%, 25%)" : isActive ? "hsl(30, 50%, 40%)" : "hsl(30, 20%, 60%)";
 
+        const routeCoordinates = getCachedGeometryCoordinates(voyage).length >= 2
+          ? getCachedGeometryCoordinates(voyage)
+          : getStraightVoyageGeometry(wps);
+
         const lineId = `voyage-line-${voyage.id}`;
-        map.addSource(lineId, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: wps.map((w) => [w.lng, w.lat]),
+        if (routeCoordinates.length >= 2) {
+          map.addSource(lineId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: routeCoordinates,
+              },
+              properties: {},
             },
-            properties: {},
-          },
-        });
+          });
 
-        map.addLayer({
-          id: lineId,
-          type: "line",
-          source: lineId,
-          paint: {
-            "line-color": lineColor,
-            "line-width": isHighlighted ? 5 : isActive ? 4 : 3,
-            "line-opacity": voyage.status === "planned" ? 0.5 : isHighlighted ? 1 : 0.7,
-            ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
-          },
-        });
+          map.addLayer({
+            id: lineId,
+            type: "line",
+            source: lineId,
+            paint: {
+              "line-color": lineColor,
+              "line-width": isHighlighted ? 5 : isActive ? 4 : 3,
+              "line-opacity": voyage.status === "planned" ? 0.5 : isHighlighted ? 1 : 0.7,
+              ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
+            },
+          });
+        }
 
-        // Waypoint circles
+        const visibleWaypoints = wps.filter((waypoint) => waypoint.waypoint_type !== "technical");
+        if (!visibleWaypoints.length) return;
+
         const wpId = `voyage-wp-${voyage.id}`;
         map.addSource(wpId, {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: wps.map((w) => ({
-              type: "Feature" as const,
-              geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
-              properties: { name: w.name || "" },
-            })),
+            features: visibleWaypoints.map((w) => {
+              const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
+              const isStart = routeIndex === 0;
+              const isEnd = routeIndex === wps.length - 1;
+              return {
+                type: "Feature" as const,
+                geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
+                properties: {
+                  name: w.name || "",
+                  markerColor: isStart ? "hsl(136, 42%, 42%)" : isEnd ? "hsl(8, 65%, 54%)" : isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)",
+                  markerRadius: isStart || isEnd ? 5 : isActive ? 5 : 4,
+                },
+              };
+            }),
           },
         });
 
@@ -153,8 +176,8 @@ const VoyageMap = ({
           type: "circle",
           source: wpId,
           paint: {
-            "circle-radius": isActive ? 5 : 4,
-            "circle-color": isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)",
+            "circle-radius": ["coalesce", ["get", "markerRadius"], isActive ? 5 : 4],
+            "circle-color": ["coalesce", ["get", "markerColor"], isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)"],
             "circle-stroke-width": 2,
             "circle-stroke-color": "#fff",
           },
@@ -165,7 +188,8 @@ const VoyageMap = ({
           const feature = e.features?.[0];
           const name = feature?.properties?.name;
           if (!name) return;
-          const coords = (feature?.geometry as any).coordinates;
+          if (!feature?.geometry || feature.geometry.type !== "Point") return;
+          const coords = feature.geometry.coordinates as [number, number];
           popupRef.current?.remove();
           popupRef.current = new maplibregl.Popup({ offset: 10, closeButton: false })
             .setLngLat(coords)
@@ -224,9 +248,9 @@ const VoyageMap = ({
       }).filter(Boolean) as (GeoArticle & { displayLat: number; displayLng: number })[];
 
       positionedArticles.forEach((article) => {
-      const isSelected = article.id === selectedArticleId;
-      const title = lang === "en" ? article.title_en : ((article as any).title_it || article.title_en);
-      const size = isSelected ? 56 : 44;
+        const isSelected = article.id === selectedArticleId;
+        const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
+        const size = isSelected ? 56 : 44;
 
         const el = document.createElement("div");
         el.className = "voyage-marker-wrap";
@@ -300,7 +324,7 @@ const VoyageMap = ({
     } else {
       map.on("load", draw);
     }
-  }, [articles, selectedArticleId, lang]);
+  }, [articles, selectedArticleId, lang, waypointsMap]);
 
   // Fly to selected article with smart bounds
   useEffect(() => {
@@ -334,6 +358,10 @@ const VoyageMap = ({
           new maplibregl.LngLatBounds([wps[0].lng, wps[0].lat], [wps[0].lng, wps[0].lat])
         );
         map.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 1200 });
+        return;
+      }
+      if (wps.length === 1) {
+        map.flyTo({ center: [wps[0].lng, wps[0].lat], zoom: 10, duration: 1200 });
         return;
       }
     }

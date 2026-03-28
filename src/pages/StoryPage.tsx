@@ -186,18 +186,24 @@ const StoryPage = () => {
               const chTitle = lang === "en" ? chapter.title_en : (chapter.title_it || chapter.title_en);
               const chExcerpt = lang === "en" ? chapter.excerpt_en : (chapter.excerpt_it || chapter.excerpt_en);
               return (
-                <Link to={`/logbook/${chapter.slug}`} key={chapter.id} className="block group">
+                <article key={chapter.id} className="group">
                   <div className="flex gap-6 items-start">
-                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border text-sm font-sans text-muted-foreground group-hover:border-accent group-hover:text-accent transition-colors">
+                    <Link
+                      to={`/logbook/${chapter.slug}`}
+                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border text-sm font-sans text-muted-foreground group-hover:border-accent group-hover:text-accent transition-colors"
+                      aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
+                    >
                       {idx + 1}
-                    </div>
+                    </Link>
                     <div className="flex-1 min-w-0">
-                      <h3 className="editorial-heading text-xl md:text-2xl mb-1 group-hover:text-accent transition-colors">
-                        {chTitle}
-                      </h3>
-                      {chExcerpt && (
-                        <p className="text-sm text-muted-foreground font-sans line-clamp-2">{chExcerpt}</p>
-                      )}
+                      <Link to={`/logbook/${chapter.slug}`} className="block">
+                        <h3 className="editorial-heading text-xl md:text-2xl mb-1 group-hover:text-accent transition-colors">
+                          {chTitle}
+                        </h3>
+                        {chExcerpt && (
+                          <p className="text-sm text-muted-foreground font-sans line-clamp-2">{chExcerpt}</p>
+                        )}
+                      </Link>
                       <div className="flex items-center gap-3 mt-2">
                         {chapter.published_at && (
                           <span className="text-xs text-muted-foreground">
@@ -205,17 +211,27 @@ const StoryPage = () => {
                           </span>
                         )}
                         {chapter.authors?.map((a: any) => (
-                          <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+                          <ProfileCard
+                            key={a.id}
+                            profileId={a.id}
+                            name={a.name}
+                            avatarUrl={a.avatar_url || undefined}
+                            size="sm"
+                          />
                         ))}
                       </div>
                     </div>
                     {chapter.cover_image && (
-                      <div className="hidden sm:block flex-shrink-0 w-24 h-16 overflow-hidden bg-muted">
+                      <Link
+                        to={`/logbook/${chapter.slug}`}
+                        className="hidden sm:block flex-shrink-0 w-24 h-16 overflow-hidden bg-muted"
+                        aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
+                      >
                         <img src={chapter.cover_image} alt={chTitle} className="img-cover" />
-                      </div>
+                      </Link>
                     )}
                   </div>
-                </Link>
+                </article>
               );
             })}
             {chapters.length === 0 && (

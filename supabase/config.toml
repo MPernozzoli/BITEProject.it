@@ -13,3 +13,11 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.newsletter-subscribe]
+    verify_jwt = false
+  [functions.newsletter-dispatch]
+    verify_jwt = true
+  [functions.newsletter-track-open]
+    verify_jwt = false
+  [functions.newsletter-track-click]
+    verify_jwt = false

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { deferSupabaseAuthWork } from "@/lib/supabase-auth";
 
 export type Language = "en" | "it";
 export type ExtendedLanguage = "en" | "it" | "fr" | "de" | "es" | "pt";
@@ -176,39 +177,61 @@ function resolveToSiteLanguage(preferred: string, secondary?: string | null): La
   return "en";
 }
 
+function resolveLanguageFromLocation(): Language | null {
+  if (typeof window === "undefined") return null;
+  const urlLang = new URLSearchParams(window.location.search).get("lang");
+  return urlLang === "it" || urlLang === "en" ? urlLang : null;
+}
+
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
-  const [lang, setLang] = useState<Language>("en");
+  const [lang, setLang] = useState<Language>(() => resolveLanguageFromLocation() ?? "en");
 
   useEffect(() => {
-    const loadUserLanguage = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) {
-        const { data } = await supabase
+    let cancelled = false;
+    const forcedLang = resolveLanguageFromLocation();
+
+    if (forcedLang) {
+      setLang(forcedLang);
+    }
+
+    const loadUserLanguage = async (userId?: string | null) => {
+      try {
+        if (forcedLang || cancelled) return;
+        let nextUserId = userId;
+        if (!nextUserId) {
+          const { data: { session } } = await supabase.auth.getSession();
+          nextUserId = session?.user?.id ?? null;
+        }
+        if (!nextUserId || cancelled) return;
+
+        const { data, error } = await supabase
           .from("profiles")
           .select("preferred_language, secondary_language")
-          .eq("id", session.user.id)
+          .eq("id", nextUserId)
           .single();
-        if (data?.preferred_language) {
-          setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
+        if (cancelled || error || !data?.preferred_language) return;
+
+        setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load user language", error);
         }
       }
     };
-    loadUserLanguage();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user?.id) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("preferred_language, secondary_language")
-          .eq("id", session.user.id)
-          .single();
-        if (data?.preferred_language) {
-          setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
-        }
-      }
+    void loadUserLanguage();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      deferSupabaseAuthWork(() => {
+        if (!session?.user?.id || cancelled) return;
+        return loadUserLanguage(session.user.id);
+      });
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const t = useCallback(

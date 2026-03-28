@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
@@ -14,11 +14,15 @@ import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-aut
 import CoverFocalPicker from "@/components/admin/CoverFocalPicker";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 
+type ArticleLanguage = "en" | "it";
+
 const ArticleEditor = () => {
   const { id } = useParams();
   const isNew = id === "new";
   const navigate = useNavigate();
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const instagramEnInputRef = useRef<HTMLInputElement>(null);
+  const instagramItInputRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"en" | "it">("en");
@@ -30,6 +34,10 @@ const ArticleEditor = () => {
   const [contentEn, setContentEn] = useState<object>({});
   const [contentIt, setContentIt] = useState<object>({});
   const [coverImage, setCoverImage] = useState("");
+  const [instagramStoryImageEn, setInstagramStoryImageEn] = useState("");
+  const [instagramStoryImageIt, setInstagramStoryImageIt] = useState("");
+  const [instagramStoryUseCoverEn, setInstagramStoryUseCoverEn] = useState(true);
+  const [instagramStoryUseCoverIt, setInstagramStoryUseCoverIt] = useState(true);
   const [coverFocal, setCoverFocal] = useState<CoverFocal>({ ...DEFAULT_COVER_FOCAL });
   const [category, setCategory] = useState("Notes from the Boat");
   const [publishDate, setPublishDate] = useState("");
@@ -111,6 +119,10 @@ const ArticleEditor = () => {
     setContentEn(data.content_en as object || {});
     setContentIt(data.content_it as object || {});
     setCoverImage(data.cover_image || "");
+    setInstagramStoryImageEn((data as any).instagram_story_image_en || "");
+    setInstagramStoryImageIt((data as any).instagram_story_image_it || "");
+    setInstagramStoryUseCoverEn((data as any).instagram_story_use_cover_en ?? true);
+    setInstagramStoryUseCoverIt((data as any).instagram_story_use_cover_it ?? true);
     setCoverFocal(
       clampCoverFocal(
         Number((data as any).cover_focal_x ?? DEFAULT_COVER_FOCAL.focalX),
@@ -152,27 +164,46 @@ const ArticleEditor = () => {
     if (isNew || !slug) setSlug(generateSlug(val));
   };
 
-  const handleCoverUpload = async (file: File) => {
-    const previewUrl = URL.createObjectURL(file);
-    setCoverImage(previewUrl);
-    const ext = file.name.split(".").pop();
-    const path = `covers/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from("logbook-media").upload(path, file);
     if (error) {
-      URL.revokeObjectURL(previewUrl);
-      console.error("Cover upload error:", error);
-      setCoverImage("");
-      toast.error("Upload copertina non riuscito.");
+      console.error("Article image upload error:", error);
+      toast.error(errorMessage);
       if (isAuthFailureError(error)) {
         await supabase.auth.signOut();
         loginPath();
       }
-      return;
+      return null;
     }
     const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
-    URL.revokeObjectURL(previewUrl);
-    setCoverImage(urlData.publicUrl);
+    return urlData.publicUrl;
+  };
+
+  const handleCoverUpload = async (file: File) => {
+    const publicUrl = await uploadArticleImage(file, "covers", "Upload copertina non riuscito.");
+    if (!publicUrl) return;
+    setCoverImage(publicUrl);
     setCoverFocal({ ...DEFAULT_COVER_FOCAL });
+  };
+
+  const handleInstagramStoryUpload = async (language: ArticleLanguage, file: File) => {
+    const publicUrl = await uploadArticleImage(
+      file,
+      `instagram-stories/${language}`,
+      "Upload immagine Instagram Stories non riuscito."
+    );
+    if (!publicUrl) return;
+
+    if (language === "en") {
+      setInstagramStoryImageEn(publicUrl);
+      setInstagramStoryUseCoverEn(false);
+      return;
+    }
+
+    setInstagramStoryImageIt(publicUrl);
+    setInstagramStoryUseCoverIt(false);
   };
 
   const addNewTag = async () => {
@@ -256,6 +287,10 @@ const ArticleEditor = () => {
       content_en: contentEn as Json,
       content_it: contentIt as Json,
       cover_image: coverImage,
+      instagram_story_image_en: instagramStoryImageEn || null,
+      instagram_story_image_it: instagramStoryImageIt || null,
+      instagram_story_use_cover_en: instagramStoryUseCoverEn,
+      instagram_story_use_cover_it: instagramStoryUseCoverIt,
       category,
       status: finalStatus,
       published_at: publishedAt,
@@ -369,7 +404,7 @@ const ArticleEditor = () => {
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
 
   // Geo map initialization
   useEffect(() => {
@@ -464,6 +499,108 @@ const ArticleEditor = () => {
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
 
+  const renderInstagramStorySection = ({
+    language,
+    label,
+    useCover,
+    customImage,
+    setUseCover,
+    setCustomImage,
+    inputRef,
+  }: {
+    language: ArticleLanguage;
+    label: string;
+    useCover: boolean;
+    customImage: string;
+    setUseCover: (value: boolean) => void;
+    setCustomImage: (value: string) => void;
+    inputRef: RefObject<HTMLInputElement>;
+  }) => {
+    const previewImage = useCover ? coverImage : customImage;
+
+    return (
+      <div className="border border-border p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-sans tracking-[0.18em] uppercase text-muted-foreground">{label}</p>
+          <div className="inline-flex border border-border">
+            <button
+              type="button"
+              onClick={() => setUseCover(true)}
+              className={`px-2.5 py-1 text-[11px] font-sans transition-colors ${useCover ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Use cover
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseCover(false)}
+              className={`px-2.5 py-1 text-[11px] font-sans transition-colors ${!useCover ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Custom image
+            </button>
+          </div>
+        </div>
+
+        {previewImage ? (
+          <div className="relative aspect-[9/16] overflow-hidden border border-border bg-muted">
+            <img src={previewImage} alt={`${label} Instagram Story`} className="h-full w-full object-cover" />
+            {!useCover && (
+              <button
+                type="button"
+                onClick={() => setCustomImage("")}
+                className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="aspect-[9/16] border border-dashed border-border flex items-center justify-center px-4 text-center text-xs text-muted-foreground">
+            {useCover ? "No cover image selected yet." : "Upload a dedicated image for Instagram Stories."}
+          </div>
+        )}
+
+        {useCover ? (
+          <p className="text-[11px] text-muted-foreground">
+            Instagram Stories will use the current cover image for the {label.toLowerCase()} article version.
+          </p>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+            >
+              <ImageIcon size={14} />
+              {customImage ? "Replace image" : "Upload image"}
+            </button>
+            {customImage && (
+              <button
+                type="button"
+                onClick={() => setCustomImage("")}
+                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
+              >
+                <X size={14} />
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleInstagramStoryUpload(language, file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
       <div className="max-w-5xl mx-auto">
@@ -539,6 +676,33 @@ const ArticleEditor = () => {
                 </button>
               )}
               <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCoverUpload(file); e.target.value = ""; }} />
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Instagram Stories</label>
+                <p className="text-[11px] text-muted-foreground">
+                  Per il web share proviamo a passare immagine + link articolo sui browser mobile che supportano la condivisione file.
+                </p>
+              </div>
+              {renderInstagramStorySection({
+                language: "en",
+                label: "English",
+                useCover: instagramStoryUseCoverEn,
+                customImage: instagramStoryImageEn,
+                setUseCover: setInstagramStoryUseCoverEn,
+                setCustomImage: setInstagramStoryImageEn,
+                inputRef: instagramEnInputRef,
+              })}
+              {renderInstagramStorySection({
+                language: "it",
+                label: "Italiano",
+                useCover: instagramStoryUseCoverIt,
+                customImage: instagramStoryImageIt,
+                setUseCover: setInstagramStoryUseCoverIt,
+                setCustomImage: setInstagramStoryImageIt,
+                inputRef: instagramItInputRef,
+              })}
             </div>
 
             {/* Slug */}

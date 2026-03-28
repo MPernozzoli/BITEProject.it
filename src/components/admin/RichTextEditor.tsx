@@ -8,7 +8,7 @@ import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
@@ -19,10 +19,30 @@ import {
 } from "lucide-react";
 
 interface RichTextEditorProps {
-  content: object;
+  content: unknown;
   onChange: (content: object) => void;
+  onHtmlChange?: (html: string) => void;
   placeholder?: string;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizeEditorContent = (value: unknown): Record<string, unknown> | undefined => {
+  if (typeof value === "string") {
+    try {
+      return normalizeEditorContent(JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (!isRecord(value) || Object.keys(value).length === 0) {
+    return undefined;
+  }
+
+  return value;
+};
 
 const MenuButton = ({
   onClick,
@@ -50,8 +70,9 @@ const MenuButton = ({
   </button>
 );
 
-const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }: RichTextEditorProps) => {
+const RichTextEditor = ({ content, onChange, onHtmlChange, placeholder = "Start writing..." }: RichTextEditorProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const normalizedContent = useMemo(() => normalizeEditorContent(content), [content]);
 
   const editor = useEditor({
     extensions: [
@@ -67,9 +88,10 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }:
       Underline,
       Placeholder.configure({ placeholder }),
     ],
-    content: content && Object.keys(content).length > 0 ? content : undefined,
+    content: normalizedContent,
     onUpdate: ({ editor }) => {
       onChange(editor.getJSON());
+      onHtmlChange?.(editor.getHTML());
     },
     editorProps: {
       attributes: {
@@ -78,6 +100,24 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }:
       },
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const nextContentKey = normalizedContent ? JSON.stringify(normalizedContent) : null;
+    const currentContentKey = JSON.stringify(editor.getJSON());
+
+    if (nextContentKey === currentContentKey) {
+      return;
+    }
+
+    if (!normalizedContent) {
+      editor.commands.clearContent(false);
+      return;
+    }
+
+    editor.commands.setContent(normalizedContent, false);
+  }, [editor, normalizedContent]);
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!editor) return;

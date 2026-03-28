@@ -57,8 +57,62 @@ export async function geocodePlace(query: string): Promise<{ lat: number; lng: n
   }
 }
 
+export async function reverseGeocodePlace(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}&zoom=12`,
+      { headers: { "User-Agent": "BITE-Logbook/1.0" } }
+    );
+    const data = await res.json();
+    const address = data?.address || {};
+    const parts = [
+      address.harbour,
+      address.marina,
+      address.city,
+      address.town,
+      address.village,
+      address.municipality,
+      address.county,
+      address.state,
+      data?.name,
+    ].filter(Boolean);
+    return parts[0] || data?.display_name?.split(",")?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function formatWaypointCoordinateLabel(lat: number, lng: number): string {
+  const latHemisphere = lat >= 0 ? "N" : "S";
+  const lngHemisphere = lng >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(2)}°${latHemisphere} · ${Math.abs(lng).toFixed(2)}°${lngHemisphere}`;
+}
+
+export function buildWaypointDefaultName(index: number, lat: number, lng: number, placeName?: string | null): string {
+  const prefix = index === 0 ? "Start" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
+  return `${prefix} · ${placeName || formatWaypointCoordinateLabel(lat, lng)}`;
+}
+
+export function getStraightVoyageGeometry(waypoints: { lat: number; lng: number }[]): [number, number][] {
+  return waypoints.map((waypoint) => [waypoint.lng, waypoint.lat]);
+}
+
+export async function buildVoyageGeometry(
+  waypoints: { lat: number; lng: number }[],
+  type: VoyageType
+): Promise<[number, number][]> {
+  if (waypoints.length < 2) return getStraightVoyageGeometry(waypoints);
+  if (type !== "land") return getStraightVoyageGeometry(waypoints);
+
+  const route = await fetchOSRMRoute(waypoints);
+  if (!route?.geometry?.length) return getStraightVoyageGeometry(waypoints);
+
+  return route.geometry.map(([lat, lng]) => [lng, lat]);
+}
+
 export type VoyageType = "water" | "land";
 export type VoyageStatus = "planned" | "active" | "completed";
+export type VoyageGeometry = { type: "LineString"; coordinates: [number, number][] } | null;
 
 export interface Voyage {
   id: string;
@@ -67,7 +121,11 @@ export interface Voyage {
   type: VoyageType;
   status: VoyageStatus;
   sort_order: number;
-  cached_geometry: any;
+  cached_geometry: VoyageGeometry;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -106,4 +164,5 @@ export interface GeoArticle {
   authors?: { id: string; name: string; avatar_url: string | null }[];
   tags?: { id: string; name: string }[];
   likeCount?: number;
+  viewCount?: number;
 }

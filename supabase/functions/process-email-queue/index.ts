@@ -52,6 +52,39 @@ function parseJwtClaims(token: string): Record<string, unknown> | null {
   }
 }
 
+function getNewsletterDeliveryId(payload: Record<string, unknown>): string | null {
+  if (!payload.metadata || typeof payload.metadata !== 'object') {
+    return null
+  }
+
+  const deliveryId = (payload.metadata as Record<string, unknown>)
+    .newsletter_delivery_id
+
+  return typeof deliveryId === 'string' ? deliveryId : null
+}
+
+async function updateNewsletterDelivery(
+  supabase: ReturnType<typeof createClient>,
+  payload: Record<string, unknown>,
+  values: Record<string, unknown>
+): Promise<void> {
+  const deliveryId = getNewsletterDeliveryId(payload)
+  if (!deliveryId) return
+
+  const { error } = await supabase
+    .from('newsletter_deliveries')
+    .update(values)
+    .eq('id', deliveryId)
+
+  if (error) {
+    console.error('Failed to update newsletter delivery', {
+      deliveryId,
+      error,
+      values,
+    })
+  }
+}
+
 // Move a message to the dead letter queue and log the reason.
 async function moveToDlq(
   supabase: ReturnType<typeof createClient>,
@@ -65,6 +98,11 @@ async function moveToDlq(
     template_name: (payload.label || queue) as string,
     recipient_email: payload.to,
     status: 'dlq',
+    error_message: reason,
+    metadata: payload.metadata,
+  })
+  await updateNewsletterDelivery(supabase, payload, {
+    status: 'failed',
     error_message: reason,
   })
   const { error } = await supabase.rpc('move_to_dlq', {
@@ -273,6 +311,12 @@ Deno.serve(async (req) => {
           template_name: payload.label || queue,
           recipient_email: payload.to,
           status: 'sent',
+          metadata: payload.metadata,
+        })
+        await updateNewsletterDelivery(supabase, payload, {
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          error_message: null,
         })
 
         // Delete from queue
@@ -301,6 +345,7 @@ Deno.serve(async (req) => {
             recipient_email: payload.to,
             status: 'rate_limited',
             error_message: errorMsg.slice(0, 1000),
+            metadata: payload.metadata,
           })
 
           const retryAfterSecs = getRetryAfterSeconds(error)
@@ -336,6 +381,11 @@ Deno.serve(async (req) => {
           message_id: payload.message_id,
           template_name: payload.label || queue,
           recipient_email: payload.to,
+          status: 'failed',
+          error_message: errorMsg.slice(0, 1000),
+          metadata: payload.metadata,
+        })
+        await updateNewsletterDelivery(supabase, payload, {
           status: 'failed',
           error_message: errorMsg.slice(0, 1000),
         })

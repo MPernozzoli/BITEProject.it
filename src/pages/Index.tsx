@@ -1,22 +1,51 @@
+import { useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowRight, Anchor, Wrench, Compass, Wifi, Pen, Eye } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
+import { useAuth } from "@/hooks/useAuth";
 
 import bowSunset from "@/assets/bow-sunset.jpeg";
 import boatSunset from "@/assets/boat-sunset.jpeg";
 import dogsMarina from "@/assets/dogs-marina.jpeg";
 import dinghyCrew from "@/assets/dinghy-crew.jpg";
 
+interface HomeTag {
+  id: string;
+  name: string;
+}
+
+interface HomeArticle {
+  id: string;
+  title_en: string;
+  title_it: string | null;
+  slug: string;
+  excerpt_en: string | null;
+  excerpt_it: string | null;
+  cover_image: string | null;
+  published_at: string | null;
+  category: string;
+  tags: HomeTag[];
+}
+
+interface ArticleTagRelation {
+  article_id: string;
+  tags: HomeTag | null;
+}
+
 const Index = () => {
   const { t, lang } = useI18n();
   const { isRead } = useArticleReads();
+  const { session } = useAuth();
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
 
   // Fetch real articles for the journal preview
-  const { data: latestArticles = [] } = useQuery({
+  const { data: latestArticles = [] } = useQuery<HomeArticle[]>({
     queryKey: ["home-latest-articles"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -34,16 +63,57 @@ const Index = () => {
           .from("article_tags")
           .select("article_id, tags(id, name)")
           .in("article_id", ids);
-        const tagMap: Record<string, any[]> = {};
-        (tagData || []).forEach((t: any) => {
+        const tagMap: Record<string, HomeTag[]> = {};
+        (tagData as ArticleTagRelation[] | null)?.forEach((t) => {
           if (!tagMap[t.article_id]) tagMap[t.article_id] = [];
           if (t.tags) tagMap[t.article_id].push(t.tags);
         });
-        return (data || []).map((a) => ({ ...a, tags: tagMap[a.id] || [] }));
+        return (data || []).map((a) => ({ ...a, tags: tagMap[a.id] || [] })) as HomeArticle[];
       }
-      return (data || []).map((a) => ({ ...a, tags: [] }));
+      return (data || []).map((a) => ({ ...a, tags: [] })) as HomeArticle[];
     },
   });
+
+  const handleNewsletterSubscribe = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const targetEmail = session?.user.email?.trim() || newsletterEmail.trim();
+
+    if (!targetEmail) {
+      toast.error(lang === "it" ? "Inserisci una email valida." : "Enter a valid email.");
+      return;
+    }
+
+    setNewsletterLoading(true);
+    const { data, error } = await supabase.functions.invoke("newsletter-subscribe", {
+      body: {
+        email: targetEmail,
+        preferredLanguage: lang,
+        source: session ? "homepage_logged_in" : "homepage",
+      },
+    });
+    setNewsletterLoading(false);
+
+    if (error) {
+      console.error("Newsletter subscribe failed", error);
+      toast.error(
+        lang === "it"
+          ? "Iscrizione non riuscita. Riprova."
+          : "Subscription failed. Please try again."
+      );
+      return;
+    }
+
+    setNewsletterEmail("");
+    toast.success(
+      data?.alreadySubscribed
+        ? lang === "it"
+          ? "Sei già iscritto. Preferenze aggiornate."
+          : "You were already subscribed. Preferences updated."
+        : lang === "it"
+          ? "Iscrizione confermata."
+          : "Subscription confirmed."
+    );
+  };
 
   return (
     <div>
@@ -166,7 +236,7 @@ const Index = () => {
 
           {latestArticles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {latestArticles.map((entry: any) => {
+              {latestArticles.map((entry) => {
                 const title = lang === "en" ? entry.title_en : (entry.title_it || entry.title_en);
                 const excerpt = lang === "en" ? entry.excerpt_en : (entry.excerpt_it || entry.excerpt_en);
                 return (
@@ -185,7 +255,7 @@ const Index = () => {
                         )}
                       </div>
                       <div className="flex items-center gap-2 mb-2">
-                        {entry.tags?.slice(0, 2).map((tag: any) => (
+                        {entry.tags?.slice(0, 2).map((tag) => (
                           <span key={tag.id} className="text-[11px] font-sans text-accent">#{tag.name}</span>
                         ))}
                         {entry.published_at && (
@@ -265,14 +335,28 @@ const Index = () => {
           <p className="text-xs font-sans tracking-[0.3em] uppercase text-primary-foreground/60 mb-8">{t("newsletter.label")}</p>
           <h2 className="editorial-heading text-3xl md:text-5xl mb-6">{t("newsletter.title")}</h2>
           <p className="editorial-body text-primary-foreground/70 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
-          <form onSubmit={(e) => e.preventDefault()} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-            <input
-              type="email"
-              placeholder={t("newsletter.placeholder")}
-              className="flex-1 bg-primary-foreground/10 border border-primary-foreground/20 px-5 py-3 text-sm text-primary-foreground placeholder:text-primary-foreground/40 focus:outline-none focus:border-primary-foreground/40 transition-colors"
-            />
-            <button type="submit" className="bg-primary-foreground text-primary px-8 py-3 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/90 transition-colors">
-              {t("newsletter.submit")}
+          <form onSubmit={handleNewsletterSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+            {session?.user.email ? (
+              <div className="flex-1 bg-primary-foreground/10 border border-primary-foreground/20 px-5 py-3 text-sm text-primary-foreground/75 text-left">
+                {lang === "it"
+                  ? `Ti iscriveremo con ${session.user.email}`
+                  : `We'll subscribe you with ${session.user.email}`}
+              </div>
+            ) : (
+              <input
+                type="email"
+                value={newsletterEmail}
+                onChange={(event) => setNewsletterEmail(event.target.value)}
+                placeholder={t("newsletter.placeholder")}
+                className="flex-1 bg-primary-foreground/10 border border-primary-foreground/20 px-5 py-3 text-sm text-primary-foreground placeholder:text-primary-foreground/40 focus:outline-none focus:border-primary-foreground/40 transition-colors"
+              />
+            )}
+            <button
+              type="submit"
+              disabled={newsletterLoading}
+              className="bg-primary-foreground text-primary px-8 py-3 text-sm font-sans font-medium tracking-wide hover:bg-primary-foreground/90 transition-colors disabled:opacity-60"
+            >
+              {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
             </button>
           </form>
         </div>
