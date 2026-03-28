@@ -25,6 +25,8 @@ import PublicProfile from "./pages/PublicProfile";
 import StoryPage from "./pages/StoryPage";
 import Unsubscribe from "./pages/Unsubscribe";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookiePolicy from "./pages/CookiePolicy";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +59,8 @@ const App = () => (
               <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
               <Route path="/profile" element={<AdminProfile />} />
               <Route path="/unsubscribe" element={<Unsubscribe />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/cookie-policy" element={<CookiePolicy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>

@@ -90,10 +90,18 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t glass-divider flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground/70">
-            © {new Date().getFullYear()} BITE. {t("footer.rights")}
-          </p>
+        <div className="mt-10 pt-6 border-t glass-divider flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground/70">
+            <p>
+              © {new Date().getFullYear()} BITE. {t("footer.rights")}
+            </p>
+            <Link to="/privacy-policy" className="hover:text-foreground transition-colors">
+              {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
+            </Link>
+            <Link to="/cookie-policy" className="hover:text-foreground transition-colors">
+              {lang === "it" ? "Cookie Policy" : "Cookie Policy"}
+            </Link>
+          </div>
           <p className="text-[11px] text-muted-foreground/70">
             {lang === "it" ? "Realizzato da" : "Made by"}{" "}
             <a

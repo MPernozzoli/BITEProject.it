@@ -81,7 +81,7 @@ const RichTextEditor = ({ content, onChange, onHtmlChange, placeholder = "Start 
       }),
       Image.configure({ inline: false, allowBase64: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-accent underline" } }),
-      Youtube.configure({ width: 640, height: 360 }),
+      Youtube.configure({ width: 640, height: 360, nocookie: true }),
       TextStyle,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),

@@ -11,7 +11,7 @@ export const articleContentExtensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
   Image,
   Link,
-  Youtube.configure({ width: 640, height: 360 }),
+  Youtube.configure({ width: 640, height: 360, nocookie: true }),
   TextStyle,
   Color,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
