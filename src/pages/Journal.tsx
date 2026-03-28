@@ -11,6 +11,7 @@ import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import { totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
 const Journal = () => {
   const { t, lang } = useI18n();
@@ -31,7 +32,8 @@ const Journal = () => {
         .from("logbook_articles")
         .select("*")
         .eq("status", "published")
-        .order("published_at", { ascending: false });
+        .order("published_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
       if (error) throw error;
 
       const ids = (data || []).map((a: any) => a.id);
@@ -161,8 +163,6 @@ const Journal = () => {
     const article = articles.find((a) => a.id === selectedArticleId);
     return article?.voyage_id || null;
   }, [selectedArticleId, articles]);
-
-  const geoArticleCount = articles.filter((a) => a.latitude && a.longitude).length;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -334,12 +334,27 @@ const Journal = () => {
                   {filtered.map((article) => {
                     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
                     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+                    const gridCoverStyle =
+                      article.cover_image &&
+                      coverImageStyle(
+                        article.cover_image,
+                        clampCoverFocal(
+                          Number(article.cover_focal_x ?? 50),
+                          Number(article.cover_focal_y ?? 50),
+                          Number(article.cover_zoom ?? 1)
+                        )
+                      );
                     return (
                       <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
                         <article>
                           <div className="aspect-[16/10] overflow-hidden bg-muted mb-4 relative">
                             {article.cover_image ? (
-                              <img src={article.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                              <img
+                                src={article.cover_image}
+                                alt={title}
+                                className="absolute inset-0 max-w-none"
+                                style={gridCoverStyle || undefined}
+                              />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>
                             )}

@@ -22,7 +22,7 @@ const PAGE_SUBTITLES: Record<string, { en: string; it: string }> = {
 
 const Navbar = () => {
   const { t, lang, setLang } = useI18n();
-  const { session, isAdmin } = useAuth();
+  const { session, isAdmin, loading: authLoading } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profile, setProfile] = useState<{ name: string; avatar_url: string | null } | null>(null);
@@ -52,13 +52,22 @@ const Navbar = () => {
   }, [session?.user?.id]);
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
+    setProfile(null);
+    const { data, error } = await supabase
       .from("profiles")
       .select("name, avatar_url")
       .eq("id", userId)
-      .single();
-    if (data) setProfile(data);
+      .maybeSingle();
+    if (!error && data) setProfile(data);
   };
+
+  const meta = session?.user?.user_metadata as Record<string, string | undefined> | undefined;
+  const displayAvatarUrl = profile?.avatar_url || meta?.avatar_url || meta?.picture;
+  const displayName =
+    profile?.name?.trim() || meta?.full_name || meta?.name || session?.user?.email?.split("@")[0] || "";
+  const initials = displayName
+    ? displayName.split(/\s+/).map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    : (session?.user?.email?.[0]?.toUpperCase() ?? "?");
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -73,10 +82,6 @@ const Navbar = () => {
     { to: "/collaborations", label: t("nav.collaborations") },
     { to: "/contact", label: t("nav.contact") },
   ];
-
-  const initials = profile?.name
-    ? profile.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "U";
 
   return (
     <nav
@@ -180,13 +185,18 @@ const Navbar = () => {
             {lang === "en" ? "IT" : "EN"}
           </button>
 
-          {/* User menu */}
-          {session ? (
+          {/* User menu — in attesa del bootstrap auth non mostrare uno stato “loggato” incoerente */}
+          {authLoading ? (
+            <div className="w-8 h-8 rounded-full bg-muted animate-pulse shrink-0" aria-hidden />
+          ) : session ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity focus:outline-none">
-                  {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                <button
+                  type="button"
+                  className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-sans font-medium tracking-wide hover:opacity-90 transition-opacity focus:outline-none overflow-hidden shrink-0"
+                >
+                  {displayAvatarUrl ? (
+                    <img src={displayAvatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
                   ) : (
                     initials
                   )}
@@ -233,10 +243,10 @@ const Navbar = () => {
             {lang === "en" ? "IT" : "EN"}
           </button>
 
-          {session && (
-            <Link to="/profile" className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-medium">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
+          {!authLoading && session && (
+            <Link to="/profile" className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-[10px] font-sans font-medium overflow-hidden">
+              {displayAvatarUrl ? (
+                <img src={displayAvatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
               ) : (
                 initials
               )}
@@ -265,7 +275,9 @@ const Navbar = () => {
               </Link>
             ))}
             <div className="h-px bg-border my-2" />
-            {session ? (
+            {authLoading ? (
+              <div className="h-10 bg-muted animate-pulse rounded-md" />
+            ) : session ? (
               <>
                 <Link to="/profile" className="font-sans text-base text-muted-foreground hover:text-foreground transition-colors">
                   {lang === "it" ? "Profilo" : "Profile"}
@@ -275,7 +287,7 @@ const Navbar = () => {
                     Dashboard
                   </Link>
                 )}
-                <button onClick={handleLogout} className="font-sans text-base text-destructive text-left">
+                <button type="button" onClick={handleLogout} className="font-sans text-base text-destructive text-left">
                   {lang === "it" ? "Esci" : "Logout"}
                 </button>
               </>

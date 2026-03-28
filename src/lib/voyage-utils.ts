@@ -91,6 +91,9 @@ export interface GeoArticle {
   title_it: string;
   slug: string;
   cover_image: string | null;
+  cover_focal_x?: number | null;
+  cover_focal_y?: number | null;
+  cover_zoom?: number | null;
   excerpt_en: string | null;
   excerpt_it: string | null;
   published_at: string | null;

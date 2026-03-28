@@ -111,6 +111,14 @@
   .slide-up {
     animation: slideUp 0.8s ease-out forwards;
   }
+
+  /* Righe vuote dall’editor TipTap (<p></p>) visibili anche nel reader */
+  .article-rich-body p:empty {
+    min-height: 1.35em;
+  }
+  .article-rich-body p:empty::before {
+    content: "\00a0";
+  }
 }
 
 @keyframes fadeIn {

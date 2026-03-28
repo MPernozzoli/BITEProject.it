@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Share2, Check } from "lucide-react";
+import { Check } from "lucide-react";
+import AppleShareIcon from "@/components/AppleShareIcon";
+import { useI18n } from "@/lib/i18n";
 
 interface ShareButtonProps {
   url?: string;
@@ -8,7 +10,9 @@ interface ShareButtonProps {
 }
 
 const ShareButton = ({ url, title, size = 18 }: ShareButtonProps) => {
+  const { lang } = useI18n();
   const [copied, setCopied] = useState(false);
+  const isIt = lang === "it";
 
   const handleShare = async () => {
     const shareUrl = url || window.location.href;
@@ -29,10 +33,10 @@ const ShareButton = ({ url, title, size = 18 }: ShareButtonProps) => {
     <button
       onClick={handleShare}
       className="inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-      title="Share"
+      title={isIt ? "Condividi" : "Share"}
     >
-      {copied ? <Check size={size} /> : <Share2 size={size} />}
-      <span>{copied ? "Copied!" : "Share"}</span>
+      {copied ? <Check size={size} /> : <AppleShareIcon size={size} />}
+      <span>{copied ? (isIt ? "Copiato!" : "Copied!") : (isIt ? "Condividi" : "Share")}</span>
     </button>
   );
 };

@@ -1,8 +1,8 @@
 import { forwardRef } from "react";
 import { format } from "date-fns";
 import { MapPin, Eye } from "lucide-react";
-import ProfileCard from "@/components/ProfileCard";
 import type { GeoArticle } from "@/lib/voyage-utils";
+import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
 interface ArticleListCardProps {
   article: GeoArticle;
@@ -16,6 +16,16 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
   ({ article, lang, isActive, isRead, onClick }, ref) => {
     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+    const thumbStyle =
+      article.cover_image &&
+      coverImageStyle(
+        article.cover_image,
+        clampCoverFocal(
+          Number(article.cover_focal_x ?? 50),
+          Number(article.cover_focal_y ?? 50),
+          Number(article.cover_zoom ?? 1)
+        )
+      );
 
     return (
       <div
@@ -30,11 +40,12 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
         <div className="flex gap-3">
           {/* Thumbnail */}
           {article.cover_image && (
-            <div className="w-20 h-20 shrink-0 overflow-hidden rounded-sm relative">
+            <div className="w-20 h-20 shrink-0 overflow-hidden rounded-sm relative bg-muted">
               <img
                 src={article.cover_image}
                 alt={title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="absolute inset-0 max-w-none"
+                style={thumbStyle || undefined}
               />
               {isRead && (
                 <span className="absolute top-1 left-1 bg-background/80 backdrop-blur-sm p-0.5 rounded-sm">
@@ -46,7 +57,12 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              {!(article.latitude != null && article.longitude != null) && !article.voyage_id && (
+                <span className="text-[9px] font-sans text-muted-foreground uppercase tracking-wider shrink-0">
+                  {lang === "it" ? "Solo elenco" : "List only"}
+                </span>
+              )}
               {article.location_name && (
                 <span className="inline-flex items-center gap-0.5 text-[10px] font-sans text-accent truncate">
                   <MapPin size={8} />

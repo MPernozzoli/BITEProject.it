@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { generateHTML } from "@tiptap/react";
@@ -11,15 +11,18 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { format } from "date-fns";
 import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
+import ArticleMapAside from "@/components/ArticleMapAside";
+import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import { useMarkAsRead } from "@/hooks/useArticleReads";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
 const extensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
@@ -32,10 +35,20 @@ const extensions = [
   Underline,
 ];
 
+type StoryChapter = {
+  id: string;
+  slug: string;
+  title_en: string;
+  title_it: string;
+  published_at: string | null;
+};
+
 const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
   const markAsRead = useMarkAsRead();
+  const queryClient = useQueryClient();
+  const viewIncrementedFor = useRef<string | null>(null);
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -51,7 +64,48 @@ const ArticlePage = () => {
     },
   });
 
-  // Mark as read when article loads
+  const storyId = (article as any)?.story_id as string | null | undefined;
+
+  const { data: storyChapters = [] } = useQuery({
+    queryKey: ["story-chapters-published", storyId],
+    enabled: Boolean(storyId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("logbook_articles")
+        .select("id, slug, title_en, title_it, published_at")
+        .eq("story_id", storyId!)
+        .eq("status", "published")
+        .order("published_at", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data || []) as StoryChapter[];
+    },
+  });
+
+  const incrementViews = useMutation({
+    mutationFn: async (articleId: string) => {
+      const { data, error } = await supabase.rpc("increment_article_view_count", {
+        _article_id: articleId,
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    onSuccess: (count) => {
+      queryClient.setQueryData(["article", slug], (old: unknown) =>
+        old && typeof old === "object" ? { ...(old as Record<string, unknown>), view_count: count } : old
+      );
+    },
+    onError: () => {
+      /* RPC assente finché non è applicata la migration */
+    },
+  });
+
+  useEffect(() => {
+    if (!article?.id) return;
+    if (viewIncrementedFor.current === article.id) return;
+    viewIncrementedFor.current = article.id;
+    incrementViews.mutate(article.id);
+  }, [article?.id]);
+
   useEffect(() => {
     if (article?.id) {
       markAsRead.mutate(article.id);
@@ -92,12 +146,39 @@ const ArticlePage = () => {
     queryKey: ["article-story", article?.id],
     enabled: !!article?.id,
     queryFn: async () => {
-      const storyId = (article as any)?.story_id;
-      if (!storyId) return null;
-      const { data } = await supabase.from("stories").select("*").eq("id", storyId).single();
+      const sid = (article as any)?.story_id;
+      if (!sid) return null;
+      const { data } = await supabase.from("stories").select("*").eq("id", sid).single();
       return data;
     },
   });
+
+  const chapterPrevNext = useMemo(() => {
+    if (!article?.id || !storyChapters.length) return { prev: null as StoryChapter | null, next: null as StoryChapter | null };
+    const idx = storyChapters.findIndex((c) => c.id === article.id);
+    if (idx < 0) return { prev: null, next: null };
+    return {
+      prev: idx > 0 ? storyChapters[idx - 1] : null,
+      next: idx < storyChapters.length - 1 ? storyChapters[idx + 1] : null,
+    };
+  }, [article?.id, storyChapters]);
+
+  const coverFocal = useMemo(() => {
+    if (!article) return clampCoverFocal(50, 50, 1);
+    return clampCoverFocal(
+      Number((article as any).cover_focal_x ?? 50),
+      Number((article as any).cover_focal_y ?? 50),
+      Number((article as any).cover_zoom ?? 1)
+    );
+  }, [article]);
+
+  const hasGeo = Boolean(
+    article &&
+      typeof article.latitude === "number" &&
+      typeof article.longitude === "number" &&
+      !Number.isNaN(article.latitude) &&
+      !Number.isNaN(article.longitude)
+  );
 
   if (isLoading) {
     return (
@@ -126,33 +207,42 @@ const ArticlePage = () => {
 
   const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
   const content = lang === "en" ? article.content_en : (article.content_it || article.content_en);
-  const htmlContent = content && typeof content === "object" && Object.keys(content).length > 0
-    ? generateHTML(content as any, extensions)
+  const htmlContent =
+    content && typeof content === "object" && Object.keys(content).length > 0
+      ? generateHTML(content as any, extensions)
+      : "";
+  const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
+  const dateLabel = article.published_at ? format(new Date(article.published_at), dateFmt) : null;
+  const views = Number((article as any).view_count ?? 0);
+  const viewsFmt = views.toLocaleString(lang === "it" ? "it-IT" : "en-US");
+
+  const coverStyle = article.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
+
+  const prevTitle = chapterPrevNext.prev
+    ? lang === "en"
+      ? chapterPrevNext.prev.title_en
+      : chapterPrevNext.prev.title_it || chapterPrevNext.prev.title_en
     : "";
-  const storyId = (article as any)?.story_id;
+  const nextTitle = chapterPrevNext.next
+    ? lang === "en"
+      ? chapterPrevNext.next.title_en
+      : chapterPrevNext.next.title_it || chapterPrevNext.next.title_en
+    : "";
 
   return (
     <div>
-      {/* Hero cover */}
       {article.cover_image && (
-        <section className="relative h-[45vh] md:h-[55vh] overflow-hidden">
-          <img src={article.cover_image} alt={title} className="img-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:p-20">
+        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden">
+          <img
+            src={article.cover_image}
+            alt=""
+            className="absolute inset-0 w-full max-w-none pointer-events-none"
+            style={coverStyle}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/25 to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
             <div className="max-w-4xl">
-              <div className="flex items-center gap-3 mb-4 flex-wrap">
-                {tags.length > 0 && tags.map((tag: any) => (
-                  <span key={tag.id} className="text-xs font-sans text-accent bg-background/80 backdrop-blur-sm px-2 py-1">
-                    #{tag.name}
-                  </span>
-                ))}
-                {article.published_at && (
-                  <span className="text-xs text-foreground/70 bg-background/80 backdrop-blur-sm px-2 py-1">
-                    {format(new Date(article.published_at), "MMMM d, yyyy")}
-                  </span>
-                )}
-              </div>
-              <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-foreground">
+              <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-foreground drop-shadow-sm">
                 {title}
               </h1>
             </div>
@@ -160,40 +250,25 @@ const ArticlePage = () => {
         </section>
       )}
 
-      <div className="page-section !pt-8 md:!pt-12">
+      <div className="page-section !pt-8 md:!pt-14">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-12 lg:gap-16">
-            {/* Main content */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-10 lg:gap-12">
             <article className="min-w-0">
               <Link
                 to="/logbook"
                 className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
               >
-                <ArrowLeft size={14} /> Back to Logbook
+                <ArrowLeft size={14} /> {lang === "it" ? "Torna al diario" : "Back to Logbook"}
               </Link>
 
-              {/* Title if no cover */}
               {!article.cover_image && (
-                <>
-                  <div className="flex items-center gap-3 mb-6 flex-wrap">
-                    {tags.length > 0 && tags.map((tag: any) => (
-                      <span key={tag.id} className="text-xs font-sans text-accent">#{tag.name}</span>
-                    ))}
-                    {article.published_at && (
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(article.published_at), "MMMM d, yyyy")}
-                      </span>
-                    )}
-                  </div>
-                  <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-6">{title}</h1>
-                </>
+                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-8">{title}</h1>
               )}
 
-              {/* Story banner */}
               {story && (
                 <Link
                   to={`/logbook/story/${story.slug}`}
-                  className="flex items-center gap-3 mb-8 p-4 border border-border hover:border-accent transition-colors group"
+                  className="flex items-center gap-3 mb-6 p-4 border border-border hover:border-accent transition-colors group bg-card/30"
                 >
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
                   <div>
@@ -207,40 +282,118 @@ const ArticlePage = () => {
                 </Link>
               )}
 
-              {/* Authors */}
-              {authors.length > 0 && (
-                <div className="flex items-center gap-4 mb-10">
-                  <span className="text-xs text-muted-foreground">by</span>
+              {story && (chapterPrevNext.prev || chapterPrevNext.next) && (
+                <nav
+                  className="flex flex-col sm:flex-row sm:items-stretch gap-3 mb-8"
+                  aria-label={lang === "it" ? "Navigazione capitoli" : "Chapter navigation"}
+                >
+                  {chapterPrevNext.prev ? (
+                    <Link
+                      to={`/logbook/${chapterPrevNext.prev.slug}`}
+                      title={prevTitle}
+                      className="flex-1 inline-flex items-center gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors"
+                    >
+                      <ChevronLeft size={18} className="shrink-0 text-accent" />
+                      <span className="min-w-0">
+                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
+                          {lang === "it" ? "Precedente" : "Previous"}
+                        </span>
+                        <span className="block line-clamp-2 leading-snug">{prevTitle}</span>
+                      </span>
+                    </Link>
+                  ) : (
+                    <div className="flex-1 hidden sm:block" aria-hidden />
+                  )}
+                  {chapterPrevNext.next ? (
+                    <Link
+                      to={`/logbook/${chapterPrevNext.next.slug}`}
+                      title={nextTitle}
+                      className="flex-1 inline-flex items-center justify-end gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors sm:text-right"
+                    >
+                      <span className="min-w-0 order-2 sm:order-1">
+                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5 sm:text-right">
+                          {lang === "it" ? "Successivo" : "Next"}
+                        </span>
+                        <span className="block line-clamp-2 leading-snug sm:text-right">{nextTitle}</span>
+                      </span>
+                      <ChevronRight size={18} className="shrink-0 text-accent order-1 sm:order-2" />
+                    </Link>
+                  ) : null}
+                </nav>
+              )}
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-8 mb-8 border-b border-border">
                   {authors.map((a: any) => (
                     <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
                   ))}
-                </div>
-              )}
+                  {dateLabel && (
+                    <span className="text-sm font-sans text-muted-foreground">
+                      {lang === "it" ? "Pubblicato il " : "Published "}
+                      <time dateTime={article.published_at || undefined}>{dateLabel}</time>
+                    </span>
+                  )}
+                <span
+                  className="inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground"
+                  title={lang === "it" ? "Visualizzazioni totali" : "Total views"}
+                >
+                  <Eye size={15} className="shrink-0 opacity-80" aria-hidden />
+                  <span>
+                    {viewsFmt} {lang === "it" ? "visualizzazioni" : "views"}
+                  </span>
+                </span>
+              </div>
 
               {htmlContent && (
                 <div
-                  className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-relaxed prose-a:text-accent prose-img:rounded-sm prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
+                  className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-sm prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
                   dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
               )}
 
-              {/* Like & Share */}
               <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">
                 <LikeButton articleId={article.id} />
                 <ShareButton title={title} />
               </div>
 
-              {/* Comments */}
               <CommentSection articleId={article.id} />
+
+              {tags.length > 0 && (
+                <footer className="mt-14 pt-10 border-t border-border">
+                  <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
+                    {lang === "it" ? "Hashtag" : "Tags"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag: any) => (
+                      <span
+                        key={tag.id}
+                        className="text-xs font-sans px-2.5 py-1 border border-border text-muted-foreground bg-muted/40"
+                      >
+                        #{tag.name}
+                      </span>
+                    ))}
+                  </div>
+                </footer>
+              )}
             </article>
 
-            {/* Sidebar */}
-            <div className="hidden lg:block">
-              <div className="sticky top-28">
-                <ArticleSidebar currentArticleId={article.id} storyId={storyId} />
-              </div>
-            </div>
+            <aside className="min-w-0 space-y-8">
+              {hasGeo && (
+                <div className="lg:sticky lg:top-24 space-y-8">
+                  <ArticleMapAside latitude={article.latitude!} longitude={article.longitude!} title={title} />
+                  <div>
+                    <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
+                  </div>
+                </div>
+              )}
+              {!hasGeo && (
+                <div className="lg:sticky lg:top-24">
+                  <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
+                </div>
+              )}
+            </aside>
           </div>
+
+          <ArticleRelatedSection articleId={article.id} tagIds={tags.map((t: any) => t.id)} lang={lang} />
         </div>
       </div>
     </div>

@@ -73,7 +73,8 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }:
     },
     editorProps: {
       attributes: {
-        class: "prose prose-lg max-w-none focus:outline-none min-h-[300px] p-4 font-sans",
+        class:
+          "article-rich-body prose prose-lg max-w-none focus:outline-none min-h-[300px] p-4 font-sans [&_p]:min-h-[1em]",
       },
     },
   });

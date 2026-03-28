@@ -11,6 +11,8 @@ import { geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
+import CoverFocalPicker from "@/components/admin/CoverFocalPicker";
+import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 
 const ArticleEditor = () => {
   const { id } = useParams();
@@ -28,6 +30,7 @@ const ArticleEditor = () => {
   const [contentEn, setContentEn] = useState<object>({});
   const [contentIt, setContentIt] = useState<object>({});
   const [coverImage, setCoverImage] = useState("");
+  const [coverFocal, setCoverFocal] = useState<CoverFocal>({ ...DEFAULT_COVER_FOCAL });
   const [category, setCategory] = useState("Notes from the Boat");
   const [publishDate, setPublishDate] = useState("");
   const [authorIds, setAuthorIds] = useState<string[]>([]);
@@ -108,6 +111,13 @@ const ArticleEditor = () => {
     setContentEn(data.content_en as object || {});
     setContentIt(data.content_it as object || {});
     setCoverImage(data.cover_image || "");
+    setCoverFocal(
+      clampCoverFocal(
+        Number((data as any).cover_focal_x ?? DEFAULT_COVER_FOCAL.focalX),
+        Number((data as any).cover_focal_y ?? DEFAULT_COVER_FOCAL.focalY),
+        Number((data as any).cover_zoom ?? DEFAULT_COVER_FOCAL.zoom)
+      )
+    );
     setCategory(data.category || "Notes from the Boat");
     setPublishDate(data.published_at ? new Date(data.published_at).toISOString().slice(0, 16) : data.scheduled_at ? new Date(data.scheduled_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
     setSelectedStoryId((data as any).story_id || null);
@@ -162,6 +172,7 @@ const ArticleEditor = () => {
     const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
     URL.revokeObjectURL(previewUrl);
     setCoverImage(urlData.publicUrl);
+    setCoverFocal({ ...DEFAULT_COVER_FOCAL });
   };
 
   const addNewTag = async () => {
@@ -256,6 +267,9 @@ const ArticleEditor = () => {
       voyage_id: selectedVoyageId || null,
       voyage_segment_start: voyageSegStart,
       voyage_segment_end: voyageSegEnd,
+      cover_focal_x: coverFocal.focalX,
+      cover_focal_y: coverFocal.focalY,
+      cover_zoom: coverFocal.zoom,
     };
 
     let articleId = id;
@@ -271,7 +285,10 @@ const ArticleEditor = () => {
       }
       if (data) {
         articleId = data.id;
-        navigate(`/admin/article/${data.id}`, { replace: true });
+        const stayForPublishedView = action === "publish" && finalStatus === "published";
+        if (!stayForPublishedView) {
+          navigate(`/admin/article/${data.id}`, { replace: true });
+        }
       }
     } else {
       const { error: upErr } = await supabase.from("logbook_articles").update(articleData).eq("id", id);
@@ -346,8 +363,13 @@ const ArticleEditor = () => {
       }
     }
 
+    if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
+      window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
+      return;
+    }
+
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
 
   // Geo map initialization
   useEffect(() => {
@@ -493,12 +515,26 @@ const ArticleEditor = () => {
             <div>
               <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 block">Cover Image</label>
               {coverImage ? (
-                <div className="relative aspect-[16/10] overflow-hidden mb-2 group bg-muted">
-                  <img src={coverImage} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
-                  <button onClick={() => setCoverImage("")} className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity">Remove</button>
-                </div>
+                <>
+                  <div className="relative aspect-[16/10] overflow-hidden mb-2 group bg-muted border border-border">
+                    <img
+                      src={coverImage}
+                      alt="Cover"
+                      className="absolute inset-0 max-w-none pointer-events-none"
+                      style={coverImageStyle(coverImage, coverFocal)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setCoverImage(""); setCoverFocal({ ...DEFAULT_COVER_FOCAL }); }}
+                      className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <CoverFocalPicker imageUrl={coverImage} value={coverFocal} onChange={setCoverFocal} />
+                </>
               ) : (
-                <button onClick={() => coverInputRef.current?.click()} className="w-full aspect-[16/10] border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-accent hover:text-accent transition-colors">
+                <button type="button" onClick={() => coverInputRef.current?.click()} className="w-full aspect-[16/10] border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-accent hover:text-accent transition-colors">
                   <ImageIcon size={24} />
                 </button>
               )}

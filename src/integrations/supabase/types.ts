@@ -378,7 +378,10 @@ export type Database = {
           category: string
           content_en: Json | null
           content_it: Json | null
+          cover_focal_x: number
+          cover_focal_y: number
           cover_image: string | null
+          cover_zoom: number
           created_at: string
           excerpt_en: string | null
           excerpt_it: string | null
@@ -394,6 +397,7 @@ export type Database = {
           title_en: string
           title_it: string
           updated_at: string
+          view_count: number
           voyage_id: string | null
           voyage_segment_end: number | null
           voyage_segment_start: number | null
@@ -402,7 +406,10 @@ export type Database = {
           category?: string
           content_en?: Json | null
           content_it?: Json | null
+          cover_focal_x?: number
+          cover_focal_y?: number
           cover_image?: string | null
+          cover_zoom?: number
           created_at?: string
           excerpt_en?: string | null
           excerpt_it?: string | null
@@ -418,6 +425,7 @@ export type Database = {
           title_en?: string
           title_it?: string
           updated_at?: string
+          view_count?: number
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
@@ -426,7 +434,10 @@ export type Database = {
           category?: string
           content_en?: Json | null
           content_it?: Json | null
+          cover_focal_x?: number
+          cover_focal_y?: number
           cover_image?: string | null
+          cover_zoom?: number
           created_at?: string
           excerpt_en?: string | null
           excerpt_it?: string | null
@@ -442,6 +453,7 @@ export type Database = {
           title_en?: string
           title_it?: string
           updated_at?: string
+          view_count?: number
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
@@ -872,6 +884,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_article_view_count: {
+        Args: { _article_id: string }
+        Returns: number
       }
       move_to_dlq: {
         Args: {

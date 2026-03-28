@@ -242,15 +242,24 @@ const VoyageMap = ({
         `;
 
         const label = document.createElement("div");
-        label.style.cssText = `
-          font-family:var(--font-sans);font-size:10px;font-weight:500;
-          color:hsl(220,40%,15%);background:hsla(40,20%,97%,0.9);
-          padding:2px 6px;border-radius:2px;white-space:nowrap;
-          max-width:120px;overflow:hidden;text-overflow:ellipsis;
-          box-shadow:0 1px 4px rgba(0,0,0,0.1);
-          opacity:${isSelected ? "1" : "0"};transition:opacity 0.2s;
-        `;
         label.textContent = title;
+        label.title = title;
+        const labelBase = `
+          font-family:var(--font-sans);font-size:11px;font-weight:500;line-height:1.35;
+          color:hsl(220,40%,15%);background:hsla(40,20%,97%,0.95);
+          padding:6px 10px;border-radius:4px;
+          box-shadow:0 2px 10px rgba(0,0,0,0.12);
+          max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+          text-align:center;pointer-events:none;
+          opacity:${isSelected ? "1" : "0"};transition:opacity 0.2s,max-width 0.2s ease,box-shadow 0.2s;
+        `;
+        label.style.cssText = labelBase;
+        if (isSelected) {
+          label.style.maxWidth = "min(280px,calc(100vw - 48px))";
+          label.style.whiteSpace = "normal";
+          label.style.overflow = "visible";
+          label.style.textOverflow = "clip";
+        }
 
         el.appendChild(circle);
         el.appendChild(label);
@@ -258,11 +267,19 @@ const VoyageMap = ({
         el.addEventListener("mouseenter", () => {
           circle.style.transform = "scale(1.1)";
           label.style.opacity = "1";
+          label.style.maxWidth = "min(280px,calc(100vw - 48px))";
+          label.style.whiteSpace = "normal";
+          label.style.overflow = "visible";
+          label.style.textOverflow = "clip";
         });
         el.addEventListener("mouseleave", () => {
           if (article.id !== selectedArticleId) {
             circle.style.transform = "scale(1)";
             label.style.opacity = "0";
+            label.style.maxWidth = "120px";
+            label.style.whiteSpace = "nowrap";
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
           }
         });
 
