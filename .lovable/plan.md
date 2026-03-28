@@ -1,159 +1,85 @@
+# Piano di implementazione — 7 punti
 
+## 1. Centrare "Scroll to discover" nella home
 
-# Story Map — Logbook + Route Unificati
+In `src/pages/Index.tsx` (riga 79), il div con il testo "scroll to discover" e la freccia usa `left-1/2 -translate-x-1/2` ma è wrappato in `flex flex-col items-center` — basta verificare che non ci siano offset. Il fix è assicurarsi che il container sia centrato con `text-center` e che il contenuto sia allineato.
 
-## Panoramica
+## 2. Rimuovere "Home" dalla navbar
 
-Unire la pagina "Diario di bordo" e la pagina "Rotta" in un'unica esperienza interattiva ispirata ad Apple Foto: una mappa a schermo pieno con la rotta visibile e gli articoli georeferenziati come marker con cover image, navigabili con pannello laterale scorrevole.
+In `src/components/Navbar.tsx`, rimuovere `{ to: "/", label: t("nav.home") }` dall'array `links` (riga 90). Il logo BITE già linka a `/`.
 
-## Architettura
+## 3. Editor rotte con mappa interattiva (Admin Voyage Manager)
 
-```text
-┌─────────────────────────────────────────────────┐
-│  Header / filtri / toggle vista                 │
-├──────────────────────┬──────────────────────────┤
-│                      │                          │
-│   Lista articoli     │       MAPPA              │
-│   (scrollabile)      │   (Leaflet + rotte       │
-│                      │    + marker articoli)     │
-│   click/scroll →     │                          │
-│   pan mappa          │   click marker →         │
-│                      │   evidenzia articolo     │
-│                      │                          │
-├──────────────────────┴──────────────────────────┤
-│  Stats rotta (miglia, tratte, progresso)        │
-└─────────────────────────────────────────────────┘
-```
+Creare `src/components/admin/AdminVoyageManager.tsx` — sostituisce il vecchio `AdminRouteManager`:
 
-Quando si clicca un articolo/marker, si apre un pannello modale laterale (slide-in da destra) con il contenuto completo, senza lasciare la mappa.
+- Lista voyages con CRUD (nome, tipo acqua/terra, status)
+- Mappa MapLibre interattiva per piazzare waypoint con click
+- Il primo click è l'inizio, i successivi sono waypoint intermedi, l'ultimo è la fine
+- I waypoint sono di due tipi, uno solo tecnico (ad esempio, per evitare che il percorso passi attraverso la terra ferma, il secondo invece sono waypoint narrativi. Il primo non lo mostriamo in mappa, facciamo solo curvare il percorso, il seocndo lo indichiamo come punto e può avere info come: Nome, data (singola o doppia - da, a -) e può essere abbinato ad un articolo. 
+- Drag & drop per riordinare waypoint nella lista laterale
+- Calcolo automatico distanza (haversine NM per acqua, OSRM km per terra)
+- Preview rotta in real-time sulla mappa
+- nella pagina logbook al tasto + assoceremo una tendina con opzioni: rotta, articolo, storia. 
 
----
+## 4. Associazione articoli/storie ai viaggi
 
-## Step 1 — Database: Nuova struttura rotte e georeferenziazione articoli
+Aggiungere sezione "Posizione & Viaggio" in `ArticleEditor.tsx`:
 
-**Tabella `voyages`** (sostituisce il concetto di "viaggio intero"):
-- `id`, `name`, `description`, `type` (enum: `water`, `land`), `status` (`active`/`completed`/`planned`), `created_at`, `updated_at`, `sort_order`
+- Mini-mappa MapLibre per selezionare lat/lng con click
+- Geocoding con Nominatim per cercare un luogo
+- Dropdown per selezionare un voyage
+- Tre modalità di associazione:
+  - **"Tutto"**: assegna `voyage_id` senza segment start/end
+  - **1 click sul percorso**: assegna un punto specifico (lat/lng del click, `voyage_segment_start` = indice waypoint più vicino)
+  - **2 click sul percorso**: seleziona una leg (segment_start e segment_end = indici waypoint più vicini ai click)
+- Per il punto singolo: si può cliccare anche in prossimità (non per forza sul percorso), registrando lat/lng reale e associandolo al voyage
+- Per la leg: snap ai waypoint più vicini lungo il percorso
 
-**Tabella `voyage_waypoints`** (sostituisce `route_legs`, waypoint multipli):
-- `id`, `voyage_id` (FK), `lat`, `lng`, `name` (opzionale, es. nome porto), `sort_order`, `created_at`
-- Per rotte acqua: linee rette tra waypoint, distanza calcolata come somma segmenti (haversine → NM)
-- Per rotte terra: waypoint come punti di passaggio, routing OSM (OSRM) per il percorso stradale effettivo
+## 5. Articoli mostrati sulla mappa dinamicamente
 
-**Modifiche a `logbook_articles`** — aggiungere colonne:
-- `latitude` (float, nullable)
-- `longitude` (float, nullable)  
-- `voyage_id` (uuid, nullable, FK → voyages)
-- `voyage_segment_start` (int, nullable) — indice waypoint inizio segmento
-- `voyage_segment_end` (int, nullable) — indice waypoint fine segmento
-- `location_name` (text, nullable) — es. "Porto di Bari"
+Già parzialmente implementato in `VoyageMap.tsx`. Estendere:
 
-Logica abbinamento articolo ↔ rotta:
-- **Punto singolo**: solo lat/lng compilati, no voyage
-- **Viaggio intero**: voyage_id senza segment_start/end
-- **Segmento specifico**: voyage_id + segment_start + segment_end
+- Per articoli associati a un segmento: posizionare il marker al punto medio del segmento
+- Per articoli associati a tutto il viaggio: posizionare al punto medio della rotta
+- Per articoli con solo lat/lng: usare quelle coordinate
+- Click su marker → apre `ArticleSlidePanel`
 
-Migrazione dei dati da `route_legs` ai nuovi `voyages` + `voyage_waypoints`.
+## 6. Pan automatico mappa su selezione articolo
 
-**RLS**: voyages e waypoints leggibili da tutti, scrivibili solo da admin (come route_legs).
+Già parzialmente implementato (flyTo su selectedArticleId). Estendere:
 
----
+- Se l'articolo è associato a un segmento → fitBounds sui waypoint del segmento
+- Se associato a tutto il viaggio → fitBounds su tutti i waypoint del voyage
+- Se punto singolo → flyTo su lat/lng
+- Se l'articolo ha un "successivo" nella stessa storia → mostrare link nel pannello
 
-## Step 2 — API e calcolo distanze
+## 7. Associazione visuale sulla mappa nell'editor
 
-- **Rotte acqua**: calcolo haversine client-side tra waypoint consecutivi → somma = NM totali
-- **Rotte terra**: chiamata a OSRM (API pubblica, no key) `https://router.project-osrm.org/route/v1/driving/{waypoints}` per ottenere il percorso stradale e la distanza in km. Caching del risultato nel DB (`voyage.cached_geometry` come GeoJSON LineString)
-- Funzione utility condivisa per calcolo distanze
+Nell'editor articoli, quando un voyage è selezionato:
 
----
-
-## Step 3 — Componente mappa unificata (`VoyageMap`)
-
-Componente React con Leaflet che mostra:
-1. **Rotte** come polyline (acqua = linee tra waypoint, terra = percorso OSRM)
-2. **Marker articoli** come cerchi con la cover image (CSS `border-radius: 50%`, `background-image`) e titolo sotto
-3. **Waypoint** come cerchi piccoli sulla rotta
-4. Stili differenziati: acqua (blu), terra (marrone), passato/corrente/futuro
-5. Clustering con `react-leaflet-markercluster` per molti articoli
-
-Interazioni:
-- Click su marker articolo → evidenzia nella lista + apre pannello laterale
-- Hover su segmento rotta → evidenzia articoli collegati (glow/pulse CSS)
-- FitBounds automatico su tutti gli elementi visibili
+- Mostrare la rotta sulla mini-mappa
+- Tasto "Tutto" per assegnare tutto il viaggio
+- Click su un punto → assegna punto singolo (lat/lng del click, associato al voyage)
+- Click su due punti → seleziona la leg tra i waypoint più vicini (snap al waypoint più prossimo sul percorso)
+- Evidenziare visivamente il segmento selezionato
 
 ---
 
-## Step 4 — Layout pagina Logbook unificata
+## File coinvolti
 
-Ridisegno di `Journal.tsx` → layout split-view:
-- **Sinistra (40%)**: lista articoli scrollabile con card (cover thumb + titolo + data + tags). Include stats rotta in alto (miglia, progresso). Filtri e ricerca.
-- **Destra (60%)**: mappa interattiva a tutta altezza
 
-Usa `react-resizable-panels` (già installato) per il layout split ridimensionabile.
+| File                                          | Azione                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `src/pages/Index.tsx`                         | Fix centering scroll indicator                                    |
+| `src/components/Navbar.tsx`                   | Rimuovere link "Home"                                             |
+| `src/components/admin/AdminVoyageManager.tsx` | **Nuovo** — editor rotte con mappa                                |
+| `src/pages/AdminDashboard.tsx`                | Sostituire AdminRouteManager con AdminVoyageManager               |
+| `src/pages/ArticleEditor.tsx`                 | Aggiungere sezione geo/voyage con mappa interattiva               |
+| `src/components/voyage/VoyageMap.tsx`         | Estendere logica posizionamento marker per segmenti/viaggi interi |
+| `src/pages/Journal.tsx`                       | Estendere logica pan/fitBounds per segmenti                       |
+| `src/components/voyage/ArticleSlidePanel.tsx` | Aggiungere link "articolo successivo" se in una storia            |
 
-**Scroll sync**: quando l'utente scrolla nella lista, `IntersectionObserver` rileva l'articolo visibile → `map.flyTo()` con animazione smooth verso la posizione dell'articolo, evidenziando il segmento rotta associato.
 
-**Click su marker mappa**: scrolla la lista all'articolo corrispondente + lo evidenzia.
+## Nota tecnica
 
----
-
-## Step 5 — Pannello laterale articolo (Slide-in reader)
-
-Quando si clicca su un articolo (dalla lista o dal marker):
-- Pannello slide-in da destra (overlay sulla mappa, ~50% larghezza)
-- Contiene: cover image, titolo, autori, data, contenuto rich text, commenti, like
-- Chiusura con X o click fuori
-- La mappa rimane visibile e centrata sull'articolo
-
----
-
-## Step 6 — Admin: gestione rotte e georeferenziazione
-
-**Editor rotte** (evoluzione di `AdminRouteManager`):
-- CRUD voyages con tipo acqua/terra
-- Aggiunta waypoint con click sulla mappa (drag & drop per riordinare)
-- Preview percorso in tempo reale
-- Calcolo automatico distanza
-
-**Editor articoli** (evoluzione di `ArticleEditor`):
-- Sezione "Posizione" con mini-mappa per selezionare lat/lng (click per piazzare pin)
-- Dropdown per selezionare voyage e segmento
-- Geocoding con Nominatim (OSM) per cercare luoghi per nome
-
----
-
-## Step 7 — Animazioni e polish
-
-- Marker articoli: transizione scale on hover, pulse quando selezionato
-- Segmenti rotta: glow animato quando associati all'articolo in focus
-- `map.flyTo()` con easing smooth
-- Transizione pannello laterale con framer-motion o CSS transitions
-- Responsive: su mobile, mappa full-screen con lista come bottom sheet scorrevole
-
----
-
-## Step 8 — Routing e cleanup
-
-- Rimuovere la route `/route` da `App.tsx` e il file `Route.tsx`
-- Rimuovere `nav.route` dalla navbar
-- La pagina `/logbook` diventa l'unico punto di accesso
-- Redirect `/route` → `/logbook`
-
----
-
-## Dettagli tecnici
-
-| Area | Tecnologia |
-|------|-----------|
-| Mappa | Leaflet + react-leaflet (già installato) |
-| Layout split | react-resizable-panels (già installato) |
-| Routing stradale | OSRM API pubblica (no key) |
-| Geocoding | Nominatim OSM (no key) |
-| Calcolo NM | Haversine formula client-side |
-| Animazioni | CSS transitions + Leaflet flyTo |
-| Marker custom | Leaflet DivIcon con HTML/CSS |
-| Mobile | Bottom sheet pattern con touch gestures |
-
-**Dipendenze nuove**: nessuna obbligatoria. Opzionali: `leaflet-markercluster` per clustering.
-
-**Stima effort**: 4-5 step di implementazione, consigliabile procedere incrementalmente (DB → mappa base → articoli su mappa → interazioni → polish).
-
+Le colonne DB necessarie (`latitude`, `longitude`, `voyage_id`, `voyage_segment_start`, `voyage_segment_end`, `location_name`) sono già presenti nella tabella `logbook_articles`. Le tabelle `voyages` e `voyage_waypoints` esistono già. Non servono migrazioni DB.
