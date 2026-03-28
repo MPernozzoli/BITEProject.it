@@ -284,10 +284,21 @@ const ArticlePage = () => {
 
   const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
   const content = lang === "en" ? article.content_en : (article.content_it || article.content_en);
-  const htmlContent =
+  const hasStructuredContent = Boolean(
     content && typeof content === "object" && Object.keys(content).length > 0
-      ? generateHTML(content as any, extensions)
-      : "";
+  );
+  let contentRenderFailed = false;
+  let htmlContent = "";
+
+  if (hasStructuredContent) {
+    try {
+      htmlContent = generateHTML(content as any, extensions);
+    } catch (error) {
+      contentRenderFailed = true;
+      console.error("Failed to render article content", error);
+    }
+  }
+
   const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
   const dateLabel = article.published_at ? format(new Date(article.published_at), dateFmt) : null;
   const views = Number((article as any).view_count ?? 0);
@@ -300,11 +311,14 @@ const ArticlePage = () => {
     : ((article as any).instagram_story_use_cover_it ?? true)
       ? article.cover_image
       : (article as any).instagram_story_image_it || article.cover_image;
-  const shareUrl = useMemo(() => {
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set("lang", lang);
-    return nextUrl.toString();
-  }, [lang]);
+  const shareUrl =
+    typeof window === "undefined"
+      ? ""
+      : (() => {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("lang", lang);
+          return nextUrl.toString();
+        })();
 
   const prevTitle = chapterPrevNext.prev
     ? lang === "en"
@@ -434,6 +448,13 @@ const ArticlePage = () => {
                   className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-sm prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
                   dangerouslySetInnerHTML={{ __html: htmlContent }}
                 />
+              )}
+              {contentRenderFailed && (
+                <p className="text-sm font-sans text-muted-foreground">
+                  {lang === "it"
+                    ? "Il contenuto di questo articolo non puo essere mostrato al momento."
+                    : "This article content cannot be displayed right now."}
+                </p>
               )}
 
               <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">

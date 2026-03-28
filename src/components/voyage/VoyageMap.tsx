@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { getStraightVoyageGeometry } from "@/lib/voyage-utils";
@@ -29,6 +29,7 @@ const VoyageMap = ({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const articlesRef = useRef(articles);
   const onArticleClickRef = useRef(onArticleClick);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
 
   // Keep refs in sync
   articlesRef.current = articles;
@@ -36,40 +37,60 @@ const VoyageMap = ({
 
   // Initialize map
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
-    mapRef.current = new maplibregl.Map({
-      container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
+      setMapUnavailable(true);
+      return;
+    }
+
+    try {
+      mapRef.current = new maplibregl.Map({
+        container: containerRef.current,
+        style: {
+          version: 8,
+          sources: {
+            carto: {
+              type: "raster",
+              tiles: [
+                "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+                "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+              ],
+              tileSize: 256,
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            },
           },
+          layers: [
+            { id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 },
+          ],
         },
-        layers: [
-          { id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 },
-        ],
-      },
-      center: [15, 40],
-      zoom: 5,
-      attributionControl: false,
-    });
+        center: [15, 40],
+        zoom: 5,
+        attributionControl: false,
+      });
 
-    mapRef.current.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
-    mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      mapRef.current.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+      mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    } catch (error) {
+      console.error("Failed to initialize voyage map", error);
+      popupRef.current?.remove();
+      popupRef.current = null;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      mapRef.current?.remove();
+      mapRef.current = null;
+      setMapUnavailable(true);
+    }
 
     return () => {
+      popupRef.current?.remove();
+      popupRef.current = null;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [mapUnavailable]);
 
   // Draw voyage routes
   useEffect(() => {
@@ -402,6 +423,18 @@ const VoyageMap = ({
       map.on("load", fit);
     }
   }, [waypointsMap, articles]);
+
+  if (mapUnavailable) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--muted))_0%,transparent_60%)] px-6 text-center">
+        <p className="max-w-md text-sm font-sans text-muted-foreground">
+          {lang === "it"
+            ? "La mappa non e disponibile su questo dispositivo. Passa alla vista lista per continuare."
+            : "The map is unavailable on this device. Switch to list view to keep browsing."}
+        </p>
+      </div>
+    );
+  }
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 };
