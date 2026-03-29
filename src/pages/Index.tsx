@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -12,11 +12,20 @@ import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import bowSunset from "@/assets/bow-sunset.webp";
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
 import dinghyCrew from "@/assets/dinghy-crew.webp";
+import spritzAnchor from "@/assets/hero-media/spritz-anchor.webp";
+import spritzCockpitVertical from "@/assets/hero-media/spritz-cockpit-vertical.webp";
+import spritzDogRest from "@/assets/hero-media/spritz-dog-rest.webp";
+import spritzDogsBow from "@/assets/hero-media/spritz-dogs-bow.webp";
+import spritzKeel from "@/assets/hero-media/spritz-keel.webp";
+import spritzMooringVertical from "@/assets/hero-media/spritz-mooring-vertical.webp";
+import spritzWake from "@/assets/hero-media/spritz-wake.webp";
+import spritzWide from "@/assets/hero-media/spritz-wide.webp";
 
 interface HomeTag {
   id: string;
@@ -41,13 +50,125 @@ interface ArticleTagRelation {
   tags: HomeTag | null;
 }
 
+interface HeroMedia {
+  kind: "image" | "video";
+  src: string;
+  alt: string;
+  poster?: string;
+  mimeType?: string;
+}
+
+interface HomepageHeroVideoPool {
+  desktop: HeroMedia[];
+  mobile: HeroMedia[];
+}
+
+interface StorageListItem {
+  name: string;
+}
+
+const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
+const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
+const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
+const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v"]);
+
+const desktopHeroMedia: HeroMedia[] = [
+  { kind: "image", src: bowSunset, alt: "View from the bow at sunset" },
+  { kind: "image", src: spritzWake, alt: "Spritz stern slicing through bright blue water" },
+  { kind: "image", src: spritzAnchor, alt: "Spritz stern gear above the sea" },
+  { kind: "image", src: spritzKeel, alt: "Keel detail over clear water" },
+  { kind: "image", src: spritzWide, alt: "Wide view of Spritz under sail" },
+];
+
+const mobileHeroMedia: HeroMedia[] = [
+  { kind: "image", src: bowSunset, alt: "View from the bow at sunset" },
+  { kind: "image", src: spritzCockpitVertical, alt: "Cockpit view while sailing" },
+  { kind: "image", src: spritzDogRest, alt: "Dog resting on deck during navigation" },
+  { kind: "image", src: spritzDogsBow, alt: "Dogs watching the water from the bow" },
+  { kind: "image", src: spritzMooringVertical, alt: "Spritz moored in calm water" },
+];
+
+const pickRandomHeroMedia = (isMobile: boolean) => {
+  const mediaPool = isMobile ? mobileHeroMedia : desktopHeroMedia;
+  return mediaPool[Math.floor(Math.random() * mediaPool.length)] ?? mediaPool[0];
+};
+
+const getVideoMimeType = (filename: string) => {
+  const extension = filename.split(".").pop()?.toLowerCase();
+  if (extension === "webm") return "video/webm";
+  return "video/mp4";
+};
+
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+  files
+    .filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
+    })
+    .map((file) => {
+      const path = `${folder}/${file.name}`;
+      const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
+
+      return {
+        kind: "video" as const,
+        src: data.publicUrl,
+        alt,
+        mimeType: getVideoMimeType(file.name),
+      };
+    });
+
 const Index = () => {
   const { t, lang } = useI18n();
   const { isRead } = useArticleReads();
   const { session } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [heroMedia, setHeroMedia] = useState<HeroMedia>(() => pickRandomHeroMedia(false));
+
+  const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
+    queryKey: ["homepage-hero-videos"],
+    queryFn: async () => {
+      const [desktopResult, mobileResult] = await Promise.all([
+        supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_HORIZONTAL_FOLDER, {
+          limit: 100,
+          sortBy: { column: "name", order: "asc" },
+        }),
+        supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_VERTICAL_FOLDER, {
+          limit: 100,
+          sortBy: { column: "name", order: "asc" },
+        }),
+      ]);
+
+      if (desktopResult.error && mobileResult.error) {
+        throw desktopResult.error;
+      }
+
+      return {
+        desktop: createStorageVideoEntries(
+          HOMEPAGE_HORIZONTAL_FOLDER,
+          (desktopResult.data ?? []) as StorageListItem[],
+          "Spritz sailing footage for the desktop hero"
+        ),
+        mobile: createStorageVideoEntries(
+          HOMEPAGE_VERTICAL_FOLDER,
+          (mobileResult.data ?? []) as StorageListItem[],
+          "Spritz sailing footage for the mobile hero"
+        ),
+      };
+    },
+    staleTime: 1000 * 60 * 10,
+    retry: false,
+  });
+
+  useEffect(() => {
+    const desktopPool = [...(heroVideoPool?.desktop ?? []), ...desktopHeroMedia];
+    const mobilePool = [...(heroVideoPool?.mobile ?? []), ...mobileHeroMedia];
+    const pool = isMobile ? mobilePool : desktopPool;
+    const nextHeroMedia = pool[Math.floor(Math.random() * pool.length)] ?? desktopHeroMedia[0];
+    setHeroMedia(nextHeroMedia);
+  }, [heroVideoPool, isMobile]);
 
   // Fetch real articles for the journal preview
   const { data: latestArticles = [] } = useQuery<HomeArticle[]>({
@@ -197,14 +318,30 @@ const Index = () => {
       />
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          <img
-            src={bowSunset}
-            alt="View from the bow at sunset"
-            className="img-cover"
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-          />
+          {heroMedia.kind === "video" ? (
+            <video
+              key={heroMedia.src}
+              className="img-cover"
+              poster={heroMedia.poster}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+            >
+              <source src={heroMedia.src} type={heroMedia.mimeType ?? "video/mp4"} />
+            </video>
+          ) : (
+            <img
+              key={heroMedia.src}
+              src={heroMedia.src}
+              alt={heroMedia.alt}
+              className="img-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
+          )}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.12)_0%,rgba(17,28,43,0.26)_36%,rgba(17,28,43,0.62)_100%)]" />
         </div>
 

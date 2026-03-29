@@ -1,7 +1,23 @@
 import { Suspense, lazy, useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation, Mail } from "lucide-react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  LogOut,
+  Clock,
+  FileText,
+  Send,
+  User,
+  BookOpen,
+  X,
+  Navigation,
+  Mail,
+  ArrowUpRight,
+  CalendarClock,
+} from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
@@ -34,19 +50,27 @@ interface Story {
 
 const statusIcon = (status: string) => {
   switch (status) {
-    case "draft": return <FileText size={14} className="text-muted-foreground" />;
-    case "scheduled": return <Clock size={14} className="text-amber-600" />;
-    case "published": return <Send size={14} className="text-accent" />;
-    default: return null;
+    case "draft":
+      return <FileText size={14} className="text-muted-foreground" />;
+    case "scheduled":
+      return <Clock size={14} className="text-amber-600" />;
+    case "published":
+      return <Send size={14} className="text-accent" />;
+    default:
+      return null;
   }
 };
 
 const statusLabel = (status: string) => {
   switch (status) {
-    case "draft": return "Draft";
-    case "scheduled": return "Scheduled";
-    case "published": return "Published";
-    default: return status;
+    case "draft":
+      return "Draft";
+    case "scheduled":
+      return "Scheduled";
+    case "published":
+      return "Published";
+    default:
+      return status;
   }
 };
 
@@ -172,212 +196,415 @@ const AdminDashboard = () => {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground animate-pulse">Verifica accesso...</p>
+      <div className="min-h-screen flex items-center justify-center pt-24">
+        <p className="text-sm font-sans text-muted-foreground animate-pulse">Verifica accesso...</p>
       </div>
     );
   }
 
+  const publishedCount = articles.filter((article) => article.status === "published").length;
+  const scheduledCount = articles.filter((article) => article.status === "scheduled").length;
+  const draftCount = articles.filter((article) => article.status === "draft").length;
+  const latestArticle = articles[0] || null;
+  const latestStory = stories[0] || null;
+  const sectionTabs = [
+    { id: "articles" as const, label: "Articoli", icon: FileText },
+    { id: "stories" as const, label: "Stories", icon: BookOpen },
+    { id: "route" as const, label: "Rotte", icon: Navigation },
+    { id: "newsletter" as const, label: "Newsletter", icon: Mail },
+  ];
+
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="editorial-heading text-3xl md:text-4xl">Logbook Admin</h1>
-          <div className="flex items-center gap-4">
-            <Link to="/admin/profile" className="text-muted-foreground hover:text-foreground transition-colors" title="Profile">
-              <User size={20} />
-            </Link>
-            <button onClick={handleLogout} className="text-muted-foreground hover:text-foreground transition-colors" title="Logout">
-              <LogOut size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Section tabs */}
-        <div className="flex items-center gap-6 mb-8 border-b border-border">
-          <button
-            onClick={() => setActiveSection("articles")}
-            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors ${
-              activeSection === "articles" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
-            }`}
-          >
-            Articles
-          </button>
-          <button
-            onClick={() => setActiveSection("stories")}
-            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors inline-flex items-center gap-2 ${
-              activeSection === "stories" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
-            }`}
-          >
-            <BookOpen size={14} /> Stories
-          </button>
-          <button
-            onClick={() => setActiveSection("route")}
-            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors inline-flex items-center gap-2 ${
-              activeSection === "route" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
-            }`}
-          >
-            <Navigation size={14} /> Route
-          </button>
-          <button
-            onClick={() => setActiveSection("newsletter")}
-            className={`pb-3 text-sm font-sans tracking-wide border-b-2 transition-colors inline-flex items-center gap-2 ${
-              activeSection === "newsletter" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"
-            }`}
-          >
-            <Mail size={14} /> Newsletter
-          </button>
-        </div>
-
-        {activeSection === "articles" && (
-          <>
-            <div className="flex justify-end mb-6">
-              <Link
-                to="/admin/article/new"
-                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors"
-              >
-                <Plus size={16} /> New Article
-              </Link>
+      <div className="max-w-7xl mx-auto space-y-8">
+        <section className="glass-panel rounded-[38px] px-6 py-8 md:px-10 md:py-10">
+          <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-3xl">
+              <div className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-5">
+                <span className="h-2 w-2 rounded-full bg-accent" />
+                Admin console
+              </div>
+              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
+              <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
+                Gestisci articoli, stories, rotte e newsletter dentro un’unica interfaccia coerente con il nuovo linguaggio del progetto.
+              </p>
             </div>
 
-            {loading ? (
-              <p className="text-muted-foreground">Loading...</p>
-            ) : articles.length === 0 ? (
-              <div className="text-center py-20">
-                <p className="text-muted-foreground mb-4">No articles yet.</p>
-                <Link to="/admin/article/new" className="inline-flex items-center gap-2 text-sm text-accent hover:text-foreground transition-colors">
-                  <Plus size={16} /> Create your first article
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {articles.map((article) => (
-                  <div key={article.id} className="flex items-center justify-between py-5 border-b border-border group">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
-                        {statusIcon(article.status)}
-                        <span className="text-xs font-sans tracking-wide text-muted-foreground uppercase">{statusLabel(article.status)}</span>
-                        <span className="text-xs text-muted-foreground/40">·</span>
-                        <span className="text-xs text-muted-foreground">{article.category}</span>
-                      </div>
-                      <h3 className="editorial-heading text-lg truncate">{article.title_en || article.title_it || "Untitled"}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Updated {format(new Date(article.updated_at), "MMM d, yyyy HH:mm")}
-                        {article.scheduled_at && article.status === "scheduled" && (
-                          <> · Scheduled for {format(new Date(article.scheduled_at), "MMM d, yyyy HH:mm")}</>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
-                      {article.status === "published" && (
-                        <Link to={`/logbook/${article.slug}`} className="p-2 text-muted-foreground hover:text-foreground transition-colors" title="View"><Eye size={16} /></Link>
-                      )}
-                      <Link to={`/admin/article/${article.id}`} className="p-2 text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Edit size={16} /></Link>
-                      <button onClick={() => deleteArticle(article.id, article.title_en)} className="p-2 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {activeSection === "stories" && (
-          <>
-            <div className="flex justify-end mb-6">
-              <button
-                onClick={() => openStoryForm()}
-                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 text-sm font-sans font-medium tracking-wide hover:bg-navy-light transition-colors"
+            <div className="flex items-center gap-3 self-start">
+              <Link
+                to="/profile"
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Profilo"
               >
-                <Plus size={16} /> New Story
+                <User size={16} />
+                Profilo
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Logout"
+              >
+                <LogOut size={16} />
+                Logout
               </button>
             </div>
+          </div>
 
-            {showStoryForm && (
-              <div className="border border-border p-6 mb-8 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="editorial-heading text-lg">{editingStory ? "Edit Story" : "New Story"}</h3>
-                  <button onClick={() => setShowStoryForm(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Title (EN)</label>
-                    <input
-                      type="text"
-                      value={storyForm.title_en}
-                      onChange={(e) => {
-                        setStoryForm((f) => ({ ...f, title_en: e.target.value, slug: f.slug || generateSlug(e.target.value) }));
-                      }}
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                    />
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
+            {[
+              { label: "Pubblicati", value: publishedCount, icon: Send },
+              { label: "Schedulati", value: scheduledCount, icon: CalendarClock },
+              { label: "Bozze", value: draftCount, icon: FileText },
+              { label: "Stories", value: stories.length, icon: BookOpen },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="glass-panel-soft rounded-[26px] p-5">
+                  <div className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground mb-4">
+                    <Icon size={16} />
                   </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Title (IT)</label>
-                    <input type="text" value={storyForm.title_it} onChange={(e) => setStoryForm((f) => ({ ...f, title_it: e.target.value }))} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
-                  </div>
+                  <p className="editorial-heading text-3xl leading-none mb-2">{item.value}</p>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">{item.label}</p>
                 </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-[0.92fr_2.08fr] gap-6">
+          <aside className="glass-panel rounded-[34px] p-5 md:p-6 h-fit">
+            <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-4">Sezioni</p>
+            <div className="space-y-2">
+              {sectionTabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = activeSection === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveSection(tab.id)}
+                    className={`w-full rounded-[22px] px-4 py-3 text-left transition-all ${
+                      active
+                        ? "bg-white/82 border border-stone-200/90 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
+                        : "glass-panel-soft hover:border-accent"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
+                        <Icon size={15} className={active ? "text-accent" : undefined} />
+                      </span>
+                      <span>
+                        <span className="block font-sans text-sm text-foreground">{tab.label}</span>
+                        <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
+                          {tab.id === "articles" && "Publishing"}
+                          {tab.id === "stories" && "Narrative arcs"}
+                          {tab.id === "route" && "Voyage map"}
+                          {tab.id === "newsletter" && "Audience"}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="glass-panel-soft rounded-[26px] p-5 mt-6">
+              <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-3">Snapshot</p>
+              <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug</label>
-                  <input type="text" value={storyForm.slug} onChange={(e) => setStoryForm((f) => ({ ...f, slug: e.target.value }))} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
+                  <p className="text-xs font-sans text-muted-foreground mb-1">Ultimo articolo</p>
+                  <p className="font-serif text-lg leading-tight text-foreground">
+                    {latestArticle ? latestArticle.title_en || latestArticle.title_it || "Untitled" : "Nessun articolo"}
+                  </p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description (EN)</label>
-                    <textarea value={storyForm.description_en} onChange={(e) => setStoryForm((f) => ({ ...f, description_en: e.target.value }))} rows={2} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description (IT)</label>
-                    <textarea value={storyForm.description_it} onChange={(e) => setStoryForm((f) => ({ ...f, description_it: e.target.value }))} rows={2} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none" />
-                  </div>
+                <div className="pt-4 border-t glass-divider">
+                  <p className="text-xs font-sans text-muted-foreground mb-1">Ultima story</p>
+                  <p className="font-serif text-lg leading-tight text-foreground">
+                    {latestStory ? latestStory.title_en || latestStory.title_it : "Nessuna story"}
+                  </p>
                 </div>
-                <button onClick={saveStory} className="bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors">
-                  {editingStory ? "Update Story" : "Create Story"}
-                </button>
+              </div>
+            </div>
+          </aside>
+
+          <main className="glass-panel rounded-[34px] p-5 md:p-6 lg:p-8">
+            {activeSection === "articles" && (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Publishing</p>
+                    <h2 className="editorial-heading text-3xl md:text-4xl">Articoli</h2>
+                  </div>
+                  <Link
+                    to="/admin/article/new"
+                    className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent transition-colors"
+                  >
+                    <Plus size={16} />
+                    Nuovo articolo
+                  </Link>
+                </div>
+
+                {loading ? (
+                  <div className="space-y-3 animate-pulse">
+                    <div className="glass-panel-soft rounded-[24px] h-24" />
+                    <div className="glass-panel-soft rounded-[24px] h-24" />
+                    <div className="glass-panel-soft rounded-[24px] h-24" />
+                  </div>
+                ) : articles.length === 0 ? (
+                  <div className="glass-panel-soft rounded-[28px] p-10 text-center">
+                    <p className="text-muted-foreground mb-4">Nessun articolo ancora pubblicato o salvato.</p>
+                    <Link
+                      to="/admin/article/new"
+                      className="inline-flex items-center gap-2 text-sm font-sans text-accent hover:text-foreground transition-colors"
+                    >
+                      <Plus size={16} />
+                      Crea il primo articolo
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {articles.map((article) => (
+                      <article key={article.id} className="glass-panel-soft rounded-[26px] p-5">
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                                {statusIcon(article.status)}
+                                {statusLabel(article.status)}
+                              </span>
+                              <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                                {article.category}
+                              </span>
+                            </div>
+                            <h3 className="editorial-heading text-2xl leading-tight mb-2">
+                              {article.title_en || article.title_it || "Untitled"}
+                            </h3>
+                            <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                              Aggiornato il {format(new Date(article.updated_at), "d MMM yyyy, HH:mm")}
+                              {article.scheduled_at && article.status === "scheduled" && (
+                                <> · programmato per {format(new Date(article.scheduled_at), "d MMM yyyy, HH:mm")}</>
+                              )}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {article.status === "published" && (
+                              <Link
+                                to={`/logbook/${article.slug}`}
+                                className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                                title="View"
+                              >
+                                <Eye size={16} />
+                              </Link>
+                            )}
+                            <Link
+                              to={`/admin/article/${article.id}`}
+                              className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit"
+                            >
+                              <Edit size={16} />
+                            </Link>
+                            <button
+                              onClick={() => deleteArticle(article.id, article.title_en || article.title_it || "Untitled")}
+                              className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {stories.length === 0 && !showStoryForm ? (
-              <div className="text-center py-20">
-                <p className="text-muted-foreground mb-4">No stories yet.</p>
-                <button onClick={() => openStoryForm()} className="inline-flex items-center gap-2 text-sm text-accent hover:text-foreground transition-colors">
-                  <Plus size={16} /> Create your first story
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {stories.map((story) => (
-                  <div key={story.id} className="flex items-center justify-between py-5 border-b border-border group">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <BookOpen size={14} className="text-accent" />
-                        <span className="text-xs font-sans tracking-wide text-accent uppercase">Story</span>
+            {activeSection === "stories" && (
+              <div className="space-y-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Narrative arcs</p>
+                    <h2 className="editorial-heading text-3xl md:text-4xl">Stories</h2>
+                  </div>
+                  <button
+                    onClick={() => openStoryForm()}
+                    className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent transition-colors"
+                  >
+                    <Plus size={16} />
+                    Nuova story
+                  </button>
+                </div>
+
+                {showStoryForm && (
+                  <div className="glass-panel-soft rounded-[30px] p-6 md:p-7 space-y-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">
+                          {editingStory ? "Editing" : "Creation"}
+                        </p>
+                        <h3 className="editorial-heading text-2xl">
+                          {editingStory ? "Modifica story" : "Nuova story"}
+                        </h3>
                       </div>
-                      <h3 className="editorial-heading text-lg truncate">{story.title_en || story.title_it}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">/{story.slug}</p>
+                      <button
+                        onClick={() => setShowStoryForm(false)}
+                        className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4">
-                      <Link to={`/logbook/story/${story.slug}`} className="p-2 text-muted-foreground hover:text-foreground transition-colors" title="View"><Eye size={16} /></Link>
-                      <button onClick={() => openStoryForm(story)} className="p-2 text-muted-foreground hover:text-foreground transition-colors" title="Edit"><Edit size={16} /></button>
-                      <button onClick={() => deleteStory(story.id, story.title_en)} className="p-2 text-muted-foreground hover:text-destructive transition-colors" title="Delete"><Trash2 size={16} /></button>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Title (EN)</label>
+                        <input
+                          type="text"
+                          value={storyForm.title_en}
+                          onChange={(e) => {
+                            setStoryForm((f) => ({ ...f, title_en: e.target.value, slug: f.slug || generateSlug(e.target.value) }));
+                          }}
+                          className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Title (IT)</label>
+                        <input
+                          type="text"
+                          value={storyForm.title_it}
+                          onChange={(e) => setStoryForm((f) => ({ ...f, title_it: e.target.value }))}
+                          className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug</label>
+                      <input
+                        type="text"
+                        value={storyForm.slug}
+                        onChange={(e) => setStoryForm((f) => ({ ...f, slug: e.target.value }))}
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Description (EN)</label>
+                        <textarea
+                          value={storyForm.description_en}
+                          onChange={(e) => setStoryForm((f) => ({ ...f, description_en: e.target.value }))}
+                          rows={3}
+                          className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Description (IT)</label>
+                        <textarea
+                          value={storyForm.description_it}
+                          onChange={(e) => setStoryForm((f) => ({ ...f, description_it: e.target.value }))}
+                          rows={3}
+                          className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={saveStory}
+                        className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent transition-colors"
+                      >
+                        <ArrowUpRight size={16} />
+                        {editingStory ? "Aggiorna story" : "Crea story"}
+                      </button>
                     </div>
                   </div>
-                ))}
+                )}
+
+                {stories.length === 0 && !showStoryForm ? (
+                  <div className="glass-panel-soft rounded-[28px] p-10 text-center">
+                    <p className="text-muted-foreground mb-4">Nessuna story disponibile.</p>
+                    <button
+                      onClick={() => openStoryForm()}
+                      className="inline-flex items-center gap-2 text-sm font-sans text-accent hover:text-foreground transition-colors"
+                    >
+                      <Plus size={16} />
+                      Crea la prima story
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {stories.map((story) => (
+                      <article key={story.id} className="glass-panel-soft rounded-[26px] p-5">
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-accent">
+                                <BookOpen size={13} />
+                                Story
+                              </span>
+                            </div>
+                            <h3 className="editorial-heading text-2xl leading-tight mb-2">
+                              {story.title_en || story.title_it}
+                            </h3>
+                            <p className="text-sm font-sans text-muted-foreground">/{story.slug}</p>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Link
+                              to={`/logbook/story/${story.slug}`}
+                              className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="View"
+                            >
+                              <Eye size={16} />
+                            </Link>
+                            <button
+                              onClick={() => openStoryForm(story)}
+                              className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => deleteStory(story.id, story.title_en || story.title_it)}
+                              className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-          </>
-        )}
 
-        {activeSection === "route" && (
-          <Suspense fallback={<p className="text-muted-foreground">Loading route manager...</p>}>
-            <AdminVoyageManager />
-          </Suspense>
-        )}
+            {activeSection === "route" && (
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Voyage map</p>
+                  <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
+                </div>
+                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
+                  <AdminVoyageManager />
+                </Suspense>
+              </div>
+            )}
 
-        {activeSection === "newsletter" && (
-          <Suspense fallback={<p className="text-muted-foreground">Loading newsletter manager...</p>}>
-            <AdminNewsletterManager />
-          </Suspense>
-        )}
+            {activeSection === "newsletter" && (
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Audience</p>
+                  <h2 className="editorial-heading text-3xl md:text-4xl">Newsletter</h2>
+                </div>
+                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading newsletter manager...</div>}>
+                  <AdminNewsletterManager />
+                </Suspense>
+              </div>
+            )}
+          </main>
+        </section>
       </div>
     </div>
   );
