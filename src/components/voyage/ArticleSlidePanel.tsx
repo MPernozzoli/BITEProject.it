@@ -15,6 +15,7 @@ interface ArticleSlidePanelProps {
   onOpenArticle?: (article: GeoArticle) => void;
   panelRef?: Ref<HTMLDivElement>;
   isSoftHidden?: boolean;
+  isAutoHidden?: boolean;
   disableEntranceAnimation?: boolean;
 }
 
@@ -26,6 +27,7 @@ const ArticleSlidePanel = ({
   onOpenArticle,
   panelRef,
   isSoftHidden = false,
+  isAutoHidden = false,
   disableEntranceAnimation = false,
 }: ArticleSlidePanelProps) => {
   if (!article) return null;
@@ -47,17 +49,21 @@ const ArticleSlidePanel = ({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 lg:hidden ${
+          isAutoHidden ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
         onClick={onClose}
         aria-hidden
       />
 
       <div
         ref={panelRef}
-        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl flex flex-col transition-opacity duration-300 ${
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl flex flex-col transition-[opacity,transform] duration-300 ${
           disableEntranceAnimation ? "" : "animate-slide-in-right"
         } ${
           isSoftHidden ? "opacity-0 pointer-events-none" : "opacity-100"
+        } ${
+          isAutoHidden ? "translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none" : "translate-x-0"
         }`}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">

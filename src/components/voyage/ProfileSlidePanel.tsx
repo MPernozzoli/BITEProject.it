@@ -72,6 +72,7 @@ interface ProfileSlidePanelProps {
   lang: "en" | "it";
   onBackToArticle: () => void;
   onClose: () => void;
+  isAutoHidden?: boolean;
 }
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
@@ -135,7 +136,14 @@ const socials: Array<{
   { key: "social_seapeople", icon: SeaPeopleIcon, label: "SeaPeople", prefix: "https://dashboard.seapeopleapp.com/" },
 ];
 
-const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose }: ProfileSlidePanelProps) => {
+const ProfileSlidePanel = ({
+  profileId,
+  article,
+  lang,
+  onBackToArticle,
+  onClose,
+  isAutoHidden = false,
+}: ProfileSlidePanelProps) => {
   const { data, isLoading } = useQuery({
     queryKey: ["logbook-profile-panel", profileId],
     enabled: Boolean(profileId),
@@ -251,9 +259,19 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden" onClick={onClose} aria-hidden />
+      <div
+        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 lg:hidden ${
+          isAutoHidden ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+        onClick={onClose}
+        aria-hidden
+      />
 
-      <div className="fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col">
+      <div
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col transition-[opacity,transform] duration-300 ${
+          isAutoHidden ? "translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
+        }`}
+      >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
           <button
             type="button"

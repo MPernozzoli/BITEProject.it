@@ -36,13 +36,13 @@ const LazyVoyageMap = ({
 
   const fallback = (
     <div
-      className={`w-full ${fallbackHeightClassName} bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]`}
+      className="w-full h-full bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]"
       aria-hidden
     />
   );
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className={`w-full ${fallbackHeightClassName}`}>
       {!shouldRenderMap ? (
         fallback
       ) : (

@@ -27,9 +27,11 @@ const Journal = () => {
   const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollYRef = useRef(0);
 
   const buildFallbackPanelRect = useCallback((): ExpandedArticleOrigin => {
     const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -264,6 +266,50 @@ const Journal = () => {
     };
   }, [expandedArticlePhase]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (viewMode !== "map") {
+      setHideMapChromeOnScroll(false);
+      return;
+    }
+
+    lastScrollYRef.current = window.scrollY;
+    let frameId: number | null = null;
+
+    const handleScroll = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+
+        const currentScrollY = window.scrollY;
+        const delta = currentScrollY - lastScrollYRef.current;
+
+        if (currentScrollY <= 24) {
+          setHideMapChromeOnScroll(false);
+          lastScrollYRef.current = currentScrollY;
+          return;
+        }
+
+        if (Math.abs(delta) < 12) return;
+
+        setHideMapChromeOnScroll(delta > 0);
+        lastScrollYRef.current = currentScrollY;
+      });
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, [viewMode]);
+
   // Highlighted voyage based on selected article
   const highlightedVoyageId = useMemo(() => {
     if (!selectedArticleId) return null;
@@ -274,11 +320,14 @@ const Journal = () => {
   const articleReaderActive = Boolean(expandedArticle);
   const showPreviewPanel = Boolean(panelArticle) && (!articleReaderActive || expandedArticlePhase === "closing");
   const sidePanelVisible = showPreviewPanel || Boolean(panelProfileId);
+  const isSidebarAutoHidden = hideMapChromeOnScroll && sidebarOpen;
+  const isDetailPanelAutoHidden = hideMapChromeOnScroll && sidePanelVisible;
+  const shouldOffsetControlsForDetail = sidePanelVisible && !isDetailPanelAutoHidden;
 
   return (
     <div className="min-h-screen flex flex-col">
       {viewMode === "map" ? (
-        <div className="flex-1 relative" style={{ height: "100vh" }}>
+        <div className="relative flex-1 min-h-screen" style={{ height: "100vh" }}>
           {/* Full-screen map */}
           <LazyVoyageMap
             voyages={voyages}
@@ -294,8 +343,8 @@ const Journal = () => {
 
           {/* Floating controls — top right */}
           <div
-            className={`absolute top-24 z-20 flex flex-col gap-2 transition-all duration-300 ${
-              sidePanelVisible ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
+            className={`fixed top-24 z-30 flex flex-col gap-2 transition-all duration-300 ${
+              shouldOffsetControlsForDetail ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
             }`}
           >
             <button
@@ -324,7 +373,7 @@ const Journal = () => {
 
           {/* Floating stats bar — top center */}
           {stats.totalNM > 0 && (
-            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
+            <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground">
                 <Ship size={10} /> {stats.totalNM.toLocaleString()} NM
               </span>
@@ -345,8 +394,8 @@ const Journal = () => {
 
           {/* Floating sidebar — article list */}
           <div
-            className={`absolute top-24 left-4 bottom-4 z-20 w-[340px] xl:w-[390px] rounded-[32px] bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] overflow-hidden flex flex-col transition-all duration-300 ease-out ${
-              sidebarOpen
+            className={`fixed top-24 left-4 bottom-4 z-30 w-[340px] xl:w-[390px] rounded-[32px] bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] overflow-hidden flex flex-col transition-all duration-300 ease-out ${
+              sidebarOpen && !isSidebarAutoHidden
                 ? "translate-x-0 opacity-100"
                 : "-translate-x-[calc(100%+1rem)] opacity-0 pointer-events-none"
             }`}
@@ -508,6 +557,7 @@ const Journal = () => {
           profileId={panelProfileId}
           article={panelArticle}
           lang={lang}
+          isAutoHidden={isDetailPanelAutoHidden}
           onBackToArticle={() => setPanelProfileId(null)}
           onClose={() => {
             setPanelProfileId(null);
@@ -522,6 +572,7 @@ const Journal = () => {
           article={panelArticle}
           panelRef={articlePanelRef}
           isSoftHidden={articleReaderActive && expandedArticlePhase !== "closing"}
+          isAutoHidden={isDetailPanelAutoHidden}
           disableEntranceAnimation={expandedArticlePhase === "closing"}
           onClose={() => {
             setPanelProfileId(null);

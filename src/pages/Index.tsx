@@ -70,7 +70,7 @@ const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const HERO_IMAGE_DURATION_MS = 6500;
-const HERO_CROSSFADE_DURATION_MS = 420;
+const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 
 const desktopHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
@@ -152,6 +152,8 @@ const Index = () => {
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
   const [pendingHeroTransition, setPendingHeroTransition] = useState<HeroTransitionTarget | null>(null);
   const [isHeroCrossfading, setIsHeroCrossfading] = useState(false);
+  const [isPendingHeroReady, setIsPendingHeroReady] = useState(false);
+  const [isHeroCrossfadeQueued, setIsHeroCrossfadeQueued] = useState(false);
   const heroPlaybackTimeoutRef = useRef<number | null>(null);
   const heroCrossfadeTimeoutRef = useRef<number | null>(null);
 
@@ -202,35 +204,42 @@ const Index = () => {
     const nextPlaylist = shuffleHeroMedia(currentHeroPool);
     setHeroPlaylist(nextPlaylist.length ? nextPlaylist : [pickRandomHeroMedia(isMobile)]);
     setHeroPlaylistIndex(0);
-    setPendingHeroTransition(null);
+    const nextTransition = getNextHeroTransition(0, nextPlaylist, currentHeroPool);
+    setPendingHeroTransition(nextTransition);
     setIsHeroCrossfading(false);
+    setIsPendingHeroReady(false);
+    setIsHeroCrossfadeQueued(false);
   }, [currentHeroPool, isMobile]);
+
+  useEffect(() => {
+    const nextTransition = getNextHeroTransition(heroPlaylistIndex, heroPlaylist, currentHeroPool);
+    setPendingHeroTransition(nextTransition);
+    setIsPendingHeroReady(false);
+    setIsHeroCrossfadeQueued(false);
+    setIsHeroCrossfading(false);
+  }, [currentHeroPool, heroPlaylist, heroPlaylistIndex]);
 
   useEffect(() => {
     if (!heroMedia || heroMedia.kind !== "image" || heroPlaylist.length <= 1) return;
 
     heroPlaybackTimeoutRef.current = window.setTimeout(() => {
-      advanceHeroMedia();
-    }, HERO_IMAGE_DURATION_MS);
+      queueHeroCrossfade();
+    }, Math.max(HERO_IMAGE_DURATION_MS - HERO_CROSSFADE_DURATION_MS, 0));
 
     return () => {
       if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
     };
   }, [currentHeroPool, heroMedia, heroPlaylist, heroPlaylist.length]);
 
-  const advanceHeroMedia = () => {
-    if (heroPlaylist.length <= 1 || pendingHeroTransition) return;
+  const queueHeroCrossfade = () => {
+    if (heroPlaylist.length <= 1 || !pendingHeroTransition || isHeroCrossfading) return;
 
     if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
-    const nextTransition = getNextHeroTransition(heroPlaylistIndex, heroPlaylist, currentHeroPool);
-    if (!nextTransition) return;
-
-    setPendingHeroTransition(nextTransition);
-    if (nextTransition.media.kind === "image") {
-      window.requestAnimationFrame(() => {
-        startHeroCrossfade();
-      });
+    if (isPendingHeroReady) {
+      startHeroCrossfade();
+      return;
     }
+    setIsHeroCrossfadeQueued(true);
   };
 
   useEffect(() => {
@@ -246,17 +255,26 @@ const Index = () => {
     setHeroPlaylistIndex(pendingHeroTransition.index);
     setPendingHeroTransition(null);
     setIsHeroCrossfading(false);
+    setIsPendingHeroReady(false);
+    setIsHeroCrossfadeQueued(false);
   };
 
   const startHeroCrossfade = () => {
-    if (!pendingHeroTransition) return;
+    if (!pendingHeroTransition || isHeroCrossfading) return;
     if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
 
+    setIsHeroCrossfadeQueued(false);
     setIsHeroCrossfading(true);
     heroCrossfadeTimeoutRef.current = window.setTimeout(() => {
       finalizeHeroCrossfade();
     }, HERO_CROSSFADE_DURATION_MS);
   };
+
+  useEffect(() => {
+    if (isPendingHeroReady && isHeroCrossfadeQueued && pendingHeroTransition && !isHeroCrossfading) {
+      startHeroCrossfade();
+    }
+  }, [isPendingHeroReady, isHeroCrossfadeQueued, pendingHeroTransition, isHeroCrossfading]);
 
   const handleHeroVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = event.currentTarget;
@@ -273,8 +291,8 @@ const Index = () => {
 
     const scheduleAdvance = () => {
       heroPlaybackTimeoutRef.current = window.setTimeout(() => {
-        advanceHeroMedia();
-      }, playbackDurationMs);
+        queueHeroCrossfade();
+      }, Math.max(playbackDurationMs - HERO_CROSSFADE_DURATION_MS, 0));
     };
 
     if (startTime > 0) {
@@ -295,24 +313,10 @@ const Index = () => {
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const maxStartTime = Math.max(duration - HERO_MAX_VIDEO_SEGMENT_SECONDS, 0);
     const startTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
-    const remainingDuration = duration > 0 ? Math.max(duration - startTime, 0) : HERO_MAX_VIDEO_SEGMENT_SECONDS;
-    const playbackDurationMs = Math.max(
-      800,
-      Math.min(remainingDuration, HERO_MAX_VIDEO_SEGMENT_SECONDS) * 1000
-    );
-
-    if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
-
-    const scheduleAdvance = () => {
-      heroPlaybackTimeoutRef.current = window.setTimeout(() => {
-        advanceHeroMedia();
-      }, playbackDurationMs);
-    };
 
     if (startTime > 0) {
       const handleSeeked = () => {
-        scheduleAdvance();
-        startHeroCrossfade();
+        setIsPendingHeroReady(true);
         video.removeEventListener("seeked", handleSeeked);
       };
       video.addEventListener("seeked", handleSeeked);
@@ -320,8 +324,7 @@ const Index = () => {
       return;
     }
 
-    scheduleAdvance();
-    startHeroCrossfade();
+    setIsPendingHeroReady(true);
   };
 
   const renderHeroMedia = (
@@ -349,7 +352,7 @@ const Index = () => {
           playsInline
           preload="auto"
           onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
-          onEnded={mode === "active" ? advanceHeroMedia : undefined}
+          onEnded={mode === "active" ? queueHeroCrossfade : undefined}
         >
           <source src={media.src} type={media.mimeType ?? "video/mp4"} />
         </video>
@@ -365,7 +368,7 @@ const Index = () => {
         loading="eager"
         fetchPriority="high"
         decoding="async"
-        onLoad={mode === "pending" ? startHeroCrossfade : undefined}
+        onLoad={mode === "pending" ? () => setIsPendingHeroReady(true) : undefined}
       />
     );
   };
