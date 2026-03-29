@@ -24,6 +24,8 @@ const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const StoryPage = lazy(() => import("./pages/StoryPage"));
+const VoyagesPage = lazy(() => import("./pages/Voyages"));
+const VoyagePage = lazy(() => import("./pages/VoyagePage"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
@@ -51,6 +53,8 @@ const App = () => (
                 <Route path="/about" element={<Navigate to="/crew" replace />} />
                 <Route path="/manifesto" element={<Manifesto />} />
                 <Route path="/logbook" element={<Journal />} />
+                <Route path="/voyages" element={<VoyagesPage />} />
+                <Route path="/voyages/:voyageRef" element={<VoyagePage />} />
                 <Route path="/route" element={<Navigate to="/logbook" replace />} />
                 <Route path="/collaborations" element={<Collaborations />} />
                 <Route path="/contact" element={<Contact />} />

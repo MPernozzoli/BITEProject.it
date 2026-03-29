@@ -25,6 +25,10 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     title: "Logbook | BITE",
     description: "Explore voyages, refit notes, and stories from aboard S/Y Spritz.",
   },
+  "/voyages": {
+    title: "Voyages | BITE",
+    description: "Browse public routes with departures, arrivals, dates, and waypoints from aboard S/Y Spritz.",
+  },
   "/collaborations": {
     title: "Collaborations | BITE",
     description: "Partnerships, editorial work, and creative collaborations with BITE.",
@@ -89,6 +93,13 @@ const getSeoForPathname = (pathname: string): SeoConfig => {
     };
   }
 
+  if (pathname.startsWith("/voyages/")) {
+    return {
+      title: "Voyage Route | BITE",
+      description: "Public route page with departure, arrival, waypoints, and voyage dates.",
+    };
+  }
+
   return (
     STATIC_ROUTE_SEO[pathname] ?? {
       title: "BITE",
@@ -110,6 +121,7 @@ const SeoManager = () => {
       robots: seo.robots ?? "index, follow",
       type:
         pathname === "/logbook"
+          || pathname === "/voyages"
           ? "collection"
           : pathname === "/"
             ? "website"

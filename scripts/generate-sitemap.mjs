@@ -14,6 +14,7 @@ const STATIC_ROUTES = [
   "/crew",
   "/manifesto",
   "/logbook",
+  "/voyages",
   "/collaborations",
   "/contact",
   "/privacy-policy",
@@ -146,15 +147,17 @@ const generateSitemap = async () => {
 
   let articleUrls = [];
   let storyUrls = [];
+  let voyageUrls = [];
 
   try {
-    const [articles, stories] = await Promise.all([
+    const [articles, stories, voyages] = await Promise.all([
       fetchSupabaseRows(
         "logbook_articles",
         "slug,title_en,title_it,published_at,updated_at,cover_image,content_en,content_it",
         "&status=eq.published&order=published_at.desc.nullslast"
       ),
       fetchSupabaseRows("stories", "slug,title_en,title_it,updated_at,cover_image", "&order=updated_at.desc.nullslast"),
+      fetchSupabaseRows("voyages", "id,name,updated_at", "&order=sort_order.asc"),
     ]);
 
     articleUrls = Array.from(
@@ -222,17 +225,41 @@ const generateSitemap = async () => {
           ])
       ).values()
     );
+
+    const slugifyVoyageName = (value) =>
+      value
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[^\w\s-]/g, "")
+        .trim()
+        .replace(/[\s_-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "voyage";
+
+    voyageUrls = Array.from(
+      new Map(
+        voyages
+          .filter((voyage) => typeof voyage.id === "string" && voyage.id && typeof voyage.name === "string" && voyage.name)
+          .map((voyage) => [
+            voyage.id,
+            {
+              loc: `${SITE_URL}/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`,
+              lastmod: toIsoDate(voyage.updated_at),
+              images: [],
+            },
+          ])
+      ).values()
+    );
   } catch (error) {
     console.warn("[sitemap] Dynamic URL fetch failed, falling back to static routes only.");
     console.warn(error instanceof Error ? error.message : error);
   }
 
-  const sitemapXml = buildSitemapXml([...staticUrls, ...storyUrls, ...articleUrls]);
+  const sitemapXml = buildSitemapXml([...staticUrls, ...voyageUrls, ...storyUrls, ...articleUrls]);
   await mkdir(publicDir, { recursive: true });
   await writeFile(outputPath, sitemapXml, "utf8");
 
   console.log(
-    `[sitemap] Wrote ${staticUrls.length + storyUrls.length + articleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
+    `[sitemap] Wrote ${staticUrls.length + voyageUrls.length + storyUrls.length + articleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
   );
 };
 

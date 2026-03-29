@@ -23,3 +23,7 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.notify-story-subscribers]
     verify_jwt = true
+  [functions.public-sitemap]
+    verify_jwt = false
+  [functions.public-llms]
+    verify_jwt = false

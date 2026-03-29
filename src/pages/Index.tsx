@@ -234,6 +234,11 @@ const Index = () => {
                 {t("hero.cta.collaborate")}
               </Link>
             </div>
+            <p className="mt-5 text-sm text-white/72">
+              <Link to="/voyages" className="underline underline-offset-4 hover:text-white transition-colors">
+                {lang === "it" ? "Esplora le rotte pubbliche" : "Explore the public routes"}
+              </Link>
+            </p>
           </div>
         </div>
 
