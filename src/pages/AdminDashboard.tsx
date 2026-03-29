@@ -60,10 +60,6 @@ const AdminDashboard = () => {
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
   const navigate = useNavigate();
 
-  useEffect(() => {
-    void checkAuth();
-  }, [checkAuth]);
-
   const fetchData = useCallback(async () => {
     const [articlesRes, storiesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
@@ -116,6 +112,10 @@ const AdminDashboard = () => {
       navigate("/login", { state: { from: "/admin" }, replace: true });
     }
   }, [fetchData, navigate]);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
 
   const deleteArticle = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
