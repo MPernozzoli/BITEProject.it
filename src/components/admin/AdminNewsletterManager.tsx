@@ -21,10 +21,10 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { ALL_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
 
-type NewsletterMessage = Database["public"]["Tables"]["newsletter_messages"]["Row"];
-type NewsletterDelivery = Database["public"]["Tables"]["newsletter_deliveries"]["Row"];
+type NewsletterMessage = any;
+type NewsletterDelivery = any;
 type NewsletterSubscriber = Database["public"]["Tables"]["newsletter_subscribers"]["Row"];
-type NewsletterEvent = Database["public"]["Tables"]["newsletter_events"]["Row"];
+type NewsletterEvent = any;
 
 type ComposerTab = "overview" | "campaigns" | "automations" | "editor";
 type NewsletterKind = "campaign" | "automation";

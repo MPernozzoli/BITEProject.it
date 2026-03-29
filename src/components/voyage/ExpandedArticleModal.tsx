@@ -207,15 +207,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     return nextUrl.toString();
   }, [lang, slug]);
 
-  const instagramStoryImage = article
-    ? lang === "en"
-      ? (article.instagram_story_use_cover_en ?? true)
-        ? article.cover_image
-        : article.instagram_story_image_en || article.cover_image
-      : (article.instagram_story_use_cover_it ?? true)
-        ? article.cover_image
-        : article.instagram_story_image_it || article.cover_image
-    : null;
+  const instagramStoryImage = article?.cover_image ?? null;
 
   if (!slug) return null;
 

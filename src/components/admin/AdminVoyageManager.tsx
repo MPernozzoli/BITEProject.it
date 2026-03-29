@@ -72,10 +72,10 @@ const isMissingWaypointMetadataColumnError = (
     (text.includes("column") || text.includes("schema cache"));
 };
 
-type VoyageRecord = Partial<Voyage> &
+type VoyageRecord = Record<string, any> &
   Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Partial<VoyageWaypoint> &
+type WaypointRecord = Record<string, any> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
@@ -275,7 +275,7 @@ const AdminVoyageManager = () => {
     if (geometryRequestRef.current[voyageId] !== requestId) return;
 
     geometryOverrideRef.current[voyageId] = coordinates;
-    const cachedGeometry = coordinates.length >= 2 ? { type: "LineString", coordinates } : null;
+    const cachedGeometry = coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
     const payload: TablesUpdate<"voyages"> = { cached_geometry: cachedGeometry };
     const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
 
