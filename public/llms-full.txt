@@ -1,0 +1,23 @@
+# BITE Full Guide
+
+BITE is an editorial project documenting voyages aboard S/Y Spritz. The site combines travel writing, sailing life documentation, refit notes, and reflections on remote work and slow living.
+
+## Audience summary
+
+- Readers interested in sailing and liveaboard life.
+- Readers following a long-form voyage narrative.
+- Partners and editors evaluating collaborations or editorial tone.
+
+## Structure
+
+- `/` introduces the project and links to major sections.
+- `/logbook` is the main archive of published articles and voyage entries.
+- `/logbook/:slug` is an individual article page.
+- `/logbook/story/:slug` is a story hub that groups chapters in order.
+- `/crew`, `/manifesto`, `/collaborations`, and `/contact` provide project context.
+
+## Reliability notes
+
+- Public pages are the only authoritative editorial sources.
+- Dynamic UI features may depend on JavaScript, but canonical metadata, robots directives, sitemap data, and JSON-LD are maintained for crawlers.
+- Login, admin, profile, and unsubscribe routes are not editorial sources.

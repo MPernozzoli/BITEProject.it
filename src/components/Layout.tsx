@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
+import SeoManager from "./SeoManager";
 
 const Layout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
@@ -12,6 +13,7 @@ const Layout = ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="site-shell min-h-screen flex flex-col">
+      <SeoManager />
       <div className="site-shell__ambient" aria-hidden>
         <span className="site-shell__orb site-shell__orb--one" />
         <span className="site-shell__orb site-shell__orb--two" />

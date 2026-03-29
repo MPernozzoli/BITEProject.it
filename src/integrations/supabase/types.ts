@@ -684,6 +684,7 @@ export type Database = {
           automation_delay_minutes: number
           automation_trigger: string | null
           body_html_translations: Json
+          body_mode_translations: Json
           body_json_translations: Json
           created_at: string
           created_by: string | null
@@ -705,6 +706,7 @@ export type Database = {
           automation_delay_minutes?: number
           automation_trigger?: string | null
           body_html_translations?: Json
+          body_mode_translations?: Json
           body_json_translations?: Json
           created_at?: string
           created_by?: string | null
@@ -726,6 +728,7 @@ export type Database = {
           automation_delay_minutes?: number
           automation_trigger?: string | null
           body_html_translations?: Json
+          body_mode_translations?: Json
           body_json_translations?: Json
           created_at?: string
           created_by?: string | null

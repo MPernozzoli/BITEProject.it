@@ -460,7 +460,7 @@ const AdminVoyageManager = () => {
           <option value="narrative"${waypoint.waypoint_type === "narrative" ? " selected" : ""}>Narrative / public</option>
           <option value="technical"${waypoint.waypoint_type === "technical" ? " selected" : ""}>Technical / hidden</option>
         </select>
-        <p style="${popupHintStyle}margin:0 0 14px;">Narrative waypoints are visible on the public route. Technical points shape the path without cluttering the map.</p>
+        <p style="${popupHintStyle}margin:0 0 14px;">Narrative waypoints are visible on the public route. Technical points shape the path without cluttering the map. Drag the marker itself to move it.</p>
         <div style="display:flex;gap:8px;">
           <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
           <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
@@ -506,7 +506,7 @@ const AdminVoyageManager = () => {
 
     el.type = "button";
     el.className = "voyage-admin-marker";
-    el.title = waypoint.name || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
+    el.title = `${waypoint.name || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)} · Drag to move`;
     el.style.cssText = `
       width:${size}px;
       height:${size}px;
@@ -1075,7 +1075,7 @@ const AdminVoyageManager = () => {
           <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
           {selectedVoyageId && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/92 backdrop-blur-md border border-border px-4 py-2 text-xs font-sans text-foreground shadow-lg z-10">
-              Click anywhere to add a waypoint. Drag a route segment to insert an intermediate point. Click a marker to rename it, hide it, or delete it.
+              Click anywhere to add a waypoint. Drag a route segment to insert an intermediate point. Drag a waypoint to move it. Click a marker to rename or delete it.
             </div>
           )}
         </div>
@@ -1129,6 +1129,13 @@ const AdminVoyageManager = () => {
                       {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
                     </span>
                   </button>
+                  <button
+                    onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
+                    className="p-1 text-muted-foreground hover:text-destructive"
+                    title="Delete waypoint"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => moveWaypoint(waypoint, "up")}
@@ -1149,12 +1156,6 @@ const AdminVoyageManager = () => {
                       className="p-1 text-muted-foreground hover:text-foreground"
                     >
                       <LocateFixed size={12} />
-                    </button>
-                    <button
-                      onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
-                      className="p-1 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 size={12} />
                     </button>
                   </div>
                 </div>

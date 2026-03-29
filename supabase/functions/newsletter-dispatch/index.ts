@@ -8,6 +8,8 @@ import {
 } from '../_shared/email-config.ts'
 import { NewsletterEmail } from '../_shared/newsletter-email.tsx'
 import {
+  buildMergeVariables,
+  renderMergeTags,
   resolveTranslatedEntry,
   rewriteTrackedLinks,
   stripHtml,
@@ -37,6 +39,7 @@ type NewsletterMessage = {
 }
 
 type RecipientProfile = {
+  name: string | null
   preferred_language: string | null
   secondary_language: string | null
 }
@@ -46,6 +49,7 @@ type Recipient = {
   email: string
   profile_id: string | null
   preferred_language: string | null
+  source: string | null
   subscribed: boolean
   profiles?: RecipientProfile | RecipientProfile[] | null
 }
@@ -209,9 +213,13 @@ async function queueNewsletterDelivery(
     recipientEmail: string
     recipientLanguage: string | null
     secondaryLanguage: string | null
+    recipientName: string | null
+    subscriberSource: string | null
+    profileId: string | null
     subscriberId: string | null
     eventId: string | null
     deliveryType: 'campaign' | 'automation'
+    eventType?: string | null
     suppressedEmails: Set<string>
     supabaseUrl: string
   }
@@ -264,7 +272,24 @@ async function queueNewsletterDelivery(
     params.secondaryLanguage
   )
 
-  if (!subjectEntry.value.trim() || !bodyEntry.value.trim()) {
+  const mergeVariables = buildMergeVariables({
+    userName: params.recipientName,
+    userEmail: normalizedEmail,
+    preferredLanguage: params.recipientLanguage,
+    profileId: params.profileId,
+    siteUrl: PUBLIC_SITE_URL,
+    unsubscribeUrl,
+    messageName: params.message.name,
+    deliveryType: params.deliveryType,
+    eventType: params.eventType,
+    subscriberSource: params.subscriberSource,
+  })
+
+  const renderedSubject = renderMergeTags(subjectEntry.value, mergeVariables)
+  const renderedPreheader = renderMergeTags(preheaderEntry.value, mergeVariables)
+  const renderedBody = renderMergeTags(bodyEntry.value, mergeVariables)
+
+  if (!renderedSubject.trim() || !renderedBody.trim()) {
     const inserted = await createDeliveryRecord(supabase, {
       id: deliveryId,
       newsletter_message_id: params.message.id,
@@ -285,18 +310,18 @@ async function queueNewsletterDelivery(
     return inserted ? 'failed' : 'skipped'
   }
 
-  const trackedBodyHtml = rewriteTrackedLinks(bodyEntry.value, clickTrackingBase)
+  const trackedBodyHtml = rewriteTrackedLinks(renderedBody, clickTrackingBase)
   const html = await renderAsync(
     React.createElement(NewsletterEmail, {
       lang: bodyEntry.language,
-      preheader: preheaderEntry.value,
+      preheader: renderedPreheader,
       bodyHtml: trackedBodyHtml,
       unsubscribeUrl,
       trackingPixelUrl: openTrackingUrl,
     })
   )
 
-  const text = `${stripHtml(bodyEntry.value)}\n\n${unsubscribeUrl}`
+  const text = `${stripHtml(renderedBody)}\n\n${unsubscribeUrl}`
 
   const inserted = await createDeliveryRecord(supabase, {
     id: deliveryId,
@@ -310,8 +335,8 @@ async function queueNewsletterDelivery(
     tracker_token: trackerToken,
     message_id: messageId,
     metadata: {
-      subject: subjectEntry.value,
-      preheader: preheaderEntry.value,
+      subject: renderedSubject,
+      preheader: renderedPreheader,
     },
   })
 
@@ -326,7 +351,7 @@ async function queueNewsletterDelivery(
       to: normalizedEmail,
       from: buildFromAddress(params.message.from_name),
       sender_domain: SENDER_DOMAIN,
-      subject: subjectEntry.value,
+      subject: renderedSubject,
       html,
       text,
       purpose: 'newsletter',
@@ -364,7 +389,7 @@ async function loadActiveRecipients(
   const { data, error } = await supabase
     .from('newsletter_subscribers')
     .select(
-      'id, email, profile_id, preferred_language, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(preferred_language, secondary_language)'
+      'id, email, profile_id, preferred_language, source, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(name, preferred_language, secondary_language)'
     )
     .eq('subscribed', true)
 
@@ -478,6 +503,9 @@ Deno.serve(async (req) => {
         recipientLanguage:
           profile?.preferred_language ?? recipient.preferred_language,
         secondaryLanguage: profile?.secondary_language ?? null,
+        recipientName: profile?.name ?? null,
+        subscriberSource: recipient.source ?? null,
+        profileId: recipient.profile_id,
         subscriberId: recipient.id,
         eventId: null,
         deliveryType: 'campaign',
@@ -550,7 +578,7 @@ Deno.serve(async (req) => {
       const { data: subscriber } = await supabase
         .from('newsletter_subscribers')
         .select(
-          'id, email, profile_id, preferred_language, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(preferred_language, secondary_language)'
+          'id, email, profile_id, preferred_language, source, subscribed, profiles:profiles!newsletter_subscribers_profile_id_fkey(name, preferred_language, secondary_language)'
         )
         .eq('email', event.email.toLowerCase())
         .maybeSingle()
@@ -613,9 +641,13 @@ Deno.serve(async (req) => {
             subscriber.preferred_language ??
             event.preferred_language,
           secondaryLanguage: profile?.secondary_language ?? null,
+          recipientName: profile?.name ?? null,
+          subscriberSource: subscriber.source ?? null,
+          profileId: subscriber.profile_id,
           subscriberId: subscriber.id,
           eventId: event.id,
           deliveryType: 'automation',
+          eventType: event.event_type,
           suppressedEmails,
           supabaseUrl,
         })

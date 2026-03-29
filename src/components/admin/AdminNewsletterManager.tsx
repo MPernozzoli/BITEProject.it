@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   Mail,
@@ -14,12 +14,22 @@ import {
   Play,
   Pause,
   Globe2,
+  Code2,
+  ImagePlus,
+  Copy,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { ALL_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
+import {
+  NEWSLETTER_MERGE_TAGS,
+  type NewsletterBodyMode,
+  buildNewsletterPreviewVariables,
+  renderNewsletterMergeTags,
+} from "@/lib/newsletter";
 
 type NewsletterMessage = Database["public"]["Tables"]["newsletter_messages"]["Row"];
 type NewsletterDelivery = Database["public"]["Tables"]["newsletter_deliveries"]["Row"];
@@ -32,6 +42,13 @@ type AutomationTrigger = "subscribed" | "unsubscribed";
 
 type TranslationStringMap = Record<ExtendedLanguage, string>;
 type TranslationJsonMap = Record<ExtendedLanguage, Json | null>;
+type TranslationBodyModeMap = Record<ExtendedLanguage, NewsletterBodyMode>;
+
+interface UploadedNewsletterAsset {
+  name: string;
+  url: string;
+  kind: "image" | "file";
+}
 
 interface NewsletterFormState {
   id: string | null;
@@ -46,6 +63,7 @@ interface NewsletterFormState {
   preheaderTranslations: TranslationStringMap;
   bodyHtmlTranslations: TranslationStringMap;
   bodyJsonTranslations: TranslationJsonMap;
+  bodyModeTranslations: TranslationBodyModeMap;
 }
 
 const languageCodes = ALL_LANGUAGES.map((language) => language.code);
@@ -55,6 +73,9 @@ const createEmptyStringTranslations = (): TranslationStringMap =>
 
 const createEmptyJsonTranslations = (): TranslationJsonMap =>
   Object.fromEntries(languageCodes.map((code) => [code, null])) as TranslationJsonMap;
+
+const createEmptyBodyModes = (): TranslationBodyModeMap =>
+  Object.fromEntries(languageCodes.map((code) => [code, "richtext"])) as TranslationBodyModeMap;
 
 const emptyFormState = (): NewsletterFormState => ({
   id: null,
@@ -69,6 +90,7 @@ const emptyFormState = (): NewsletterFormState => ({
   preheaderTranslations: createEmptyStringTranslations(),
   bodyHtmlTranslations: createEmptyStringTranslations(),
   bodyJsonTranslations: createEmptyJsonTranslations(),
+  bodyModeTranslations: createEmptyBodyModes(),
 });
 
 const parseStringTranslations = (value: Json): TranslationStringMap => {
@@ -93,6 +115,35 @@ const parseJsonTranslations = (value: Json): TranslationJsonMap => {
     const maybeValue = (value as Record<string, Json | null>)[code];
     if (maybeValue) {
       next[code] = maybeValue;
+    }
+  }
+
+  return next;
+};
+
+const parseBodyModes = (
+  value: Json,
+  bodyJsonTranslations: TranslationJsonMap,
+  bodyHtmlTranslations: TranslationStringMap
+): TranslationBodyModeMap => {
+  const next = createEmptyBodyModes();
+
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    for (const code of languageCodes) {
+      const maybeValue = (value as Record<string, unknown>)[code];
+      if (maybeValue === "html" || maybeValue === "richtext") {
+        next[code] = maybeValue;
+      }
+    }
+  }
+
+  for (const code of languageCodes) {
+    if (
+      next[code] === "richtext" &&
+      !bodyJsonTranslations[code] &&
+      bodyHtmlTranslations[code].trim()
+    ) {
+      next[code] = "html";
     }
   }
 
@@ -170,6 +221,8 @@ const AdminNewsletterManager = () => {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState<ExtendedLanguage>("it");
   const [form, setForm] = useState<NewsletterFormState>(emptyFormState);
+  const [uploadedAssets, setUploadedAssets] = useState<UploadedNewsletterAsset[]>([]);
+  const [uploadingAssets, setUploadingAssets] = useState(false);
 
   const fetchNewsletterData = async (withLoader = false) => {
     if (withLoader) setLoading(true);
@@ -254,8 +307,12 @@ const AdminNewsletterManager = () => {
     if (!message) {
       setForm(emptyFormState());
       setSelectedLanguage("it");
+      setUploadedAssets([]);
       return;
     }
+
+    const bodyJsonTranslations = parseJsonTranslations(message.body_json_translations);
+    const bodyHtmlTranslations = parseStringTranslations(message.body_html_translations);
 
     setForm({
       id: message.id,
@@ -268,10 +325,16 @@ const AdminNewsletterManager = () => {
       automationActive: message.status === "active",
       subjectTranslations: parseStringTranslations(message.subject_translations),
       preheaderTranslations: parseStringTranslations(message.preheader_translations),
-      bodyHtmlTranslations: parseStringTranslations(message.body_html_translations),
-      bodyJsonTranslations: parseJsonTranslations(message.body_json_translations),
+      bodyHtmlTranslations,
+      bodyJsonTranslations,
+      bodyModeTranslations: parseBodyModes(
+        message.body_mode_translations,
+        bodyJsonTranslations,
+        bodyHtmlTranslations
+      ),
     });
     setSelectedLanguage("it");
+    setUploadedAssets([]);
   };
 
   const openComposer = (message?: NewsletterMessage, nextKind?: NewsletterKind) => {
@@ -300,6 +363,96 @@ const AdminNewsletterManager = () => {
         [selectedLanguage]: value,
       },
     }));
+  };
+
+  const selectedBodyMode = form.bodyModeTranslations[selectedLanguage];
+
+  const copyToClipboard = async (value: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(successMessage);
+    } catch (error) {
+      console.error("Clipboard copy failed", error);
+      toast.error("Copia negli appunti non riuscita.");
+    }
+  };
+
+  const setSelectedBodyMode = (mode: NewsletterBodyMode) => {
+    if (mode === selectedBodyMode) return;
+
+    if (
+      mode === "richtext" &&
+      !form.bodyJsonTranslations[selectedLanguage] &&
+      form.bodyHtmlTranslations[selectedLanguage].trim()
+    ) {
+      toast.message("Passaggio a rich text", {
+        description:
+          "L'HTML raw non viene convertito automaticamente in blocchi TipTap. Il contenuto HTML resta salvato e puoi sempre tornare in modalità HTML.",
+      });
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      bodyModeTranslations: {
+        ...prev.bodyModeTranslations,
+        [selectedLanguage]: mode,
+      },
+    }));
+  };
+
+  const appendHtmlSnippet = (snippet: string) => {
+    setForm((prev) => ({
+      ...prev,
+      bodyHtmlTranslations: {
+        ...prev.bodyHtmlTranslations,
+        [selectedLanguage]: `${prev.bodyHtmlTranslations[selectedLanguage] || ""}\n${snippet}`.trim(),
+      },
+      bodyModeTranslations: {
+        ...prev.bodyModeTranslations,
+        [selectedLanguage]: "html",
+      },
+    }));
+  };
+
+  const handleAssetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    setUploadingAssets(true);
+    const nextAssets: UploadedNewsletterAsset[] = [];
+
+    for (const file of files) {
+      const safeName = file.name.toLowerCase().replace(/[^a-z0-9.-]+/g, "-");
+      const path = `newsletters/${Date.now()}-${Math.random().toString(36).slice(2)}-${safeName}`;
+      const { error } = await supabase.storage.from("logbook-media").upload(path, file, {
+        contentType: file.type || undefined,
+      });
+
+      if (error) {
+        console.error("Newsletter asset upload failed", error);
+        toast.error(`Upload fallito per ${file.name}.`);
+        continue;
+      }
+
+      const { data } = supabase.storage.from("logbook-media").getPublicUrl(path);
+      nextAssets.unshift({
+        name: file.name,
+        url: data.publicUrl,
+        kind: file.type.startsWith("image/") ? "image" : "file",
+      });
+    }
+
+    setUploadingAssets(false);
+    event.target.value = "";
+
+    if (nextAssets.length) {
+      setUploadedAssets((prev) => [...nextAssets, ...prev]);
+      toast.success(
+        nextAssets.length === 1
+          ? "Asset caricato."
+          : `${nextAssets.length} asset caricati.`
+      );
+    }
   };
 
   const saveMessage = async () => {
@@ -339,6 +492,7 @@ const AdminNewsletterManager = () => {
       preheader_translations: compactStringTranslations(form.preheaderTranslations),
       body_html_translations: compactStringTranslations(form.bodyHtmlTranslations),
       body_json_translations: compactJsonTranslations(form.bodyJsonTranslations),
+      body_mode_translations: form.bodyModeTranslations,
       created_by: user?.id || null,
     };
 
@@ -417,9 +571,19 @@ const AdminNewsletterManager = () => {
     await fetchNewsletterData();
   };
 
-  const previewSubject = resolvePreviewValue(form.subjectTranslations, selectedLanguage);
-  const previewPreheader = resolvePreviewValue(form.preheaderTranslations, selectedLanguage);
-  const previewBody = resolvePreviewValue(form.bodyHtmlTranslations, selectedLanguage);
+  const previewVariables = buildNewsletterPreviewVariables(form.name, selectedLanguage);
+  const previewSubject = renderNewsletterMergeTags(
+    resolvePreviewValue(form.subjectTranslations, selectedLanguage),
+    previewVariables
+  );
+  const previewPreheader = renderNewsletterMergeTags(
+    resolvePreviewValue(form.preheaderTranslations, selectedLanguage),
+    previewVariables
+  );
+  const previewBody = renderNewsletterMergeTags(
+    resolvePreviewValue(form.bodyHtmlTranslations, selectedLanguage),
+    previewVariables
+  );
 
   const getMessageMetrics = (messageId: string) => {
     const messageDeliveries = deliveries.filter(
@@ -941,16 +1105,138 @@ const AdminNewsletterManager = () => {
                     className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
+                <div className="border border-border/70 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-1">
+                        Variabili dinamiche
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Usa merge tag come <code>{"{{first_name}}"}</code> o <code>{"{{unsubscribe_url}}"}</code>.
+                      </p>
+                    </div>
+                    <div className="inline-flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBodyMode("richtext")}
+                        className={`border px-3 py-2 text-sm font-sans transition-colors ${
+                          selectedBodyMode === "richtext"
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Rich text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBodyMode("html")}
+                        className={`inline-flex items-center gap-2 border px-3 py-2 text-sm font-sans transition-colors ${
+                          selectedBodyMode === "html"
+                            ? "border-accent bg-accent/10 text-accent"
+                            : "border-border text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Code2 size={14} /> HTML
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {NEWSLETTER_MERGE_TAGS.map((tag) => (
+                      <button
+                        key={tag.token}
+                        type="button"
+                        onClick={() => void copyToClipboard(tag.token, `${tag.token} copiato.`)}
+                        className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground transition-colors"
+                        title={tag.label}
+                      >
+                        <Copy size={12} /> {tag.token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border border-border/70 p-4 space-y-3">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-1">
+                        Asset multimediali
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Carica immagini o file hostati sul bucket del sito. Per video/audio conviene usare link hostati, non embed diretti.
+                      </p>
+                    </div>
+                    <label className="inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans text-foreground hover:border-foreground transition-colors cursor-pointer">
+                      <ImagePlus size={14} /> {uploadingAssets ? "Caricamento..." : "Carica asset"}
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(event) => void handleAssetUpload(event)}
+                      />
+                    </label>
+                  </div>
+                  {uploadedAssets.length > 0 && (
+                    <div className="space-y-2">
+                      {uploadedAssets.map((asset) => {
+                        const imageSnippet = `<p><img src="${asset.url}" alt="${asset.name}" style="max-width:100%;height:auto;" /></p>`;
+                        const linkSnippet = `<p><a href="${asset.url}" target="_blank" rel="noopener noreferrer">${asset.name}</a></p>`;
+                        return (
+                          <div
+                            key={`${asset.url}-${asset.name}`}
+                            className="flex flex-col gap-3 border border-border/60 p-3 lg:flex-row lg:items-center lg:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-sans truncate">{asset.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{asset.url}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void copyToClipboard(asset.url, "URL copiata.")}
+                                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <Link2 size={12} /> URL
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  selectedBodyMode === "html"
+                                    ? appendHtmlSnippet(asset.kind === "image" ? imageSnippet : linkSnippet)
+                                    : void copyToClipboard(
+                                        asset.kind === "image" ? imageSnippet : linkSnippet,
+                                        "Snippet HTML copiato."
+                                      )
+                                }
+                                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <Code2 size={12} /> {selectedBodyMode === "html" ? "Inserisci snippet" : "Copia snippet"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <div>
                   <label className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
                     Contenuto ({selectedLanguage.toUpperCase()})
                   </label>
-                  <RichTextEditor
-                    content={form.bodyJsonTranslations[selectedLanguage]}
-                    onChange={(content) => updateSelectedJson(content as Json)}
-                    onHtmlChange={updateSelectedHtml}
-                    placeholder="Scrivi il contenuto della mail..."
-                  />
+                  {selectedBodyMode === "html" ? (
+                    <textarea
+                      value={form.bodyHtmlTranslations[selectedLanguage]}
+                      onChange={(event) => updateSelectedHtml(event.target.value)}
+                      rows={18}
+                      className="w-full border border-border bg-transparent px-4 py-3 text-sm font-mono focus:outline-none focus:border-accent transition-colors resize-y"
+                      placeholder="<h1>Ciao {{first_name}}</h1><p>...</p>"
+                    />
+                  ) : (
+                    <RichTextEditor
+                      content={form.bodyJsonTranslations[selectedLanguage]}
+                      onChange={(content) => updateSelectedJson(content as Json)}
+                      onHtmlChange={updateSelectedHtml}
+                      placeholder="Scrivi il contenuto della mail..."
+                    />
+                  )}
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 const SUPPORTED_LANGUAGES = ['it', 'en', 'fr', 'de', 'es', 'pt'] as const
 
 type TranslationRecord = Record<string, string>
+type MergeVariables = Record<string, string>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -104,5 +105,55 @@ export function rewriteTrackedLinks(html: string, trackingBaseUrl: string): stri
     /href=(["'])(https?:\/\/[^"']+)\1/gi,
     (_, quote: string, href: string) =>
       `href=${quote}${trackingBaseUrl}&url=${encodeURIComponent(href)}${quote}`
+  )
+}
+
+function getFirstName(name?: string | null): string {
+  if (!name?.trim()) return ''
+  return name.trim().split(/\s+/)[0] ?? ''
+}
+
+export function buildMergeVariables(params: {
+  userName?: string | null
+  userEmail: string
+  preferredLanguage?: string | null
+  profileId?: string | null
+  siteUrl: string
+  unsubscribeUrl: string
+  messageName: string
+  deliveryType: 'campaign' | 'automation'
+  eventType?: string | null
+  subscriberSource?: string | null
+}): MergeVariables {
+  const normalizedDate = new Date().toISOString().slice(0, 10)
+  const firstName = getFirstName(params.userName)
+  const profileUrl = params.profileId
+    ? `${params.siteUrl}/profile/${params.profileId}`
+    : ''
+
+  return {
+    user_name: params.userName?.trim() || '',
+    first_name: firstName,
+    greeting_name: firstName || params.userName?.trim() || 'friend',
+    user_email: params.userEmail,
+    preferred_language: params.preferredLanguage || '',
+    profile_url: profileUrl,
+    unsubscribe_url: params.unsubscribeUrl,
+    site_url: params.siteUrl,
+    message_name: params.messageName,
+    delivery_type: params.deliveryType,
+    event_type: params.eventType || '',
+    subscriber_source: params.subscriberSource || '',
+    today: normalizedDate,
+    current_year: String(new Date().getFullYear()),
+  }
+}
+
+export function renderMergeTags(
+  template: string,
+  variables: MergeVariables
+): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) =>
+    variables[key] ?? ''
   )
 }

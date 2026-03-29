@@ -12,11 +12,12 @@ import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import { applySeo, DEFAULT_DESCRIPTION } from "@/lib/seo";
 
 type StoryChapter = {
   id: string;
@@ -204,6 +205,21 @@ const ArticlePage = () => {
       ? chapterPrevNext.next.title_en
       : chapterPrevNext.next.title_it || chapterPrevNext.next.title_en
     : "";
+
+  useEffect(() => {
+    if (!article) return;
+
+    const seoDescription =
+      (lang === "en" ? article.excerpt_en : article.excerpt_it || article.excerpt_en) ||
+      DEFAULT_DESCRIPTION;
+
+    applySeo({
+      title: `${title} | BITE`,
+      description: seoDescription,
+      pathname: `/logbook/${article.slug}`,
+      image: article.cover_image,
+    });
+  }, [article, lang, title]);
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
