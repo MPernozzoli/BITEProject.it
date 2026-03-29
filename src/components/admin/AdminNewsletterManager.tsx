@@ -343,8 +343,8 @@ const AdminNewsletterManager = () => {
     };
 
     const mutation = form.id
-      ? supabase.from("newsletter_messages").update(payload).eq("id", form.id)
-      : supabase.from("newsletter_messages").insert(payload);
+      ? (supabase as any).from("newsletter_messages").update(payload).eq("id", form.id)
+      : (supabase as any).from("newsletter_messages").insert(payload);
 
     const { error } = await mutation;
     setSaving(false);
