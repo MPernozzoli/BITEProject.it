@@ -70,7 +70,7 @@ interface StorageListItem {
 const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
-const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v"]);
+const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 
 const desktopHeroMedia: HeroMedia[] = [
   { kind: "image", src: bowSunset, alt: "View from the bow at sunset" },
@@ -96,6 +96,7 @@ const pickRandomHeroMedia = (isMobile: boolean) => {
 const getVideoMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
   if (extension === "webm") return "video/webm";
+  if (extension === "mov") return "video/quicktime";
   return "video/mp4";
 };
 
@@ -342,40 +343,35 @@ const Index = () => {
               decoding="async"
             />
           )}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.12)_0%,rgba(17,28,43,0.26)_36%,rgba(17,28,43,0.62)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_26%),linear-gradient(180deg,rgba(7,15,27,0.42)_0%,rgba(9,18,31,0.38)_24%,rgba(10,20,34,0.54)_48%,rgba(8,17,30,0.76)_100%)]" />
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] max-w-6xl items-center justify-center">
-          <div className="w-full max-w-4xl px-4 text-center slide-up md:px-10">
-            <p className="mb-6 text-[11px] font-sans uppercase tracking-[0.34em] text-white/72 [text-shadow:0_6px_22px_rgba(0,0,0,0.28)]">
-              {lang === "it" ? "Dal bordo di Spritz" : "From aboard Spritz"}
+          <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center slide-up md:px-10 md:py-10">
+            <p className="hero-kicker mb-6 text-[11px] font-sans uppercase tracking-[0.34em]">
+              {lang === "it" ? "A bordo di Spritz" : "From aboard Spritz"}
             </p>
-            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-6 whitespace-pre-line [text-shadow:0_10px_34px_rgba(0,0,0,0.30)]">
+            <h1 className="editorial-heading hero-copy-text text-4xl md:text-6xl lg:text-7xl mb-6 whitespace-pre-line">
               {t("hero.title")}
             </h1>
-            <p className="editorial-body text-white text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line [text-shadow:0_8px_26px_rgba(0,0,0,0.24)]">
+            <p className="editorial-body hero-copy-text text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line">
               {t("hero.subtitle")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/logbook"
-                className="glass-button inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+                className="glass-button hero-cta inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
               >
                 {t("hero.cta.journey")}
                 <ArrowRight size={16} />
               </Link>
               <Link
                 to="/collaborations"
-                className="glass-button-dark inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+                className="glass-button-dark hero-cta hero-cta-dark inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
               >
                 {t("hero.cta.collaborate")}
               </Link>
             </div>
-            <p className="mt-5 text-sm text-white/72">
-              <Link to="/voyages" className="underline underline-offset-4 hover:text-white transition-colors">
-                {lang === "it" ? "Esplora le rotte pubbliche" : "Explore the public routes"}
-              </Link>
-            </p>
           </div>
         </div>
 
