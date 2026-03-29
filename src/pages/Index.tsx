@@ -59,11 +59,18 @@ interface StorageListItem {
   name: string;
 }
 
+interface HeroTransitionTarget {
+  media: HeroMedia;
+  index: number;
+  playlist: HeroMedia[];
+}
+
 const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const HERO_IMAGE_DURATION_MS = 6500;
+const HERO_CROSSFADE_DURATION_MS = 420;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 
 const desktopHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
@@ -114,6 +121,25 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
       };
     });
 
+const getNextHeroTransition = (
+  currentIndex: number,
+  playlist: HeroMedia[],
+  currentPool: HeroMedia[]
+): HeroTransitionTarget | null => {
+  if (!playlist.length) return null;
+
+  const isLast = currentIndex >= playlist.length - 1;
+  if (isLast) {
+    const nextPlaylist = shuffleHeroMedia(currentPool, playlist[currentIndex]?.src);
+    const media = nextPlaylist[0];
+    return media ? { media, index: 0, playlist: nextPlaylist } : null;
+  }
+
+  const index = currentIndex + 1;
+  const media = playlist[index];
+  return media ? { media, index, playlist } : null;
+};
+
 const Index = () => {
   const { t, lang } = useI18n();
   const { isRead } = useArticleReads();
@@ -124,7 +150,10 @@ const Index = () => {
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>(() => [pickRandomHeroMedia(false)]);
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
+  const [pendingHeroTransition, setPendingHeroTransition] = useState<HeroTransitionTarget | null>(null);
+  const [isHeroCrossfading, setIsHeroCrossfading] = useState(false);
   const heroPlaybackTimeoutRef = useRef<number | null>(null);
+  const heroCrossfadeTimeoutRef = useRef<number | null>(null);
 
   const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
@@ -173,6 +202,8 @@ const Index = () => {
     const nextPlaylist = shuffleHeroMedia(currentHeroPool);
     setHeroPlaylist(nextPlaylist.length ? nextPlaylist : [pickRandomHeroMedia(isMobile)]);
     setHeroPlaylistIndex(0);
+    setPendingHeroTransition(null);
+    setIsHeroCrossfading(false);
   }, [currentHeroPool, isMobile]);
 
   useEffect(() => {
@@ -188,26 +219,44 @@ const Index = () => {
   }, [currentHeroPool, heroMedia, heroPlaylist, heroPlaylist.length]);
 
   const advanceHeroMedia = () => {
-    if (heroPlaylist.length <= 1) return;
+    if (heroPlaylist.length <= 1 || pendingHeroTransition) return;
 
     if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+    const nextTransition = getNextHeroTransition(heroPlaylistIndex, heroPlaylist, currentHeroPool);
+    if (!nextTransition) return;
 
-    setHeroPlaylistIndex((currentIndex) => {
-      const isLast = currentIndex >= heroPlaylist.length - 1;
-      if (isLast) {
-        const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
-        setHeroPlaylist(nextPlaylist);
-        return 0;
-      }
-      return currentIndex + 1;
-    });
+    setPendingHeroTransition(nextTransition);
+    if (nextTransition.media.kind === "image") {
+      window.requestAnimationFrame(() => {
+        startHeroCrossfade();
+      });
+    }
   };
 
   useEffect(() => {
     return () => {
       if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+      if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
     };
   }, []);
+
+  const finalizeHeroCrossfade = () => {
+    if (!pendingHeroTransition) return;
+    setHeroPlaylist(pendingHeroTransition.playlist);
+    setHeroPlaylistIndex(pendingHeroTransition.index);
+    setPendingHeroTransition(null);
+    setIsHeroCrossfading(false);
+  };
+
+  const startHeroCrossfade = () => {
+    if (!pendingHeroTransition) return;
+    if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
+
+    setIsHeroCrossfading(true);
+    heroCrossfadeTimeoutRef.current = window.setTimeout(() => {
+      finalizeHeroCrossfade();
+    }, HERO_CROSSFADE_DURATION_MS);
+  };
 
   const handleHeroVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = event.currentTarget;
@@ -239,6 +288,86 @@ const Index = () => {
     }
 
     scheduleAdvance();
+  };
+
+  const handlePendingHeroVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const maxStartTime = Math.max(duration - HERO_MAX_VIDEO_SEGMENT_SECONDS, 0);
+    const startTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
+    const remainingDuration = duration > 0 ? Math.max(duration - startTime, 0) : HERO_MAX_VIDEO_SEGMENT_SECONDS;
+    const playbackDurationMs = Math.max(
+      800,
+      Math.min(remainingDuration, HERO_MAX_VIDEO_SEGMENT_SECONDS) * 1000
+    );
+
+    if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+
+    const scheduleAdvance = () => {
+      heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+        advanceHeroMedia();
+      }, playbackDurationMs);
+    };
+
+    if (startTime > 0) {
+      const handleSeeked = () => {
+        scheduleAdvance();
+        startHeroCrossfade();
+        video.removeEventListener("seeked", handleSeeked);
+      };
+      video.addEventListener("seeked", handleSeeked);
+      video.currentTime = startTime;
+      return;
+    }
+
+    scheduleAdvance();
+    startHeroCrossfade();
+  };
+
+  const renderHeroMedia = (
+    media: HeroMedia,
+    mode: "active" | "pending"
+  ) => {
+    const baseClassName = `img-cover hero-layer ${
+      mode === "active"
+        ? isHeroCrossfading
+          ? "hero-layer--outgoing"
+          : "hero-layer--active"
+        : isHeroCrossfading
+          ? "hero-layer--incoming-active"
+          : "hero-layer--incoming"
+    }`;
+
+    if (media.kind === "video") {
+      return (
+        <video
+          key={media.src}
+          className={baseClassName}
+          poster={media.poster}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
+          onEnded={mode === "active" ? advanceHeroMedia : undefined}
+        >
+          <source src={media.src} type={media.mimeType ?? "video/mp4"} />
+        </video>
+      );
+    }
+
+    return (
+      <img
+        key={media.src}
+        src={media.src}
+        alt={media.alt}
+        className={baseClassName}
+        loading="eager"
+        fetchPriority="high"
+        decoding="async"
+        onLoad={mode === "pending" ? startHeroCrossfade : undefined}
+      />
+    );
   };
 
   // Fetch real articles for the journal preview
@@ -389,31 +518,8 @@ const Index = () => {
       />
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          {heroMedia.kind === "video" ? (
-            <video
-              key={heroMedia.src}
-              className="img-cover"
-              poster={heroMedia.poster}
-              autoPlay
-              muted
-              playsInline
-              preload="auto"
-              onLoadedMetadata={handleHeroVideoMetadata}
-              onEnded={advanceHeroMedia}
-            >
-              <source src={heroMedia.src} type={heroMedia.mimeType ?? "video/mp4"} />
-            </video>
-          ) : (
-            <img
-              key={heroMedia.src}
-              src={heroMedia.src}
-              alt={heroMedia.alt}
-              className="img-cover"
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-            />
-          )}
+          {renderHeroMedia(heroMedia, "active")}
+          {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
         </div>
 
