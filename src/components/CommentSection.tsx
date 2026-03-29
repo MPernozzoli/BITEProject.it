@@ -55,7 +55,7 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
     if (!commentsData) { setLoading(false); return; }
 
     const profileIds = [...new Set(commentsData.map((c) => c.profile_id))];
-    const { data: profiles } = await supabase.from("public_profiles").select("id, name, avatar_url").in("id", profileIds);
+    const { data: profiles } = await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds);
     const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
 
     const commentIds = commentsData.map((c) => c.id);

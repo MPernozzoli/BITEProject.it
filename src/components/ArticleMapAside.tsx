@@ -21,10 +21,12 @@ const ArticleMapAside = ({ latitude, longitude, title }: ArticleMapAsideProps) =
   useEffect(() => {
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
-    if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
-      setMapUnavailable(true);
-      return;
-    }
+    try {
+      if (!(maplibregl as any).supported?.()) {
+        setMapUnavailable(true);
+        return;
+      }
+    } catch { /* supported check unavailable, proceed */ }
 
     try {
       mapRef.current = new maplibregl.Map({
@@ -46,7 +48,7 @@ const ArticleMapAside = ({ latitude, longitude, title }: ArticleMapAsideProps) =
         },
         center: [longitude, latitude],
         zoom: 10,
-        attributionControl: true,
+        attributionControl: {},
       });
 
       mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");

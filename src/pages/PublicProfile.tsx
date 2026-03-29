@@ -119,7 +119,7 @@ const XIcon = ({ size = 16 }: { size?: number }) => (
 
 const socials: Array<{
   key: SocialKey;
-  icon: ({ size }: { size?: number }) => JSX.Element;
+  icon: React.ComponentType<any>;
   label: string;
   prefix: string;
 }> = [
@@ -148,7 +148,7 @@ const PublicProfile = () => {
 
       const [profileRes, badgeRes, authorRes] = await Promise.all([
         supabase
-          .from("public_profiles")
+          .from("profiles")
           .select(
             "id, name, bio, avatar_url, created_at, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website"
           )

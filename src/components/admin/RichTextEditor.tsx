@@ -116,7 +116,7 @@ const RichTextEditor = ({ content, onChange, onHtmlChange, placeholder = "Start 
       return;
     }
 
-    editor.commands.setContent(normalizedContent, false);
+    editor.commands.setContent(normalizedContent, { emitUpdate: false } as any);
   }, [editor, normalizedContent]);
 
   const handleImageUpload = useCallback(async (file: File) => {
