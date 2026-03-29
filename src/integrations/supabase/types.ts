@@ -915,12 +915,14 @@ export type Database = {
           bio: string | null
           created_at: string | null
           id: string | null
+          is_admin: boolean | null
           name: string | null
           preferred_language: string | null
           secondary_language: string | null
           social_facebook: string | null
           social_instagram: string | null
           social_linkedin: string | null
+          social_seapeople: string | null
           social_tiktok: string | null
           social_website: string | null
           social_x: string | null

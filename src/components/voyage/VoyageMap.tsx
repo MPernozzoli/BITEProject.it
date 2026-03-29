@@ -43,13 +43,6 @@ const VoyageMap = ({
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
     try {
-      if (!(maplibregl as any).supported?.()) {
-        setMapUnavailable(true);
-        return;
-      }
-    } catch { /* proceed */ }
-
-    try {
       mapRef.current = new maplibregl.Map({
         container: containerRef.current,
         style: {

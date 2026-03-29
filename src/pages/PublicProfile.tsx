@@ -13,7 +13,6 @@ import {
   Languages,
   Linkedin,
   MapPin,
-  Sparkles,
   User,
   Youtube,
 } from "lucide-react";
@@ -144,6 +143,7 @@ const PublicProfile = () => {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [articles, setArticles] = useState<ProfileArticle[]>([]);
   const [commentCount, setCommentCount] = useState(0);
+  const [totalLikes, setTotalLikes] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -176,9 +176,20 @@ const PublicProfile = () => {
       setBadges((badgeRes.data || []) as Badge[]);
       setCommentCount(commentRes.count || 0);
 
+      const { data: authoredComments } = await supabase
+        .from("article_comments")
+        .select("id")
+        .eq("profile_id", id);
+
+      const commentIds = (authoredComments || []).map((comment) => comment.id);
+      const { count: commentLikesCount } = commentIds.length
+        ? await supabase.from("comment_likes").select("id", { count: "exact", head: true }).in("comment_id", commentIds)
+        : { count: 0 };
+
       const articleIds = [...new Set((authorRes.data || []).map((row) => row.article_id))];
       if (!articleIds.length) {
         setArticles([]);
+        setTotalLikes(commentLikesCount || 0);
         setLoading(false);
         return;
       }
@@ -201,6 +212,9 @@ const PublicProfile = () => {
         acc[row.article_id] = (acc[row.article_id] || 0) + 1;
         return acc;
       }, {});
+
+      const articleLikesTotal = Object.values(likeCounts).reduce((sum, count) => sum + count, 0);
+      setTotalLikes(articleLikesTotal + (commentLikesCount || 0));
 
       setArticles(
         (articleData || []).map((article) => ({
@@ -239,10 +253,46 @@ const PublicProfile = () => {
       .filter(Boolean) as string[];
   }, [profile]);
 
+  const formatNumber = (value: number) => value.toLocaleString(lang === "it" ? "it-IT" : "en-US");
   const totalViews = articles.reduce((sum, article) => sum + Number(article.view_count || 0), 0);
-  const totalLikes = articles.reduce((sum, article) => sum + Number(article.like_count || 0), 0);
   const featuredArticle = articles[0] || null;
   const recentArticles = articles.slice(1, 4);
+  const hasPublishedArticles = articles.length > 0;
+  const stats = hasPublishedArticles
+    ? [
+        {
+          label: lang === "it" ? "Articoli" : "Articles",
+          value: formatNumber(articles.length),
+          icon: BookOpen,
+        },
+        {
+          label: lang === "it" ? "Visualizzazioni" : "Views",
+          value: formatNumber(totalViews),
+          icon: Eye,
+        },
+        {
+          label: lang === "it" ? "Mi piace" : "Likes",
+          value: formatNumber(totalLikes),
+          icon: Heart,
+        },
+        {
+          label: lang === "it" ? "Commenti" : "Comments",
+          value: formatNumber(commentCount),
+          icon: MessageCircle,
+        },
+      ]
+    : [
+        {
+          label: lang === "it" ? "Mi piace" : "Likes",
+          value: formatNumber(totalLikes),
+          icon: Heart,
+        },
+        {
+          label: lang === "it" ? "Commenti" : "Comments",
+          value: formatNumber(commentCount),
+          icon: MessageCircle,
+        },
+      ];
 
   if (loading) {
     return (
@@ -265,8 +315,6 @@ const PublicProfile = () => {
       </div>
     );
   }
-
-  const formatNumber = (value: number) => value.toLocaleString(lang === "it" ? "it-IT" : "en-US");
   const memberSince = profile.created_at
     ? new Intl.DateTimeFormat(lang === "it" ? "it-IT" : "en-US", {
         month: "long",
@@ -283,11 +331,6 @@ const PublicProfile = () => {
 
           <div className="relative grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 p-6 md:p-8 lg:p-10">
             <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.25em] text-muted-foreground">
-                <Sparkles size={12} className="text-accent" />
-                {lang === "it" ? "Profilo autore" : "Author profile"}
-              </div>
-
               <div className="flex flex-col md:flex-row md:items-center gap-5">
                 <div className="w-28 h-28 md:w-32 md:h-32 rounded-[32px] overflow-hidden bg-muted ring-1 ring-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.12)]">
                   <ProfileAvatar
@@ -332,28 +375,7 @@ const PublicProfile = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4 h-fit">
-              {[
-                {
-                  label: lang === "it" ? "Articoli" : "Articles",
-                  value: formatNumber(articles.length),
-                  icon: BookOpen,
-                },
-                {
-                  label: lang === "it" ? "Visualizzazioni" : "Views",
-                  value: formatNumber(totalViews),
-                  icon: Eye,
-                },
-                {
-                  label: lang === "it" ? "Mi piace" : "Likes",
-                  value: formatNumber(totalLikes),
-                  icon: Heart,
-                },
-                {
-                  label: lang === "it" ? "Commenti" : "Comments",
-                  value: formatNumber(commentCount),
-                  icon: MessageCircle,
-                },
-              ].map((item) => {
+              {stats.map((item) => {
                 const Icon = item.icon;
                 return (
                   <div

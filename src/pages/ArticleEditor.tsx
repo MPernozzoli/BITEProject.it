@@ -80,6 +80,22 @@ const ArticleEditor = () => {
       loginPath();
       return;
     }
+
+    const { data: isAdmin, error: adminError } = await supabase.rpc("has_role", {
+      _user_id: session.user.id,
+      _role: "admin",
+    });
+    if (adminError) {
+      console.error("Admin check failed", adminError);
+      loginPath();
+      return;
+    }
+    if (!isAdmin) {
+      toast.error("Accesso non autorizzato");
+      navigate("/", { replace: true });
+      return;
+    }
+
     setCurrentUserId(session.user.id);
 
     // Load tags, stories, and voyages

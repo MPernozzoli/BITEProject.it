@@ -13,7 +13,6 @@ import {
   Languages,
   Linkedin,
   MessageCircle,
-  Sparkles,
   User,
   X,
   Youtube,
@@ -154,6 +153,16 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
         supabase.from("article_comments").select("id", { count: "exact", head: true }).eq("profile_id", profileId!),
       ]);
 
+      const { data: authoredComments } = await supabase
+        .from("article_comments")
+        .select("id")
+        .eq("profile_id", profileId!);
+
+      const commentIds = (authoredComments || []).map((comment) => comment.id);
+      const { count: commentLikesCount } = commentIds.length
+        ? await supabase.from("comment_likes").select("id", { count: "exact", head: true }).in("comment_id", commentIds)
+        : { count: 0 };
+
       const articleIds = [...new Set((authorRes.data || []).map((row) => row.article_id))];
       const { data: articleData } = articleIds.length
         ? await supabase
@@ -174,10 +183,13 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
         return acc;
       }, {});
 
+      const articleLikesTotal = Object.values(likeCounts).reduce((sum, count) => sum + count, 0);
+
       return {
         profile: (profileRes.data || null) as ProfileData | null,
         badges: (badgeRes.data || []) as Badge[],
         commentCount: commentRes.count || 0,
+        totalLikes: articleLikesTotal + (commentLikesCount || 0),
         articles: (articleData || []).map((entry) => ({
           ...entry,
           like_count: likeCounts[entry.id] || 0,
@@ -213,17 +225,29 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
   if (!profileId) return null;
 
   const profile = data?.profile || null;
+  const formatNumber = (value: number) => value.toLocaleString(lang === "it" ? "it-IT" : "en-US");
   const articles = (data?.articles || []).filter((entry) => entry.id !== article?.id);
   const totalViews = (data?.articles || []).reduce((sum, entry) => sum + Number(entry.view_count || 0), 0);
-  const totalLikes = (data?.articles || []).reduce((sum, entry) => sum + Number(entry.like_count || 0), 0);
+  const totalLikes = data?.totalLikes || 0;
   const commentCount = data?.commentCount || 0;
+  const hasPublishedArticles = (data?.articles || []).length > 0;
+  const stats = hasPublishedArticles
+    ? [
+        { label: lang === "it" ? "Articoli" : "Articles", value: formatNumber(data?.articles.length || 0), icon: BookOpen },
+        { label: lang === "it" ? "Visualizzazioni" : "Views", value: formatNumber(totalViews), icon: Eye },
+        { label: lang === "it" ? "Mi piace" : "Likes", value: formatNumber(totalLikes), icon: Heart },
+        { label: lang === "it" ? "Commenti" : "Comments", value: formatNumber(commentCount), icon: MessageCircle },
+      ]
+    : [
+        { label: lang === "it" ? "Mi piace" : "Likes", value: formatNumber(totalLikes), icon: Heart },
+        { label: lang === "it" ? "Commenti" : "Comments", value: formatNumber(commentCount), icon: MessageCircle },
+      ];
   const memberSince = profile?.created_at
     ? new Intl.DateTimeFormat(lang === "it" ? "it-IT" : "en-US", {
         month: "long",
         year: "numeric",
       }).format(new Date(profile.created_at))
     : null;
-  const formatNumber = (value: number) => value.toLocaleString(lang === "it" ? "it-IT" : "en-US");
 
   return (
     <>
@@ -266,11 +290,6 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
           ) : (
             <div className="space-y-4">
               <div className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-background/75 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.25em] text-muted-foreground mb-4">
-                  <Sparkles size={12} className="text-accent" />
-                  {lang === "it" ? "Profilo autore" : "Author profile"}
-                </div>
-
                 <div className="flex items-center gap-4 mb-5">
                   <div className="w-20 h-20 rounded-[24px] overflow-hidden bg-muted">
                     <ProfileAvatar
@@ -308,12 +327,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: lang === "it" ? "Articoli" : "Articles", value: formatNumber(data.articles.length), icon: BookOpen },
-                  { label: lang === "it" ? "Visualizzazioni" : "Views", value: formatNumber(totalViews), icon: Eye },
-                  { label: lang === "it" ? "Mi piace" : "Likes", value: formatNumber(totalLikes), icon: Heart },
-                  { label: lang === "it" ? "Commenti" : "Comments", value: formatNumber(commentCount), icon: MessageCircle },
-                ].map((item) => {
+                {stats.map((item) => {
                   const Icon = item.icon;
                   return (
                     <div key={item.label} className="rounded-[24px] border border-stone-200/85 bg-white/72 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">

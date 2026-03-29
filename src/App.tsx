@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
+import AdminRoute from "@/components/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -64,8 +65,8 @@ const App = () => (
                 <Route path="/login" element={<UserLogin />} />
                 <Route path="/signup" element={<UserLogin />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/article/:id" element={<ArticleEditor />} />
+                <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                 <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
                 <Route path="/profile" element={<AdminProfile />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />

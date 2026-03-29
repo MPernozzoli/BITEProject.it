@@ -22,13 +22,6 @@ const ArticleMapAside = ({ latitude, longitude, title }: ArticleMapAsideProps) =
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
     try {
-      if (!(maplibregl as any).supported?.()) {
-        setMapUnavailable(true);
-        return;
-      }
-    } catch { /* supported check unavailable, proceed */ }
-
-    try {
       mapRef.current = new maplibregl.Map({
         container: containerRef.current,
         style: {
