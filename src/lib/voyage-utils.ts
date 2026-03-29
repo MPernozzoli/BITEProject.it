@@ -88,6 +88,48 @@ export function formatWaypointCoordinateLabel(lat: number, lng: number): string 
   return `${Math.abs(lat).toFixed(2)}°${latHemisphere} · ${Math.abs(lng).toFixed(2)}°${lngHemisphere}`;
 }
 
+export function slugifyVoyageName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "voyage";
+}
+
+export function buildVoyagePath(voyage: Pick<Voyage, "id" | "name">): string {
+  return `/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`;
+}
+
+export function getVoyageIdFromRouteParam(value?: string | null): string | null {
+  if (!value) return null;
+  const [id] = value.split("--");
+  return id || null;
+}
+
+export function formatIsoDate(value?: string | null, locale = "en-US"): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+export function formatVoyageDateRange(
+  voyage: Pick<Voyage, "start_date" | "end_date">,
+  locale = "en-US"
+): string | null {
+  const start = formatIsoDate(voyage.start_date, locale);
+  const end = formatIsoDate(voyage.end_date, locale);
+  if (!start && !end) return null;
+  if (start && end) return `${start} → ${end}`;
+  return start || end;
+}
+
 export function buildWaypointDefaultName(index: number, lat: number, lng: number, placeName?: string | null): string {
   const prefix = index === 0 ? "Start" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
   return `${prefix} · ${placeName || formatWaypointCoordinateLabel(lat, lng)}`;
