@@ -118,7 +118,7 @@ const languageLabel = (code: string | null | undefined) => {
 
 const socials: Array<{
   key: SocialKey;
-  icon: ({ size }: { size?: number }) => JSX.Element;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
   prefix: string;
 }> = [
