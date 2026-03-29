@@ -1,34 +1,39 @@
+import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
-import Index from "./pages/Index";
-import TheCrew from "./pages/About";
-import { Navigate } from "react-router-dom";
-import Manifesto from "./pages/Manifesto";
-import Journal from "./pages/Journal";
-
-import Collaborations from "./pages/Collaborations";
-import Contact from "./pages/Contact";
-import ArticlePage from "./pages/ArticlePage";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDashboard from "./pages/AdminDashboard";
-import ArticleEditor from "./pages/ArticleEditor";
-import AdminProfile from "./pages/AdminProfile";
-import UserLogin from "./pages/UserLogin";
-import PublicProfile from "./pages/PublicProfile";
-import StoryPage from "./pages/StoryPage";
-import Unsubscribe from "./pages/Unsubscribe";
-import NotFound from "./pages/NotFound";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import CookiePolicy from "./pages/CookiePolicy";
 
 const queryClient = new QueryClient();
+
+const Index = lazy(() => import("./pages/Index"));
+const TheCrew = lazy(() => import("./pages/About"));
+const Manifesto = lazy(() => import("./pages/Manifesto"));
+const Journal = lazy(() => import("./pages/Journal"));
+const Collaborations = lazy(() => import("./pages/Collaborations"));
+const Contact = lazy(() => import("./pages/Contact"));
+const ArticlePage = lazy(() => import("./pages/ArticlePage"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
+const AdminProfile = lazy(() => import("./pages/AdminProfile"));
+const UserLogin = lazy(() => import("./pages/UserLogin"));
+const PublicProfile = lazy(() => import("./pages/PublicProfile"));
+const StoryPage = lazy(() => import("./pages/StoryPage"));
+const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center pt-24">
+    <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading...</p>
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -39,30 +44,32 @@ const App = () => (
         <AuthProvider>
         <BrowserRouter>
           <Layout>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/crew" element={<TheCrew />} />
-              <Route path="/about" element={<Navigate to="/crew" replace />} />
-              <Route path="/manifesto" element={<Manifesto />} />
-              <Route path="/logbook" element={<Journal />} />
-              <Route path="/route" element={<Navigate to="/logbook" replace />} />
-              <Route path="/collaborations" element={<Collaborations />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/logbook/story/:slug" element={<StoryPage />} />
-              <Route path="/logbook/:slug" element={<ArticlePage />} />
-              <Route path="/profile/:id" element={<PublicProfile />} />
-              <Route path="/login" element={<UserLogin />} />
-              <Route path="/signup" element={<UserLogin />} />
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/admin/article/:id" element={<ArticleEditor />} />
-              <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
-              <Route path="/profile" element={<AdminProfile />} />
-              <Route path="/unsubscribe" element={<Unsubscribe />} />
-              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-              <Route path="/cookie-policy" element={<CookiePolicy />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/crew" element={<TheCrew />} />
+                <Route path="/about" element={<Navigate to="/crew" replace />} />
+                <Route path="/manifesto" element={<Manifesto />} />
+                <Route path="/logbook" element={<Journal />} />
+                <Route path="/route" element={<Navigate to="/logbook" replace />} />
+                <Route path="/collaborations" element={<Collaborations />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/logbook/story/:slug" element={<StoryPage />} />
+                <Route path="/logbook/:slug" element={<ArticlePage />} />
+                <Route path="/profile/:id" element={<PublicProfile />} />
+                <Route path="/login" element={<UserLogin />} />
+                <Route path="/signup" element={<UserLogin />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/article/:id" element={<ArticleEditor />} />
+                <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
+                <Route path="/profile" element={<AdminProfile />} />
+                <Route path="/unsubscribe" element={<Unsubscribe />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/cookie-policy" element={<CookiePolicy />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </Layout>
         </BrowserRouter>
         </AuthProvider>

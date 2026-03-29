@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { Search, Plus, Map, List, Ship, Navigation, Anchor, PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
-import VoyageMap from "@/components/voyage/VoyageMap";
+import LazyVoyageMap from "@/components/LazyVoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
@@ -280,7 +280,7 @@ const Journal = () => {
       {viewMode === "map" ? (
         <div className="flex-1 relative" style={{ height: "100vh" }}>
           {/* Full-screen map */}
-          <VoyageMap
+          <LazyVoyageMap
             voyages={voyages}
             waypointsMap={waypointsMap}
             articles={filtered}
@@ -289,6 +289,7 @@ const Journal = () => {
             onArticleClick={handleArticleClick}
             lang={lang}
             initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
+            fallbackHeightClassName="h-full min-h-screen"
           />
 
           {/* Floating controls — top right */}

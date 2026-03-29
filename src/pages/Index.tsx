@@ -8,8 +8,10 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
-import VoyageMap from "@/components/voyage/VoyageMap";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import LazyVoyageMap from "@/components/LazyVoyageMap";
+import StructuredData from "@/components/StructuredData";
+import { SITE_URL } from "@/lib/seo";
 
 import bowSunset from "@/assets/bow-sunset.jpeg";
 import boatSunset from "@/assets/boat-sunset.jpeg";
@@ -172,6 +174,16 @@ const Index = () => {
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
+      <StructuredData
+        id="homepage"
+        data={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "BITE",
+          url: SITE_URL,
+          description: "Stories, voyages, refit notes, and life aboard S/Y Spritz.",
+        }}
+      />
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
           <img src={bowSunset} alt="View from the bow at sunset" className="img-cover" />
@@ -373,13 +385,14 @@ const Index = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="glass-frame rounded-[30px] p-2">
               <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]">
-                <VoyageMap
+                <LazyVoyageMap
                   voyages={voyages}
                   waypointsMap={waypointsMap}
                   articles={mapArticles}
                   lang={lang}
                   initialFitReady={isHomeMapReady}
                   onArticleClick={(article) => navigate(`/logbook/${article.slug}`)}
+                  fallbackHeightClassName="aspect-[16/10]"
                 />
                 {!isHomeMapReady ? (
                   <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-4">
