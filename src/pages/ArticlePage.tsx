@@ -18,6 +18,7 @@ import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
+import { extractImagesFromRichContent } from "@/lib/content-images";
 
 type StoryChapter = {
   id: string;
@@ -215,6 +216,13 @@ const ArticlePage = () => {
     const authorNames = authors
       .map((author: any) => author?.name)
       .filter((name): name is string => typeof name === "string" && name.length > 0);
+    const inlineImages = [
+      ...extractImagesFromRichContent(article.content_en as any),
+      ...extractImagesFromRichContent(article.content_it as any),
+    ];
+    const imageUrls = Array.from(
+      new Set([article.cover_image, ...inlineImages.map((image) => image.src)].filter((value): value is string => Boolean(value)))
+    );
 
     applySeo({
       title: `${title} | BITE`,
@@ -230,7 +238,7 @@ const ArticlePage = () => {
           description: seoDescription,
           url: `${window.location.origin}/logbook/${article.slug}`,
           mainEntityOfPage: `${window.location.origin}/logbook/${article.slug}`,
-          image: article.cover_image ? [article.cover_image] : undefined,
+          image: imageUrls.length ? imageUrls : undefined,
           datePublished: article.published_at || undefined,
           dateModified: article.updated_at || article.published_at || undefined,
           articleSection: article.category || "Logbook",
@@ -244,6 +252,15 @@ const ArticlePage = () => {
           publisher: { "@id": ORGANIZATION_ID },
           isPartOf: { "@id": WEBSITE_ID },
           inLanguage: lang,
+          associatedMedia: inlineImages.length
+            ? inlineImages.map((image) => ({
+                "@type": "ImageObject",
+                contentUrl: image.src,
+                url: image.src,
+                caption: image.alt || image.title || undefined,
+                name: image.title || image.alt || undefined,
+              }))
+            : undefined,
         },
       ],
     });

@@ -12,6 +12,7 @@ import {
   Instagram,
   Languages,
   Linkedin,
+  MessageCircle,
   Sparkles,
   User,
   X,
@@ -21,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { GeoArticle } from "@/lib/voyage-utils";
 import { ALL_LANGUAGES } from "@/lib/i18n";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 
 interface ProfileData {
   id: string;
@@ -37,6 +39,7 @@ interface ProfileData {
   social_x: string | null;
   social_linkedin: string | null;
   social_website: string | null;
+  social_seapeople: string | null;
 }
 
 interface Badge {
@@ -61,7 +64,8 @@ type SocialKey =
   | "social_facebook"
   | "social_x"
   | "social_linkedin"
-  | "social_website";
+  | "social_website"
+  | "social_seapeople";
 
 interface ProfileSlidePanelProps {
   profileId: string | null;
@@ -129,6 +133,7 @@ const socials: Array<{
   { key: "social_x", icon: XIcon, label: "X", prefix: "https://x.com/" },
   { key: "social_linkedin", icon: Linkedin, label: "LinkedIn", prefix: "https://linkedin.com/in/" },
   { key: "social_website", icon: Globe, label: "Website", prefix: "" },
+  { key: "social_seapeople", icon: SeaPeopleIcon, label: "SeaPeople", prefix: "https://dashboard.seapeopleapp.com/" },
 ];
 
 const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose }: ProfileSlidePanelProps) => {
@@ -136,16 +141,17 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
     queryKey: ["logbook-profile-panel", profileId],
     enabled: Boolean(profileId),
     queryFn: async () => {
-      const [profileRes, badgeRes, authorRes] = await Promise.all([
+      const [profileRes, badgeRes, authorRes, commentRes] = await Promise.all([
         supabase
           .from("profiles")
           .select(
-            "id, name, bio, avatar_url, created_at, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website"
+            "id, name, bio, avatar_url, created_at, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople"
           )
           .eq("id", profileId!)
           .single(),
         supabase.from("profile_badges").select("id, badge_name, badge_icon").eq("profile_id", profileId!),
         supabase.from("article_authors").select("article_id").eq("profile_id", profileId!),
+        supabase.from("article_comments").select("id", { count: "exact", head: true }).eq("profile_id", profileId!),
       ]);
 
       const articleIds = [...new Set((authorRes.data || []).map((row) => row.article_id))];
@@ -171,6 +177,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
       return {
         profile: (profileRes.data || null) as ProfileData | null,
         badges: (badgeRes.data || []) as Badge[],
+        commentCount: commentRes.count || 0,
         articles: (articleData || []).map((entry) => ({
           ...entry,
           like_count: likeCounts[entry.id] || 0,
@@ -209,6 +216,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
   const articles = (data?.articles || []).filter((entry) => entry.id !== article?.id);
   const totalViews = (data?.articles || []).reduce((sum, entry) => sum + Number(entry.view_count || 0), 0);
   const totalLikes = (data?.articles || []).reduce((sum, entry) => sum + Number(entry.like_count || 0), 0);
+  const commentCount = data?.commentCount || 0;
   const memberSince = profile?.created_at
     ? new Intl.DateTimeFormat(lang === "it" ? "it-IT" : "en-US", {
         month: "long",
@@ -257,7 +265,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-[28px] border border-white/55 bg-white/58 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-background/75 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.25em] text-muted-foreground mb-4">
                   <Sparkles size={12} className="text-accent" />
                   {lang === "it" ? "Profilo autore" : "Author profile"}
@@ -304,11 +312,11 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
                   { label: lang === "it" ? "Articoli" : "Articles", value: formatNumber(data.articles.length), icon: BookOpen },
                   { label: lang === "it" ? "Visualizzazioni" : "Views", value: formatNumber(totalViews), icon: Eye },
                   { label: lang === "it" ? "Mi piace" : "Likes", value: formatNumber(totalLikes), icon: Heart },
-                  { label: lang === "it" ? "Link attivi" : "Active links", value: formatNumber(activeSocials.length), icon: Globe },
+                  { label: lang === "it" ? "Commenti" : "Comments", value: formatNumber(commentCount), icon: MessageCircle },
                 ].map((item) => {
                   const Icon = item.icon;
                   return (
-                    <div key={item.label} className="rounded-[24px] border border-white/55 bg-white/52 p-4">
+                    <div key={item.label} className="rounded-[24px] border border-stone-200/85 bg-white/72 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
                       <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/70 bg-background/75 mb-3">
                         <Icon size={14} className="text-accent" />
                       </div>
@@ -320,7 +328,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
               </div>
 
               {activeSocials.length > 0 && (
-                <div className="rounded-[26px] border border-white/55 bg-white/50 p-4">
+                <div className="rounded-[26px] border border-stone-200/85 bg-white/60 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
                   <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
                     {lang === "it" ? "Social e link" : "Socials and links"}
                   </p>
@@ -333,7 +341,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
                           href={social.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-[22px] border border-white/65 bg-background/72 px-4 py-3 hover:bg-background/88 transition-colors"
+                          className="rounded-[22px] border border-stone-200/90 bg-white/78 px-4 py-3 hover:bg-white/92 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -353,7 +361,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
               )}
 
               {(data.badges.length > 0 || articles.length > 0) && (
-                <div className="rounded-[26px] border border-white/55 bg-white/50 p-4 space-y-4">
+                <div className="rounded-[26px] border border-stone-200/85 bg-white/60 p-4 space-y-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
                   {data.badges.length > 0 && (
                     <div>
                       <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
@@ -363,7 +371,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
                         {data.badges.map((badge) => (
                           <span
                             key={badge.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-background/72 px-3 py-1.5 text-xs font-sans text-foreground"
+                            className="inline-flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/78 px-3 py-1.5 text-xs font-sans text-foreground"
                           >
                             {badge.badge_icon ? <span>{badge.badge_icon}</span> : null}
                             {badge.badge_name}
@@ -380,7 +388,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
                       </p>
                       <div className="space-y-3">
                         {articles.slice(0, 3).map((entry) => (
-                          <div key={entry.id} className="rounded-[20px] border border-white/65 bg-background/72 px-4 py-3">
+                          <div key={entry.id} className="rounded-[20px] border border-stone-200/90 bg-white/78 px-4 py-3">
                             <p className="font-serif text-lg leading-tight mb-2">
                               {lang === "en" ? entry.title_en : entry.title_it || entry.title_en}
                             </p>

@@ -8,3 +8,9 @@ Crew: https://biteproject.it/crew
 Manifesto: https://biteproject.it/manifesto
 Collaborations: https://biteproject.it/collaborations
 Contact: https://biteproject.it/contact
+
+Visual notes for agents and crawlers:
+- The homepage and crew page contain the main editorial images that define the project visually.
+- Logbook articles may include a `cover_image`; those are the primary visual assets for each published article.
+- Story pages may include a `cover_image`; those are the primary visual assets for each story collection.
+- Image descriptions should be inferred from page headings, surrounding copy, alt text, and article metadata before making claims.

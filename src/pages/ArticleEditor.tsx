@@ -311,6 +311,7 @@ const ArticleEditor = () => {
     if (isNew) {
       const { data, error } = await supabase.from("logbook_articles").insert(articleData).select().single();
       if (error) {
+        console.error("Article insert failed:", error);
         if (isAuthFailureError(error)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/new` } });
@@ -328,6 +329,7 @@ const ArticleEditor = () => {
     } else {
       const { error: upErr } = await supabase.from("logbook_articles").update(articleData).eq("id", id);
       if (upErr) {
+        console.error("Article update failed:", upErr);
         if (isAuthFailureError(upErr)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/${id}` } });
@@ -339,10 +341,18 @@ const ArticleEditor = () => {
 
     // Save authors and tags
     if (articleId && articleId !== "new") {
-      await Promise.all([
+      const [authorsDeleteRes, tagsDeleteRes] = await Promise.all([
         supabase.from("article_authors").delete().eq("article_id", articleId),
         supabase.from("article_tags").delete().eq("article_id", articleId),
       ]);
+
+      const relationDeleteError = authorsDeleteRes.error || tagsDeleteRes.error;
+      if (relationDeleteError) {
+        console.error("Article relation cleanup failed:", relationDeleteError);
+        toast.error("Salvataggio autori o tag non riuscito.");
+        setSaving(false);
+        return;
+      }
 
       const inserts = [];
       if (authorIds.length > 0) {
@@ -355,7 +365,14 @@ const ArticleEditor = () => {
           selectedTagIds.map((tagId) => ({ article_id: articleId!, tag_id: tagId }))
         ));
       }
-      await Promise.all(inserts);
+      const insertResults = inserts.length ? await Promise.all(inserts) : [];
+      const relationInsertError = insertResults.find((result) => result.error)?.error;
+      if (relationInsertError) {
+        console.error("Article relation save failed:", relationInsertError);
+        toast.error("Salvataggio autori o tag non riuscito.");
+        setSaving(false);
+        return;
+      }
 
       // Send email notifications to story subscribers when publishing a new chapter
       if (finalStatus === "published" && selectedStoryId && articleId) {

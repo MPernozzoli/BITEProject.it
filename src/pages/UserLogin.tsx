@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Compass, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
-import boatHarbor from "@/assets/boat-harbor.jpeg";
+import boatHarbor from "@/assets/boat-harbor.webp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
@@ -467,7 +467,14 @@ const UserLogin = () => {
           </div>
 
           <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/60 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur">
-            <img src={boatHarbor} alt={ui.hero.imageAlt} className="h-80 w-full object-cover" />
+            <img
+              src={boatHarbor}
+              alt={ui.hero.imageAlt}
+              className="h-80 w-full object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[hsl(var(--primary)/0.96)] via-[hsl(var(--primary)/0.62)] to-transparent p-6 text-primary-foreground">
               <p className="text-[0.65rem] uppercase tracking-[0.28em] text-primary-foreground/80">
                 {ui.hero.imageLabel}

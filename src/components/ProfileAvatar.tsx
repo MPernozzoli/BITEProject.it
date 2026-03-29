@@ -23,6 +23,9 @@ const ProfileAvatar = ({ name, avatarUrl, fallback, imgClassName }: ProfileAvata
       src={src}
       alt={name}
       className={imgClassName || "w-full h-full object-cover"}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />
   );

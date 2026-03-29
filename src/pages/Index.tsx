@@ -13,10 +13,10 @@ import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
 
-import bowSunset from "@/assets/bow-sunset.jpeg";
-import boatSunset from "@/assets/boat-sunset.jpeg";
-import dogsMarina from "@/assets/dogs-marina.jpeg";
-import dinghyCrew from "@/assets/dinghy-crew.jpg";
+import bowSunset from "@/assets/bow-sunset.webp";
+import boatSunset from "@/assets/boat-sunset.webp";
+import dogsMarina from "@/assets/dogs-marina.webp";
+import dinghyCrew from "@/assets/dinghy-crew.webp";
 
 interface HomeTag {
   id: string;

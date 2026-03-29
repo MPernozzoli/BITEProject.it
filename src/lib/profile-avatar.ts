@@ -8,13 +8,29 @@ export const resolveProfileAvatarUrl = (avatarUrl?: string | null) => {
   if (!raw) return undefined;
 
   if (raw.startsWith("blob:") || raw.startsWith("data:")) return raw;
-  if (/^[a-z][a-z\d+\-.]*:/i.test(raw)) return raw;
 
   if (raw.startsWith("/storage/v1/object/") || raw.startsWith("storage/v1/object/")) {
     const baseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
     if (!baseUrl) return raw.startsWith("/") ? raw : `/${raw}`;
     const pathname = raw.startsWith("/") ? raw : `/${raw}`;
     return new URL(pathname, baseUrl).toString();
+  }
+
+  if (/^[a-z][a-z\d+\-.]*:/i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      const storageMarker = `/storage/v1/object/public/${PROFILE_AVATAR_BUCKET}/`;
+      const storageIndex = parsed.pathname.indexOf(storageMarker);
+      if (storageIndex >= 0) {
+        const storagePath = decodeURIComponent(parsed.pathname.slice(storageIndex + storageMarker.length));
+        const { data } = supabase.storage.from(PROFILE_AVATAR_BUCKET).getPublicUrl(storagePath);
+        return data.publicUrl;
+      }
+    } catch {
+      return raw;
+    }
+
+    return raw;
   }
 
   let storagePath = raw.replace(/^\/+/, "");

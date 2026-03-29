@@ -1,14 +1,14 @@
 import { useI18n } from "@/lib/i18n";
 import { Heart, Music } from "lucide-react";
-import dinghyCrew from "@/assets/dinghy-crew.jpg";
-import boatSunset from "@/assets/boat-sunset.jpeg";
-import sailingCockpit from "@/assets/sailing-cockpit.jpeg";
-import boatHarbor from "@/assets/boat-harbor.jpeg";
-import godot from "@/assets/godot.jpeg";
-import godotSnow from "@/assets/godot-snow.jpeg";
-import snowSami from "@/assets/snow-sami.jpeg";
-import duodji from "@/assets/duodji.jpeg";
-import freya from "@/assets/freya.jpeg";
+import dinghyCrew from "@/assets/dinghy-crew.webp";
+import boatSunset from "@/assets/boat-sunset.webp";
+import sailingCockpit from "@/assets/sailing-cockpit.webp";
+import boatHarbor from "@/assets/boat-harbor.webp";
+import godot from "@/assets/godot.webp";
+import godotSnow from "@/assets/godot-snow.webp";
+import snowSami from "@/assets/snow-sami.webp";
+import duodji from "@/assets/duodji.webp";
+import freya from "@/assets/freya.webp";
 
 const TheCrew = () => {
   const { t, lang } = useI18n();
@@ -17,7 +17,14 @@ const TheCrew = () => {
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <section className="relative min-h-[78vh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          <img src={dinghyCrew} alt="The crew" className="img-cover" />
+          <img
+            src={dinghyCrew}
+            alt="The crew arriving by dinghy beside the boat"
+            className="img-cover"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.18)_0%,rgba(17,28,43,0.46)_42%,rgba(17,28,43,0.76)_100%)]" />
         </div>
         <div className="relative z-10 mx-auto flex min-h-[calc(78vh-7rem)] max-w-6xl items-end">
@@ -46,7 +53,13 @@ const TheCrew = () => {
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3]">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={duodji} alt="Duodji — the camper" className="img-cover hover:scale-105 transition-transform duration-700 object-bottom" />
+                <img
+                  src={duodji}
+                  alt="Duodji, the camper that came before life aboard"
+                  className="img-cover hover:scale-105 transition-transform duration-700 object-bottom"
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
             </div>
           </div>
@@ -117,7 +130,13 @@ const TheCrew = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3]">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={godot} alt="Godot" className="img-cover hover:scale-105 transition-transform duration-700" />
+                <img
+                  src={godot}
+                  alt="Godot aboard"
+                  className="img-cover hover:scale-105 transition-transform duration-700"
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
             </div>
             <div>
@@ -141,7 +160,13 @@ const TheCrew = () => {
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3] order-1 lg:order-2">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={freya} alt="Freya" className="img-cover hover:scale-105 transition-transform duration-700" />
+                <img
+                  src={freya}
+                  alt="Freya aboard"
+                  className="img-cover hover:scale-105 transition-transform duration-700"
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
             </div>
           </div>
@@ -165,12 +190,12 @@ const TheCrew = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={snowSami} alt="Snow Daisy and Sami" className="img-cover" />
+                <img src={snowSami} alt="Snow Daisy and Sami" className="img-cover" loading="lazy" decoding="async" />
               </div>
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={godotSnow} alt="Godot and Snow Daisy" className="img-cover" />
+                <img src={godotSnow} alt="Godot and Snow Daisy" className="img-cover" loading="lazy" decoding="async" />
               </div>
             </div>
           </div>
@@ -189,12 +214,24 @@ const TheCrew = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-frame rounded-[28px] p-2 aspect-[3/4]">
                 <div className="overflow-hidden rounded-[22px] h-full">
-                  <img src={boatHarbor} alt="Spritz in harbor" className="img-cover hover:scale-105 transition-transform duration-700" />
+                  <img
+                    src={boatHarbor}
+                    alt="Spritz in harbor"
+                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               </div>
               <div className="glass-frame rounded-[28px] p-2 aspect-[3/4] mt-8">
                 <div className="overflow-hidden rounded-[22px] h-full">
-                  <img src={sailingCockpit} alt="Sailing cockpit" className="img-cover hover:scale-105 transition-transform duration-700" />
+                  <img
+                    src={sailingCockpit}
+                    alt="Cockpit while sailing"
+                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               </div>
             </div>
@@ -206,7 +243,7 @@ const TheCrew = () => {
         <div className="page-section-wide">
           <div className="glass-frame rounded-[34px] p-2 overflow-hidden">
             <div className="overflow-hidden rounded-[28px] aspect-[16/7] md:aspect-[16/6] max-h-[420px]">
-              <img src={boatSunset} alt="Spritz at sunset" className="img-cover object-bottom" />
+              <img src={boatSunset} alt="Spritz at sunset" className="img-cover object-bottom" loading="lazy" decoding="async" />
             </div>
           </div>
         </div>

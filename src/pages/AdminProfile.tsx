@@ -9,6 +9,7 @@ import { isAuthFailureError } from "@/lib/supabase-auth";
 import { toast } from "sonner";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
+import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 
 const TikTokIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -46,6 +47,7 @@ const AdminProfile = () => {
     social_x: "",
     social_linkedin: "",
     social_website: "",
+    social_seapeople: "",
   });
   const [storySubscriptions, setStorySubscriptions] = useState<Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>>([]);
   const { lang } = useI18n();
@@ -81,7 +83,7 @@ const AdminProfile = () => {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website")
+        .select("name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople")
         .eq("id", userId)
         .single();
       if (error) {
@@ -107,6 +109,7 @@ const AdminProfile = () => {
           social_x: data.social_x || "",
           social_linkedin: data.social_linkedin || "",
           social_website: data.social_website || "",
+          social_seapeople: data.social_seapeople || "",
         });
       }
 
@@ -371,6 +374,7 @@ const AdminProfile = () => {
                 { key: "social_x", icon: <XIcon size={16} />, placeholder: "@username" },
                 { key: "social_linkedin", icon: <Linkedin size={16} />, placeholder: "username" },
                 { key: "social_website", icon: <Globe size={16} />, placeholder: "https://tuosito.com" },
+                { key: "social_seapeople", icon: <SeaPeopleIcon size={16} />, placeholder: "link al profilo o slug" },
               ].map((s) => (
                 <div key={s.key} className="flex items-center gap-3">
                   <span className="text-muted-foreground w-5 flex-shrink-0 flex items-center justify-center">{s.icon}</span>

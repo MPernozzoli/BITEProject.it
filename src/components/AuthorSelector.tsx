@@ -19,7 +19,11 @@ const AuthorSelector = ({ selectedIds, onChange }: AuthorSelectorProps) => {
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const { data } = await supabase.from("profiles").select("id, name, avatar_url");
+      const { data, error } = await supabase.from("public_profiles").select("id, name, avatar_url");
+      if (error) {
+        console.error("Failed to load author profiles:", error);
+        return;
+      }
       if (data) setProfiles(data);
     };
     fetchProfiles();
