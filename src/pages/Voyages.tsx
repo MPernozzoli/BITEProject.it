@@ -5,6 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import {
   buildVoyagePath,
   formatVoyageDateRange,
+  getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   totalWaypointDistance,
   type GeoArticle,
@@ -13,7 +14,7 @@ import {
 } from "@/lib/voyage-utils";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { useEffect, useMemo } from "react";
-import { ArrowRight, Compass, MapPinned } from "lucide-react";
+import { ArrowRight, MapPinned } from "lucide-react";
 
 const VoyagesPage = () => {
   const { lang } = useI18n();
@@ -23,7 +24,7 @@ const VoyagesPage = () => {
     queryKey: ["public-voyages"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("voyages" as any)
+        .from("voyages")
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
@@ -35,7 +36,7 @@ const VoyagesPage = () => {
     queryKey: ["public-voyage-waypoints"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("voyage_waypoints" as any)
+        .from("voyage_waypoints")
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
@@ -132,6 +133,8 @@ const VoyagesPage = () => {
             const publicWaypoints = getPublicVoyageWaypoints(voyageWaypoints, articleLinkMap[voyage.id] || [], voyage.id);
             const departure = publicWaypoints[0];
             const arrival = publicWaypoints[publicWaypoints.length - 1];
+            const departureIndex = departure ? voyageWaypoints.findIndex((item) => item.id === departure.id) : -1;
+            const arrivalIndex = arrival ? voyageWaypoints.findIndex((item) => item.id === arrival.id) : -1;
             const distance = Math.round(totalWaypointDistance(voyageWaypoints));
             const dateRange = formatVoyageDateRange(voyage, locale);
 
@@ -167,13 +170,21 @@ const VoyagesPage = () => {
                     <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">
                       {lang === "it" ? "Partenza" : "Departure"}
                     </p>
-                    <p className="text-sm">{departure?.name || (lang === "it" ? "Non definita" : "Not set")}</p>
+                    <p className="text-sm">
+                      {departure
+                        ? getLocalizedWaypointName(departure, lang, departureIndex >= 0 ? departureIndex : 0)
+                        : (lang === "it" ? "Non definita" : "Not set")}
+                    </p>
                   </div>
                   <div className="glass-panel-soft rounded-[24px] p-4">
                     <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">
                       {lang === "it" ? "Arrivo" : "Arrival"}
                     </p>
-                    <p className="text-sm">{arrival?.name || (lang === "it" ? "In corso" : "Open-ended")}</p>
+                    <p className="text-sm">
+                      {arrival
+                        ? getLocalizedWaypointName(arrival, lang, arrivalIndex >= 0 ? arrivalIndex : publicWaypoints.length - 1)
+                        : (lang === "it" ? "In corso" : "Open-ended")}
+                    </p>
                   </div>
                   <div className="glass-panel-soft rounded-[24px] p-4 flex items-center justify-between gap-3">
                     <div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useI18n } from "@/lib/i18n";
 import {
   Plus,
   Edit,
@@ -21,11 +22,15 @@ import {
   totalWaypointDistance,
   reverseGeocodePlace,
   buildWaypointDefaultName,
+  buildWaypointDefaultLocalizedNames,
   formatWaypointCoordinateLabel,
   buildVoyageGeometry,
+  getLocalizedWaypointName,
+  getWaypointEffectiveType,
   getStraightVoyageGeometry,
+  normalizeWaypointMedia,
 } from "@/lib/voyage-utils";
-import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 interface VoyageFormState {
@@ -52,12 +57,15 @@ const emptyVoyageForm: VoyageFormState = {
 
 const popupLabelStyle = "display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);margin-bottom:6px;font-family:var(--font-sans);";
 const popupInputStyle = "width:100%;padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:12px;font-family:var(--font-sans);outline:none;";
+const popupTextareaStyle = `${popupInputStyle}min-height:68px;resize:vertical;`;
+const popupMetaStyle = "margin:0;font-size:12px;color:hsl(220,15%,30%);";
+const popupLanguageOptions = [
+  { code: "it", label: "Italiano" },
+  { code: "en", label: "English" },
+] as const;
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
-
-const getNextWaypointOrder = (waypoints: VoyageWaypoint[]) =>
-  waypoints.length ? Math.max(...waypoints.map((waypoint) => waypoint.sort_order)) + 1 : 0;
 
 const getErrorMessage = (error: { message?: string | null } | null, fallback: string) =>
   error?.message || fallback;
@@ -67,20 +75,35 @@ const isMissingWaypointMetadataColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["waypoint_type", "date_start", "date_end"].some((column) => text.includes(column)) &&
+  return ["waypoint_type", "date_start", "date_end", "visibility_mode", "name_it", "name_en", "description_it", "description_en", "event_date", "event_time", "media"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
-type VoyageRecord = Record<string, any> &
+const stripUnsupportedWaypointMetadata = (payload: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(payload).filter(([key]) =>
+      ["voyage_id", "lat", "lng", "name", "sort_order"].includes(key)
+    )
+  );
+
+type VoyageRecord = Record<string, unknown> &
   Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Record<string, any> &
+type WaypointRecord = Record<string, unknown> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   ...waypoint,
-  name: waypoint?.name ?? "",
+  name: waypoint?.name ?? waypoint?.name_it ?? waypoint?.name_en ?? "",
+  name_it: waypoint?.name_it ?? waypoint?.name ?? "",
+  name_en: waypoint?.name_en ?? waypoint?.name ?? "",
   waypoint_type: waypoint?.waypoint_type === "narrative" ? "narrative" : "technical",
+  visibility_mode: waypoint?.visibility_mode === "manual" ? "manual" : "auto",
+  description_it: waypoint?.description_it ?? null,
+  description_en: waypoint?.description_en ?? null,
+  event_date: waypoint?.event_date ?? null,
+  event_time: waypoint?.event_time ?? null,
+  media: normalizeWaypointMedia(waypoint?.media),
   date_start: waypoint?.date_start ?? null,
   date_end: waypoint?.date_end ?? null,
 });
@@ -168,6 +191,7 @@ const getNearestSegmentIndex = (
 };
 
 const AdminVoyageManager = () => {
+  const { lang } = useI18n();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [waypoints, setWaypoints] = useState<Record<string, VoyageWaypoint[]>>({});
   const [selectedVoyageId, setSelectedVoyageId] = useState<string | null>(null);
@@ -292,6 +316,38 @@ const AdminVoyageManager = () => {
     );
   }, [commitVoyages]);
 
+  const uploadWaypointMediaAsset = useCallback(async (waypointId: string, file: File) => {
+    const ext = file.name.split(".").pop() || "bin";
+    const path = `voyage-waypoints/${waypointId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from("logbook-media").upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    });
+
+    if (error) {
+      toast.error(getErrorMessage(error, "Unable to upload waypoint media"));
+      return null;
+    }
+
+    const { data } = supabase.storage.from("logbook-media").getPublicUrl(path);
+    return {
+      kind: file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "file",
+      mime_type: file.type || null,
+      name: file.name,
+      path,
+      url: data.publicUrl,
+    } satisfies VoyageWaypointMediaItem;
+  }, []);
+
+  const deleteWaypointMediaAsset = useCallback(async (mediaItem: VoyageWaypointMediaItem) => {
+    if (!mediaItem.path) return;
+
+    const { error } = await supabase.storage.from("logbook-media").remove([mediaItem.path]);
+    if (error) {
+      console.error("Unable to delete waypoint media asset", error);
+    }
+  }, []);
+
   const updateWaypoint = useCallback(
     async (
       voyageId: string,
@@ -300,7 +356,21 @@ const AdminVoyageManager = () => {
       options?: { successMessage?: string | null; syncGeometry?: boolean }
     ) => {
       const payload = changes as TablesUpdate<"voyage_waypoints">;
-      const { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
+      let appliedChanges = changes;
+      let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
+
+      if (error && isMissingWaypointMetadataColumnError(error)) {
+        const legacyPayload = stripUnsupportedWaypointMetadata(payload as Record<string, unknown>) as TablesUpdate<"voyage_waypoints">;
+        if (!Object.keys(legacyPayload).length) {
+          toast.error("Apply the latest waypoint migration to save localized content, dates, and media.");
+          return false;
+        }
+
+        const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
+        error = fallbackResult.error;
+        appliedChanges = legacyPayload as Partial<VoyageWaypoint>;
+      }
+
       if (error) {
         toast.error(getErrorMessage(error, "Unable to update waypoint"));
         return false;
@@ -309,7 +379,7 @@ const AdminVoyageManager = () => {
       const nextWaypoints = commitWaypoints(
         voyageId,
         (waypointsRef.current[voyageId] || []).map((waypoint) =>
-          waypoint.id === waypointId ? normalizeWaypoint({ ...waypoint, ...changes }) : waypoint
+          waypoint.id === waypointId ? normalizeWaypoint({ ...waypoint, ...appliedChanges }) : waypoint
         )
       );
 
@@ -331,7 +401,8 @@ const AdminVoyageManager = () => {
     async (voyageId: string, lat: number, lng: number, insertIndex: number) => {
       const currentWaypoints = waypointsRef.current[voyageId] || [];
       const boundedIndex = Math.max(0, Math.min(insertIndex, currentWaypoints.length));
-      const provisionalName = buildWaypointDefaultName(boundedIndex, lat, lng);
+      const provisionalNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng);
+      const provisionalName = provisionalNames[lang];
       const shiftedWaypoints = currentWaypoints.map((waypoint, index) =>
         index >= boundedIndex ? normalizeWaypoint({ ...waypoint, sort_order: index + 1 }) : waypoint
       );
@@ -358,15 +429,27 @@ const AdminVoyageManager = () => {
         lat,
         lng,
         name: provisionalName,
+        name_it: provisionalNames.it,
+        name_en: provisionalNames.en,
         sort_order: boundedIndex,
       };
-      const metadata: Pick<TablesInsert<"voyage_waypoints">, "waypoint_type"> = { waypoint_type: "technical" };
+      const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
+        voyage_id: voyageId,
+        lat,
+        lng,
+        name: provisionalName,
+        sort_order: boundedIndex,
+      };
+      const metadata: Pick<TablesInsert<"voyage_waypoints">, "waypoint_type" | "visibility_mode"> = {
+        waypoint_type: "technical",
+        visibility_mode: "auto",
+      };
       const runInsert = (payload: TablesInsert<"voyage_waypoints">) =>
         supabase.from("voyage_waypoints").insert(payload).select().single();
 
       let { data, error } = await runInsert({ ...baseData, ...metadata });
       if (error && isMissingWaypointMetadataColumnError(error)) {
-        ({ data, error } = await runInsert(baseData));
+        ({ data, error } = await runInsert(legacyBaseData));
       }
 
       if (error || !data) {
@@ -388,15 +471,22 @@ const AdminVoyageManager = () => {
       if (!suggestedPlace) return true;
 
       const currentWaypoint = (waypointsRef.current[voyageId] || []).find((item) => item.id === createdWaypoint.id);
-      if (!currentWaypoint || currentWaypoint.name !== provisionalName) return true;
+      if (!currentWaypoint) return true;
 
-      const suggestedName = buildWaypointDefaultName(boundedIndex, lat, lng, suggestedPlace);
-      if (suggestedName === provisionalName) return true;
+      const hasCustomLocalizedName = currentWaypoint.name_it !== provisionalNames.it || currentWaypoint.name_en !== provisionalNames.en;
+      if (hasCustomLocalizedName) return true;
 
-      await updateWaypoint(voyageId, createdWaypoint.id, { name: suggestedName });
+      const suggestedNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng, suggestedPlace);
+      if (suggestedNames.it === provisionalNames.it && suggestedNames.en === provisionalNames.en) return true;
+
+      await updateWaypoint(voyageId, createdWaypoint.id, {
+        name: suggestedNames[lang],
+        name_it: suggestedNames.it,
+        name_en: suggestedNames.en,
+      });
       return true;
     },
-    [commitWaypoints, syncVoyageGeometry, updateWaypoint]
+    [commitWaypoints, lang, syncVoyageGeometry, updateWaypoint]
   );
 
   const deleteWaypoint = useCallback(
@@ -479,53 +569,137 @@ const AdminVoyageManager = () => {
     (waypoint: VoyageWaypoint, index: number, total: number, popup: maplibregl.Popup) => {
       const isStart = index === 0;
       const isEnd = total > 1 && index === total - 1;
+      const effectiveType = getWaypointEffectiveType(waypoint, index, total);
+      const defaultNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
+      const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
+      const statusLabel = waypoint.visibility_mode === "manual"
+        ? effectiveType === "narrative" ? "Visible" : "Hidden"
+        : effectiveType === "narrative" ? "Auto end" : "Auto hidden";
       const wrapper = document.createElement("form");
-      wrapper.style.cssText = "width:220px;max-height:240px;overflow-y:auto;overflow-x:hidden;padding:2px 2px 4px;box-sizing:border-box;font-family:var(--font-sans);";
+      wrapper.style.cssText = "width:280px;max-height:360px;overflow-y:auto;overflow-x:hidden;padding:2px 2px 4px;box-sizing:border-box;font-family:var(--font-sans);";
 
       const heading = isStart ? "Start" : isEnd ? "Arrival" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
-      const safeName = escapeHtml(waypoint.name || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng));
+      const mediaMarkup = waypoint.media.length
+        ? waypoint.media.map((mediaItem, mediaIndex) => {
+            const safeUrl = escapeHtml(mediaItem.url);
+            const safeName = escapeHtml(mediaItem.name || `Asset ${mediaIndex + 1}`);
+            const preview = mediaItem.kind === "image"
+              ? `<img src="${safeUrl}" alt="" style="width:100%;height:84px;object-fit:cover;border:1px solid hsl(var(--border));" />`
+              : mediaItem.kind === "video"
+                ? `<video src="${safeUrl}" muted playsinline style="width:100%;height:84px;object-fit:cover;border:1px solid hsl(var(--border));"></video>`
+                : `<div style="display:flex;align-items:center;justify-content:center;height:84px;border:1px solid hsl(var(--border));background:hsl(var(--muted));font-size:11px;color:hsl(220,10%,45%);">File</div>`;
+
+            return `
+              <div style="display:grid;gap:6px;">
+                ${preview}
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:hsl(var(--foreground));text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${safeName}</a>
+                  <button type="button" data-action="delete-media" data-media-index="${mediaIndex}" style="padding:4px 6px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:10px;cursor:pointer;">Remove</button>
+                </div>
+              </div>
+            `;
+          }).join("")
+        : `<p style="margin:0;font-size:11px;color:hsl(220,10%,45%);">No media attached yet.</p>`;
 
       wrapper.innerHTML = `
         <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;">
           <div>
             <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:hsl(220,10%,45%);">${heading}</p>
-            <p style="margin:0;font-size:12px;color:hsl(220,15%,30%);">${coords}</p>
+            <p style="${popupMetaStyle}">${coords}</p>
           </div>
-          <span style="font-size:11px;padding:4px 7px;background:${waypoint.waypoint_type === "technical" ? "hsla(220,10%,60%,0.12)" : "hsla(180,40%,35%,0.12)"};color:${waypoint.waypoint_type === "technical" ? "hsl(220,10%,40%)" : "hsl(180,40%,28%)"};">
-            ${waypoint.waypoint_type === "technical" ? "Hidden" : "Visible"}
+          <span style="font-size:11px;padding:4px 7px;background:${effectiveType === "technical" ? "hsla(220,10%,60%,0.12)" : "hsla(180,40%,35%,0.12)"};color:${effectiveType === "technical" ? "hsl(220,10%,40%)" : "hsl(180,40%,28%)"};">
+            ${statusLabel}
           </span>
         </div>
-        <label style="${popupLabelStyle}">Name</label>
-        <input name="name" type="text" value="${safeName}" style="${popupInputStyle}margin-bottom:12px;" />
+        ${popupLanguageOptions.map(({ code, label }) => `
+          <label style="${popupLabelStyle}">Name · ${label}</label>
+          <input
+            name="name_${code}"
+            type="text"
+            value="${escapeHtml((code === "it" ? waypoint.name_it : waypoint.name_en) || defaultNames[code])}"
+            style="${popupInputStyle}margin-bottom:10px;"
+          />
+        `).join("")}
+        <div style="display:grid;grid-template-columns:1fr 112px;gap:10px;margin-bottom:12px;">
+          <div>
+            <label style="${popupLabelStyle}">Date</label>
+            <input name="event_date" type="date" value="${escapeHtml(waypoint.event_date || "")}" style="${popupInputStyle}" />
+          </div>
+          <div>
+            <label style="${popupLabelStyle}">Time</label>
+            <input name="event_time" type="time" value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}" style="${popupInputStyle}" />
+          </div>
+        </div>
         <label style="${popupLabelStyle}">Visibility</label>
-        <select name="waypoint_type" style="${popupInputStyle}margin-bottom:8px;">
-          <option value="technical"${waypoint.waypoint_type === "technical" ? " selected" : ""}>Technical / hidden</option>
-          <option value="narrative"${waypoint.waypoint_type === "narrative" ? " selected" : ""}>Narrative / public</option>
+        <select name="visibility_mode" style="${popupInputStyle}margin-bottom:12px;">
+          <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (current end is public)</option>
+          <option value="technical"${selectedVisibilityValue === "technical" ? " selected" : ""}>Technical / hidden</option>
+          <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
         </select>
+        ${popupLanguageOptions.map(({ code, label }) => `
+          <label style="${popupLabelStyle}">Description · ${label}</label>
+          <textarea
+            name="description_${code}"
+            rows="3"
+            style="${popupTextareaStyle}margin-bottom:10px;"
+          >${escapeHtml((code === "it" ? waypoint.description_it : waypoint.description_en) || "")}</textarea>
+        `).join("")}
+        <label style="${popupLabelStyle}">Media</label>
+        <div style="display:grid;gap:10px;margin-bottom:10px;">${mediaMarkup}</div>
+        <input name="media_upload" type="file" multiple style="${popupInputStyle}margin-bottom:12px;padding:6px 10px;" />
         <div style="display:flex;gap:8px;">
           <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
           <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
         </div>
       `;
 
-      const nameInput = wrapper.querySelector('input[name="name"]') as HTMLInputElement | null;
-      const typeSelect = wrapper.querySelector('select[name="waypoint_type"]') as HTMLSelectElement | null;
+      const nameItInput = wrapper.querySelector('input[name="name_it"]') as HTMLInputElement | null;
+      const nameEnInput = wrapper.querySelector('input[name="name_en"]') as HTMLInputElement | null;
+      const descriptionItInput = wrapper.querySelector('textarea[name="description_it"]') as HTMLTextAreaElement | null;
+      const descriptionEnInput = wrapper.querySelector('textarea[name="description_en"]') as HTMLTextAreaElement | null;
+      const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
+      const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
+      const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
+      const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
+      const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
+
+      const refreshPopup = () => {
+        const nextWaypoint = (waypointsRef.current[waypoint.voyage_id] || []).find((item) => item.id === waypoint.id);
+        if (!nextWaypoint) return;
+        popup.setDOMContent(createWaypointPopupContent(nextWaypoint, index, total, popup));
+      };
 
       wrapper.addEventListener("submit", (event) => {
         event.preventDefault();
-        const name = nameInput?.value.trim() || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
-        const waypointType = typeSelect?.value === "technical" ? "technical" : "narrative";
+        const name_it = nameItInput?.value.trim() || defaultNames.it;
+        const name_en = nameEnInput?.value.trim() || defaultNames.en;
+        const visibilityValue = visibilitySelect?.value === "narrative" || visibilitySelect?.value === "technical"
+          ? visibilitySelect.value
+          : "auto";
+        const visibility_mode = visibilityValue === "auto" ? "auto" : "manual";
+        const waypoint_type = visibilityValue === "narrative" ? "narrative" : "technical";
+        const legacyName = (lang === "it" ? name_it : name_en) || name_it || name_en || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
 
         void (async () => {
           const success = await updateWaypoint(
             waypoint.voyage_id,
             waypoint.id,
-            { name, waypoint_type: waypointType },
+            {
+              name: legacyName,
+              name_it,
+              name_en,
+              description_it: descriptionItInput?.value.trim() || null,
+              description_en: descriptionEnInput?.value.trim() || null,
+              event_date: eventDateInput?.value || null,
+              event_time: eventTimeInput?.value || null,
+              visibility_mode,
+              waypoint_type,
+            },
             { successMessage: "Waypoint updated" }
           );
-          if (success) popup.remove();
+          if (success) refreshPopup();
         })();
       });
 
@@ -534,21 +708,60 @@ const AdminVoyageManager = () => {
         void deleteWaypoint(waypoint.voyage_id, waypoint.id);
       });
 
+      mediaDeleteButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const mediaIndex = Number((button as HTMLButtonElement).dataset.mediaIndex);
+          if (!Number.isInteger(mediaIndex) || !waypoint.media[mediaIndex]) return;
+
+          void (async () => {
+            await deleteWaypointMediaAsset(waypoint.media[mediaIndex]);
+            const nextMedia = waypoint.media.filter((_, indexValue) => indexValue !== mediaIndex);
+            const success = await updateWaypoint(
+              waypoint.voyage_id,
+              waypoint.id,
+              { media: nextMedia },
+              { successMessage: "Media removed" }
+            );
+            if (success) refreshPopup();
+          })();
+        });
+      });
+
+      mediaUploadInput?.addEventListener("change", () => {
+        const files = Array.from(mediaUploadInput.files || []);
+        if (!files.length) return;
+
+        void (async () => {
+          const uploaded = (await Promise.all(files.map((file) => uploadWaypointMediaAsset(waypoint.id, file))))
+            .filter(Boolean) as VoyageWaypointMediaItem[];
+          mediaUploadInput.value = "";
+          if (!uploaded.length) return;
+
+          const success = await updateWaypoint(
+            waypoint.voyage_id,
+            waypoint.id,
+            { media: [...waypoint.media, ...uploaded] },
+            { successMessage: uploaded.length === 1 ? "Media added" : `${uploaded.length} media added` }
+          );
+          if (success) refreshPopup();
+        })();
+      });
+
       return wrapper;
     },
-    [deleteWaypoint, updateWaypoint]
+    [deleteWaypoint, deleteWaypointMediaAsset, lang, updateWaypoint, uploadWaypointMediaAsset]
   );
 
   const createWaypointMarkerEl = useCallback((waypoint: VoyageWaypoint, index: number, total: number) => {
     const el = document.createElement("button");
-    const isNarrative = waypoint.waypoint_type === "narrative";
+    const isNarrative = getWaypointEffectiveType(waypoint, index, total) === "narrative";
     const isStart = index === 0;
     const isEnd = total > 1 && index === total - 1;
     const size = isNarrative ? 16 : 10;
 
     el.type = "button";
     el.className = "voyage-admin-marker";
-    el.title = `${waypoint.name || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)} · Drag to move`;
+    el.title = `${getLocalizedWaypointName(waypoint, lang, index)} · Drag to move`;
     el.style.cssText = `
       width:${size}px;
       height:${size}px;
@@ -564,7 +777,7 @@ const AdminVoyageManager = () => {
     el.addEventListener("mousedown", (event) => event.stopPropagation());
 
     return el;
-  }, []);
+  }, [lang]);
 
   const drawRouteOnMap = useCallback((map: maplibregl.Map) => {
     markersRef.current.forEach((marker) => marker.remove());
@@ -822,11 +1035,15 @@ const AdminVoyageManager = () => {
   }, []);
 
   const saveVoyage = useCallback(async () => {
-    const data: any = {
+    const data: TablesInsert<"voyages"> = {
       name: voyageForm.name,
       description: voyageForm.description,
       type: voyageForm.type,
       status: voyageForm.status,
+      start_date: voyageForm.start_date || null,
+      start_time: voyageForm.start_time || null,
+      end_date: voyageForm.end_date || null,
+      end_time: voyageForm.end_time || null,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
     };
 
@@ -1116,87 +1333,101 @@ const AdminVoyageManager = () => {
                 <p className="text-xs text-muted-foreground font-sans">
                   {selectedWaypoints.length >= 2
                     ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                    : voyageDates || "The first click creates the start waypoint as technical."}
+                    : voyageDates || "The current last waypoint is public by default until you add another point."}
                 </p>
               </div>
             </div>
 
             <div className="space-y-0 max-h-[260px] overflow-y-auto">
-              {selectedWaypoints.map((waypoint, index) => (
-                <div
-                  key={waypoint.id}
-                  className="flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs"
-                >
-                  <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  {waypoint.waypoint_type === "technical" ? (
-                    <span title="Technical (hidden from public map)">
-                      <EyeOff size={10} className="text-muted-foreground shrink-0" />
-                    </span>
-                  ) : (
-                    <span title="Narrative (visible to readers)">
-                      <Eye size={10} className="text-accent shrink-0" />
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => openWaypointPopup(waypoint.id)}
-                    className="flex-1 min-w-0 text-left hover:text-foreground transition-colors"
+              {selectedWaypoints.map((waypoint, index) => {
+                const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
+                const displayName = getLocalizedWaypointName(waypoint, lang, index);
+                const visibilityLabel = waypoint.visibility_mode === "manual"
+                  ? effectiveType === "narrative"
+                    ? "Manual narrative waypoint"
+                    : "Manual technical waypoint"
+                  : effectiveType === "narrative"
+                    ? "Auto public end waypoint"
+                    : "Auto technical waypoint";
+                const eventLabel = [waypoint.event_date, waypoint.event_time?.slice(0, 5)].filter(Boolean).join(" · ");
+
+                return (
+                  <div
+                    key={waypoint.id}
+                    className="flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs"
                   >
-                    <span className="font-sans truncate block">
-                      {waypoint.name || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
+                    <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
+                      {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span className="text-[10px] text-muted-foreground font-sans">
-                      {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
-                    className="p-1 text-muted-foreground hover:text-destructive"
-                    title="Delete waypoint"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {effectiveType === "technical" ? (
+                      <span title={visibilityLabel}>
+                        <EyeOff size={10} className="text-muted-foreground shrink-0" />
+                      </span>
+                    ) : (
+                      <span title={visibilityLabel}>
+                        <Eye size={10} className="text-accent shrink-0" />
+                      </span>
+                    )}
                     <button
+                      type="button"
                       onClick={() => openWaypointPopup(waypoint.id)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                      title="Edit waypoint"
+                      className="flex-1 min-w-0 text-left hover:text-foreground transition-colors"
                     >
-                      <Edit size={12} />
+                      <span className="font-sans truncate block">
+                        {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-sans">
+                        {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                        {eventLabel ? ` · ${eventLabel}` : ""}
+                      </span>
                     </button>
                     <button
-                      onClick={() => moveWaypoint(waypoint, "up")}
-                      disabled={index === 0}
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                      onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
+                      className="p-1 text-muted-foreground hover:text-destructive"
+                      title="Delete waypoint"
                     >
-                      <ChevronUp size={12} />
+                      <Trash2 size={12} />
                     </button>
-                    <button
-                      onClick={() => moveWaypoint(waypoint, "down")}
-                      disabled={index === selectedWaypoints.length - 1}
-                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                    >
-                      <ChevronDown size={12} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        focusWaypointOnMap(waypoint.id);
-                      }}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                      title="Center waypoint on map"
-                    >
-                      <LocateFixed size={12} />
-                    </button>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openWaypointPopup(waypoint.id)}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        title="Edit waypoint"
+                      >
+                        <Edit size={12} />
+                      </button>
+                      <button
+                        onClick={() => moveWaypoint(waypoint, "up")}
+                        disabled={index === 0}
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                      >
+                        <ChevronUp size={12} />
+                      </button>
+                      <button
+                        onClick={() => moveWaypoint(waypoint, "down")}
+                        disabled={index === selectedWaypoints.length - 1}
+                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          focusWaypointOnMap(waypoint.id);
+                        }}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        title="Center waypoint on map"
+                      >
+                        <LocateFixed size={12} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {selectedWaypoints.length === 0 && (
               <p className="text-center text-xs text-muted-foreground py-6">
-                The next click on the map will create the start waypoint as technical.
+                The next click on the map will create the first waypoint.
               </p>
             )}
           </div>

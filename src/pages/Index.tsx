@@ -14,7 +14,6 @@ import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import bowSunset from "@/assets/bow-sunset.webp";
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
 import dinghyCrew from "@/assets/dinghy-crew.webp";
@@ -43,7 +42,7 @@ interface ArticleTagRelation {
 }
 
 interface HeroMedia {
-  kind: "image" | "video";
+  kind: "video";
   src: string;
   alt: string;
   poster?: string;
@@ -69,18 +68,8 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
-const HERO_IMAGE_DURATION_MS = 5000;
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
-
-const desktopHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
-
-const mobileHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
-
-const pickRandomHeroMedia = (isMobile: boolean) => {
-  const mediaPool = isMobile ? mobileHeroMedia : desktopHeroMedia;
-  return mediaPool[Math.floor(Math.random() * mediaPool.length)] ?? mediaPool[0];
-};
 
 const shuffleHeroMedia = (items: HeroMedia[], avoidSrc?: string) => {
   const nextItems = [...items];
@@ -114,7 +103,7 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
       return {
-        kind: "video" as const,
+        kind: "video",
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
@@ -148,7 +137,7 @@ const Index = () => {
   const isMobile = useIsMobile();
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
-  const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>(() => [pickRandomHeroMedia(false)]);
+  const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>([]);
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
   const [pendingHeroTransition, setPendingHeroTransition] = useState<HeroTransitionTarget | null>(null);
   const [isHeroCrossfading, setIsHeroCrossfading] = useState(false);
@@ -193,16 +182,14 @@ const Index = () => {
   });
 
   const currentHeroPool = useMemo(() => {
-    const desktopPool = [...(heroVideoPool?.desktop ?? []), ...desktopHeroMedia];
-    const mobilePool = [...(heroVideoPool?.mobile ?? []), ...mobileHeroMedia];
-    return isMobile ? mobilePool : desktopPool;
+    return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
   }, [heroVideoPool, isMobile]);
 
-  const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? pickRandomHeroMedia(false);
+  const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
 
   useEffect(() => {
     const nextPlaylist = shuffleHeroMedia(currentHeroPool);
-    setHeroPlaylist(nextPlaylist.length ? nextPlaylist : [pickRandomHeroMedia(isMobile)]);
+    setHeroPlaylist(nextPlaylist);
     setHeroPlaylistIndex(0);
     const nextTransition = getNextHeroTransition(0, nextPlaylist, currentHeroPool);
     setPendingHeroTransition(nextTransition);
@@ -218,18 +205,6 @@ const Index = () => {
     setIsHeroCrossfadeQueued(false);
     setIsHeroCrossfading(false);
   }, [currentHeroPool, heroPlaylist, heroPlaylistIndex]);
-
-  useEffect(() => {
-    if (!heroMedia || heroMedia.kind !== "image" || heroPlaylist.length <= 1) return;
-
-    heroPlaybackTimeoutRef.current = window.setTimeout(() => {
-      queueHeroCrossfade();
-    }, Math.max(HERO_IMAGE_DURATION_MS - HERO_CROSSFADE_DURATION_MS, 0));
-
-    return () => {
-      if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
-    };
-  }, [currentHeroPool, heroMedia, heroPlaylist, heroPlaylist.length]);
 
   const queueHeroCrossfade = () => {
     if (heroPlaylist.length <= 1 || !pendingHeroTransition || isHeroCrossfading) return;
@@ -327,10 +302,7 @@ const Index = () => {
     setIsPendingHeroReady(true);
   };
 
-  const renderHeroMedia = (
-    media: HeroMedia,
-    mode: "active" | "pending"
-  ) => {
+  const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -341,35 +313,20 @@ const Index = () => {
           : "hero-layer--incoming"
     }`;
 
-    if (media.kind === "video") {
-      return (
-        <video
-          key={media.src}
-          className={baseClassName}
-          poster={media.poster}
-          autoPlay
-          muted
-          playsInline
-          preload="auto"
-          onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
-          onEnded={mode === "active" ? queueHeroCrossfade : undefined}
-        >
-          <source src={media.src} type={media.mimeType ?? "video/mp4"} />
-        </video>
-      );
-    }
-
     return (
-      <img
+      <video
         key={media.src}
-        src={media.src}
-        alt={media.alt}
         className={baseClassName}
-        loading="eager"
-        fetchPriority="high"
-        decoding="async"
-        onLoad={mode === "pending" ? () => setIsPendingHeroReady(true) : undefined}
-      />
+        poster={media.poster}
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
+        onEnded={mode === "active" ? queueHeroCrossfade : undefined}
+      >
+        <source src={media.src} type={media.mimeType ?? "video/mp4"} />
+      </video>
     );
   };
 
@@ -521,7 +478,7 @@ const Index = () => {
       />
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          {renderHeroMedia(heroMedia, "active")}
+          {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
         </div>

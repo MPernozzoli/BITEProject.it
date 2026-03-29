@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 import { validateSessionOrSignOut } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
@@ -249,6 +250,7 @@ const UserLogin = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [lastUsedMethod, setLastUsedMethod] = useState<AuthMethod | null>(null);
   const { lang } = useI18n();
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -434,14 +436,29 @@ const UserLogin = () => {
         ];
 
   return (
-    <div className="relative isolate overflow-hidden px-6 pb-24 pt-24 sm:px-8 lg:px-12">
-      <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_28%,_hsl(var(--secondary))_58%,_hsl(var(--background))_100%)]" />
-      <div className="absolute left-[6%] top-28 -z-10 h-48 w-48 rounded-full bg-[hsl(var(--accent)/0.16)] blur-3xl" />
-      <div className="absolute right-[8%] top-40 -z-10 h-64 w-64 rounded-full bg-[hsl(var(--sand)/0.22)] blur-3xl" />
-      <div className="absolute bottom-16 left-1/3 -z-10 h-56 w-56 rounded-full bg-[hsl(var(--primary)/0.08)] blur-3xl" />
+    <div
+      className={cn(
+        "relative isolate overflow-hidden sm:px-8 lg:px-12",
+        isMobile ? "px-4 pb-10 pt-6" : "px-6 pb-24 pt-24",
+      )}
+    >
+      {!isMobile && (
+        <>
+          <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_28%,_hsl(var(--secondary))_58%,_hsl(var(--background))_100%)]" />
+          <div className="absolute left-[6%] top-28 -z-10 h-48 w-48 rounded-full bg-[hsl(var(--accent)/0.16)] blur-3xl" />
+          <div className="absolute right-[8%] top-40 -z-10 h-64 w-64 rounded-full bg-[hsl(var(--sand)/0.22)] blur-3xl" />
+          <div className="absolute bottom-16 left-1/3 -z-10 h-56 w-56 rounded-full bg-[hsl(var(--primary)/0.08)] blur-3xl" />
+        </>
+      )}
 
-      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
-        <section className="space-y-8 slide-up">
+      <div
+        className={cn(
+          "mx-auto max-w-6xl",
+          isMobile ? "max-w-md" : "grid gap-10 lg:grid-cols-[1.08fr_0.92fr] lg:items-center",
+        )}
+      >
+        {!isMobile && (
+          <section className="space-y-8 slide-up">
           <div className="space-y-4">
             <h1 className="editorial-heading max-w-xl text-5xl leading-[0.95] text-foreground md:text-6xl">
               {heroContent.title}
@@ -484,10 +501,18 @@ const UserLogin = () => {
               </p>
             </div>
           </div>
-        </section>
+          </section>
+        )}
 
         <section className="fade-in">
-          <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] p-6 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur md:p-8">
+          <div
+            className={cn(
+              "border border-white/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] backdrop-blur",
+              isMobile
+                ? "rounded-[1.5rem] p-5 shadow-[0_20px_48px_-36px_hsl(var(--navy)/0.3)]"
+                : "rounded-[2rem] p-6 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] md:p-8",
+            )}
+          >
             <div className="space-y-6">
               <div className="space-y-4">
                 <div className="inline-flex w-full rounded-full border border-white/80 bg-white/70 p-1 shadow-[0_20px_40px_-30px_hsl(var(--navy)/0.35)]">
@@ -518,12 +543,19 @@ const UserLogin = () => {
                 </div>
 
                 <div>
-                  <h2 className="editorial-heading text-4xl text-foreground">
+                  <h2
+                    className={cn(
+                      "editorial-heading text-foreground",
+                      isMobile ? "text-3xl leading-tight" : "text-4xl",
+                    )}
+                  >
                     {formContent.title}
                   </h2>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    {formContent.subtitle}
-                  </p>
+                  {!isMobile && (
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      {formContent.subtitle}
+                    </p>
+                  )}
                 </div>
               </div>
 

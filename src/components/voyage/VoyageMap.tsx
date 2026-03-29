@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { getPublicVoyageWaypoints, getStraightVoyageGeometry } from "@/lib/voyage-utils";
+import {
+  buildPublicVoyageGeometry,
+  getAssociatedArticleForWaypoint,
+  getLocalizedWaypointName,
+  getPublicVoyageWaypoints,
+} from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 
 interface VoyageMapProps {
@@ -14,6 +19,14 @@ interface VoyageMapProps {
   lang: "en" | "it";
   initialFitReady?: boolean;
 }
+
+const escapePopupHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const VoyageMap = ({
   voyages,
@@ -29,10 +42,26 @@ const VoyageMap = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const waypointLayerHandlersRef = useRef<Record<string, {
+    mouseenter: (event: maplibregl.MapLayerMouseEvent) => void;
+    mousemove: (event: maplibregl.MapLayerMouseEvent) => void;
+    mouseleave: (event: maplibregl.MapLayerMouseEvent) => void;
+  }>>({});
   const articlesRef = useRef(articles);
   const onArticleClickRef = useRef(onArticleClick);
   const hasPerformedInitialFitRef = useRef(false);
   const [mapUnavailable, setMapUnavailable] = useState(false);
+
+  const clearWaypointLayerHandlers = useCallback((map: maplibregl.Map) => {
+    Object.entries(waypointLayerHandlersRef.current).forEach(([layerId, handlers]) => {
+      map.off("mouseenter", layerId, handlers.mouseenter);
+      map.off("mousemove", layerId, handlers.mousemove);
+      map.off("mouseleave", layerId, handlers.mouseleave);
+    });
+    waypointLayerHandlersRef.current = {};
+    popupRef.current?.remove();
+    popupRef.current = null;
+  }, []);
 
   // Keep refs in sync
   articlesRef.current = articles;
@@ -73,6 +102,9 @@ const VoyageMap = ({
       console.error("Failed to initialize voyage map", error);
       popupRef.current?.remove();
       popupRef.current = null;
+      if (mapRef.current) {
+        clearWaypointLayerHandlers(mapRef.current);
+      }
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       mapRef.current?.remove();
@@ -81,6 +113,9 @@ const VoyageMap = ({
     }
 
     return () => {
+      if (mapRef.current) {
+        clearWaypointLayerHandlers(mapRef.current);
+      }
       popupRef.current?.remove();
       popupRef.current = null;
       markersRef.current.forEach((marker) => marker.remove());
@@ -88,7 +123,7 @@ const VoyageMap = ({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [mapUnavailable]);
+  }, [clearWaypointLayerHandlers, mapUnavailable]);
 
   // Draw voyage routes
   useEffect(() => {
@@ -100,6 +135,8 @@ const VoyageMap = ({
         const coordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
         return Array.isArray(coordinates) ? coordinates : [];
       };
+
+      clearWaypointLayerHandlers(map);
 
       // Remove old sources/layers
       voyages.forEach((v) => {
@@ -134,9 +171,13 @@ const VoyageMap = ({
           ? isCompleted ? "hsl(220, 40%, 15%)" : isActive ? "hsl(210, 60%, 45%)" : "hsl(210, 30%, 65%)"
           : isCompleted ? "hsl(30, 30%, 25%)" : isActive ? "hsl(30, 50%, 40%)" : "hsl(30, 20%, 60%)";
 
-        const routeCoordinates = getCachedGeometryCoordinates(voyage).length >= 2
-          ? getCachedGeometryCoordinates(voyage)
-          : getStraightVoyageGeometry(wps);
+        const routeCoordinates = buildPublicVoyageGeometry(
+          wps,
+          voyage.type,
+          articles,
+          voyage.id,
+          getCachedGeometryCoordinates(voyage)
+        );
 
         const lineId = `voyage-line-${voyage.id}`;
         if (routeCoordinates.length >= 2) {
@@ -173,15 +214,22 @@ const VoyageMap = ({
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: visibleWaypoints.map((w) => {
+            features: visibleWaypoints.map((w, visibleIndex) => {
               const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
-              const isStart = routeIndex === 0;
-              const isEnd = routeIndex === wps.length - 1;
+              const safeIndex = routeIndex >= 0 ? routeIndex : visibleIndex;
+              const associatedArticle = getAssociatedArticleForWaypoint(articles, voyage.id, safeIndex);
+              const isStart = safeIndex === 0;
+              const isEnd = safeIndex === wps.length - 1;
               return {
                 type: "Feature" as const,
                 geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
                 properties: {
-                  name: w.name || "",
+                  name: getLocalizedWaypointName(w, lang, safeIndex),
+                  articleTitle: associatedArticle
+                    ? lang === "en"
+                      ? associatedArticle.title_en
+                      : associatedArticle.title_it || associatedArticle.title_en
+                    : "",
                   markerColor: isStart ? "hsl(136, 42%, 42%)" : isEnd ? "hsl(8, 65%, 54%)" : isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)",
                   markerRadius: isStart || isEnd ? 5 : isActive ? 5 : 4,
                 },
@@ -202,22 +250,55 @@ const VoyageMap = ({
           },
         });
 
-        // Popup on waypoint click
-        map.on("click", wpId, (e) => {
-          const feature = e.features?.[0];
-          const name = feature?.properties?.name;
-          if (!name) return;
+        const renderWaypointHoverPopup = (event: maplibregl.MapLayerMouseEvent) => {
+          const feature = event.features?.[0];
           if (!feature?.geometry || feature.geometry.type !== "Point") return;
           const coords = feature.geometry.coordinates as [number, number];
-          popupRef.current?.remove();
-          popupRef.current = new maplibregl.Popup({ offset: 10, closeButton: false })
-            .setLngLat(coords)
-            .setHTML(`<strong style="font-family:var(--font-sans);font-size:12px">${name}</strong>`)
-            .addTo(map);
-        });
+          const name = String(feature.properties?.name || "");
+          const articleTitle = String(feature.properties?.articleTitle || "");
+          if (!name) return;
 
-        map.on("mouseenter", wpId, () => { map.getCanvas().style.cursor = "pointer"; });
-        map.on("mouseleave", wpId, () => { map.getCanvas().style.cursor = ""; });
+          const popupHtml = `
+            <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:160px;max-width:240px;">
+              <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(name)}</strong>
+              ${articleTitle
+                ? `<span style="font-size:11px;line-height:1.4;color:hsl(220,15%,40%);">${lang === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
+                : ""}
+            </div>
+          `;
+
+          if (!popupRef.current) {
+            popupRef.current = new maplibregl.Popup({
+              offset: 12,
+              closeButton: false,
+              closeOnClick: false,
+              closeOnMove: false,
+              maxWidth: "260px",
+            });
+          }
+
+          popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
+        };
+
+        const handlers = {
+          mouseenter: (event: maplibregl.MapLayerMouseEvent) => {
+            map.getCanvas().style.cursor = "pointer";
+            renderWaypointHoverPopup(event);
+          },
+          mousemove: (event: maplibregl.MapLayerMouseEvent) => {
+            renderWaypointHoverPopup(event);
+          },
+          mouseleave: () => {
+            map.getCanvas().style.cursor = "";
+            popupRef.current?.remove();
+            popupRef.current = null;
+          },
+        };
+
+        waypointLayerHandlersRef.current[wpId] = handlers;
+        map.on("mouseenter", wpId, handlers.mouseenter);
+        map.on("mousemove", wpId, handlers.mousemove);
+        map.on("mouseleave", wpId, handlers.mouseleave);
       });
     };
 
@@ -226,7 +307,7 @@ const VoyageMap = ({
     } else {
       map.on("load", draw);
     }
-  }, [voyages, waypointsMap, highlightedVoyageId, articles]);
+  }, [articles, clearWaypointLayerHandlers, highlightedVoyageId, lang, voyages, waypointsMap]);
 
   // Draw article markers
   useEffect(() => {
@@ -454,7 +535,7 @@ const VoyageMap = ({
       <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--muted))_0%,transparent_60%)] px-6 text-center">
         <p className="max-w-md text-sm font-sans text-muted-foreground">
           {lang === "it"
-            ? "La mappa non e disponibile su questo dispositivo. Passa alla vista lista per continuare."
+            ? "La mappa non è disponibile su questo dispositivo. Passa alla vista lista per continuare."
             : "The map is unavailable on this device. Switch to list view to keep browsing."}
         </p>
       </div>

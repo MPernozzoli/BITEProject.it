@@ -8,8 +8,12 @@ import {
   formatIsoDate,
   formatVoyageDateRange,
   formatWaypointCoordinateLabel,
+  getAssociatedArticleForWaypoint,
+  getLocalizedWaypointDescription,
+  getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   getVoyageIdFromRouteParam,
+  normalizeWaypointMedia,
   totalWaypointDistance,
   type GeoArticle,
   type Voyage,
@@ -28,7 +32,7 @@ const VoyagePage = () => {
     queryKey: ["voyage", voyageId],
     enabled: Boolean(voyageId),
     queryFn: async () => {
-      const { data, error } = await supabase.from("voyages" as any).select("*").eq("id", voyageId).maybeSingle();
+      const { data, error } = await supabase.from("voyages").select("*").eq("id", voyageId).maybeSingle();
       if (error) throw error;
       return (data || null) as Voyage | null;
     },
@@ -39,7 +43,7 @@ const VoyagePage = () => {
     enabled: Boolean(voyageId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("voyage_waypoints" as any)
+        .from("voyage_waypoints")
         .select("*")
         .eq("voyage_id", voyageId)
         .order("sort_order", { ascending: true });
@@ -67,18 +71,45 @@ const VoyagePage = () => {
     () => getPublicVoyageWaypoints(waypoints, articles, voyageId),
     [articles, voyageId, waypoints]
   );
-  const departure = publicWaypoints[0];
-  const arrival = publicWaypoints[publicWaypoints.length - 1];
+  const publicWaypointEntries = useMemo(
+    () =>
+      publicWaypoints.map((waypoint, publicIndex) => {
+        const matchedIndex = waypoints.findIndex((item) => item.id === waypoint.id);
+        const originalIndex = matchedIndex >= 0 ? matchedIndex : publicIndex;
+        return {
+          waypoint,
+          originalIndex,
+          article: getAssociatedArticleForWaypoint(articles, voyageId, originalIndex),
+        };
+      }),
+    [articles, publicWaypoints, voyageId, waypoints]
+  );
+  const departureEntry = publicWaypointEntries[0];
+  const arrivalEntry = publicWaypointEntries[publicWaypointEntries.length - 1];
+  const departure = departureEntry?.waypoint;
+  const arrival = arrivalEntry?.waypoint;
   const totalNm = useMemo(() => Math.round(totalWaypointDistance(waypoints)), [waypoints]);
   const canonicalPath = voyage ? buildVoyagePath(voyage) : voyageId ? `/voyages/${voyageId}` : "/voyages";
+  const formatWaypointMoment = (date?: string | null, time?: string | null) => {
+    const formattedDate = formatIsoDate(date, locale);
+    if (!formattedDate) return null;
+    const formattedTime = time?.slice(0, 5);
+    return formattedTime ? `${formattedDate} · ${formattedTime}` : formattedDate;
+  };
+  const departureLabel = departureEntry
+    ? getLocalizedWaypointName(departureEntry.waypoint, lang, departureEntry.originalIndex)
+    : null;
+  const arrivalLabel = arrivalEntry
+    ? getLocalizedWaypointName(arrivalEntry.waypoint, lang, arrivalEntry.originalIndex)
+    : null;
 
   useEffect(() => {
     if (!voyage) return;
 
     const description = voyage.description?.trim()
       || (lang === "it"
-        ? `Rotta ${voyage.name} con partenza da ${departure?.name || "punto iniziale"}, arrivo a ${arrival?.name || "punto finale"} e ${publicWaypoints.length} waypoint pubblici.`
-        : `Route ${voyage.name} with departure from ${departure?.name || "starting point"}, arrival at ${arrival?.name || "final point"}, and ${publicWaypoints.length} public waypoints.`);
+        ? `Rotta ${voyage.name} con partenza da ${departureLabel || "punto iniziale"}, arrivo a ${arrivalLabel || "punto finale"} e ${publicWaypoints.length} waypoint pubblici.`
+        : `Route ${voyage.name} with departure from ${departureLabel || "starting point"}, arrival at ${arrivalLabel || "final point"}, and ${publicWaypoints.length} public waypoints.`);
 
     applySeo({
       title: `${voyage.name} | Routes | BITE`,
@@ -91,19 +122,19 @@ const VoyagePage = () => {
         name: voyage.name,
         description,
         url: `${window.location.origin}${canonicalPath}`,
-        itinerary: publicWaypoints.map((waypoint, index) => ({
+        itinerary: publicWaypointEntries.map(({ waypoint, originalIndex }) => ({
           "@type": "Place",
-          name: waypoint.name || `Waypoint ${index + 1}`,
+          name: getLocalizedWaypointName(waypoint, lang, originalIndex),
           geo: {
             "@type": "GeoCoordinates",
             latitude: waypoint.lat,
             longitude: waypoint.lng,
           },
-          arrivalTime: waypoint.date_end || undefined,
-          departureTime: waypoint.date_start || undefined,
+          arrivalTime: waypoint.event_date ? [waypoint.event_date, waypoint.event_time].filter(Boolean).join("T") : waypoint.date_end || undefined,
+          departureTime: waypoint.event_date ? [waypoint.event_date, waypoint.event_time].filter(Boolean).join("T") : waypoint.date_start || undefined,
         })),
-        departureTime: departure?.date_start || voyage.start_date || undefined,
-        arrivalTime: arrival?.date_end || voyage.end_date || undefined,
+        departureTime: departure?.event_date || departure?.date_start || voyage.start_date || undefined,
+        arrivalTime: arrival?.event_date || arrival?.date_end || voyage.end_date || undefined,
         subjectOf: articles.map((article) => ({
           "@type": "Article",
           headline: lang === "it" ? article.title_it || article.title_en : article.title_en,
@@ -114,7 +145,7 @@ const VoyagePage = () => {
         inLanguage: lang,
       },
     });
-  }, [arrival, articles, canonicalPath, departure, lang, publicWaypoints, voyage]);
+  }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, lang, publicWaypointEntries, publicWaypoints.length, voyage]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading route...</p></div>;
@@ -152,11 +183,11 @@ const VoyagePage = () => {
             <div className="grid gap-4 md:grid-cols-4">
               <div className="glass-panel-soft rounded-[24px] p-4">
                 <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">{lang === "it" ? "Partenza" : "Departure"}</p>
-                <p className="text-sm">{departure?.name || "-"}</p>
+                <p className="text-sm">{departureLabel || "-"}</p>
               </div>
               <div className="glass-panel-soft rounded-[24px] p-4">
                 <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">{lang === "it" ? "Arrivo" : "Arrival"}</p>
-                <p className="text-sm">{arrival?.name || "-"}</p>
+                <p className="text-sm">{arrivalLabel || "-"}</p>
               </div>
               <div className="glass-panel-soft rounded-[24px] p-4">
                 <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">{lang === "it" ? "Periodo" : "Dates"}</p>
@@ -184,23 +215,66 @@ const VoyagePage = () => {
               </div>
             </div>
             <div className="space-y-4">
-              {publicWaypoints.map((waypoint, index) => (
-                <article key={waypoint.id} className="glass-panel-soft rounded-[26px] p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent mb-2">
-                        {index === 0 ? (lang === "it" ? "Partenza" : "Departure") : index === publicWaypoints.length - 1 ? (lang === "it" ? "Arrivo" : "Arrival") : `${lang === "it" ? "Sosta" : "Stop"} ${index + 1}`}
+              {publicWaypointEntries.map(({ waypoint, originalIndex, article }, index) => {
+                const waypointName = getLocalizedWaypointName(waypoint, lang, originalIndex);
+                const waypointDescription = getLocalizedWaypointDescription(waypoint, lang);
+                const mediaItems = normalizeWaypointMedia(waypoint.media);
+                const articleTitle = article
+                  ? lang === "it"
+                    ? article.title_it || article.title_en
+                    : article.title_en
+                  : null;
+                const waypointMoment = formatWaypointMoment(waypoint.event_date, waypoint.event_time);
+
+                return (
+                  <article key={waypoint.id} className="glass-panel-soft rounded-[26px] p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent mb-2">
+                          {index === 0 ? (lang === "it" ? "Partenza" : "Departure") : index === publicWaypointEntries.length - 1 ? (lang === "it" ? "Arrivo" : "Arrival") : `${lang === "it" ? "Sosta" : "Stop"} ${index + 1}`}
+                        </p>
+                        <h3 className="editorial-heading text-xl mb-2">{waypointName}</h3>
+                        <p className="text-sm text-muted-foreground">{formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}</p>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground max-w-[220px]">
+                        {waypointMoment && <p>{waypointMoment}</p>}
+                        {article && (
+                          <Link to={`/logbook/${article.slug}`} className="inline-flex mt-2 text-accent hover:text-foreground transition-colors">
+                            {lang === "it" ? "Articolo collegato" : "Related article"}: {articleTitle}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                    {waypointDescription && (
+                      <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+                        {waypointDescription}
                       </p>
-                      <h3 className="editorial-heading text-xl mb-2">{waypoint.name || `${lang === "it" ? "Waypoint" : "Waypoint"} ${index + 1}`}</h3>
-                      <p className="text-sm text-muted-foreground">{formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}</p>
-                    </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      {waypoint.date_start && <p>{lang === "it" ? "Da" : "From"} {formatIsoDate(waypoint.date_start, locale)}</p>}
-                      {waypoint.date_end && <p>{lang === "it" ? "A" : "To"} {formatIsoDate(waypoint.date_end, locale)}</p>}
-                    </div>
-                  </div>
-                </article>
-              ))}
+                    )}
+                    {mediaItems.length > 0 && (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {mediaItems.map((mediaItem, mediaIndex) => (
+                          <div key={`${waypoint.id}-${mediaIndex}`} className="overflow-hidden rounded-[20px] border border-border/60 bg-background/40">
+                            {mediaItem.kind === "image" ? (
+                              <img src={mediaItem.url} alt={mediaItem.name || waypointName} className="h-44 w-full object-cover" />
+                            ) : mediaItem.kind === "video" ? (
+                              <video src={mediaItem.url} controls playsInline className="h-44 w-full object-cover" />
+                            ) : (
+                              <a
+                                href={mediaItem.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-44 items-center justify-center px-4 text-center text-sm text-accent hover:text-foreground transition-colors"
+                              >
+                                {mediaItem.name || (lang === "it" ? "Apri allegato" : "Open attachment")}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
               {publicWaypoints.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   {lang === "it"

@@ -829,11 +829,19 @@ export type Database = {
           created_at: string
           date_end: string | null
           date_start: string | null
+          description_en: string | null
+          description_it: string | null
+          event_date: string | null
+          event_time: string | null
           id: string
           lat: number
           lng: number
+          media: Json
           name: string | null
+          name_en: string | null
+          name_it: string | null
           sort_order: number
+          visibility_mode: string
           voyage_id: string
           waypoint_type: string
         }
@@ -841,11 +849,19 @@ export type Database = {
           created_at?: string
           date_end?: string | null
           date_start?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          event_date?: string | null
+          event_time?: string | null
           id?: string
           lat?: number
           lng?: number
+          media?: Json
           name?: string | null
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          visibility_mode?: string
           voyage_id: string
           waypoint_type?: string
         }
@@ -853,11 +869,19 @@ export type Database = {
           created_at?: string
           date_end?: string | null
           date_start?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          event_date?: string | null
+          event_time?: string | null
           id?: string
           lat?: number
           lng?: number
+          media?: Json
           name?: string | null
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          visibility_mode?: string
           voyage_id?: string
           waypoint_type?: string
         }
@@ -876,9 +900,13 @@ export type Database = {
           cached_geometry: Json | null
           created_at: string
           description: string | null
+          end_date: string | null
+          end_time: string | null
           id: string
           name: string
           sort_order: number
+          start_date: string | null
+          start_time: string | null
           status: Database["public"]["Enums"]["voyage_status"]
           type: Database["public"]["Enums"]["voyage_type"]
           updated_at: string
@@ -887,9 +915,13 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
+          end_time?: string | null
           id?: string
           name?: string
           sort_order?: number
+          start_date?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
@@ -898,9 +930,13 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
+          end_time?: string | null
           id?: string
           name?: string
           sort_order?: number
+          start_date?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string

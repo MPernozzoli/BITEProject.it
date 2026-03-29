@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes mobile-sheet-handle-nudge {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
 @layer base {
   :root {
     --font-serif: 'Playfair Display', Georgia, serif;
@@ -122,6 +134,10 @@
 }
 
 @layer components {
+  .mobile-sheet-handle-hint {
+    animation: mobile-sheet-handle-nudge 1.8s ease-in-out infinite;
+  }
+
   .editorial-heading {
     font-family: var(--font-serif);
     @apply tracking-tight leading-tight;
