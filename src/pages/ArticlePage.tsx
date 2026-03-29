@@ -17,7 +17,7 @@ import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
-import { applySeo, DEFAULT_DESCRIPTION } from "@/lib/seo";
+import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 
 type StoryChapter = {
   id: string;
@@ -212,14 +212,42 @@ const ArticlePage = () => {
     const seoDescription =
       (lang === "en" ? article.excerpt_en : article.excerpt_it || article.excerpt_en) ||
       DEFAULT_DESCRIPTION;
+    const authorNames = authors
+      .map((author: any) => author?.name)
+      .filter((name): name is string => typeof name === "string" && name.length > 0);
 
     applySeo({
       title: `${title} | BITE`,
       description: seoDescription,
       pathname: `/logbook/${article.slug}`,
       image: article.cover_image,
+      type: "article",
+      structuredData: [
+        {
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: title,
+          description: seoDescription,
+          url: `${window.location.origin}/logbook/${article.slug}`,
+          mainEntityOfPage: `${window.location.origin}/logbook/${article.slug}`,
+          image: article.cover_image ? [article.cover_image] : undefined,
+          datePublished: article.published_at || undefined,
+          dateModified: article.updated_at || article.published_at || undefined,
+          articleSection: article.category || "Logbook",
+          keywords: tags.map((tag: any) => tag.name).filter(Boolean),
+          author: authorNames.length
+            ? authorNames.map((name) => ({
+                "@type": "Person",
+                name,
+              }))
+            : undefined,
+          publisher: { "@id": ORGANIZATION_ID },
+          isPartOf: { "@id": WEBSITE_ID },
+          inLanguage: lang,
+        },
+      ],
     });
-  }, [article, lang, title]);
+  }, [article, authors, lang, tags, title]);
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">

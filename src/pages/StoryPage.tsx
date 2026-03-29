@@ -7,7 +7,7 @@ import { ArrowLeft, Bell, BellOff, BookOpen } from "lucide-react";
 import ProfileCard from "@/components/ProfileCard";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { applySeo, DEFAULT_DESCRIPTION } from "@/lib/seo";
+import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 
 const StoryPage = () => {
   const { slug } = useParams();
@@ -133,8 +133,33 @@ const StoryPage = () => {
       description: desc || DEFAULT_DESCRIPTION,
       pathname: `/logbook/story/${story.slug}`,
       image: story.cover_image,
+      type: "collection",
+      structuredData: [
+        {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          name: title,
+          description: desc || DEFAULT_DESCRIPTION,
+          url: `${window.location.origin}/logbook/story/${story.slug}`,
+          mainEntity: {
+            "@type": "CreativeWorkSeries",
+            name: title,
+            description: desc || DEFAULT_DESCRIPTION,
+            url: `${window.location.origin}/logbook/story/${story.slug}`,
+          },
+          hasPart: chapters.map((chapter) => ({
+            "@type": "Article",
+            headline: lang === "en" ? chapter.title_en : chapter.title_it || chapter.title_en,
+            url: `${window.location.origin}/logbook/${chapter.slug}`,
+            datePublished: chapter.published_at || undefined,
+          })),
+          publisher: { "@id": ORGANIZATION_ID },
+          isPartOf: { "@id": WEBSITE_ID },
+          inLanguage: lang,
+        },
+      ],
     });
-  }, [story, title, desc]);
+  }, [chapters, story, title, desc, lang]);
 
   return (
     <div>
