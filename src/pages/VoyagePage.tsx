@@ -8,6 +8,7 @@ import {
   formatIsoDate,
   formatVoyageDateRange,
   formatWaypointCoordinateLabel,
+  getPublicVoyageWaypoints,
   getVoyageIdFromRouteParam,
   totalWaypointDistance,
   type GeoArticle,
@@ -62,8 +63,12 @@ const VoyagePage = () => {
     },
   });
 
-  const departure = waypoints[0];
-  const arrival = waypoints[waypoints.length - 1];
+  const publicWaypoints = useMemo(
+    () => getPublicVoyageWaypoints(waypoints, articles, voyageId),
+    [articles, voyageId, waypoints]
+  );
+  const departure = publicWaypoints[0];
+  const arrival = publicWaypoints[publicWaypoints.length - 1];
   const totalNm = useMemo(() => Math.round(totalWaypointDistance(waypoints)), [waypoints]);
   const canonicalPath = voyage ? buildVoyagePath(voyage) : voyageId ? `/voyages/${voyageId}` : "/voyages";
 
@@ -72,8 +77,8 @@ const VoyagePage = () => {
 
     const description = voyage.description?.trim()
       || (lang === "it"
-        ? `Rotta ${voyage.name} con partenza da ${departure?.name || "punto iniziale"}, arrivo a ${arrival?.name || "punto finale"} e ${waypoints.length} waypoint pubblici.`
-        : `Route ${voyage.name} with departure from ${departure?.name || "starting point"}, arrival at ${arrival?.name || "final point"}, and ${waypoints.length} public waypoints.`);
+        ? `Rotta ${voyage.name} con partenza da ${departure?.name || "punto iniziale"}, arrivo a ${arrival?.name || "punto finale"} e ${publicWaypoints.length} waypoint pubblici.`
+        : `Route ${voyage.name} with departure from ${departure?.name || "starting point"}, arrival at ${arrival?.name || "final point"}, and ${publicWaypoints.length} public waypoints.`);
 
     applySeo({
       title: `${voyage.name} | Routes | BITE`,
@@ -86,7 +91,7 @@ const VoyagePage = () => {
         name: voyage.name,
         description,
         url: `${window.location.origin}${canonicalPath}`,
-        itinerary: waypoints.map((waypoint, index) => ({
+        itinerary: publicWaypoints.map((waypoint, index) => ({
           "@type": "Place",
           name: waypoint.name || `Waypoint ${index + 1}`,
           geo: {
@@ -109,7 +114,7 @@ const VoyagePage = () => {
         inLanguage: lang,
       },
     });
-  }, [arrival, articles, canonicalPath, departure, lang, voyage, waypoints]);
+  }, [arrival, articles, canonicalPath, departure, lang, publicWaypoints, voyage]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading route...</p></div>;
@@ -175,16 +180,16 @@ const VoyagePage = () => {
               </div>
               <div>
                 <h2 className="editorial-heading text-2xl md:text-3xl">{lang === "it" ? "Waypoint" : "Waypoints"}</h2>
-                <p className="text-sm text-muted-foreground">{waypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
+                <p className="text-sm text-muted-foreground">{publicWaypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
               </div>
             </div>
             <div className="space-y-4">
-              {waypoints.map((waypoint, index) => (
+              {publicWaypoints.map((waypoint, index) => (
                 <article key={waypoint.id} className="glass-panel-soft rounded-[26px] p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent mb-2">
-                        {index === 0 ? (lang === "it" ? "Partenza" : "Departure") : index === waypoints.length - 1 ? (lang === "it" ? "Arrivo" : "Arrival") : `${lang === "it" ? "Sosta" : "Stop"} ${index + 1}`}
+                        {index === 0 ? (lang === "it" ? "Partenza" : "Departure") : index === publicWaypoints.length - 1 ? (lang === "it" ? "Arrivo" : "Arrival") : `${lang === "it" ? "Sosta" : "Stop"} ${index + 1}`}
                       </p>
                       <h3 className="editorial-heading text-xl mb-2">{waypoint.name || `${lang === "it" ? "Waypoint" : "Waypoint"} ${index + 1}`}</h3>
                       <p className="text-sm text-muted-foreground">{formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}</p>
@@ -196,6 +201,13 @@ const VoyagePage = () => {
                   </div>
                 </article>
               ))}
+              {publicWaypoints.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {lang === "it"
+                    ? "Nessun waypoint pubblico ancora disponibile per questa rotta."
+                    : "No public waypoints are available for this route yet."}
+                </p>
+              )}
             </div>
           </div>
 

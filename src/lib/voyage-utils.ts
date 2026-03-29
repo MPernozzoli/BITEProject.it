@@ -135,6 +135,29 @@ export function buildWaypointDefaultName(index: number, lat: number, lng: number
   return `${prefix} · ${placeName || formatWaypointCoordinateLabel(lat, lng)}`;
 }
 
+export function getPublicVoyageWaypoints(
+  waypoints: VoyageWaypoint[],
+  articles: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[] = [],
+  voyageId?: string | null
+): VoyageWaypoint[] {
+  const targetVoyageId = voyageId ?? waypoints[0]?.voyage_id ?? null;
+  const articleLinkedIndexes = new Set<number>();
+
+  articles.forEach((article) => {
+    if (!targetVoyageId || article.voyage_id !== targetVoyageId) return;
+    if (Number.isInteger(article.voyage_segment_start) && article.voyage_segment_start != null && article.voyage_segment_start >= 0) {
+      articleLinkedIndexes.add(article.voyage_segment_start);
+    }
+    if (Number.isInteger(article.voyage_segment_end) && article.voyage_segment_end != null && article.voyage_segment_end >= 0) {
+      articleLinkedIndexes.add(article.voyage_segment_end);
+    }
+  });
+
+  return waypoints.filter(
+    (waypoint, index) => waypoint.waypoint_type === "narrative" || articleLinkedIndexes.has(index)
+  );
+}
+
 export function getStraightVoyageGeometry(waypoints: { lat: number; lng: number }[]): [number, number][] {
   return waypoints.map((waypoint) => [waypoint.lng, waypoint.lat]);
 }

@@ -5,7 +5,9 @@ import { useI18n } from "@/lib/i18n";
 import {
   buildVoyagePath,
   formatVoyageDateRange,
+  getPublicVoyageWaypoints,
   totalWaypointDistance,
+  type GeoArticle,
   type Voyage,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
@@ -41,6 +43,19 @@ const VoyagesPage = () => {
     },
   });
 
+  const { data: articleLinks = [] } = useQuery<Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]>({
+    queryKey: ["public-voyage-article-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("logbook_articles")
+        .select("voyage_id, voyage_segment_start, voyage_segment_end")
+        .eq("status", "published")
+        .not("voyage_id", "is", null);
+      if (error) throw error;
+      return (data || []) as Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[];
+    },
+  });
+
   const waypointMap = useMemo(() => {
     const map: Record<string, VoyageWaypoint[]> = {};
     waypoints.forEach((waypoint) => {
@@ -49,6 +64,16 @@ const VoyagesPage = () => {
     });
     return map;
   }, [waypoints]);
+
+  const articleLinkMap = useMemo(() => {
+    const map: Record<string, Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]> = {};
+    articleLinks.forEach((article) => {
+      if (!article.voyage_id) return;
+      if (!map[article.voyage_id]) map[article.voyage_id] = [];
+      map[article.voyage_id].push(article);
+    });
+    return map;
+  }, [articleLinks]);
 
   useEffect(() => {
     applySeo({
@@ -104,8 +129,9 @@ const VoyagesPage = () => {
         <div className="page-section-wide grid gap-5">
           {voyages.map((voyage) => {
             const voyageWaypoints = waypointMap[voyage.id] || [];
-            const departure = voyageWaypoints[0];
-            const arrival = voyageWaypoints[voyageWaypoints.length - 1];
+            const publicWaypoints = getPublicVoyageWaypoints(voyageWaypoints, articleLinkMap[voyage.id] || [], voyage.id);
+            const departure = publicWaypoints[0];
+            const arrival = publicWaypoints[publicWaypoints.length - 1];
             const distance = Math.round(totalWaypointDistance(voyageWaypoints));
             const dateRange = formatVoyageDateRange(voyage, locale);
 
@@ -133,7 +159,7 @@ const VoyagesPage = () => {
                   <div className="flex-shrink-0 text-sm text-muted-foreground md:text-right">
                     {dateRange && <p>{dateRange}</p>}
                     {distance > 0 && <p>{distance} NM</p>}
-                    <p>{voyageWaypoints.length} {lang === "it" ? "waypoint" : "waypoints"}</p>
+                    <p>{publicWaypoints.length} {lang === "it" ? "waypoint pubblici" : "public waypoints"}</p>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3 md:grid-cols-3">

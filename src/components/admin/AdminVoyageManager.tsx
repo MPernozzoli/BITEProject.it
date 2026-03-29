@@ -81,7 +81,7 @@ type WaypointRecord = Record<string, any> &
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   ...waypoint,
   name: waypoint?.name ?? "",
-  waypoint_type: waypoint?.waypoint_type === "technical" ? "technical" : "narrative",
+  waypoint_type: waypoint?.waypoint_type === "narrative" ? "narrative" : "technical",
   date_start: waypoint?.date_start ?? null,
   date_end: waypoint?.date_end ?? null,
 });
@@ -361,7 +361,7 @@ const AdminVoyageManager = () => {
         name: provisionalName,
         sort_order: boundedIndex,
       };
-      const metadata: Pick<TablesInsert<"voyage_waypoints">, "waypoint_type"> = { waypoint_type: "narrative" };
+      const metadata: Pick<TablesInsert<"voyage_waypoints">, "waypoint_type"> = { waypoint_type: "technical" };
       const runInsert = (payload: TablesInsert<"voyage_waypoints">) =>
         supabase.from("voyage_waypoints").insert(payload).select().single();
 
@@ -384,7 +384,6 @@ const AdminVoyageManager = () => {
       ]);
       geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
       void syncVoyageGeometry(voyageId, nextWaypoints);
-      toast.success(boundedIndex === currentWaypoints.length ? "Waypoint added" : "Intermediate waypoint added");
 
       const suggestedPlace = await reverseGeocodePlace(lat, lng);
       if (!suggestedPlace) return true;
@@ -422,15 +421,49 @@ const AdminVoyageManager = () => {
     [commitWaypoints, syncVoyageGeometry]
   );
 
-  const openWaypointPopup = useCallback((waypointId: string) => {
+  const fitMapToWaypoints = useCallback((candidateWaypoints: VoyageWaypoint[]) => {
+    const map = mapRef.current;
+    if (!map || !candidateWaypoints.length) return;
+
+    if (candidateWaypoints.length === 1) {
+      map.flyTo({
+        center: [candidateWaypoints[0].lng, candidateWaypoints[0].lat],
+        zoom: Math.max(map.getZoom(), 10),
+        duration: 500,
+      });
+      return;
+    }
+
+    const bounds = candidateWaypoints.reduce(
+      (accumulator, waypoint) => accumulator.extend([waypoint.lng, waypoint.lat]),
+      new maplibregl.LngLatBounds(
+        [candidateWaypoints[0].lng, candidateWaypoints[0].lat],
+        [candidateWaypoints[0].lng, candidateWaypoints[0].lat]
+      )
+    );
+
+    map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 500 });
+  }, []);
+
+  const focusWaypointOnMap = useCallback((waypointId: string) => {
     const marker = markersByWaypointRef.current[waypointId];
     const map = mapRef.current;
-    if (!marker || !map) return;
+    if (!marker || !map) return false;
 
     const position = marker.getLngLat();
     map.flyTo({ center: [position.lng, position.lat], zoom: Math.max(map.getZoom(), 8), duration: 500 });
-    if (!marker.getPopup()?.isOpen()) marker.togglePopup();
+    return true;
   }, []);
+
+  const openWaypointPopup = useCallback((waypointId: string) => {
+    const marker = markersByWaypointRef.current[waypointId];
+    if (!marker) return;
+
+    const hasFocused = focusWaypointOnMap(waypointId);
+    if (!hasFocused) return;
+
+    if (!marker.getPopup()?.isOpen()) marker.togglePopup();
+  }, [focusWaypointOnMap]);
 
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, popup: maplibregl.Popup) => {
@@ -457,10 +490,10 @@ const AdminVoyageManager = () => {
         <input name="name" type="text" value="${safeName}" style="${popupInputStyle}margin-bottom:12px;" />
         <label style="${popupLabelStyle}">Visibility</label>
         <select name="waypoint_type" style="${popupInputStyle}margin-bottom:8px;">
-          <option value="narrative"${waypoint.waypoint_type === "narrative" ? " selected" : ""}>Narrative / public</option>
           <option value="technical"${waypoint.waypoint_type === "technical" ? " selected" : ""}>Technical / hidden</option>
+          <option value="narrative"${waypoint.waypoint_type === "narrative" ? " selected" : ""}>Narrative / public</option>
         </select>
-        <p style="${popupHintStyle}margin:0 0 14px;">Narrative waypoints are visible on the public route. Technical points shape the path without cluttering the map. Drag the marker itself to move it.</p>
+        <p style="${popupHintStyle}margin:0 0 14px;">New waypoints start as technical. Switch to Narrative only for stops you want readers to see, or that should anchor a story. Drag the marker itself to move it.</p>
         <div style="display:flex;gap:8px;">
           <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
           <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
@@ -643,16 +676,6 @@ const AdminVoyageManager = () => {
         requestAnimationFrame(() => marker.togglePopup());
       }
     });
-
-    const bounds = selectedWaypoints.reduce(
-      (accumulator, waypoint) => accumulator.extend([waypoint.lng, waypoint.lat]),
-      new maplibregl.LngLatBounds(
-        [selectedWaypoints[0].lng, selectedWaypoints[0].lat],
-        [selectedWaypoints[0].lng, selectedWaypoints[0].lat]
-      )
-    );
-
-    map.fitBounds(bounds, { padding: 60, maxZoom: selectedWaypoints.length === 1 ? 10 : 12 });
   }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, updateWaypoint]);
 
   useEffect(() => {
@@ -765,10 +788,9 @@ const AdminVoyageManager = () => {
 
   const selectVoyage = useCallback(async (voyageId: string) => {
     setSelectedVoyageId(voyageId);
-    if (!waypointsRef.current[voyageId]) {
-      await fetchWaypoints(voyageId);
-    }
-  }, [fetchWaypoints]);
+    const loadedWaypoints = waypointsRef.current[voyageId] || await fetchWaypoints(voyageId);
+    fitMapToWaypoints(loadedWaypoints);
+  }, [fetchWaypoints, fitMapToWaypoints]);
 
   const openVoyageForm = useCallback((voyage?: Voyage) => {
     if (voyage) {
@@ -1071,14 +1093,14 @@ const AdminVoyageManager = () => {
           <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
           {selectedVoyageId && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/92 backdrop-blur-md border border-border px-4 py-2 text-xs font-sans text-foreground shadow-lg z-10">
-              Click anywhere to add a waypoint. Drag a route segment to insert an intermediate point. Drag a waypoint to move it. Click a marker to rename or delete it.
+              Click anywhere to add a technical waypoint. Drag a route segment to insert an intermediate point. Drag a waypoint to move it. Use the marker popup to rename it, change visibility, or delete it.
             </div>
           )}
         </div>
 
         {!selectedVoyageId && (
           <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
-            Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito uno start o un nuovo waypoint.
+            Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito uno start o un nuovo waypoint tecnico.
           </p>
         )}
 
@@ -1090,7 +1112,7 @@ const AdminVoyageManager = () => {
                 <p className="text-xs text-muted-foreground font-sans">
                   {selectedWaypoints.length >= 2
                     ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                    : voyageDates || "The first click creates the narrative start immediately."}
+                    : voyageDates || "The first click creates the start waypoint as technical."}
                 </p>
               </div>
             </div>
@@ -1134,6 +1156,13 @@ const AdminVoyageManager = () => {
                   </button>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      onClick={() => openWaypointPopup(waypoint.id)}
+                      className="p-1 text-muted-foreground hover:text-foreground"
+                      title="Edit waypoint"
+                    >
+                      <Edit size={12} />
+                    </button>
+                    <button
                       onClick={() => moveWaypoint(waypoint, "up")}
                       disabled={index === 0}
                       className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
@@ -1148,8 +1177,11 @@ const AdminVoyageManager = () => {
                       <ChevronDown size={12} />
                     </button>
                     <button
-                      onClick={() => openWaypointPopup(waypoint.id)}
+                      onClick={() => {
+                        focusWaypointOnMap(waypoint.id);
+                      }}
                       className="p-1 text-muted-foreground hover:text-foreground"
+                      title="Center waypoint on map"
                     >
                       <LocateFixed size={12} />
                     </button>
@@ -1160,7 +1192,7 @@ const AdminVoyageManager = () => {
 
             {selectedWaypoints.length === 0 && (
               <p className="text-center text-xs text-muted-foreground py-6">
-                The next click on the map will create the start waypoint immediately.
+                The next click on the map will create the start waypoint as technical.
               </p>
             )}
           </div>

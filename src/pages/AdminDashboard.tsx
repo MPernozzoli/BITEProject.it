@@ -17,6 +17,7 @@ import {
   Mail,
   ArrowUpRight,
   CalendarClock,
+  Award,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-aut
 
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
+const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
 
 interface Article {
   id: string;
@@ -79,7 +81,7 @@ const AdminDashboard = () => {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
-  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route" | "newsletter">("articles");
+  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route" | "newsletter" | "badges">("articles");
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
@@ -210,6 +212,7 @@ const AdminDashboard = () => {
   const sectionTabs = [
     { id: "articles" as const, label: "Articoli", icon: FileText },
     { id: "stories" as const, label: "Stories", icon: BookOpen },
+    { id: "badges" as const, label: "Badge", icon: Award },
     { id: "route" as const, label: "Rotte", icon: Navigation },
     { id: "newsletter" as const, label: "Newsletter", icon: Mail },
   ];
@@ -297,6 +300,7 @@ const AdminDashboard = () => {
                         <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
                           {tab.id === "articles" && "Publishing"}
                           {tab.id === "stories" && "Narrative arcs"}
+                          {tab.id === "badges" && "Profile rewards"}
                           {tab.id === "route" && "Voyage map"}
                           {tab.id === "newsletter" && "Audience"}
                         </span>
@@ -588,6 +592,18 @@ const AdminDashboard = () => {
                 </div>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
                   <AdminVoyageManager />
+                </Suspense>
+              </div>
+            )}
+
+            {activeSection === "badges" && (
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Profile rewards</p>
+                  <h2 className="editorial-heading text-3xl md:text-4xl">Badge</h2>
+                </div>
+                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading badge manager...</div>}>
+                  <AdminBadgeManager />
                 </Suspense>
               </div>
             )}

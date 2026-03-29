@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { getStraightVoyageGeometry } from "@/lib/voyage-utils";
+import { getPublicVoyageWaypoints, getStraightVoyageGeometry } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 
 interface VoyageMapProps {
@@ -165,7 +165,7 @@ const VoyageMap = ({
           });
         }
 
-        const visibleWaypoints = wps.filter((waypoint) => waypoint.waypoint_type !== "technical");
+        const visibleWaypoints = getPublicVoyageWaypoints(wps, articles, voyage.id);
         if (!visibleWaypoints.length) return;
 
         const wpId = `voyage-wp-${voyage.id}`;
@@ -226,7 +226,7 @@ const VoyageMap = ({
     } else {
       map.on("load", draw);
     }
-  }, [voyages, waypointsMap, highlightedVoyageId]);
+  }, [voyages, waypointsMap, highlightedVoyageId, articles]);
 
   // Draw article markers
   useEffect(() => {
