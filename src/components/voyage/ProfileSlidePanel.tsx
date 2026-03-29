@@ -118,7 +118,7 @@ const languageLabel = (code: string | null | undefined) => {
 
 const socials: Array<{
   key: SocialKey;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<any>;
   label: string;
   prefix: string;
 }> = [
@@ -138,7 +138,7 @@ const ProfileSlidePanel = ({ profileId, article, lang, onBackToArticle, onClose 
     queryFn: async () => {
       const [profileRes, badgeRes, authorRes] = await Promise.all([
         supabase
-          .from("public_profiles")
+          .from("profiles")
           .select(
             "id, name, bio, avatar_url, created_at, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website"
           )
