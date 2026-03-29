@@ -138,6 +138,45 @@ export type Database = {
           },
         ]
       }
+      article_read_events: {
+        Row: {
+          article_id: string
+          counted_at: string
+          id: string
+          profile_id: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          counted_at?: string
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          counted_at?: string
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_read_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_read_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       article_reads: {
         Row: {
           article_id: string
@@ -386,10 +425,6 @@ export type Database = {
           excerpt_en: string | null
           excerpt_it: string | null
           id: string
-          instagram_story_image_en: string | null
-          instagram_story_image_it: string | null
-          instagram_story_use_cover_en: boolean
-          instagram_story_use_cover_it: boolean
           latitude: number | null
           location_name: string | null
           longitude: number | null
@@ -418,10 +453,6 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
-          instagram_story_image_en?: string | null
-          instagram_story_image_it?: string | null
-          instagram_story_use_cover_en?: boolean
-          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null
@@ -450,10 +481,6 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
-          instagram_story_image_en?: string | null
-          instagram_story_image_it?: string | null
-          instagram_story_use_cover_en?: boolean
-          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null
@@ -492,39 +519,24 @@ export type Database = {
           created_at: string
           email: string
           id: string
-          last_event_at: string
-          preferred_language: string
-          profile_id: string | null
-          source: string
+          profile_id: string
           subscribed: boolean
-          subscribed_at: string
-          unsubscribed_at: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           email: string
           id?: string
-          last_event_at?: string
-          preferred_language?: string
-          profile_id?: string | null
-          source?: string
+          profile_id: string
           subscribed?: boolean
-          subscribed_at?: string
-          unsubscribed_at?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           email?: string
           id?: string
-          last_event_at?: string
-          preferred_language?: string
-          profile_id?: string | null
-          source?: string
+          profile_id?: string
           subscribed?: boolean
-          subscribed_at?: string
-          unsubscribed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -532,221 +544,6 @@ export type Database = {
             foreignKeyName: "newsletter_subscribers_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      newsletter_deliveries: {
-        Row: {
-          click_count: number
-          delivery_type: string
-          error_message: string | null
-          first_clicked_at: string | null
-          first_opened_at: string | null
-          id: string
-          last_clicked_at: string | null
-          last_clicked_url: string | null
-          last_opened_at: string | null
-          message_id: string | null
-          metadata: Json
-          newsletter_event_id: string | null
-          newsletter_message_id: string
-          open_count: number
-          queued_at: string
-          queue_name: string
-          recipient_email: string
-          recipient_language: string
-          sent_at: string | null
-          status: string
-          subscriber_id: string | null
-          tracker_token: string
-        }
-        Insert: {
-          click_count?: number
-          delivery_type: string
-          error_message?: string | null
-          first_clicked_at?: string | null
-          first_opened_at?: string | null
-          id?: string
-          last_clicked_at?: string | null
-          last_clicked_url?: string | null
-          last_opened_at?: string | null
-          message_id?: string | null
-          metadata?: Json
-          newsletter_event_id?: string | null
-          newsletter_message_id: string
-          open_count?: number
-          queued_at?: string
-          queue_name?: string
-          recipient_email: string
-          recipient_language?: string
-          sent_at?: string | null
-          status?: string
-          subscriber_id?: string | null
-          tracker_token: string
-        }
-        Update: {
-          click_count?: number
-          delivery_type?: string
-          error_message?: string | null
-          first_clicked_at?: string | null
-          first_opened_at?: string | null
-          id?: string
-          last_clicked_at?: string | null
-          last_clicked_url?: string | null
-          last_opened_at?: string | null
-          message_id?: string | null
-          metadata?: Json
-          newsletter_event_id?: string | null
-          newsletter_message_id?: string
-          open_count?: number
-          queued_at?: string
-          queue_name?: string
-          recipient_email?: string
-          recipient_language?: string
-          sent_at?: string | null
-          status?: string
-          subscriber_id?: string | null
-          tracker_token?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "newsletter_deliveries_newsletter_event_id_fkey"
-            columns: ["newsletter_event_id"]
-            isOneToOne: false
-            referencedRelation: "newsletter_events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "newsletter_deliveries_newsletter_message_id_fkey"
-            columns: ["newsletter_message_id"]
-            isOneToOne: false
-            referencedRelation: "newsletter_messages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "newsletter_deliveries_subscriber_id_fkey"
-            columns: ["subscriber_id"]
-            isOneToOne: false
-            referencedRelation: "newsletter_subscribers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      newsletter_events: {
-        Row: {
-          email: string
-          event_type: string
-          id: string
-          occurred_at: string
-          payload: Json
-          preferred_language: string | null
-          processed_at: string | null
-          processing_note: string | null
-          subscriber_id: string | null
-        }
-        Insert: {
-          email: string
-          event_type: string
-          id?: string
-          occurred_at?: string
-          payload?: Json
-          preferred_language?: string | null
-          processed_at?: string | null
-          processing_note?: string | null
-          subscriber_id?: string | null
-        }
-        Update: {
-          email?: string
-          event_type?: string
-          id?: string
-          occurred_at?: string
-          payload?: Json
-          preferred_language?: string | null
-          processed_at?: string | null
-          processing_note?: string | null
-          subscriber_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "newsletter_events_subscriber_id_fkey"
-            columns: ["subscriber_id"]
-            isOneToOne: false
-            referencedRelation: "newsletter_subscribers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      newsletter_messages: {
-        Row: {
-          audience_filter: string
-          automation_delay_minutes: number
-          automation_trigger: string | null
-          body_html_translations: Json
-          body_json_translations: Json
-          created_at: string
-          created_by: string | null
-          from_name: string
-          id: string
-          kind: string
-          last_queued_at: string | null
-          name: string
-          preheader_translations: Json
-          reply_to: string | null
-          scheduled_at: string | null
-          sent_at: string | null
-          status: string
-          subject_translations: Json
-          updated_at: string
-        }
-        Insert: {
-          audience_filter?: string
-          automation_delay_minutes?: number
-          automation_trigger?: string | null
-          body_html_translations?: Json
-          body_json_translations?: Json
-          created_at?: string
-          created_by?: string | null
-          from_name?: string
-          id?: string
-          kind: string
-          last_queued_at?: string | null
-          name: string
-          preheader_translations?: Json
-          reply_to?: string | null
-          scheduled_at?: string | null
-          sent_at?: string | null
-          status?: string
-          subject_translations?: Json
-          updated_at?: string
-        }
-        Update: {
-          audience_filter?: string
-          automation_delay_minutes?: number
-          automation_trigger?: string | null
-          body_html_translations?: Json
-          body_json_translations?: Json
-          created_at?: string
-          created_by?: string | null
-          from_name?: string
-          id?: string
-          kind?: string
-          last_queued_at?: string | null
-          name?: string
-          preheader_translations?: Json
-          reply_to?: string | null
-          scheduled_at?: string | null
-          sent_at?: string | null
-          status?: string
-          subject_translations?: Json
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "newsletter_messages_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1076,13 +873,9 @@ export type Database = {
           cached_geometry: Json | null
           created_at: string
           description: string | null
-          end_date: string | null
-          end_time: string | null
           id: string
           name: string
           sort_order: number
-          start_date: string | null
-          start_time: string | null
           status: Database["public"]["Enums"]["voyage_status"]
           type: Database["public"]["Enums"]["voyage_type"]
           updated_at: string
@@ -1091,13 +884,9 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
-          end_date?: string | null
-          end_time?: string | null
           id?: string
           name?: string
           sort_order?: number
-          start_date?: string | null
-          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
@@ -1106,13 +895,9 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
-          end_date?: string | null
-          end_time?: string | null
           id?: string
           name?: string
           sort_order?: number
-          start_date?: string | null
-          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
@@ -1121,25 +906,7 @@ export type Database = {
       }
     }
     Views: {
-      public_profiles: {
-        Row: {
-          avatar_url: string | null
-          bio: string | null
-          created_at: string | null
-          id: string | null
-          name: string | null
-          preferred_language: string | null
-          secondary_language: string | null
-          social_facebook: string | null
-          social_instagram: string | null
-          social_linkedin: string | null
-          social_tiktok: string | null
-          social_website: string | null
-          social_x: string | null
-          social_youtube: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       delete_email: {
@@ -1158,7 +925,7 @@ export type Database = {
         Returns: boolean
       }
       increment_article_view_count: {
-        Args: { _article_id: string; _visitor_key?: string | null }
+        Args: { _article_id: string; _visitor_key?: string }
         Returns: number
       }
       move_to_dlq: {
