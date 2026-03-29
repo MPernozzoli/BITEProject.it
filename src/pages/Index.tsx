@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
-import { SITE_URL } from "@/lib/seo";
+import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
 
 import bowSunset from "@/assets/bow-sunset.jpeg";
 import boatSunset from "@/assets/boat-sunset.jpeg";
@@ -176,17 +176,35 @@ const Index = () => {
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <StructuredData
         id="homepage"
-        data={{
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          name: "BITE",
-          url: SITE_URL,
-          description: "Stories, voyages, refit notes, and life aboard S/Y Spritz.",
-        }}
+        data={[
+          {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "@id": ORGANIZATION_ID,
+            name: "BITE",
+            url: SITE_URL,
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "@id": WEBSITE_ID,
+            name: "BITE",
+            url: SITE_URL,
+            description: "Stories, voyages, refit notes, and life aboard S/Y Spritz.",
+            publisher: { "@id": ORGANIZATION_ID },
+          },
+        ]}
       />
       <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          <img src={bowSunset} alt="View from the bow at sunset" className="img-cover" />
+          <img
+            src={bowSunset}
+            alt="View from the bow at sunset"
+            className="img-cover"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.12)_0%,rgba(17,28,43,0.26)_36%,rgba(17,28,43,0.62)_100%)]" />
         </div>
 
@@ -269,12 +287,24 @@ const Index = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-frame rounded-[28px] p-2 aspect-[3/4]">
                 <div className="overflow-hidden rounded-[22px] h-full">
-                  <img src={boatSunset} alt="Spritz at sunset" className="img-cover hover:scale-105 transition-transform duration-700" />
+                  <img
+                    src={boatSunset}
+                    alt="Spritz at sunset"
+                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               </div>
               <div className="glass-frame rounded-[28px] p-2 aspect-[3/4] mt-8">
                 <div className="overflow-hidden rounded-[22px] h-full">
-                  <img src={dogsMarina} alt="Dogs at the marina" className="img-cover hover:scale-105 transition-transform duration-700" />
+                  <img
+                    src={dogsMarina}
+                    alt="Dogs at the marina"
+                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               </div>
             </div>
@@ -336,7 +366,13 @@ const Index = () => {
                       <div className="glass-frame rounded-[24px] p-1.5 mb-5">
                         <div className="aspect-[4/3] overflow-hidden rounded-[19px] bg-muted relative">
                           {entry.cover_image ? (
-                            <img src={entry.cover_image} alt={title} className="img-cover group-hover:scale-105 transition-transform duration-700" />
+                            <img
+                              src={entry.cover_image}
+                              alt={title}
+                              className="img-cover group-hover:scale-105 transition-transform duration-700"
+                              loading="lazy"
+                              decoding="async"
+                            />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-2xl">BITE</div>
                           )}
@@ -393,6 +429,7 @@ const Index = () => {
                   initialFitReady={isHomeMapReady}
                   onArticleClick={(article) => navigate(`/logbook/${article.slug}`)}
                   fallbackHeightClassName="aspect-[16/10]"
+                  deferUntilVisible
                 />
                 {!isHomeMapReady ? (
                   <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-4">
@@ -431,7 +468,7 @@ const Index = () => {
       <section className="px-4 md:px-6">
         <div className="glass-frame rounded-[34px] p-2 h-[50vh] md:h-[60vh] overflow-hidden">
           <div className="overflow-hidden rounded-[28px] h-full">
-            <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" />
+            <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" loading="lazy" decoding="async" />
           </div>
         </div>
       </section>

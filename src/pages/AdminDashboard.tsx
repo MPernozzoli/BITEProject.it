@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, lazy, useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Edit, Trash2, Eye, LogOut, Clock, FileText, Send, User, BookOpen, X, Navigation, Mail } from "lucide-react";
-import AdminVoyageManager from "@/components/admin/AdminVoyageManager";
-import AdminNewsletterManager from "@/components/admin/AdminNewsletterManager";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
+
+const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
+const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 
 interface Article {
   id: string;
@@ -366,9 +367,17 @@ const AdminDashboard = () => {
           </>
         )}
 
-        {activeSection === "route" && <AdminVoyageManager />}
+        {activeSection === "route" && (
+          <Suspense fallback={<p className="text-muted-foreground">Loading route manager...</p>}>
+            <AdminVoyageManager />
+          </Suspense>
+        )}
 
-        {activeSection === "newsletter" && <AdminNewsletterManager />}
+        {activeSection === "newsletter" && (
+          <Suspense fallback={<p className="text-muted-foreground">Loading newsletter manager...</p>}>
+            <AdminNewsletterManager />
+          </Suspense>
+        )}
       </div>
     </div>
   );

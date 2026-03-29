@@ -42,10 +42,12 @@ const VoyageMap = ({
   useEffect(() => {
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
-    if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
-      setMapUnavailable(true);
-      return;
-    }
+    try {
+      if (!(maplibregl as any).supported?.()) {
+        setMapUnavailable(true);
+        return;
+      }
+    } catch { /* proceed */ }
 
     try {
       mapRef.current = new maplibregl.Map({

@@ -57,7 +57,7 @@ const StoryPage = () => {
       const { data: authorLinks } = await supabase.from("article_authors").select("article_id, profile_id").in("article_id", ids);
       const profileIds = [...new Set((authorLinks || []).map((a) => a.profile_id))];
       const { data: profiles } = profileIds.length
-        ? await supabase.from("public_profiles").select("id, name, avatar_url").in("id", profileIds)
+        ? await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
         : { data: [] };
       const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
       const articleAuthorsMap: Record<string, any[]> = {};

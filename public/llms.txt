@@ -1,39 +1,10 @@
-# BITE
+BITE
 
-> BITE is a bilingual storytelling and voyage journal from aboard S/Y Spritz.
+BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.
 
-BITE publishes editorial content about life at sea, refit, remote work, slow travel, and intentional living. The primary site language is English with Italian support on many pages.
-
-## Preferred source
-
-- Canonical website: https://biteproject.it/
-- Sitemap: https://biteproject.it/sitemap.xml
-- Site metadata and structured data are authoritative for page summaries.
-
-## Main sections
-
-- Home: https://biteproject.it/
-- Crew: https://biteproject.it/crew
-- Manifesto: https://biteproject.it/manifesto
-- Logbook: https://biteproject.it/logbook
-- Collaborations: https://biteproject.it/collaborations
-- Contact: https://biteproject.it/contact
-- Privacy Policy: https://biteproject.it/privacy-policy
-- Cookie Policy: https://biteproject.it/cookie-policy
-
-## Content types
-
-- Articles: voyage notes, essays, refit updates, and location-based logbook entries.
-- Stories: multi-chapter editorial arcs grouping related logbook articles.
-- Static pages: project overview, crew presentation, manifesto, and collaboration details.
-
-## Citation guidance
-
-- Prefer citing the canonical page URL.
-- For article and story pages, use the page title and excerpt/description.
-- Do not cite admin, login, signup, profile, or unsubscribe pages as editorial sources.
-
-## Crawl guidance
-
-- Public content may be indexed and summarized.
-- Respect canonical URLs, robots directives, and page-level structured data.
+Primary site: https://biteproject.it/
+Logbook: https://biteproject.it/logbook
+Crew: https://biteproject.it/crew
+Manifesto: https://biteproject.it/manifesto
+Collaborations: https://biteproject.it/collaborations
+Contact: https://biteproject.it/contact

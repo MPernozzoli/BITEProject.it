@@ -72,10 +72,10 @@ const isMissingWaypointMetadataColumnError = (
     (text.includes("column") || text.includes("schema cache"));
 };
 
-type VoyageRecord = Partial<Voyage> &
+type VoyageRecord = Record<string, any> &
   Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Partial<VoyageWaypoint> &
+type WaypointRecord = Record<string, any> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
@@ -111,11 +111,11 @@ const getCachedGeometryCoordinates = (voyage: Voyage | undefined): [number, numb
 
 const escapeHtml = (value: string) =>
   value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const getDistanceToSegmentSquared = (
   point: maplibregl.Point,
@@ -275,7 +275,7 @@ const AdminVoyageManager = () => {
     if (geometryRequestRef.current[voyageId] !== requestId) return;
 
     geometryOverrideRef.current[voyageId] = coordinates;
-    const cachedGeometry = coordinates.length >= 2 ? { type: "LineString", coordinates } : null;
+    const cachedGeometry = coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
     const payload: TablesUpdate<"voyages"> = { cached_geometry: cachedGeometry };
     const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
 
@@ -791,16 +791,12 @@ const AdminVoyageManager = () => {
   }, []);
 
   const saveVoyage = useCallback(async () => {
-    const data: TablesInsert<"voyages"> = {
+    const data: any = {
       name: voyageForm.name,
       description: voyageForm.description,
       type: voyageForm.type,
       status: voyageForm.status,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
-      start_date: voyageForm.start_date || null,
-      start_time: voyageForm.start_time || null,
-      end_date: voyageForm.end_date || null,
-      end_time: voyageForm.end_time || null,
     };
 
     if (editingVoyage) {

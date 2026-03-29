@@ -9,7 +9,6 @@ import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
-import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { useEffect, useMemo } from "react";
@@ -18,6 +17,7 @@ import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 
 type StoryChapter = {
   id: string;
@@ -75,7 +75,7 @@ const ArticlePage = () => {
       if (!authorLinks?.length) return [];
       const ids = authorLinks.map((a) => a.profile_id);
       const { data: profiles } = await supabase
-        .from("public_profiles")
+        .from("profiles")
         .select("id, name, avatar_url")
         .in("id", ids);
       return profiles || [];
@@ -416,7 +416,7 @@ const ArticlePage = () => {
             <aside className="min-w-0 space-y-8">
               {hasGeo && (
                 <div className="lg:sticky lg:top-24 space-y-8">
-                  <ArticleMapAside latitude={article.latitude!} longitude={article.longitude!} title={title} />
+                  <LazyArticleMapAside latitude={article.latitude!} longitude={article.longitude!} title={title} />
                   <div>
                     <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                   </div>

@@ -34,7 +34,7 @@ import {
 type NewsletterMessage = Database["public"]["Tables"]["newsletter_messages"]["Row"];
 type NewsletterDelivery = Database["public"]["Tables"]["newsletter_deliveries"]["Row"];
 type NewsletterSubscriber = Database["public"]["Tables"]["newsletter_subscribers"]["Row"];
-type NewsletterEvent = Database["public"]["Tables"]["newsletter_events"]["Row"];
+type NewsletterEvent = any;
 
 type ComposerTab = "overview" | "campaigns" | "automations" | "editor";
 type NewsletterKind = "campaign" | "automation";
@@ -229,11 +229,11 @@ const AdminNewsletterManager = () => {
     setRefreshing(true);
 
     const [messagesRes, deliveriesRes, subscribersRes, eventsRes] = await Promise.all([
-      supabase
+      (supabase as any)
         .from("newsletter_messages")
         .select("*")
         .order("updated_at", { ascending: false }),
-      supabase
+      (supabase as any)
         .from("newsletter_deliveries")
         .select("*")
         .order("queued_at", { ascending: false })
@@ -242,7 +242,7 @@ const AdminNewsletterManager = () => {
         .from("newsletter_subscribers")
         .select("*")
         .order("updated_at", { ascending: false }),
-      supabase
+      (supabase as any)
         .from("newsletter_events")
         .select("*")
         .order("occurred_at", { ascending: false })
@@ -470,7 +470,7 @@ const AdminNewsletterManager = () => {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const payload: Database["public"]["Tables"]["newsletter_messages"]["Insert"] = {
+    const payload: any = {
       name: form.name.trim(),
       kind: form.kind,
       from_name: form.fromName.trim() || "BITE",
@@ -497,8 +497,8 @@ const AdminNewsletterManager = () => {
     };
 
     const mutation = form.id
-      ? supabase.from("newsletter_messages").update(payload).eq("id", form.id)
-      : supabase.from("newsletter_messages").insert(payload);
+      ? (supabase as any).from("newsletter_messages").update(payload).eq("id", form.id)
+      : (supabase as any).from("newsletter_messages").insert(payload);
 
     const { error } = await mutation;
     setSaving(false);
@@ -519,7 +519,7 @@ const AdminNewsletterManager = () => {
     setDispatchingId(message.id);
 
     const scheduledAt = new Date().toISOString();
-    const { error: prepareError } = await supabase
+    const { error: prepareError } = await (supabase as any)
       .from("newsletter_messages")
       .update({
         status: "scheduled",
@@ -556,7 +556,7 @@ const AdminNewsletterManager = () => {
 
   const toggleAutomation = async (message: NewsletterMessage) => {
     const nextStatus = message.status === "active" ? "paused" : "active";
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("newsletter_messages")
       .update({ status: nextStatus })
       .eq("id", message.id);
