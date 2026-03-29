@@ -1,9 +1,11 @@
 import type { Ref } from "react";
 import { X, MapPin, Heart, Eye, ArrowUpRight } from "lucide-react";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 import type { GeoArticle } from "@/lib/voyage-utils";
-import ProfileCard from "@/components/ProfileCard";
 import { coverImageStyle, clampCoverFocal } from "@/lib/article-cover";
+import ProfileAvatar from "@/components/ProfileAvatar";
+import { User } from "lucide-react";
 
 interface ArticleSlidePanelProps {
   article: GeoArticle | null;
@@ -59,10 +61,18 @@ const ArticleSlidePanel = ({
         }`}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
-          <div className="min-w-0 flex items-center gap-2 text-xs font-sans text-muted-foreground">
+          <div className="min-w-0 flex items-center gap-2 text-xs font-sans text-muted-foreground flex-wrap">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
               <MapPin size={12} className="shrink-0 text-accent" />
               <span className="truncate">{article.location_name || (lang === "it" ? "Anteprima articolo" : "Article preview")}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
+              <Eye size={12} className="shrink-0 text-accent" />
+              <span>{views}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
+              <Heart size={12} className="shrink-0 text-accent" />
+              <span>{likes}</span>
             </span>
           </div>
           <button
@@ -91,14 +101,40 @@ const ArticleSlidePanel = ({
               {(article.authors && article.authors.length > 0) || dateLabel ? (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-5 mb-5 border-b border-border/60">
                   {article.authors?.map((a) => (
-                    <ProfileCard
-                      key={a.id}
-                      profileId={a.id}
-                      onProfileClick={onAuthorClick}
-                      name={a.name}
-                      avatarUrl={a.avatar_url || undefined}
-                      size="sm"
-                    />
+                    onAuthorClick ? (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => onAuthorClick(a.id)}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                          <ProfileAvatar
+                            name={a.name || "Anonymous"}
+                            avatarUrl={a.avatar_url || undefined}
+                            imgClassName="h-full w-full object-cover"
+                            fallback={<User size={12} className="text-muted-foreground" />}
+                          />
+                        </span>
+                        <span>{a.name}</span>
+                      </button>
+                    ) : (
+                      <Link
+                        key={a.id}
+                        to={`/profile/${a.id}`}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                          <ProfileAvatar
+                            name={a.name || "Anonymous"}
+                            avatarUrl={a.avatar_url || undefined}
+                            imgClassName="h-full w-full object-cover"
+                            fallback={<User size={12} className="text-muted-foreground" />}
+                          />
+                        </span>
+                        <span>{a.name}</span>
+                      </Link>
+                    )
                   ))}
                   {dateLabel && (
                     <span className="text-xs font-sans text-muted-foreground">
@@ -108,18 +144,6 @@ const ArticleSlidePanel = ({
                   )}
                 </div>
               ) : null}
-
-              <div className="flex flex-wrap items-center gap-2 mb-5">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/75 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground">
-                  <Eye size={12} className="text-accent" />
-                  {views} {lang === "it" ? "view" : "views"}
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/75 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground">
-                  <Heart size={12} className="text-accent" />
-                  {likes} {lang === "it" ? "like" : "likes"}
-                </span>
-              </div>
-
               {excerpt && (
                 <div className="rounded-[22px] border border-white/65 bg-background/65 px-4 py-4 mb-5">
                   <p className="editorial-body text-muted-foreground leading-[1.75] whitespace-pre-wrap">{excerpt}</p>

@@ -1,8 +1,9 @@
 import { forwardRef } from "react";
 import { format } from "date-fns";
-import { MapPin, Eye, Heart } from "lucide-react";
+import { MapPin, Eye, Heart, User } from "lucide-react";
 import type { GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 interface ArticleListCardProps {
   article: GeoArticle;
@@ -76,25 +77,43 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                   {format(new Date(article.published_at), "MMM d")}
                 </span>
               )}
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+                <Eye size={10} className="text-accent" />
+                {views}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+                <Heart size={10} className="text-accent" />
+                {likes}
+              </span>
             </div>
             <h3 className={`text-sm font-serif font-medium leading-tight line-clamp-2 mb-1 transition-colors ${
               isActive ? "text-accent" : "text-foreground group-hover:text-accent"
             }`}>
               {title}
             </h3>
+            {article.authors && article.authors.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                {article.authors.slice(0, 3).map((author) => (
+                  <span
+                    key={author.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-background/72 px-2 py-1 text-[10px] font-sans text-foreground"
+                  >
+                    <span className="flex h-4 w-4 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                      <ProfileAvatar
+                        name={author.name || "Anonymous"}
+                        avatarUrl={author.avatar_url || undefined}
+                        imgClassName="h-full w-full object-cover"
+                        fallback={<User size={9} className="text-muted-foreground" />}
+                      />
+                    </span>
+                    <span className="max-w-[92px] truncate">{author.name}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             {excerpt && (
               <p className="text-[11px] text-muted-foreground line-clamp-2 font-sans">{excerpt}</p>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
-                <Eye size={10} className="text-accent" />
-                {views}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
-                <Heart size={10} className="text-accent" />
-                {likes}
-              </span>
-            </div>
           </div>
         </div>
       </div>

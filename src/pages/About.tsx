@@ -28,7 +28,7 @@ const TheCrew = () => {
             <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-4 [text-shadow:0_10px_34px_rgba(0,0,0,0.30)]">
               {t("crew.title")}
             </h1>
-            <p className="editorial-body text-lg md:text-xl text-white/86 leading-relaxed max-w-2xl [text-shadow:0_8px_28px_rgba(0,0,0,0.24)]">
+            <p className="editorial-body text-lg md:text-xl text-white leading-relaxed max-w-2xl [text-shadow:0_8px_28px_rgba(0,0,0,0.28)]">
               {t("crew.intro")}
             </p>
           </div>
@@ -202,10 +202,12 @@ const TheCrew = () => {
         </div>
       </section>
 
-      <section className="px-4 md:px-6">
-        <div className="glass-frame rounded-[34px] p-2 h-[40vh] md:h-[50vh] overflow-hidden">
-          <div className="overflow-hidden rounded-[28px] h-full">
-            <img src={boatSunset} alt="Spritz at sunset" className="img-cover object-bottom" />
+      <section className="page-section pt-0">
+        <div className="page-section-wide">
+          <div className="glass-frame rounded-[34px] p-2 overflow-hidden">
+            <div className="overflow-hidden rounded-[28px] aspect-[16/7] md:aspect-[16/6] max-h-[420px]">
+              <img src={boatSunset} alt="Spritz at sunset" className="img-cover object-bottom" />
+            </div>
           </div>
         </div>
       </section>
