@@ -31,8 +31,8 @@ import {
   renderNewsletterMergeTags,
 } from "@/lib/newsletter";
 
-type NewsletterMessage = Database["public"]["Tables"]["newsletter_messages"]["Row"];
-type NewsletterDelivery = Database["public"]["Tables"]["newsletter_deliveries"]["Row"];
+type NewsletterMessage = any;
+type NewsletterDelivery = any;
 type NewsletterSubscriber = Database["public"]["Tables"]["newsletter_subscribers"]["Row"];
 type NewsletterEvent = any;
 
