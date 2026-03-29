@@ -216,7 +216,7 @@ const Index = () => {
             <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-6 whitespace-pre-line [text-shadow:0_10px_34px_rgba(0,0,0,0.30)]">
               {t("hero.title")}
             </h1>
-            <p className="editorial-body text-white/82 text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line [text-shadow:0_8px_26px_rgba(0,0,0,0.24)]">
+            <p className="editorial-body text-white text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line [text-shadow:0_8px_26px_rgba(0,0,0,0.24)]">
               {t("hero.subtitle")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
