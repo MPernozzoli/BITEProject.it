@@ -791,16 +791,12 @@ const AdminVoyageManager = () => {
   }, []);
 
   const saveVoyage = useCallback(async () => {
-    const data: TablesInsert<"voyages"> = {
+    const data: any = {
       name: voyageForm.name,
       description: voyageForm.description,
       type: voyageForm.type,
       status: voyageForm.status,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
-      start_date: voyageForm.start_date || null,
-      start_time: voyageForm.start_time || null,
-      end_date: voyageForm.end_date || null,
-      end_time: voyageForm.end_time || null,
     };
 
     if (editingVoyage) {
