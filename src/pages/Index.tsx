@@ -93,6 +93,20 @@ const pickRandomHeroMedia = (isMobile: boolean) => {
   return mediaPool[Math.floor(Math.random() * mediaPool.length)] ?? mediaPool[0];
 };
 
+const shuffleHeroMedia = (items: HeroMedia[], avoidSrc?: string) => {
+  const nextItems = [...items];
+  for (let i = nextItems.length - 1; i > 0; i -= 1) {
+    const swapIndex = Math.floor(Math.random() * (i + 1));
+    [nextItems[i], nextItems[swapIndex]] = [nextItems[swapIndex], nextItems[i]];
+  }
+
+  if (avoidSrc && nextItems.length > 1 && nextItems[0]?.src === avoidSrc) {
+    [nextItems[0], nextItems[1]] = [nextItems[1], nextItems[0]];
+  }
+
+  return nextItems;
+};
+
 const getVideoMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
   if (extension === "webm") return "video/webm";
@@ -126,7 +140,9 @@ const Index = () => {
   const isMobile = useIsMobile();
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
-  const [heroMedia, setHeroMedia] = useState<HeroMedia>(() => pickRandomHeroMedia(false));
+  const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>(() => [pickRandomHeroMedia(false)]);
+  const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
+  const [heroMediaVisible, setHeroMediaVisible] = useState(true);
 
   const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
@@ -163,13 +179,60 @@ const Index = () => {
     retry: false,
   });
 
-  useEffect(() => {
+  const currentHeroPool = useMemo(() => {
     const desktopPool = [...(heroVideoPool?.desktop ?? []), ...desktopHeroMedia];
     const mobilePool = [...(heroVideoPool?.mobile ?? []), ...mobileHeroMedia];
-    const pool = isMobile ? mobilePool : desktopPool;
-    const nextHeroMedia = pool[Math.floor(Math.random() * pool.length)] ?? desktopHeroMedia[0];
-    setHeroMedia(nextHeroMedia);
+    return isMobile ? mobilePool : desktopPool;
   }, [heroVideoPool, isMobile]);
+
+  const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? pickRandomHeroMedia(false);
+
+  useEffect(() => {
+    const nextPlaylist = shuffleHeroMedia(currentHeroPool);
+    setHeroPlaylist(nextPlaylist.length ? nextPlaylist : [pickRandomHeroMedia(isMobile)]);
+    setHeroPlaylistIndex(0);
+    setHeroMediaVisible(true);
+  }, [currentHeroPool, isMobile]);
+
+  useEffect(() => {
+    if (!heroMedia || heroMedia.kind !== "image" || heroPlaylist.length <= 1) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setHeroMediaVisible(false);
+      window.setTimeout(() => {
+        setHeroPlaylistIndex((currentIndex) => {
+          const isLast = currentIndex >= heroPlaylist.length - 1;
+          if (isLast) {
+            const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
+            setHeroPlaylist(nextPlaylist);
+            return 0;
+          }
+          return currentIndex + 1;
+        });
+        setHeroMediaVisible(true);
+      }, 320);
+    }, 6500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [currentHeroPool, heroMedia, heroPlaylist, heroPlaylist.length]);
+
+  const advanceHeroMedia = () => {
+    if (heroPlaylist.length <= 1) return;
+
+    setHeroMediaVisible(false);
+    window.setTimeout(() => {
+      setHeroPlaylistIndex((currentIndex) => {
+        const isLast = currentIndex >= heroPlaylist.length - 1;
+        if (isLast) {
+          const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
+          setHeroPlaylist(nextPlaylist);
+          return 0;
+        }
+        return currentIndex + 1;
+      });
+      setHeroMediaVisible(true);
+    }, 320);
+  };
 
   // Fetch real articles for the journal preview
   const { data: latestArticles = [] } = useQuery<HomeArticle[]>({
@@ -322,13 +385,13 @@ const Index = () => {
           {heroMedia.kind === "video" ? (
             <video
               key={heroMedia.src}
-              className="img-cover"
+              className={`img-cover hero-media ${heroMediaVisible ? "hero-media--visible" : ""}`}
               poster={heroMedia.poster}
               autoPlay
               muted
-              loop
               playsInline
               preload="metadata"
+              onEnded={advanceHeroMedia}
             >
               <source src={heroMedia.src} type={heroMedia.mimeType ?? "video/mp4"} />
             </video>
@@ -337,7 +400,7 @@ const Index = () => {
               key={heroMedia.src}
               src={heroMedia.src}
               alt={heroMedia.alt}
-              className="img-cover"
+              className={`img-cover hero-media ${heroMediaVisible ? "hero-media--visible" : ""}`}
               loading="eager"
               fetchPriority="high"
               decoding="async"
