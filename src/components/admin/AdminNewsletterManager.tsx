@@ -317,7 +317,7 @@ const AdminNewsletterManager = () => {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const payload: Database["public"]["Tables"]["newsletter_messages"]["Insert"] = {
+    const payload: any = {
       name: form.name.trim(),
       kind: form.kind,
       from_name: form.fromName.trim() || "BITE",
