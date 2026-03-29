@@ -52,7 +52,6 @@ const emptyVoyageForm: VoyageFormState = {
 
 const popupLabelStyle = "display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);margin-bottom:6px;font-family:var(--font-sans);";
 const popupInputStyle = "width:100%;padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:12px;font-family:var(--font-sans);outline:none;";
-const popupHintStyle = "font-size:11px;line-height:1.45;color:hsl(220,10%,45%);font-family:var(--font-sans);";
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
@@ -451,7 +450,13 @@ const AdminVoyageManager = () => {
     if (!marker || !map) return false;
 
     const position = marker.getLngLat();
-    map.flyTo({ center: [position.lng, position.lat], zoom: Math.max(map.getZoom(), 8), duration: 500 });
+    map.easeTo({
+      center: [position.lng, position.lat],
+      zoom: Math.max(map.getZoom(), 8),
+      offset: [0, 96],
+      duration: 400,
+      essential: true,
+    });
     return true;
   }, []);
 
@@ -459,10 +464,15 @@ const AdminVoyageManager = () => {
     const marker = markersByWaypointRef.current[waypointId];
     if (!marker) return;
 
+    const popup = marker.getPopup();
     const hasFocused = focusWaypointOnMap(waypointId);
-    if (!hasFocused) return;
+    if (!hasFocused || !popup) return;
 
-    if (!marker.getPopup()?.isOpen()) marker.togglePopup();
+    if (popup.isOpen()) return;
+
+    mapRef.current?.once("moveend", () => {
+      if (!popup.isOpen()) marker.togglePopup();
+    });
   }, [focusWaypointOnMap]);
 
   const createWaypointPopupContent = useCallback(
@@ -470,7 +480,7 @@ const AdminVoyageManager = () => {
       const isStart = index === 0;
       const isEnd = total > 1 && index === total - 1;
       const wrapper = document.createElement("form");
-      wrapper.style.cssText = "width:240px;padding:2px;font-family:var(--font-sans);";
+      wrapper.style.cssText = "width:220px;max-height:240px;overflow-y:auto;overflow-x:hidden;padding:2px 2px 4px;box-sizing:border-box;font-family:var(--font-sans);";
 
       const heading = isStart ? "Start" : isEnd ? "Arrival" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
@@ -493,7 +503,6 @@ const AdminVoyageManager = () => {
           <option value="technical"${waypoint.waypoint_type === "technical" ? " selected" : ""}>Technical / hidden</option>
           <option value="narrative"${waypoint.waypoint_type === "narrative" ? " selected" : ""}>Narrative / public</option>
         </select>
-        <p style="${popupHintStyle}margin:0 0 14px;">New waypoints start as technical. Switch to Narrative only for stops you want readers to see, or that should anchor a story. Drag the marker itself to move it.</p>
         <div style="display:flex;gap:8px;">
           <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
           <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
@@ -650,7 +659,7 @@ const AdminVoyageManager = () => {
 
     selectedWaypoints.forEach((waypoint, index) => {
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
-      const popup = new maplibregl.Popup({ offset: 14, closeButton: false, closeOnMove: false });
+      const popup = new maplibregl.Popup({ offset: 14, closeButton: false, closeOnMove: false, maxWidth: "240px" });
       popup.setDOMContent(createWaypointPopupContent(waypoint, index, selectedWaypoints.length, popup));
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
@@ -673,10 +682,10 @@ const AdminVoyageManager = () => {
 
       if (pendingPopupWaypointIdRef.current === waypoint.id) {
         pendingPopupWaypointIdRef.current = null;
-        requestAnimationFrame(() => marker.togglePopup());
+        requestAnimationFrame(() => openWaypointPopup(waypoint.id));
       }
     });
-  }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, updateWaypoint]);
+  }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, openWaypointPopup, updateWaypoint]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -1091,11 +1100,6 @@ const AdminVoyageManager = () => {
       <div className="border border-border">
         <div className="relative" style={{ height: "420px" }}>
           <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
-          {selectedVoyageId && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-background/92 backdrop-blur-md border border-border px-4 py-2 text-xs font-sans text-foreground shadow-lg z-10">
-              Click anywhere to add a technical waypoint. Drag a route segment to insert an intermediate point. Drag a waypoint to move it. Use the marker popup to rename it, change visibility, or delete it.
-            </div>
-          )}
         </div>
 
         {!selectedVoyageId && (
