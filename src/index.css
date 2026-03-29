@@ -369,21 +369,6 @@
     border-radius: 2rem;
   }
 
-  .hero-media {
-    opacity: 0;
-    transition: opacity 320ms ease;
-  }
-
-  .hero-media--visible {
-    opacity: 1;
-  }
-
-  .hero-kicker {
-    color: white;
-    mix-blend-mode: difference;
-    text-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
-  }
-
   .hero-copy-text {
     color: rgba(255, 255, 255, 0.98);
     text-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -18,14 +18,6 @@ import bowSunset from "@/assets/bow-sunset.webp";
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
 import dinghyCrew from "@/assets/dinghy-crew.webp";
-import spritzAnchor from "@/assets/hero-media/spritz-anchor.webp";
-import spritzCockpitVertical from "@/assets/hero-media/spritz-cockpit-vertical.webp";
-import spritzDogRest from "@/assets/hero-media/spritz-dog-rest.webp";
-import spritzDogsBow from "@/assets/hero-media/spritz-dogs-bow.webp";
-import spritzKeel from "@/assets/hero-media/spritz-keel.webp";
-import spritzMooringVertical from "@/assets/hero-media/spritz-mooring-vertical.webp";
-import spritzWake from "@/assets/hero-media/spritz-wake.webp";
-import spritzWide from "@/assets/hero-media/spritz-wide.webp";
 
 interface HomeTag {
   id: string;
@@ -71,22 +63,12 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
+const HERO_IMAGE_DURATION_MS = 6500;
+const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 
-const desktopHeroMedia: HeroMedia[] = [
-  { kind: "image", src: bowSunset, alt: "View from the bow at sunset" },
-  { kind: "image", src: spritzWake, alt: "Spritz stern slicing through bright blue water" },
-  { kind: "image", src: spritzAnchor, alt: "Spritz stern gear above the sea" },
-  { kind: "image", src: spritzKeel, alt: "Keel detail over clear water" },
-  { kind: "image", src: spritzWide, alt: "Wide view of Spritz under sail" },
-];
+const desktopHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
 
-const mobileHeroMedia: HeroMedia[] = [
-  { kind: "image", src: bowSunset, alt: "View from the bow at sunset" },
-  { kind: "image", src: spritzCockpitVertical, alt: "Cockpit view while sailing" },
-  { kind: "image", src: spritzDogRest, alt: "Dog resting on deck during navigation" },
-  { kind: "image", src: spritzDogsBow, alt: "Dogs watching the water from the bow" },
-  { kind: "image", src: spritzMooringVertical, alt: "Spritz moored in calm water" },
-];
+const mobileHeroMedia: HeroMedia[] = [{ kind: "image", src: bowSunset, alt: "View from the bow at sunset" }];
 
 const pickRandomHeroMedia = (isMobile: boolean) => {
   const mediaPool = isMobile ? mobileHeroMedia : desktopHeroMedia;
@@ -142,7 +124,7 @@ const Index = () => {
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>(() => [pickRandomHeroMedia(false)]);
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
-  const [heroMediaVisible, setHeroMediaVisible] = useState(true);
+  const heroPlaybackTimeoutRef = useRef<number | null>(null);
 
   const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
@@ -191,47 +173,72 @@ const Index = () => {
     const nextPlaylist = shuffleHeroMedia(currentHeroPool);
     setHeroPlaylist(nextPlaylist.length ? nextPlaylist : [pickRandomHeroMedia(isMobile)]);
     setHeroPlaylistIndex(0);
-    setHeroMediaVisible(true);
   }, [currentHeroPool, isMobile]);
 
   useEffect(() => {
     if (!heroMedia || heroMedia.kind !== "image" || heroPlaylist.length <= 1) return;
 
-    const timeoutId = window.setTimeout(() => {
-      setHeroMediaVisible(false);
-      window.setTimeout(() => {
-        setHeroPlaylistIndex((currentIndex) => {
-          const isLast = currentIndex >= heroPlaylist.length - 1;
-          if (isLast) {
-            const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
-            setHeroPlaylist(nextPlaylist);
-            return 0;
-          }
-          return currentIndex + 1;
-        });
-        setHeroMediaVisible(true);
-      }, 320);
-    }, 6500);
+    heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+      advanceHeroMedia();
+    }, HERO_IMAGE_DURATION_MS);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => {
+      if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+    };
   }, [currentHeroPool, heroMedia, heroPlaylist, heroPlaylist.length]);
 
   const advanceHeroMedia = () => {
     if (heroPlaylist.length <= 1) return;
 
-    setHeroMediaVisible(false);
-    window.setTimeout(() => {
-      setHeroPlaylistIndex((currentIndex) => {
-        const isLast = currentIndex >= heroPlaylist.length - 1;
-        if (isLast) {
-          const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
-          setHeroPlaylist(nextPlaylist);
-          return 0;
-        }
-        return currentIndex + 1;
-      });
-      setHeroMediaVisible(true);
-    }, 320);
+    if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+
+    setHeroPlaylistIndex((currentIndex) => {
+      const isLast = currentIndex >= heroPlaylist.length - 1;
+      if (isLast) {
+        const nextPlaylist = shuffleHeroMedia(currentHeroPool, heroPlaylist[currentIndex]?.src);
+        setHeroPlaylist(nextPlaylist);
+        return 0;
+      }
+      return currentIndex + 1;
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+    };
+  }, []);
+
+  const handleHeroVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const maxStartTime = Math.max(duration - HERO_MAX_VIDEO_SEGMENT_SECONDS, 0);
+    const startTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
+    const remainingDuration = duration > 0 ? Math.max(duration - startTime, 0) : HERO_MAX_VIDEO_SEGMENT_SECONDS;
+    const playbackDurationMs = Math.max(
+      800,
+      Math.min(remainingDuration, HERO_MAX_VIDEO_SEGMENT_SECONDS) * 1000
+    );
+
+    if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+
+    const scheduleAdvance = () => {
+      heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+        advanceHeroMedia();
+      }, playbackDurationMs);
+    };
+
+    if (startTime > 0) {
+      const handleSeeked = () => {
+        scheduleAdvance();
+        video.removeEventListener("seeked", handleSeeked);
+      };
+      video.addEventListener("seeked", handleSeeked);
+      video.currentTime = startTime;
+      return;
+    }
+
+    scheduleAdvance();
   };
 
   // Fetch real articles for the journal preview
@@ -385,12 +392,13 @@ const Index = () => {
           {heroMedia.kind === "video" ? (
             <video
               key={heroMedia.src}
-              className={`img-cover hero-media ${heroMediaVisible ? "hero-media--visible" : ""}`}
+              className="img-cover"
               poster={heroMedia.poster}
               autoPlay
               muted
               playsInline
-              preload="metadata"
+              preload="auto"
+              onLoadedMetadata={handleHeroVideoMetadata}
               onEnded={advanceHeroMedia}
             >
               <source src={heroMedia.src} type={heroMedia.mimeType ?? "video/mp4"} />
@@ -400,20 +408,17 @@ const Index = () => {
               key={heroMedia.src}
               src={heroMedia.src}
               alt={heroMedia.alt}
-              className={`img-cover hero-media ${heroMediaVisible ? "hero-media--visible" : ""}`}
+              className="img-cover"
               loading="eager"
               fetchPriority="high"
               decoding="async"
             />
           )}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_26%),linear-gradient(180deg,rgba(7,15,27,0.42)_0%,rgba(9,18,31,0.38)_24%,rgba(10,20,34,0.54)_48%,rgba(8,17,30,0.76)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
         </div>
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] max-w-6xl items-center justify-center">
           <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center slide-up md:px-10 md:py-10">
-            <p className="hero-kicker mb-6 text-[11px] font-sans uppercase tracking-[0.34em]">
-              {lang === "it" ? "A bordo di Spritz" : "From aboard Spritz"}
-            </p>
             <h1 className="editorial-heading hero-copy-text text-4xl md:text-6xl lg:text-7xl mb-6 whitespace-pre-line">
               {t("hero.title")}
             </h1>
