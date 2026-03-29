@@ -176,11 +176,11 @@ const AdminNewsletterManager = () => {
     setRefreshing(true);
 
     const [messagesRes, deliveriesRes, subscribersRes, eventsRes] = await Promise.all([
-      supabase
+      (supabase as any)
         .from("newsletter_messages")
         .select("*")
         .order("updated_at", { ascending: false }),
-      supabase
+      (supabase as any)
         .from("newsletter_deliveries")
         .select("*")
         .order("queued_at", { ascending: false })
@@ -189,7 +189,7 @@ const AdminNewsletterManager = () => {
         .from("newsletter_subscribers")
         .select("*")
         .order("updated_at", { ascending: false }),
-      supabase
+      (supabase as any)
         .from("newsletter_events")
         .select("*")
         .order("occurred_at", { ascending: false })
@@ -365,7 +365,7 @@ const AdminNewsletterManager = () => {
     setDispatchingId(message.id);
 
     const scheduledAt = new Date().toISOString();
-    const { error: prepareError } = await supabase
+    const { error: prepareError } = await (supabase as any)
       .from("newsletter_messages")
       .update({
         status: "scheduled",
@@ -402,7 +402,7 @@ const AdminNewsletterManager = () => {
 
   const toggleAutomation = async (message: NewsletterMessage) => {
     const nextStatus = message.status === "active" ? "paused" : "active";
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("newsletter_messages")
       .update({ status: nextStatus })
       .eq("id", message.id);
