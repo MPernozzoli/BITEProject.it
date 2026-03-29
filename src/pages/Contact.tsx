@@ -1,14 +1,53 @@
+import { Instagram, Youtube } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
+const TikTokIcon = ({ size = 18, className }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
+
+const SeaPeopleIcon = ({ size = 18, className }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12 3v18" />
+    <path d="M7 4v4.5c0 3 1.8 5.2 5 6.8" />
+    <path d="M17 4v4.5c0 3-1.8 5.2-5 6.8" />
+    <path d="M7 4 4.5 7" />
+    <path d="M17 4 19.5 7" />
+  </svg>
+);
+
 const Contact = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <section className="pt-28 pb-0 md:pt-32 px-6 md:px-12">
-        <div className="page-section-narrow glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
-          <p className="glass-chip inline-flex px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-accent mb-6">
-            {t("nav.contact")}
+        <div className="page-section-narrow">
+          <p className="mb-5 text-[11px] font-sans uppercase tracking-[0.32em] text-accent/80">
+            {lang === "it" ? "Messaggi, idee, collaborazioni" : "Messages, ideas, collaborations"}
           </p>
           <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-4">
             {t("contact.title")}
@@ -84,11 +123,42 @@ const Contact = () => {
               </div>
               <div className="glass-panel-soft rounded-[26px] p-5">
                 <p className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">Social</p>
-                <div className="flex flex-col gap-2">
-                  <a href="https://www.instagram.com/better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">Instagram</a>
-                  <a href="https://www.youtube.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">YouTube</a>
-                  <a href="https://www.tiktok.com/@better_is_the_end" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">TikTok</a>
-                  <a href="https://dashboard.seapeopleapp.com/group/41a0ad62-7f71-4107-9269-878fa210f24c?utm_source=SP&utm_medium=usershare&utm_campaign=mpernozzoli" target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-accent transition-colors font-sans">SeaPeople Community</a>
+                <div className="flex flex-wrap items-center gap-3">
+                  {[
+                    {
+                      href: "https://www.instagram.com/better_is_the_end",
+                      label: "Instagram",
+                      icon: Instagram,
+                    },
+                    {
+                      href: "https://www.youtube.com/@better_is_the_end",
+                      label: "YouTube",
+                      icon: Youtube,
+                    },
+                    {
+                      href: "https://www.tiktok.com/@better_is_the_end",
+                      label: "TikTok",
+                      icon: TikTokIcon,
+                    },
+                    {
+                      href: "https://dashboard.seapeopleapp.com/group/41a0ad62-7f71-4107-9269-878fa210f24c?utm_source=SP&utm_medium=usershare&utm_campaign=mpernozzoli",
+                      label: "SeaPeople",
+                      icon: SeaPeopleIcon,
+                    },
+                  ].map(({ href, label, icon: Icon }) => (
+                    <a
+                      key={label}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={label}
+                      title={label}
+                      className="glass-chip inline-flex h-11 w-11 items-center justify-center text-foreground hover:text-accent transition-colors"
+                    >
+                      <Icon size={18} />
+                      <span className="sr-only">{label}</span>
+                    </a>
+                  ))}
                 </div>
               </div>
               <div className="glass-panel-soft rounded-[26px] p-5">

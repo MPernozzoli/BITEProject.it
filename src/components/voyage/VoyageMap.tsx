@@ -401,32 +401,49 @@ const VoyageMap = ({
     const map = mapRef.current;
     if (!map || !initialFitReady || hasPerformedInitialFitRef.current) return;
 
+    const isValidLngLat = (value: unknown): value is [number, number] =>
+      Array.isArray(value) &&
+      value.length >= 2 &&
+      Number.isFinite(value[0]) &&
+      Number.isFinite(value[1]);
+
     const fit = () => {
       const points: [number, number][] = [];
       voyages.forEach((voyage) => {
         const geometryCoordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
         geometryCoordinates?.forEach((coordinate) => {
-          if (Array.isArray(coordinate) && coordinate.length >= 2) {
+          if (isValidLngLat(coordinate)) {
             points.push(coordinate);
           }
         });
       });
       Object.values(waypointsMap).forEach((wps) =>
-        wps.forEach((w) => { if (w.lat && w.lng) points.push([w.lng, w.lat]); })
+        wps.forEach((w) => {
+          if (Number.isFinite(w.lat) && Number.isFinite(w.lng)) {
+            points.push([w.lng, w.lat]);
+          }
+        })
       );
       articles.forEach((a) => {
-        if (a.latitude && a.longitude) points.push([a.longitude, a.latitude]);
+        if (Number.isFinite(a.latitude) && Number.isFinite(a.longitude)) {
+          points.push([a.longitude, a.latitude]);
+        }
       });
-      if (points.length >= 2) {
-        hasPerformedInitialFitRef.current = true;
-        const bounds = points.reduce(
-          (b, p) => b.extend(p),
-          new maplibregl.LngLatBounds(points[0], points[0])
-        );
-        map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
-      } else if (points.length === 1) {
-        hasPerformedInitialFitRef.current = true;
-        map.flyTo({ center: points[0], zoom: 8 });
+
+      try {
+        if (points.length >= 2) {
+          hasPerformedInitialFitRef.current = true;
+          const bounds = points.reduce(
+            (b, p) => b.extend(p),
+            new maplibregl.LngLatBounds(points[0], points[0])
+          );
+          map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
+        } else if (points.length === 1) {
+          hasPerformedInitialFitRef.current = true;
+          map.flyTo({ center: points[0], zoom: 8 });
+        }
+      } catch (error) {
+        console.error("Failed to fit initial voyage bounds", error);
       }
     };
 

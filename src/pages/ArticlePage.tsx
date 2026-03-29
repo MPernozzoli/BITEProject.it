@@ -3,9 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { generateHTML } from "@tiptap/react";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { format } from "date-fns";
-import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
@@ -17,6 +16,7 @@ import { useMemo } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 type StoryChapter = {
   id: string;
@@ -218,8 +218,8 @@ const ArticlePage = () => {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[rgba(12,20,31,0.72)] via-[rgba(12,20,31,0.18)] to-transparent pointer-events-none" />
             <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
-              <div className="glass-panel-dark inline-flex max-w-4xl rounded-[30px] px-6 py-5 md:px-8 md:py-6">
-                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-white drop-shadow-sm">
+              <div className="max-w-4xl">
+                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-white [text-shadow:0_10px_34px_rgba(0,0,0,0.34)]">
                   {title}
                 </h1>
               </div>
@@ -300,20 +300,28 @@ const ArticlePage = () => {
                 </nav>
               )}
 
-              <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-x-4 gap-y-3 p-4 md:p-5 mb-8">
-                  {authors.map((a: any) => (
-                    <ProfileCard
-                      key={a.id}
-                      profileId={a.id}
-                      name={a.name}
-                      avatarUrl={a.avatar_url || undefined}
-                      size="sm"
-                    />
+              <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-3 p-4 md:p-5 mb-8">
+                  {authors.map((author: any) => (
+                    <Link
+                      key={author.id}
+                      to={`/profile/${author.id}`}
+                      className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors"
+                    >
+                      <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                        <ProfileAvatar
+                          name={author.name || "Anonymous"}
+                          avatarUrl={author.avatar_url || undefined}
+                          imgClassName="h-full w-full object-cover"
+                          fallback={<User size={12} className="text-muted-foreground" />}
+                        />
+                      </span>
+                      <span>{author.name}</span>
+                    </Link>
                   ))}
                   {dateLabel && (
-                    <span className="text-sm font-sans text-muted-foreground">
+                    <span className="glass-chip inline-flex items-center px-3 py-2 text-xs font-sans text-muted-foreground">
                       {lang === "it" ? "Pubblicato il " : "Published "}
-                      <time dateTime={article.published_at || undefined}>{dateLabel}</time>
+                      <time className="ml-1" dateTime={article.published_at || undefined}>{dateLabel}</time>
                     </span>
                   )}
                 <LiveReadCounter count={views} lang={lang} />

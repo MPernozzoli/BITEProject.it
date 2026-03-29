@@ -16,7 +16,7 @@ import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
 const Journal = () => {
-  const EXPANDED_READER_MS = 560;
+  const EXPANDED_READER_MS = 480;
   const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -538,6 +538,7 @@ const Journal = () => {
           slug={expandedArticle.slug}
           originRect={expandedArticle.originRect}
           phase={expandedArticlePhase}
+          previewAuthors={panelArticle?.authors || []}
           lang={lang}
           onClose={handleCollapseExpandedArticle}
         />

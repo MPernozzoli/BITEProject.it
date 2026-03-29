@@ -45,9 +45,9 @@ const Manifesto = () => {
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <section className="pt-28 pb-0 md:pt-32 px-6 md:px-12">
-        <div className="page-section-narrow glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
-          <p className="glass-chip inline-flex px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-accent mb-6">
-            {t("nav.manifesto")}
+        <div className="page-section-narrow">
+          <p className="mb-5 text-[11px] font-sans uppercase tracking-[0.32em] text-accent/80">
+            {lang === "it" ? "Principi, metodo, direzione" : "Principles, method, direction"}
           </p>
           <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl mb-8">
             {t("manifesto.title")}

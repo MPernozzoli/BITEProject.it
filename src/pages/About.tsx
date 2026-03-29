@@ -11,7 +11,7 @@ import duodji from "@/assets/duodji.jpeg";
 import freya from "@/assets/freya.jpeg";
 
 const TheCrew = () => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
@@ -21,14 +21,14 @@ const TheCrew = () => {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.18)_0%,rgba(17,28,43,0.46)_42%,rgba(17,28,43,0.76)_100%)]" />
         </div>
         <div className="relative z-10 mx-auto flex min-h-[calc(78vh-7rem)] max-w-6xl items-end">
-          <div className="glass-panel-dark max-w-4xl rounded-[40px] px-6 py-8 md:px-10 md:py-10">
-            <div className="glass-chip-dark inline-flex px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-white/72 mb-6">
-              {t("nav.about")}
-            </div>
-            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-4">
+          <div className="max-w-4xl px-1 md:px-0">
+            <p className="mb-5 text-[11px] font-sans uppercase tracking-[0.32em] text-white/72 [text-shadow:0_6px_22px_rgba(0,0,0,0.28)]">
+              {lang === "it" ? "Un po' di noi" : "A little about us"}
+            </p>
+            <h1 className="editorial-heading text-4xl md:text-6xl lg:text-7xl text-white mb-4 [text-shadow:0_10px_34px_rgba(0,0,0,0.30)]">
               {t("crew.title")}
             </h1>
-            <p className="editorial-body text-lg md:text-xl text-white/76 leading-relaxed max-w-2xl">
+            <p className="editorial-body text-lg md:text-xl text-white/86 leading-relaxed max-w-2xl [text-shadow:0_8px_28px_rgba(0,0,0,0.24)]">
               {t("crew.intro")}
             </p>
           </div>
@@ -59,7 +59,7 @@ const TheCrew = () => {
             <Music size={20} />
           </div>
           <h2 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.name.title")}</h2>
-          <p className="editorial-body text-white/74 text-lg leading-relaxed max-w-2xl mx-auto mb-12">
+          <p className="editorial-body text-white/84 text-lg leading-relaxed max-w-2xl mx-auto mb-12">
             {t("crew.name.text")}
           </p>
           <blockquote className="glass-chip-dark max-w-lg mx-auto mb-8 px-6 py-6 font-serif italic text-xl md:text-2xl text-white/90 leading-relaxed">
@@ -158,7 +158,7 @@ const TheCrew = () => {
               {t("crew.snow.subtitle")}
             </p>
             <h3 className="editorial-heading text-3xl md:text-5xl mb-8">{t("crew.snow.title")}</h3>
-            <p className="editorial-body text-white/74 text-lg leading-relaxed max-w-2xl mx-auto">
+            <p className="editorial-body text-white/84 text-lg leading-relaxed max-w-2xl mx-auto">
               {t("crew.snow.text")}
             </p>
           </div>

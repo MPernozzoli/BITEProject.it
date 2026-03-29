@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { generateHTML } from "@tiptap/react";
-import { ArrowLeft, MapPin, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, MapPin, User, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
@@ -12,6 +12,7 @@ import LiveReadCounter from "@/components/LiveReadCounter";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -26,11 +27,12 @@ type ExpandedArticleModalProps = {
   lang: "it" | "en";
   originRect: ExpandedArticleOrigin | null;
   phase: "opening" | "open" | "closing";
+  previewAuthors?: Array<{ id: string; name: string; avatar_url: string | null }>;
   onClose: () => void;
 };
 
-const ANIMATION_MS = 560;
-const ANIMATION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+const ANIMATION_MS = 480;
+const ANIMATION_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 const getViewportRect = () => ({
   width: typeof window === "undefined" ? 1440 : window.innerWidth,
@@ -51,7 +53,7 @@ const buildTargetRect = (viewportWidth: number, viewportHeight: number): Expande
   };
 };
 
-const ExpandedArticleModal = ({ slug, lang, originRect, phase, onClose }: ExpandedArticleModalProps) => {
+const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = [], onClose }: ExpandedArticleModalProps) => {
   const [viewport, setViewport] = useState(getViewportRect);
 
   const { data: article, isLoading } = useQuery({
@@ -134,9 +136,18 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, onClose }: Expand
     [viewport.height, viewport.width]
   );
 
-  const shellRect = phase === "open" ? targetRect : (originRect || targetRect);
   const overlayOpacity = phase === "closing" ? 0 : phase === "open" ? 1 : 0;
   const contentVisible = phase === "open";
+  const startRect = originRect || targetRect;
+  const scaleX = startRect.width / targetRect.width;
+  const scaleY = startRect.height / targetRect.height;
+  const translateX = startRect.left - targetRect.left;
+  const translateY = startRect.top - targetRect.top;
+  const shellTransform = phase === "open"
+    ? "translate3d(0px, 0px, 0px) scale(1, 1)"
+    : `translate3d(${translateX}px, ${translateY}px, 0px) scale(${scaleX}, ${scaleY})`;
+  const shellBorderRadius = phase === "open" ? targetRect.borderRadius : startRect.borderRadius;
+  const resolvedAuthors = authors.length > 0 ? authors : previewAuthors;
 
   const title = article
     ? lang === "en"
@@ -226,16 +237,15 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, onClose }: Expand
         aria-label={lang === "it" ? "Articolo completo" : "Full article"}
         className="fixed z-[71] overflow-hidden border border-black/5 bg-[rgba(255,255,255,0.97)] shadow-[0_40px_120px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
         style={{
-          top: `${shellRect.top}px`,
-          left: `${shellRect.left}px`,
-          width: `${shellRect.width}px`,
-          height: `${shellRect.height}px`,
-          borderRadius: `${shellRect.borderRadius}px`,
+          top: `${targetRect.top}px`,
+          left: `${targetRect.left}px`,
+          width: `${targetRect.width}px`,
+          height: `${targetRect.height}px`,
+          transform: shellTransform,
+          transformOrigin: "top left",
+          borderRadius: `${shellBorderRadius}px`,
           transition: [
-            `top ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
-            `left ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
-            `width ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
-            `height ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
+            `transform ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
             `border-radius ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
             `box-shadow ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
             `background-color ${ANIMATION_MS}ms ${ANIMATION_EASING}`,
@@ -329,21 +339,29 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, onClose }: Expand
                     </div>
                   )}
 
-                  {(authors.length > 0 || dateLabel) && (
+                  {(resolvedAuthors.length > 0 || dateLabel) && (
                     <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-black/6 pt-6">
-                      {authors.map((author) => (
-                        <ProfileCard
+                      {resolvedAuthors.map((author) => (
+                        <Link
                           key={author.id}
-                          profileId={author.id}
-                          name={author.name}
-                          avatarUrl={author.avatar_url || undefined}
-                          size="sm"
-                        />
+                          to={`/profile/${author.id}`}
+                          className="inline-flex items-center gap-2 rounded-full border border-black/7 bg-white px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                        >
+                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-black/6 bg-neutral-100">
+                            <ProfileAvatar
+                              name={author.name || "Anonymous"}
+                              avatarUrl={author.avatar_url || undefined}
+                              imgClassName="h-full w-full object-cover"
+                              fallback={<User size={12} className="text-muted-foreground" />}
+                            />
+                          </span>
+                          <span>{author.name}</span>
+                        </Link>
                       ))}
                       {dateLabel && (
-                        <span className="text-sm font-sans text-muted-foreground">
+                        <span className="inline-flex items-center rounded-full border border-black/7 bg-white px-3 py-2 text-xs font-sans text-muted-foreground">
                           {lang === "it" ? "Pubblicato il " : "Published "}
-                          <time dateTime={article.published_at || undefined}>{dateLabel}</time>
+                          <time className="ml-1" dateTime={article.published_at || undefined}>{dateLabel}</time>
                         </span>
                       )}
                     </div>
