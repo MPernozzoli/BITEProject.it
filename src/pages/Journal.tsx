@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Navigation, Anchor, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Navigation, Anchor, ChevronUp, ChevronDown } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -20,6 +20,7 @@ const Journal = () => {
   const EXPANDED_READER_MS = 480;
   const MOBILE_SIDEBAR_PEEK = 220;
   const MOBILE_SIDEBAR_OPEN = 0.78;
+  const MOBILE_SIDEBAR_HANDLE = 34;
   const MOBILE_SHEET_SWIPE_THRESHOLD = 48;
   const { t, lang } = useI18n();
   const { isAdmin } = useAuth();
@@ -32,7 +33,7 @@ const Journal = () => {
   const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileSidebarExpanded, setMobileSidebarExpanded] = useState(false);
+  const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
   const { isRead } = useArticleReads();
@@ -218,7 +219,7 @@ const Journal = () => {
     setPanelArticle(article);
     setPanelProfileId(null);
     if (isMobile) {
-      setMobileSidebarExpanded(true);
+      setMobileSidebarMode("expanded");
     }
   }, [isMobile]);
 
@@ -235,7 +236,7 @@ const Journal = () => {
     });
     setExpandedArticlePhase("opening");
     if (isMobile) {
-      setMobileSidebarExpanded(false);
+      setMobileSidebarMode("collapsed");
     } else {
       setSidebarOpen(false);
     }
@@ -245,7 +246,7 @@ const Journal = () => {
     if (!expandedArticle) return;
     setExpandedArticlePhase("closing");
     if (isMobile) {
-      setMobileSidebarExpanded(true);
+      setMobileSidebarMode("expanded");
     } else {
       setSidebarOpen(true);
     }
@@ -253,7 +254,7 @@ const Journal = () => {
 
   const toggleSidebar = useCallback(() => {
     if (isMobile) {
-      setMobileSidebarExpanded((current) => !current);
+      setMobileSidebarMode((current) => (current === "expanded" ? "collapsed" : "expanded"));
       return;
     }
 
@@ -270,18 +271,24 @@ const Journal = () => {
     const currentY = event.touches[0]?.clientY ?? mobileSidebarTouchStartRef.current;
     const delta = currentY - mobileSidebarTouchStartRef.current;
 
-    if ((mobileSidebarExpanded && delta > 0) || (!mobileSidebarExpanded && delta < 0)) {
-      setMobileSidebarDragOffset(Math.min(Math.abs(delta), 120));
-    } else {
-      setMobileSidebarDragOffset(0);
+    if (mobileSidebarMode === "expanded" && delta > 0) {
+      setMobileSidebarDragOffset(Math.min(delta, 160));
+      return;
     }
-  }, [mobileSidebarExpanded]);
+
+    if ((mobileSidebarMode === "peek" || mobileSidebarMode === "collapsed") && delta < 0) {
+      setMobileSidebarDragOffset(Math.min(Math.abs(delta), 160));
+      return;
+    }
+
+    setMobileSidebarDragOffset(0);
+  }, [mobileSidebarMode]);
 
   const handleMobileSidebarTouchEnd = useCallback(() => {
     if (mobileSidebarTouchStartRef.current === null) return;
 
     if (mobileSidebarDragOffset > MOBILE_SHEET_SWIPE_THRESHOLD) {
-      setMobileSidebarExpanded((current) => !current);
+      setMobileSidebarMode((current) => (current === "expanded" ? "collapsed" : "expanded"));
     }
 
     mobileSidebarTouchStartRef.current = null;
@@ -368,7 +375,7 @@ const Journal = () => {
 
   useEffect(() => {
     if (!isMobile) {
-      setMobileSidebarExpanded(false);
+      setMobileSidebarMode("peek");
       setMobileSidebarDragOffset(0);
     }
   }, [isMobile]);
@@ -386,14 +393,24 @@ const Journal = () => {
   const isSidebarAutoHidden = !isMobile && hideMapChromeOnScroll && sidebarOpen;
   const isDetailPanelAutoHidden = hideMapChromeOnScroll && sidePanelVisible;
   const shouldOffsetControlsForDetail = sidePanelVisible && !isDetailPanelAutoHidden;
+  const mobileSidebarVisible = mobileSidebarMode !== "collapsed";
   const mobileSidebarHeight = typeof window === "undefined"
     ? 560
     : Math.max(360, Math.round(window.innerHeight * MOBILE_SIDEBAR_OPEN));
   const mobileSidebarPeekHeight = Math.min(MOBILE_SIDEBAR_PEEK, Math.round(mobileSidebarHeight * 0.42));
-  const mobileSidebarBaseOffset = mobileSidebarExpanded ? 0 : Math.max(0, mobileSidebarHeight - mobileSidebarPeekHeight);
-  const mobileSidebarTranslateY = mobileSidebarExpanded
-    ? Math.max(0, mobileSidebarDragOffset)
-    : Math.max(0, mobileSidebarBaseOffset - mobileSidebarDragOffset);
+  const mobileSidebarBaseOffset =
+    mobileSidebarMode === "expanded"
+      ? 0
+      : mobileSidebarMode === "peek"
+        ? Math.max(0, mobileSidebarHeight - mobileSidebarPeekHeight)
+        : Math.max(0, mobileSidebarHeight - MOBILE_SIDEBAR_HANDLE);
+  const mobileSidebarTranslateY =
+    mobileSidebarMode === "expanded"
+      ? Math.max(0, mobileSidebarDragOffset)
+      : Math.max(0, mobileSidebarBaseOffset - mobileSidebarDragOffset);
+  const isMapInteractionLocked =
+    viewMode === "map" &&
+    (articleReaderActive || showPreviewPanel || Boolean(panelProfileId) || (isMobile && mobileSidebarVisible));
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -408,9 +425,12 @@ const Journal = () => {
             highlightedVoyageId={highlightedVoyageId}
             onArticleClick={handleArticleClick}
             lang={lang}
+            disableInteractions={isMapInteractionLocked}
             initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
             fallbackHeightClassName="h-full min-h-screen"
           />
+
+          {isMapInteractionLocked && <div className="absolute inset-0 z-10" aria-hidden />}
 
           {/* Floating controls — top right */}
           <div
@@ -421,9 +441,9 @@ const Journal = () => {
             <button
               onClick={toggleSidebar}
               className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
-              title={isMobile ? (mobileSidebarExpanded ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
+              title={isMobile ? (mobileSidebarMode === "expanded" ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
             >
-              {(isMobile ? mobileSidebarExpanded : sidebarOpen) ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+              {(isMobile ? mobileSidebarMode === "expanded" : sidebarOpen) ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
             <button
               onClick={() => setViewMode("list")}
@@ -481,17 +501,23 @@ const Journal = () => {
             {/* Search inside sidebar */}
             <div
               className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
-              onTouchStart={isMobile ? handleMobileSidebarTouchStart : undefined}
-              onTouchMove={isMobile ? handleMobileSidebarTouchMove : undefined}
-              onTouchEnd={isMobile ? handleMobileSidebarTouchEnd : undefined}
-              onTouchCancel={isMobile ? handleMobileSidebarTouchEnd : undefined}
             >
               {isMobile && (
                 <div className="mb-3 flex flex-col items-center gap-2">
-                  <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${!mobileSidebarExpanded ? "mobile-sheet-handle-hint" : ""}`} />
-                  <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                    {lang === "it" ? "Scorri verso l'alto" : "Swipe up"}
-                  </p>
+                  <div
+                    className="flex w-full flex-col items-center gap-2"
+                    onTouchStart={handleMobileSidebarTouchStart}
+                    onTouchMove={handleMobileSidebarTouchMove}
+                    onTouchEnd={handleMobileSidebarTouchEnd}
+                    onTouchCancel={handleMobileSidebarTouchEnd}
+                  >
+                    <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${mobileSidebarMode !== "expanded" ? "mobile-sheet-handle-hint" : ""}`} />
+                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {mobileSidebarMode === "expanded"
+                        ? (lang === "it" ? "Scorri verso il basso" : "Swipe down")
+                        : (lang === "it" ? "Scorri verso l'alto" : "Swipe up")}
+                    </p>
+                  </div>
                 </div>
               )}
               <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
@@ -507,7 +533,10 @@ const Journal = () => {
             </div>
 
             {/* Article list */}
-            <div className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}>
+            <div
+              className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}
+              style={isMobile ? { touchAction: "pan-y" } : undefined}
+            >
               {isArticlesLoading ? (
                 <div className="p-3 space-y-3">
                   {[...Array(5)].map((_, i) => (

@@ -215,7 +215,7 @@ export function getWaypointEffectiveType(
     return waypoint.waypoint_type === "narrative" ? "narrative" : "technical";
   }
 
-  return index === total - 1 ? "narrative" : "technical";
+  return index === 0 || index === total - 1 ? "narrative" : "technical";
 }
 
 export function getLocalizedWaypointName(

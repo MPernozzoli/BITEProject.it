@@ -91,7 +91,7 @@ const ArticleSlidePanel = ({
           </button>
         </div>
 
-        <div className="px-4 py-4 md:px-5 md:py-5 flex-1 overflow-y-auto">
+        <div className="px-4 py-4 md:px-5 md:py-5 flex-1 overflow-y-auto" style={{ touchAction: "pan-y" }}>
           <div className="space-y-4">
             {article.cover_image && (
               <div className="overflow-hidden rounded-[26px] border border-white/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">

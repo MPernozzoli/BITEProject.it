@@ -18,6 +18,7 @@ interface VoyageMapProps {
   onArticleClick?: (article: GeoArticle) => void;
   lang: "en" | "it";
   initialFitReady?: boolean;
+  disableInteractions?: boolean;
 }
 
 const escapePopupHtml = (value: string) =>
@@ -37,6 +38,7 @@ const VoyageMap = ({
   onArticleClick,
   lang,
   initialFitReady = true,
+  disableInteractions = false,
 }: VoyageMapProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -124,6 +126,31 @@ const VoyageMap = ({
       mapRef.current = null;
     };
   }, [clearWaypointLayerHandlers, mapUnavailable]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handlers = [
+      map.scrollZoom,
+      map.boxZoom,
+      map.dragRotate,
+      map.dragPan,
+      map.keyboard,
+      map.doubleClickZoom,
+      map.touchZoomRotate,
+    ];
+
+    handlers.forEach((handler) => {
+      if (disableInteractions) {
+        handler.disable();
+      } else {
+        handler.enable();
+      }
+    });
+
+    map.getCanvas().style.pointerEvents = disableInteractions ? "none" : "auto";
+  }, [disableInteractions]);
 
   // Draw voyage routes
   useEffect(() => {

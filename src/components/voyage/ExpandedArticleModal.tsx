@@ -273,7 +273,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5">
+          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5" style={{ touchAction: "pan-y" }}>
             {isLoading ? (
               <div className="mx-auto max-w-4xl space-y-4 animate-pulse">
                 <div className="h-[34vh] rounded-[30px] bg-neutral-100" />

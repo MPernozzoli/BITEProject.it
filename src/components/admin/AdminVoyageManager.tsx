@@ -285,6 +285,15 @@ const AdminVoyageManager = () => {
     segmentPreviewMarkerRef.current = null;
   }, []);
 
+  const resetSegmentInsertState = useCallback(() => {
+    const map = mapRef.current;
+    segmentInsertRef.current = null;
+    removeSegmentPreviewMarker();
+    if (!map) return;
+    if (!map.dragPan.isEnabled()) map.dragPan.enable();
+    map.getCanvas().style.cursor = selectedVoyageRef.current ? "crosshair" : "";
+  }, [removeSegmentPreviewMarker]);
+
   const ensureSegmentPreviewMarker = useCallback((map: maplibregl.Map, lng: number, lat: number) => {
     if (!segmentPreviewMarkerRef.current) {
       const previewEl = document.createElement("div");
@@ -574,15 +583,26 @@ const AdminVoyageManager = () => {
     if (!marker) return;
 
     const popup = marker.getPopup();
-    const hasFocused = focusWaypointOnMap(waypointId);
-    if (!hasFocused || !popup) return;
+    if (!popup) return;
 
     if (popup.isOpen()) return;
-
-    mapRef.current?.once("moveend", () => {
-      if (!popup.isOpen()) marker.togglePopup();
-    });
+    marker.togglePopup();
+    void focusWaypointOnMap(waypointId);
   }, [focusWaypointOnMap]);
+
+  const toggleWaypointVisibility = useCallback(async (waypoint: VoyageWaypoint, index: number, total: number) => {
+    const effectiveType = getWaypointEffectiveType(waypoint, index, total);
+    const nextType = effectiveType === "narrative" ? "technical" : "narrative";
+    await updateWaypoint(
+      waypoint.voyage_id,
+      waypoint.id,
+      {
+        visibility_mode: "manual",
+        waypoint_type: nextType,
+      },
+      { successMessage: nextType === "narrative" ? "Waypoint is now public" : "Waypoint is now technical" }
+    );
+  }, [updateWaypoint]);
 
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, popup: maplibregl.Popup) => {
@@ -593,7 +613,7 @@ const AdminVoyageManager = () => {
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
       const statusLabel = waypoint.visibility_mode === "manual"
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
-        : effectiveType === "narrative" ? "Auto end" : "Auto hidden";
+        : effectiveType === "narrative" ? (index === 0 ? "Auto start" : "Auto end") : "Auto hidden";
       const wrapper = document.createElement("form");
       wrapper.style.cssText = "width:280px;max-height:360px;overflow-y:auto;overflow-x:hidden;padding:2px 2px 4px;box-sizing:border-box;font-family:var(--font-sans);";
 
@@ -652,7 +672,7 @@ const AdminVoyageManager = () => {
         </div>
         <label style="${popupLabelStyle}">Visibility</label>
         <select name="visibility_mode" style="${popupInputStyle}margin-bottom:12px;">
-          <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (current end is public)</option>
+          <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (start and end are public)</option>
           <option value="technical"${selectedVisibilityValue === "technical" ? " selected" : ""}>Technical / hidden</option>
           <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
         </select>
@@ -799,6 +819,9 @@ const AdminVoyageManager = () => {
   }, [lang]);
 
   const drawRouteOnMap = useCallback((map: maplibregl.Map) => {
+    const openedPopupWaypointId = Object.entries(markersByWaypointRef.current).find(([, marker]) =>
+      marker.getPopup()?.isOpen()
+    )?.[0] || null;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     markersByWaypointRef.current = {};
@@ -915,6 +938,13 @@ const AdminVoyageManager = () => {
       if (pendingPopupWaypointIdRef.current === waypoint.id) {
         pendingPopupWaypointIdRef.current = null;
         requestAnimationFrame(() => openWaypointPopup(waypoint.id));
+      } else if (openedPopupWaypointId === waypoint.id) {
+        requestAnimationFrame(() => {
+          const nextPopup = marker.getPopup();
+          if (nextPopup && !nextPopup.isOpen()) {
+            marker.togglePopup();
+          }
+        });
       }
     });
   }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, openWaypointPopup, updateWaypoint]);
@@ -956,14 +986,9 @@ const AdminVoyageManager = () => {
 
     mapRef.current.on("mouseup", (event) => {
       const activeInsert = segmentInsertRef.current;
-      const map = mapRef.current;
-      if (!activeInsert || !map) return;
-
-      segmentInsertRef.current = null;
-      removeSegmentPreviewMarker();
-      if (!map.dragPan.isEnabled()) map.dragPan.enable();
-      map.getCanvas().style.cursor = selectedVoyageRef.current ? "crosshair" : "";
+      if (!activeInsert) return;
       suppressMapClickUntilRef.current = Date.now() + 250;
+      resetSegmentInsertState();
 
       void insertWaypointAtIndex(
         activeInsert.voyageId,
@@ -972,6 +997,14 @@ const AdminVoyageManager = () => {
         activeInsert.insertIndex
       );
     });
+
+    const handleWindowMouseUp = () => {
+      if (!segmentInsertRef.current) return;
+      resetSegmentInsertState();
+    };
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+    window.addEventListener("blur", handleWindowMouseUp);
 
     mapRef.current.on("click", (event) => {
       const voyageId = selectedVoyageRef.current;
@@ -990,8 +1023,9 @@ const AdminVoyageManager = () => {
     });
 
     return () => {
-      segmentInsertRef.current = null;
-      removeSegmentPreviewMarker();
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+      window.removeEventListener("blur", handleWindowMouseUp);
+      resetSegmentInsertState();
       if (routeLineMouseDownRef.current) {
         mapRef.current?.off("mousedown", "admin-route-line", routeLineMouseDownRef.current);
         routeLineMouseDownRef.current = null;
@@ -1007,7 +1041,7 @@ const AdminVoyageManager = () => {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [ensureSegmentPreviewMarker, insertWaypointAtIndex, removeSegmentPreviewMarker]);
+  }, [ensureSegmentPreviewMarker, insertWaypointAtIndex, resetSegmentInsertState]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1016,7 +1050,7 @@ const AdminVoyageManager = () => {
     const draw = () => drawRouteOnMap(map);
     if (map.isStyleLoaded()) draw();
     else map.once("load", draw);
-  }, [drawRouteOnMap, selectedVoyageId, voyages, waypoints]);
+  }, [drawRouteOnMap, selectedVoyageId, waypoints]);
 
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas();
@@ -1387,7 +1421,7 @@ const AdminVoyageManager = () => {
 
         {!selectedVoyageId && (
           <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
-            Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito uno start o un nuovo waypoint tecnico.
+            Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito un waypoint: start e arrivo restano pubblici di default, gli intermedi diventano tecnici.
           </p>
         )}
 
@@ -1399,7 +1433,7 @@ const AdminVoyageManager = () => {
                 <p className="text-xs text-muted-foreground font-sans">
                   {selectedWaypoints.length >= 2
                     ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                    : voyageDates || "The current last waypoint is public by default until you add another point."}
+                    : voyageDates || "The first and last waypoints stay public by default. Intermediate ones are technical."}
                 </p>
               </div>
             </div>
@@ -1425,15 +1459,18 @@ const AdminVoyageManager = () => {
                     <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    {effectiveType === "technical" ? (
-                      <span title={visibilityLabel}>
+                    <button
+                      type="button"
+                      onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground"
+                      title={`${visibilityLabel}. Click to toggle quickly.`}
+                    >
+                      {effectiveType === "technical" ? (
                         <EyeOff size={10} className="text-muted-foreground shrink-0" />
-                      </span>
-                    ) : (
-                      <span title={visibilityLabel}>
+                      ) : (
                         <Eye size={10} className="text-accent shrink-0" />
-                      </span>
-                    )}
+                      )}
+                    </button>
                     <button
                       type="button"
                       onClick={() => openWaypointPopup(waypoint.id)}

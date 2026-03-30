@@ -292,7 +292,7 @@ const ProfileSlidePanel = ({
           </button>
         </div>
 
-        <div className="px-4 py-4 md:px-5 md:py-5 flex-1 overflow-y-auto">
+        <div className="px-4 py-4 md:px-5 md:py-5 flex-1 overflow-y-auto" style={{ touchAction: "pan-y" }}>
           {isLoading ? (
             <div className="space-y-4 animate-pulse">
               <div className="rounded-[28px] bg-muted h-44" />
