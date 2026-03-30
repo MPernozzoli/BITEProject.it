@@ -4,6 +4,7 @@ type ArticleImage = {
   src: string;
   alt?: string;
   title?: string;
+  caption?: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -36,6 +37,19 @@ export const extractImagesFromRichContent = (content: Json | null | undefined): 
           src,
           alt: typeof node.attrs.alt === "string" ? node.attrs.alt : undefined,
           title: typeof node.attrs.title === "string" ? node.attrs.title : undefined,
+        });
+      }
+    }
+
+    if (node.type === "mediaFigure" && isRecord(node.attrs) && node.attrs.kind !== "youtube") {
+      const src = normalizeImageSrc(node.attrs.src);
+      if (src && !seen.has(src)) {
+        seen.add(src);
+        images.push({
+          src,
+          alt: typeof node.attrs.alt === "string" ? node.attrs.alt : undefined,
+          title: typeof node.attrs.title === "string" ? node.attrs.title : undefined,
+          caption: typeof node.attrs.caption === "string" ? node.attrs.caption : undefined,
         });
       }
     }

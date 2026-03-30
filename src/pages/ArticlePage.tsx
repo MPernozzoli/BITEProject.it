@@ -314,11 +314,11 @@ const ArticlePage = () => {
           associatedMedia: inlineImages.length
             ? inlineImages.map((image) => ({
                 "@type": "ImageObject",
-                contentUrl: image.src,
-                url: image.src,
-                caption: image.alt || image.title || undefined,
-                name: image.title || image.alt || undefined,
-              }))
+              contentUrl: image.src,
+              url: image.src,
+              caption: image.caption || image.alt || image.title || undefined,
+              name: image.title || image.caption || image.alt || undefined,
+            }))
             : undefined,
         },
       ],

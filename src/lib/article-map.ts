@@ -231,13 +231,21 @@ export const getArticleContentBlocks = (value: Json | unknown, lang: Language): 
       ? "H"
       : type === "image"
         ? (lang === "it" ? "Immagine" : "Image")
+        : type === "mediaFigure"
+          ? (lang === "it" ? "Media" : "Media")
         : type === "bulletList" || type === "orderedList"
           ? (lang === "it" ? "Lista" : "List")
           : type === "blockquote"
             ? (lang === "it" ? "Citazione" : "Quote")
             : "";
 
-    const label = truncateText(rawText || normalizeString(node.attrs?.alt) || fallbackLabel);
+    const label = truncateText(
+      rawText ||
+      normalizeString(node.attrs?.caption) ||
+      normalizeString(node.attrs?.alt) ||
+      normalizeString(node.attrs?.title) ||
+      fallbackLabel
+    );
 
     return [{
       index,
