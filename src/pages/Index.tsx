@@ -136,6 +136,8 @@ const Index = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterConsent, setNewsletterConsent] = useState(false);
+  const [newsletterWebsite, setNewsletterWebsite] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const [heroPlaylist, setHeroPlaylist] = useState<HeroMedia[]>([]);
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
@@ -437,12 +439,23 @@ const Index = () => {
       return;
     }
 
+    if (!newsletterConsent) {
+      toast.error(
+        lang === "it"
+          ? "Devi accettare l'iscrizione alla newsletter prima di continuare."
+          : "You need to accept the newsletter subscription before continuing."
+      );
+      return;
+    }
+
     setNewsletterLoading(true);
-    const { data, error } = await supabase.functions.invoke("newsletter-subscribe", {
+    const { error } = await supabase.functions.invoke("newsletter-subscribe", {
       body: {
         email: targetEmail,
         preferredLanguage: lang,
         source: session ? "homepage_logged_in" : "homepage",
+        consent: newsletterConsent,
+        website: newsletterWebsite,
       },
     });
     setNewsletterLoading(false);
@@ -458,14 +471,16 @@ const Index = () => {
     }
 
     setNewsletterEmail("");
+    setNewsletterConsent(false);
+    setNewsletterWebsite("");
     toast.success(
-      data?.alreadySubscribed
+      session?.user.email
         ? lang === "it"
-          ? "Sei già iscritto. Preferenze aggiornate."
-          : "You were already subscribed. Preferences updated."
+          ? "Preferenze newsletter aggiornate."
+          : "Newsletter preferences updated."
         : lang === "it"
-          ? "Iscrizione confermata."
-          : "Subscription confirmed."
+          ? "Richiesta registrata."
+          : "Subscription request received."
     );
   };
 
@@ -766,31 +781,60 @@ const Index = () => {
           <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
           <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
           <p className="editorial-body text-white/84 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
-          <form onSubmit={handleNewsletterSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto">
-            {session?.user.email ? (
-              <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/88 text-left">
+          <form onSubmit={handleNewsletterSubscribe} className="max-w-xl mx-auto space-y-4">
+            <input
+              type="text"
+              name="website"
+              value={newsletterWebsite}
+              onChange={(event) => setNewsletterWebsite(event.target.value)}
+              tabIndex={-1}
+              autoComplete="off"
+              className="hidden"
+              aria-hidden="true"
+            />
+            <div className="flex flex-col sm:flex-row gap-3">
+              {session?.user.email ? (
+                <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/88 text-left">
+                  {lang === "it"
+                    ? `Ti iscriveremo con ${session.user.email}`
+                    : `We'll subscribe you with ${session.user.email}`}
+                </div>
+              ) : (
+                <div className="glass-input flex-1 rounded-full px-1.5">
+                  <input
+                    type="email"
+                    value={newsletterEmail}
+                    onChange={(event) => setNewsletterEmail(event.target.value)}
+                    placeholder={t("newsletter.placeholder")}
+                    className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                  />
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={newsletterLoading}
+                className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
+              >
+                {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
+              </button>
+            </div>
+            <label className="flex items-start gap-3 text-left text-sm text-white/82">
+              <input
+                type="checkbox"
+                checked={newsletterConsent}
+                onChange={(event) => setNewsletterConsent(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-white/40 bg-transparent accent-white"
+              />
+              <span>
                 {lang === "it"
-                  ? `Ti iscriveremo con ${session.user.email}`
-                  : `We'll subscribe you with ${session.user.email}`}
-              </div>
-            ) : (
-              <div className="glass-input flex-1 rounded-full px-1.5">
-                <input
-                  type="email"
-                  value={newsletterEmail}
-                  onChange={(event) => setNewsletterEmail(event.target.value)}
-                  placeholder={t("newsletter.placeholder")}
-                  className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-                />
-              </div>
-            )}
-            <button
-              type="submit"
-              disabled={newsletterLoading}
-              className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
-            >
-              {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
-            </button>
+                  ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
+                  : "I agree to receive the BITE newsletter and confirm that I have read the "}
+                <Link to="/privacy-policy" className="underline decoration-white/50 underline-offset-4 hover:text-white">
+                  {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
+                </Link>
+                .
+              </span>
+            </label>
           </form>
         </div>
       </section>

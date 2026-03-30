@@ -17,6 +17,7 @@ import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
@@ -195,7 +196,9 @@ const ArticlePage = () => {
 
   if (hasStructuredContent) {
     try {
-      htmlContent = generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions);
+      htmlContent = sanitizeRichHtml(
+        generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions)
+      );
     } catch (error) {
       contentRenderFailed = true;
       console.error("Failed to render article content", error);
@@ -619,9 +622,11 @@ const ArticlePage = () => {
                 <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
                   <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
                     {contentNodes.map((node, index) => {
-                      const blockHtml = generateHTML(
-                        { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
-                        articleContentExtensions
+                      const blockHtml = sanitizeRichHtml(
+                        generateHTML(
+                          { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
+                          articleContentExtensions
+                        )
                       );
 
                       return (

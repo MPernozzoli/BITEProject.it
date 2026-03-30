@@ -48,9 +48,11 @@ const CoverCropDialog = ({
   onCancel,
   onConfirm,
 }: CoverCropDialogProps) => {
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(DEFAULT_COVER_FOCAL.zoom);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [viewportSize, setViewportSize] = useState({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
   const [isProcessing, setIsProcessing] = useState(false);
   const dragging = useRef(false);
   const lastPointer = useRef({ x: 0, y: 0 });
@@ -59,8 +61,28 @@ const CoverCropDialog = ({
 
   const baseScale = useMemo(() => {
     if (!imageSize) return 1;
-    return Math.max(VIEWPORT_WIDTH / imageSize.width, VIEWPORT_HEIGHT / imageSize.height);
-  }, [imageSize]);
+    return Math.max(viewportSize.width / imageSize.width, viewportSize.height / imageSize.height);
+  }, [imageSize, viewportSize.height, viewportSize.width]);
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element) return;
+
+    const syncSize = () => {
+      const width = element.clientWidth || VIEWPORT_WIDTH;
+      setViewportSize({
+        width,
+        height: width / VIEWPORT_ASPECT_RATIO,
+      });
+    };
+
+    syncSize();
+
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [open]);
 
   const clampOffset = useCallback(
     (next: { x: number; y: number }, zoomValue: number) => {
@@ -68,15 +90,15 @@ const CoverCropDialog = ({
 
       const renderedWidth = imageSize.width * baseScale * zoomValue;
       const renderedHeight = imageSize.height * baseScale * zoomValue;
-      const maxX = Math.max(0, (renderedWidth - VIEWPORT_WIDTH) / 2);
-      const maxY = Math.max(0, (renderedHeight - VIEWPORT_HEIGHT) / 2);
+      const maxX = Math.max(0, (renderedWidth - viewportSize.width) / 2);
+      const maxY = Math.max(0, (renderedHeight - viewportSize.height) / 2);
 
       return {
         x: clamp(next.x, -maxX, maxX),
         y: clamp(next.y, -maxY, maxY),
       };
     },
-    [baseScale, imageSize]
+    [baseScale, imageSize, viewportSize.height, viewportSize.width]
   );
 
   const focalToOffset = useCallback(
@@ -88,13 +110,13 @@ const CoverCropDialog = ({
 
       return clampOffset(
         {
-          x: ((50 - focal.focalX) / 100) * (renderedWidth - VIEWPORT_WIDTH),
-          y: ((50 - focal.focalY) / 100) * (renderedHeight - VIEWPORT_HEIGHT),
+          x: ((50 - focal.focalX) / 100) * (renderedWidth - viewportSize.width),
+          y: ((50 - focal.focalY) / 100) * (renderedHeight - viewportSize.height),
         },
         zoomValue
       );
     },
-    [baseScale, clampOffset, imageSize]
+    [baseScale, clampOffset, imageSize, viewportSize.height, viewportSize.width]
   );
 
   const offsetToFocal = useCallback(
@@ -105,15 +127,15 @@ const CoverCropDialog = ({
 
       const renderedWidth = imageSize.width * baseScale * zoomValue;
       const renderedHeight = imageSize.height * baseScale * zoomValue;
-      const horizontalRoom = Math.max(0, renderedWidth - VIEWPORT_WIDTH);
-      const verticalRoom = Math.max(0, renderedHeight - VIEWPORT_HEIGHT);
+      const horizontalRoom = Math.max(0, renderedWidth - viewportSize.width);
+      const verticalRoom = Math.max(0, renderedHeight - viewportSize.height);
 
       const focalX = horizontalRoom === 0 ? 50 : 50 - (nextOffset.x / horizontalRoom) * 100;
       const focalY = verticalRoom === 0 ? 50 : 50 - (nextOffset.y / verticalRoom) * 100;
 
       return clampCoverFocal(focalX, focalY, zoomValue);
     },
-    [baseScale, imageSize]
+    [baseScale, imageSize, viewportSize.height, viewportSize.width]
   );
 
   useEffect(() => {
@@ -225,6 +247,7 @@ const CoverCropDialog = ({
 
         <div className="px-6 pb-6 space-y-5">
           <div
+            ref={viewportRef}
             className="relative mx-auto w-full max-w-[640px] aspect-[16/10] overflow-hidden rounded-2xl border border-border bg-muted cursor-grab active:cursor-grabbing touch-none select-none"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}

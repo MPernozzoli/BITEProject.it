@@ -14,6 +14,10 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   })
 }
 
+function successResponse(): Response {
+  return jsonResponse({ success: true })
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
@@ -47,6 +51,21 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Valid email is required' }, 400)
   }
 
+  const consentAccepted = body.consent === true
+  if (!consentAccepted) {
+    return jsonResponse({ error: 'Consent is required' }, 400)
+  }
+
+  const honeypot =
+    typeof body.website === 'string'
+      ? body.website.trim()
+      : typeof body.company === 'string'
+        ? body.company.trim()
+        : ''
+  if (honeypot) {
+    return successResponse()
+  }
+
   const preferredLanguage = normalizeLanguage(
     typeof body.preferredLanguage === 'string'
       ? body.preferredLanguage
@@ -56,10 +75,24 @@ Deno.serve(async (req) => {
   )
   const source =
     typeof body.source === 'string' && body.source.trim()
-      ? body.source.trim()
+      ? body.source.trim().slice(0, 64)
       : 'homepage'
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const authHeader = req.headers.get('Authorization')
+  const accessToken = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length).trim()
+    : null
+
+  let requesterUserId: string | null = null
+  let requesterEmail: string | null = null
+  if (accessToken) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(accessToken)
+    requesterUserId = user?.id ?? null
+    requesterEmail = user?.email?.trim().toLowerCase() ?? null
+  }
 
   const { data: matchingProfile } = await supabase
     .from('profiles')
@@ -81,6 +114,31 @@ Deno.serve(async (req) => {
   if (lookupError) {
     console.error('Failed to load newsletter subscriber', lookupError)
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
+  }
+
+  const { data: suppressedEmail, error: suppressionLookupError } = await supabase
+    .from('suppressed_emails')
+    .select('email')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  if (suppressionLookupError) {
+    console.error('Failed to load suppression status', suppressionLookupError)
+    return jsonResponse({ error: 'Failed to subscribe' }, 500)
+  }
+
+  const hasVerifiedOwnership =
+    requesterEmail === normalizedEmail ||
+    (requesterUserId !== null &&
+      (matchingProfile?.id === requesterUserId ||
+        existingSubscriber?.profile_id === requesterUserId))
+
+  const shouldNoopForSafety =
+    !hasVerifiedOwnership &&
+    (Boolean(suppressedEmail) || Boolean(existingSubscriber))
+
+  if (shouldNoopForSafety) {
+    return successResponse()
   }
 
   const payload = {
@@ -106,14 +164,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
 
-  await supabase.from('suppressed_emails').delete().eq('email', normalizedEmail)
-  await supabase
-    .from('email_unsubscribe_tokens')
-    .update({ used_at: null })
-    .eq('email', normalizedEmail)
+  if (hasVerifiedOwnership) {
+    await supabase.from('suppressed_emails').delete().eq('email', normalizedEmail)
+    await supabase
+      .from('email_unsubscribe_tokens')
+      .update({ used_at: null })
+      .eq('email', normalizedEmail)
+  }
 
-  return jsonResponse({
-    success: true,
-    alreadySubscribed: Boolean(existingSubscriber?.subscribed),
-  })
+  return successResponse()
 })

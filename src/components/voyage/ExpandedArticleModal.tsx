@@ -13,6 +13,7 @@ import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArt
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import {
@@ -339,7 +340,9 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
     try {
       return {
-        htmlContent: generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions),
+        htmlContent: sanitizeRichHtml(
+          generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions)
+        ),
         contentRenderFailed: false,
       };
     } catch (error) {
@@ -613,9 +616,11 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                       {contentNodes.length > 0 && (
                         <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
                           {contentNodes.map((node, index) => {
-                            const blockHtml = generateHTML(
-                              { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
-                              articleContentExtensions
+                            const blockHtml = sanitizeRichHtml(
+                              generateHTML(
+                                { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
+                                articleContentExtensions
+                              )
                             );
 
                             return (
