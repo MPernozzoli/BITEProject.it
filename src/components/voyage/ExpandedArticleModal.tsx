@@ -15,7 +15,9 @@ import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import {
+  getArticleSceneAnchorId,
   getArticleSceneAnchorIndex,
+  getArticleSceneAnchorPreview,
   getArticleSceneDescription,
   getArticleOverlayLabel,
   getArticleSceneTitle,
@@ -69,6 +71,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
   const [viewport, setViewport] = useState(getViewportRect);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
 
@@ -242,6 +245,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       longitude: scene.longitude as number,
       zoom: scene.zoom,
       windAngle: scene.wind_angle,
+      anchorId: getArticleSceneAnchorId(scene, lang),
+      anchorPreview: getArticleSceneAnchorPreview(scene, lang),
       anchorIndex: getArticleSceneAnchorIndex(scene, lang),
       showMainRoute: scene.show_main_route,
       vessels: scene.vessels,
@@ -302,11 +307,16 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     const updateFromScroll = () => {
       const containerRect = scrollContainer.getBoundingClientRect();
       const scenePositions = localizedScenes.map((scene) => {
+        const anchorElement = scene.anchorId
+          ? articleContentRef.current?.querySelector<HTMLElement>(`[data-map-scene-anchor-id="${scene.anchorId}"]`) ?? null
+          : null;
         const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
-        const anchorElement = articleBlockRefs.current[anchorIndex];
+        const fallbackElement = articleBlockRefs.current[anchorIndex];
         const top = anchorElement
           ? anchorElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
-          : scrollContainer.scrollTop;
+          : fallbackElement
+            ? fallbackElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
+            : scrollContainer.scrollTop;
 
         return { ...scene, top };
       });
@@ -536,7 +546,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   <div className={`grid gap-6 ${hasGeo ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-1"}`}>
                     <div className="min-w-0">
                       {contentNodes.length > 0 && (
-                        <div className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
+                        <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
                           {contentNodes.map((node, index) => {
                             const blockHtml = generateHTML(
                               { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],

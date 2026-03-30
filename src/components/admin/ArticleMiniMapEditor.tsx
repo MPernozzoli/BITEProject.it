@@ -8,7 +8,6 @@ import {
   createEmptyArticleMapScene,
   createEmptyArticleMapOverlay,
   createEmptyArticleMapVessel,
-  getArticleContentBlocks,
   getArticleSceneTitle,
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
@@ -21,8 +20,6 @@ import {
 interface ArticleMiniMapEditorProps {
   value: Json | unknown;
   onChange: (next: ArticleMapScene[]) => void;
-  contentEn: Json | unknown;
-  contentIt: Json | unknown;
   activeLanguage: Language;
   primaryRouteCoordinates?: [number, number][] | null;
 }
@@ -30,14 +27,10 @@ interface ArticleMiniMapEditorProps {
 const ArticleMiniMapEditor = ({
   value,
   onChange,
-  contentEn,
-  contentIt,
   activeLanguage,
   primaryRouteCoordinates = null,
 }: ArticleMiniMapEditorProps) => {
   const scenes = useMemo(() => normalizeArticleMapScenes(value), [value]);
-  const contentBlocksEn = useMemo(() => getArticleContentBlocks(contentEn, "en"), [contentEn]);
-  const contentBlocksIt = useMemo(() => getArticleContentBlocks(contentIt, "it"), [contentIt]);
   const sortedScenes = useMemo(
     () => sortArticleMapScenesForLanguage(scenes, activeLanguage),
     [activeLanguage, scenes]
@@ -429,17 +422,6 @@ const ArticleMiniMapEditor = ({
     )));
   };
 
-  const renderBlockOptions = (language: Language, blocks: { index: number; label: string }[]) => (
-    <>
-      <option value={0}>{language === "it" ? "Inizio articolo" : "Article start"}</option>
-      {blocks.map((block) => (
-        <option key={`${language}-${block.index}`} value={block.index}>
-          {String(block.index + 1).padStart(2, "0")} · {block.label}
-        </option>
-      ))}
-    </>
-  );
-
   return (
     <section className="space-y-4 border border-border p-4">
       <div className="flex items-start justify-between gap-4">
@@ -559,26 +541,24 @@ const ArticleMiniMapEditor = ({
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-[11px] font-sans tracking-[0.16em] uppercase text-muted-foreground">Anchor EN</span>
-              <select
-                value={selectedScene.anchor_block_en}
-                onChange={(event) => updateScene(selectedScene.id, { anchor_block_en: Number(event.target.value) })}
-                className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              >
-                {renderBlockOptions("en", contentBlocksEn)}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              <span className="text-[11px] font-sans tracking-[0.16em] uppercase text-muted-foreground">Anchor IT</span>
-              <select
-                value={selectedScene.anchor_block_it}
-                onChange={(event) => updateScene(selectedScene.id, { anchor_block_it: Number(event.target.value) })}
-                className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:outline-none focus:border-accent"
-              >
-                {renderBlockOptions("it", contentBlocksIt)}
-              </select>
-            </label>
+            <div className="border border-border px-3 py-3">
+              <p className="text-[11px] font-sans tracking-[0.16em] uppercase text-muted-foreground">Anchor EN</p>
+              <p className="mt-1 text-sm text-foreground">
+                {selectedScene.anchor_preview_en || "No linked text yet"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Select text in the English editor, then right click and choose this scene.
+              </p>
+            </div>
+            <div className="border border-border px-3 py-3">
+              <p className="text-[11px] font-sans tracking-[0.16em] uppercase text-muted-foreground">Anchor IT</p>
+              <p className="mt-1 text-sm text-foreground">
+                {selectedScene.anchor_preview_it || "Nessun testo collegato"}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Seleziona il testo nell'editor italiano, tasto destro e collega questa scena.
+              </p>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">

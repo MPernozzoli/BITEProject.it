@@ -12,6 +12,10 @@ export type ArticleMapScene = {
   latitude: number | null;
   longitude: number | null;
   zoom: number;
+  anchor_id_en: string;
+  anchor_id_it: string;
+  anchor_preview_en: string;
+  anchor_preview_it: string;
   anchor_block_en: number;
   anchor_block_it: number;
   wind_angle: number | null;
@@ -123,6 +127,10 @@ export const createEmptyArticleMapScene = (seed?: number): ArticleMapScene => ({
   latitude: null,
   longitude: null,
   zoom: DEFAULT_SCENE_ZOOM,
+  anchor_id_en: "",
+  anchor_id_it: "",
+  anchor_preview_en: "",
+  anchor_preview_it: "",
   anchor_block_en: 0,
   anchor_block_it: 0,
   wind_angle: null,
@@ -191,6 +199,10 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
       latitude,
       longitude,
       zoom: Math.max(1, Math.min(16, normalizeNumber(item.zoom, DEFAULT_SCENE_ZOOM) ?? DEFAULT_SCENE_ZOOM)),
+      anchor_id_en: normalizeString(item.anchor_id_en),
+      anchor_id_it: normalizeString(item.anchor_id_it),
+      anchor_preview_en: normalizeString(item.anchor_preview_en),
+      anchor_preview_it: normalizeString(item.anchor_preview_it),
       anchor_block_en: normalizeAnchorIndex(item.anchor_block_en),
       anchor_block_it: normalizeAnchorIndex(item.anchor_block_it),
       wind_angle: normalizeNumber(item.wind_angle),
@@ -203,6 +215,12 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
 
 export const getArticleSceneAnchorIndex = (scene: ArticleMapScene, lang: Language) =>
   lang === "it" ? scene.anchor_block_it : scene.anchor_block_en;
+
+export const getArticleSceneAnchorId = (scene: ArticleMapScene, lang: Language) =>
+  lang === "it" ? scene.anchor_id_it : scene.anchor_id_en;
+
+export const getArticleSceneAnchorPreview = (scene: ArticleMapScene, lang: Language) =>
+  (lang === "it" ? scene.anchor_preview_it : scene.anchor_preview_en) || scene.anchor_preview_en || scene.anchor_preview_it;
 
 export const getArticleSceneTitle = (scene: ArticleMapScene, lang: Language) =>
   (lang === "it" ? scene.title_it : scene.title_en) || scene.title_en || scene.title_it;

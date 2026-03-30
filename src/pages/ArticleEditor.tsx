@@ -1140,6 +1140,14 @@ const ArticleEditor = () => {
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
+  const sceneOptionsEn = useMemo(
+    () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_en || scene.title_it || `Scene ${index + 1}` })),
+    [articleMapScenes]
+  );
+  const sceneOptionsIt = useMemo(
+    () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_it || scene.title_en || `Scena ${index + 1}` })),
+    [articleMapScenes]
+  );
   const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
   const primaryRouteCoordinates = useMemo(() => {
     if (!selectedVoyage || voyageWaypoints.length < 2) return null;
@@ -1157,6 +1165,17 @@ const ArticleEditor = () => {
 
     return buildPublicVoyageGeometry(voyageWaypoints, selectedVoyage.type, [], selectedVoyage.id, cachedGeometry);
   }, [selectedVoyage, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+
+  const handleSceneAnchorLink = useCallback((language: ArticleLanguage, sceneId: string, payload: { anchorId: string; anchorPreview: string }) => {
+    setArticleMapScenes((currentScenes) =>
+      currentScenes.map((scene) => {
+        if (scene.id !== sceneId) return scene;
+        return language === "en"
+          ? { ...scene, anchor_id_en: payload.anchorId, anchor_preview_en: payload.anchorPreview }
+          : { ...scene, anchor_id_it: payload.anchorId, anchor_preview_it: payload.anchorPreview };
+      })
+    );
+  }, []);
   const voyageWaypointOptions = voyageWaypoints.map((waypoint, index) => ({
     value: String(index),
     label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
@@ -1311,16 +1330,26 @@ const ArticleEditor = () => {
             )}
 
             {activeTab === "en" ? (
-              <RichTextEditor content={contentEn} onChange={setContentEn} placeholder="Start writing your article in English..." />
+              <RichTextEditor
+                content={contentEn}
+                onChange={setContentEn}
+                placeholder="Start writing your article in English..."
+                mapScenes={sceneOptionsEn}
+                onMapSceneLink={(sceneId, payload) => handleSceneAnchorLink("en", sceneId, payload)}
+              />
             ) : (
-              <RichTextEditor content={contentIt} onChange={setContentIt} placeholder="Inizia a scrivere l'articolo in italiano..." />
+              <RichTextEditor
+                content={contentIt}
+                onChange={setContentIt}
+                placeholder="Inizia a scrivere l'articolo in italiano..."
+                mapScenes={sceneOptionsIt}
+                onMapSceneLink={(sceneId, payload) => handleSceneAnchorLink("it", sceneId, payload)}
+              />
             )}
 
             <ArticleMiniMapEditor
               value={articleMapScenes}
               onChange={setArticleMapScenes}
-              contentEn={contentEn as Json}
-              contentIt={contentIt as Json}
               activeLanguage={activeTab}
               primaryRouteCoordinates={primaryRouteCoordinates}
             />

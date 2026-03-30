@@ -20,7 +20,9 @@ import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/li
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
 import {
+  getArticleSceneAnchorId,
   getArticleSceneAnchorIndex,
+  getArticleSceneAnchorPreview,
   getArticleSceneDescription,
   getArticleOverlayLabel,
   getArticleSceneTitle,
@@ -43,6 +45,7 @@ const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
   const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
 
@@ -209,6 +212,8 @@ const ArticlePage = () => {
       longitude: scene.longitude as number,
       zoom: scene.zoom,
       windAngle: scene.wind_angle,
+      anchorId: getArticleSceneAnchorId(scene, lang),
+      anchorPreview: getArticleSceneAnchorPreview(scene, lang),
       anchorIndex: getArticleSceneAnchorIndex(scene, lang),
       showMainRoute: scene.show_main_route,
       vessels: scene.vessels,
@@ -336,11 +341,16 @@ const ArticlePage = () => {
 
     const updateFromScroll = () => {
       const scenePositions = localizedScenes.map((scene) => {
+        const anchorElement = scene.anchorId
+          ? articleContentRef.current?.querySelector<HTMLElement>(`[data-map-scene-anchor-id="${scene.anchorId}"]`) ?? null
+          : null;
         const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
-        const anchorElement = articleBlockRefs.current[anchorIndex];
+        const fallbackElement = articleBlockRefs.current[anchorIndex];
         const top = anchorElement
           ? anchorElement.getBoundingClientRect().top + window.scrollY
-          : window.scrollY;
+          : fallbackElement
+            ? fallbackElement.getBoundingClientRect().top + window.scrollY
+            : window.scrollY;
 
         return { ...scene, top };
       });
@@ -557,7 +567,7 @@ const ArticlePage = () => {
 
               {contentNodes.length > 0 && (
                 <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
+                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
                     {contentNodes.map((node, index) => {
                       const blockHtml = generateHTML(
                         { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
