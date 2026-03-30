@@ -207,6 +207,10 @@ const VoyageMap = ({
     });
 
     map.getCanvas().style.pointerEvents = disableInteractions ? "none" : "auto";
+    if (containerRef.current) {
+      containerRef.current.style.pointerEvents = disableInteractions ? "none" : "auto";
+      containerRef.current.style.touchAction = disableInteractions ? "none" : "auto";
+    }
   }, [disableInteractions]);
 
   // Draw voyage routes

@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 
 interface ShareButtonProps {
@@ -63,8 +64,12 @@ const triggerImageFallback = (imageUrl: string, filename: string) => {
 
 const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareButtonProps) => {
   const { lang } = useI18n();
+  const isMobileViewport = useIsMobile();
   const [preparedInstagramFile, setPreparedInstagramFile] = useState<File | null>(null);
   const isIt = lang === "it";
+  const isMobileDevice =
+    isMobileViewport ||
+    (typeof navigator !== "undefined" && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent));
 
   useEffect(() => {
     let cancelled = false;
@@ -170,12 +175,14 @@ const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareBut
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuItem onClick={() => void handleShareLink()} className="flex items-center gap-2">
           <Link2 size={14} />
-          <span>{isIt ? "Condividi link" : "Share link"}</span>
+          <span>{isMobileDevice ? (isIt ? "Condividi link" : "Share link") : (isIt ? "Condividi" : "Share")}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void handleInstagramStoriesShare()} className="flex items-center gap-2">
-          <ImageIcon size={14} />
-          <span>Instagram Stories</span>
-        </DropdownMenuItem>
+        {isMobileDevice && (
+          <DropdownMenuItem onClick={() => void handleInstagramStoriesShare()} className="flex items-center gap-2">
+            <ImageIcon size={14} />
+            <span>{isIt ? "Social" : "Social"}</span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

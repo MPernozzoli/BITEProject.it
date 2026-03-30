@@ -12,6 +12,7 @@ import LiveReadCounter from "@/components/LiveReadCounter";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import {
@@ -25,7 +26,7 @@ import {
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
 } from "@/lib/article-map";
-import { buildPublicVoyageGeometry } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export type ExpandedArticleOrigin = {
@@ -271,6 +272,21 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
     return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
   }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
+  const articleNauticalMiles = useMemo(() => {
+    if (!article?.voyage_id || linkedVoyageWaypoints.length < 2) return null;
+
+    let relevantWaypoints = linkedVoyageWaypoints;
+    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
+      const rawStart = article.voyage_segment_start ?? article.voyage_segment_end ?? 0;
+      const rawEnd = article.voyage_segment_end ?? article.voyage_segment_start ?? rawStart;
+      const safeStart = Math.max(0, Math.min(Math.min(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
+      const safeEnd = Math.max(0, Math.min(Math.max(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
+      relevantWaypoints = linkedVoyageWaypoints.slice(safeStart, safeEnd + 1);
+    }
+
+    if (relevantWaypoints.length < 2) return null;
+    return totalWaypointDistance(relevantWaypoints);
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyageWaypoints]);
   const fallbackSceneCoordinates = useMemo(() => {
     if (hasGeo && article) {
       return {
@@ -429,7 +445,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     return nextUrl.toString();
   }, [lang, slug]);
 
-  const instagramStoryImage = article?.cover_image ?? null;
+  const instagramStoryImage = getArticleInstagramStoryImage(article, lang);
 
   if (!slug) return null;
 
@@ -642,6 +658,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                             zoom: hasGeo ? 7 : 6,
                           } : null)}
                           primaryRouteCoordinates={primaryRouteCoordinates}
+                          nauticalMiles={articleNauticalMiles}
                         />
                       </aside>
                     )}

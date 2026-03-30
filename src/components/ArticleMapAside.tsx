@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { MapPin, Navigation } from "lucide-react";
+import { MapPin, Navigation, Ship } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
 
@@ -31,6 +31,7 @@ interface ArticleMapAsideProps {
     zoom: number;
   } | null;
   primaryRouteCoordinates?: [number, number][] | null;
+  nauticalMiles?: number | null;
 }
 
 const ArticleMapAside = ({
@@ -41,6 +42,7 @@ const ArticleMapAside = ({
   activeSceneId = null,
   camera = null,
   primaryRouteCoordinates = null,
+  nauticalMiles = null,
 }: ArticleMapAsideProps) => {
   const { lang } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +58,7 @@ const ArticleMapAside = ({
   const activeScene = normalizedScenes.find((scene) => scene.id === activeSceneId) ?? normalizedScenes[0] ?? null;
   const activeVessels = useMemo(() => activeScene?.vessels ?? [], [activeScene]);
   const activeOverlays = useMemo(() => activeScene?.overlays ?? [], [activeScene]);
+  const shouldFitPrimaryRoute = Boolean(activeScene?.showMainRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
 
   const destinationPoint = (latitudeValue: number, longitudeValue: number, bearingDegrees: number, distanceNm: number) => {
     const earthRadiusKm = 6371;
@@ -346,7 +349,22 @@ const ArticleMapAside = ({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !camera) return;
+    if (!map) return;
+
+    if (shouldFitPrimaryRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1) {
+      const relevantCoordinates = [
+        ...primaryRouteCoordinates,
+        ...(activeScene ? [[activeScene.longitude, activeScene.latitude] as [number, number]] : []),
+      ];
+      const bounds = relevantCoordinates.reduce(
+        (acc, coordinate) => acc.extend(coordinate),
+        new maplibregl.LngLatBounds(relevantCoordinates[0], relevantCoordinates[0])
+      );
+      map.fitBounds(bounds, { padding: 44, duration: 0, maxZoom: 10.5 });
+      return;
+    }
+
+    if (!camera) return;
 
     const currentCenter = map.getCenter();
     const needsMove =
@@ -360,7 +378,7 @@ const ArticleMapAside = ({
       center: [camera.longitude, camera.latitude],
       zoom: camera.zoom,
     });
-  }, [camera]);
+  }, [activeScene, camera, primaryRouteCoordinates, shouldFitPrimaryRoute]);
 
   return (
     <div className="glass-panel rounded-[28px] overflow-hidden">
@@ -382,25 +400,25 @@ const ArticleMapAside = ({
       ) : (
         <>
           <div ref={containerRef} className="w-full h-[280px] md:h-[320px]" />
-          {activeScene && (
+          {(activeScene?.description || activeScene?.windLabel || (nauticalMiles ?? 0) > 0) && (
             <div className="border-t glass-divider px-4 py-3 space-y-2">
-              <div>
-                <p className="text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                  {lang === "it" ? "Punto attivo" : "Active point"}
-                </p>
-                <p className="text-sm font-medium text-foreground">
-                  {activeScene.title || (lang === "it" ? "Posizione corrente" : "Current position")}
-                </p>
-              </div>
-              {activeScene.description && (
+              {activeScene?.description && (
                 <p className="text-xs font-sans leading-relaxed text-muted-foreground">{activeScene.description}</p>
               )}
-              {activeScene.windLabel && (
-                <p className="inline-flex items-center gap-2 text-xs font-sans text-foreground">
-                  <Navigation size={12} className="text-accent" />
-                  {activeScene.windLabel}
-                </p>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {activeScene?.windLabel && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                    <Navigation size={12} className="text-accent" />
+                    {activeScene.windLabel}
+                  </span>
+                )}
+                {(nauticalMiles ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                    <Ship size={12} className="text-accent" />
+                    {Math.round(nauticalMiles ?? 0).toLocaleString()} NM
+                  </span>
+                )}
+              </div>
               {(activeVessels.length > 0 || activeOverlays.length > 0) && (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {activeVessels.map((vessel) => (
@@ -414,11 +432,6 @@ const ArticleMapAside = ({
                     </span>
                   ))}
                 </div>
-              )}
-              {activeScene.showMainRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1 && (
-                <p className="text-[11px] font-sans text-muted-foreground">
-                  {lang === "it" ? "Rotta principale visibile" : "Main route visible"}
-                </p>
               )}
             </div>
           )}

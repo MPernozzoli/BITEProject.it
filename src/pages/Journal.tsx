@@ -279,11 +279,15 @@ const Journal = () => {
   }, [isMobile]);
 
   const handleMobileSidebarTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     mobileSidebarTouchStartRef.current = event.touches[0]?.clientY ?? null;
     setMobileSidebarDragOffset(0);
   }, []);
 
   const handleMobileSidebarTouchMove = useCallback((event: TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (mobileSidebarTouchStartRef.current === null) return;
     const currentY = event.touches[0]?.clientY ?? mobileSidebarTouchStartRef.current;
     const delta = currentY - mobileSidebarTouchStartRef.current;
@@ -301,7 +305,9 @@ const Journal = () => {
     setMobileSidebarDragOffset(0);
   }, [mobileSidebarMode]);
 
-  const handleMobileSidebarTouchEnd = useCallback(() => {
+  const handleMobileSidebarTouchEnd = useCallback((event?: TouchEvent<HTMLDivElement>) => {
+    event?.preventDefault();
+    event?.stopPropagation();
     if (mobileSidebarTouchStartRef.current === null) return;
 
     if (mobileSidebarDragOffset > MOBILE_SHEET_SWIPE_THRESHOLD) {
@@ -582,6 +588,7 @@ const Journal = () => {
                 <div className="mb-3 flex flex-col items-center gap-2">
                   <div
                     className="flex w-full flex-col items-center gap-2"
+                    style={{ touchAction: "none" }}
                     onTouchStart={handleMobileSidebarTouchStart}
                     onTouchMove={handleMobileSidebarTouchMove}
                     onTouchEnd={handleMobileSidebarTouchEnd}
