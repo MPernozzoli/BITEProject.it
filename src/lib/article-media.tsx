@@ -24,20 +24,9 @@ declare module "@tiptap/core" {
 
 const normalizeString = (value: unknown) => (typeof value === "string" ? value : "");
 
-const createFigcaptionSpec = (caption: string, aiGenerated: boolean) => {
-  if (!caption && !aiGenerated) return null;
-
-  const children: any[] = [];
-
-  if (aiGenerated) {
-    children.push(["span", { class: "article-media-flag" }, "AI"]);
-  }
-
-  if (caption) {
-    children.push(["span", { class: "article-media-caption" }, caption]);
-  }
-
-  return ["figcaption", { class: "article-media-meta" }, ...children];
+const createFigcaptionSpec = (caption: string) => {
+  if (!caption) return null;
+  return ["figcaption", { class: "article-media-meta" }, ["span", { class: "article-media-caption" }, caption]];
 };
 
 export const MediaFigure = Node.create({
@@ -124,11 +113,14 @@ export const MediaFigure = Node.create({
             title: title || caption || undefined,
             loading: "lazy",
           }];
-    const figcaptionSpec = createFigcaptionSpec(caption, aiGenerated);
+    const mediaFrameSpec = aiGenerated
+      ? ["div", { class: "article-media-frame" }, mediaSpec, ["span", { class: "article-media-flag" }, "AI"]]
+      : ["div", { class: "article-media-frame" }, mediaSpec];
+    const figcaptionSpec = createFigcaptionSpec(caption);
 
     return figcaptionSpec
-      ? ["figure", figureAttrs, mediaSpec, figcaptionSpec]
-      : ["figure", figureAttrs, mediaSpec];
+      ? ["figure", figureAttrs, mediaFrameSpec, figcaptionSpec]
+      : ["figure", figureAttrs, mediaFrameSpec];
   },
 
   addCommands() {

@@ -26,7 +26,7 @@ const MediaFigureNodeView = ({ node, updateAttributes, selected }: NodeViewProps
       data-ai-generated={aiGenerated ? "true" : "false"}
       contentEditable={false}
     >
-      <div className="overflow-hidden rounded-[22px] border border-border bg-background">
+      <div className="relative overflow-hidden rounded-[22px] border border-border bg-background">
         {kind === "youtube" ? (
           <div className="aspect-video bg-black">
             <iframe
@@ -45,17 +45,15 @@ const MediaFigureNodeView = ({ node, updateAttributes, selected }: NodeViewProps
             className="max-h-[32rem] w-full object-contain bg-background"
           />
         )}
+        {aiGenerated && (
+          <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center justify-center rounded-full border border-white/30 bg-black/58 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.26)] backdrop-blur-md">
+            AI
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-          <span>{label}</span>
-          {aiGenerated && (
-            <span className="rounded-full border border-amber-300/70 bg-amber-100 px-2 py-1 text-[10px] font-medium tracking-[0.16em] text-amber-800">
-              AI
-            </span>
-          )}
-        </div>
+        <div className="text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
 
         <label className="flex flex-col gap-2 text-xs font-sans text-muted-foreground">
           <span>Didascalia</span>

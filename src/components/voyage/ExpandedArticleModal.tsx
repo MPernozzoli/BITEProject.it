@@ -271,6 +271,46 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
     return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
   }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
+  const fallbackSceneCoordinates = useMemo(() => {
+    if (hasGeo && article) {
+      return {
+        latitude: article.latitude!,
+        longitude: article.longitude!,
+      };
+    }
+
+    if (primaryRouteCoordinates && primaryRouteCoordinates.length > 0) {
+      const middleCoordinate = primaryRouteCoordinates[Math.floor(primaryRouteCoordinates.length / 2)];
+      return {
+        longitude: middleCoordinate[0],
+        latitude: middleCoordinate[1],
+      };
+    }
+
+    return null;
+  }, [article, hasGeo, primaryRouteCoordinates]);
+  const effectiveScenes = useMemo(() => {
+    if (localizedScenes.length > 0) return localizedScenes;
+    if (!fallbackSceneCoordinates) return [];
+
+    return [{
+      id: "article-default-scene",
+      title: title || (lang === "it" ? "Posizione articolo" : "Article location"),
+      description: article?.location_name || "",
+      windLabel: "",
+      latitude: fallbackSceneCoordinates.latitude,
+      longitude: fallbackSceneCoordinates.longitude,
+      zoom: hasGeo ? 7 : 6,
+      windAngle: null,
+      anchorId: "",
+      anchorPreview: "",
+      anchorIndex: 0,
+      showMainRoute: Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1),
+      vessels: [],
+      overlays: [],
+    }];
+  }, [article?.location_name, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
+  const shouldShowMapWidget = effectiveScenes.length > 0 || Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
 
   const { htmlContent, contentRenderFailed } = useMemo(() => {
     const hasStructuredContent = Boolean(
@@ -588,15 +628,19 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                       </div>
                     </div>
 
-                    {hasGeo && (
+                    {shouldShowMapWidget && (
                       <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                         <LazyArticleMapAside
-                          latitude={article.latitude!}
-                          longitude={article.longitude!}
+                          latitude={fallbackSceneCoordinates?.latitude ?? article.latitude ?? 0}
+                          longitude={fallbackSceneCoordinates?.longitude ?? article.longitude ?? 0}
                           title={title}
-                          scenes={localizedScenes}
-                          activeSceneId={activeSceneId}
-                          camera={mapCamera}
+                          scenes={effectiveScenes}
+                          activeSceneId={activeSceneId ?? effectiveScenes[0]?.id ?? null}
+                          camera={mapCamera ?? (fallbackSceneCoordinates ? {
+                            latitude: fallbackSceneCoordinates.latitude,
+                            longitude: fallbackSceneCoordinates.longitude,
+                            zoom: hasGeo ? 7 : 6,
+                          } : null)}
                           primaryRouteCoordinates={primaryRouteCoordinates}
                         />
                       </aside>

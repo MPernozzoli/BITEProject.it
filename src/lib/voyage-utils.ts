@@ -297,10 +297,8 @@ const collectArticleLinkedWaypointIndexes = (
     if (!voyageId || article.voyage_id !== voyageId) return;
     const range = getArticleWaypointRange(article);
     if (!range) return;
-
-    for (let index = range[0]; index <= range[1]; index += 1) {
-      linkedIndexes.add(index);
-    }
+    if (range[0] !== range[1]) return;
+    linkedIndexes.add(range[0]);
   });
 
   return linkedIndexes;
@@ -331,7 +329,7 @@ export function getAssociatedArticleForWaypoint<
     if (!voyageId || article.voyage_id !== voyageId) continue;
     const range = getArticleWaypointRange(article);
     if (!range) continue;
-    if (waypointIndex >= range[0] && waypointIndex <= range[1]) return article;
+    if (range[0] === range[1] && waypointIndex === range[0]) return article;
   }
 
   return null;
