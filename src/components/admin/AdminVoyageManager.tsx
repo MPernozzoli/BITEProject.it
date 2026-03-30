@@ -396,7 +396,7 @@ const AdminVoyageManager = () => {
 
         const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
         error = fallbackResult.error;
-        appliedChanges = legacyPayload as Partial<VoyageWaypoint>;
+        appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
       }
 
       if (error) {
