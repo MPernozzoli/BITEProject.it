@@ -19,10 +19,19 @@ const AuthorSelector = ({ selectedIds, onChange }: AuthorSelectorProps) => {
 
   useEffect(() => {
     const fetchProfiles = async () => {
+      const { data: roles, error: rolesErr } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
+      if (rolesErr || !roles?.length) {
+        console.error("Failed to load admin roles:", rolesErr);
+        return;
+      }
+      const adminIds = roles.map((r) => r.user_id);
       const { data, error } = await supabase
-        .from("public_profiles")
+        .from("profiles")
         .select("id, name, avatar_url")
-        .eq("is_admin", true)
+        .in("id", adminIds)
         .order("name");
       if (error) {
         console.error("Failed to load author profiles:", error);
