@@ -9,12 +9,15 @@ interface ArticleListCardProps {
   article: GeoArticle;
   lang: "en" | "it";
   isActive: boolean;
+  isDimmed?: boolean;
   isRead?: boolean;
   onClick: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
-  ({ article, lang, isActive, isRead, onClick }, ref) => {
+  ({ article, lang, isActive, isDimmed = false, isRead, onClick, onMouseEnter, onMouseLeave }, ref) => {
     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
     const views = Number(article.viewCount ?? 0).toLocaleString(lang === "it" ? "it-IT" : "en-US");
@@ -34,11 +37,13 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
       <div
         ref={ref}
         onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
         className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-all duration-300 ${
           isActive
             ? "border-accent/50 bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
             : "border-white/55 bg-white/48 hover:bg-white/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
-        }`}
+        } ${isDimmed && !isActive ? "opacity-40 saturate-[0.65] scale-[0.985]" : ""}`}
       >
         <div className="flex gap-3">
           {/* Thumbnail */}

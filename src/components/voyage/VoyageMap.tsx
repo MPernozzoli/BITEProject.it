@@ -3,6 +3,8 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   buildPublicVoyageGeometry,
+  getArticleVoyageFocus,
+  getArticleWaypointRange,
   getAssociatedArticleForWaypoint,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
@@ -14,6 +16,7 @@ interface VoyageMapProps {
   waypointsMap: Record<string, VoyageWaypoint[]>;
   articles: GeoArticle[];
   selectedArticleId?: string | null;
+  hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
   onArticleClick?: (article: GeoArticle) => void;
   lang: "en" | "it";
@@ -29,11 +32,52 @@ const escapePopupHtml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const clampWaypointIndex = (value: number, max: number) => Math.max(0, Math.min(value, max));
+
+const getVoyageStrokeColor = (voyage: Voyage, index: number, variant: "base" | "focus" = "base") => {
+  const toneShift = ((index % 5) - 2) * (voyage.type === "water" ? 5 : 4);
+
+  if (voyage.type === "water") {
+    const hue = 206 + toneShift;
+    if (variant === "focus") {
+      return `hsl(${hue}, 78%, 42%)`;
+    }
+
+    if (voyage.status === "completed") return `hsl(${hue - 6}, 34%, 26%)`;
+    if (voyage.status === "planned") return `hsl(${hue + 4}, 28%, 70%)`;
+    return `hsl(${hue}, 52%, 46%)`;
+  }
+
+  const hue = 26 + toneShift;
+  if (variant === "focus") {
+    return `hsl(${hue}, 76%, 42%)`;
+  }
+
+  if (voyage.status === "completed") return `hsl(${hue}, 28%, 28%)`;
+  if (voyage.status === "planned") return `hsl(${hue + 4}, 22%, 68%)`;
+  return `hsl(${hue}, 44%, 44%)`;
+};
+
+const getArticleSegmentGeometry = (
+  waypoints: VoyageWaypoint[],
+  type: Voyage["type"],
+  startIndex: number,
+  endIndex: number
+) => {
+  if (!waypoints.length) return [];
+
+  const safeStart = clampWaypointIndex(startIndex, waypoints.length - 1);
+  const safeEnd = clampWaypointIndex(endIndex, waypoints.length - 1);
+  const segmentWaypoints = waypoints.slice(Math.min(safeStart, safeEnd), Math.max(safeStart, safeEnd) + 1);
+  return buildPublicVoyageGeometry(segmentWaypoints, type, []);
+};
+
 const VoyageMap = ({
   voyages,
   waypointsMap,
   articles,
   selectedArticleId,
+  hoveredArticleId,
   highlightedVoyageId,
   onArticleClick,
   lang,
@@ -44,17 +88,27 @@ const VoyageMap = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const lineLayerHandlersRef = useRef<Record<string, {
+    mouseenter: () => void;
+    mouseleave: () => void;
+  }>>({});
   const waypointLayerHandlersRef = useRef<Record<string, {
     mouseenter: (event: maplibregl.MapLayerMouseEvent) => void;
     mousemove: (event: maplibregl.MapLayerMouseEvent) => void;
     mouseleave: (event: maplibregl.MapLayerMouseEvent) => void;
   }>>({});
-  const articlesRef = useRef(articles);
   const onArticleClickRef = useRef(onArticleClick);
   const hasPerformedInitialFitRef = useRef(false);
   const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [hoveredRouteVoyageId, setHoveredRouteVoyageId] = useState<string | null>(null);
 
-  const clearWaypointLayerHandlers = useCallback((map: maplibregl.Map) => {
+  const clearInteractiveLayerHandlers = useCallback((map: maplibregl.Map) => {
+    Object.entries(lineLayerHandlersRef.current).forEach(([layerId, handlers]) => {
+      map.off("mouseenter", layerId, handlers.mouseenter);
+      map.off("mouseleave", layerId, handlers.mouseleave);
+    });
+    lineLayerHandlersRef.current = {};
+
     Object.entries(waypointLayerHandlersRef.current).forEach(([layerId, handlers]) => {
       map.off("mouseenter", layerId, handlers.mouseenter);
       map.off("mousemove", layerId, handlers.mousemove);
@@ -66,7 +120,6 @@ const VoyageMap = ({
   }, []);
 
   // Keep refs in sync
-  articlesRef.current = articles;
   onArticleClickRef.current = onArticleClick;
 
   // Initialize map
@@ -105,7 +158,7 @@ const VoyageMap = ({
       popupRef.current?.remove();
       popupRef.current = null;
       if (mapRef.current) {
-        clearWaypointLayerHandlers(mapRef.current);
+        clearInteractiveLayerHandlers(mapRef.current);
       }
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
@@ -116,7 +169,7 @@ const VoyageMap = ({
 
     return () => {
       if (mapRef.current) {
-        clearWaypointLayerHandlers(mapRef.current);
+        clearInteractiveLayerHandlers(mapRef.current);
       }
       popupRef.current?.remove();
       popupRef.current = null;
@@ -125,11 +178,15 @@ const VoyageMap = ({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [clearWaypointLayerHandlers, mapUnavailable]);
+  }, [clearInteractiveLayerHandlers, mapUnavailable]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    if (disableInteractions) {
+      setHoveredRouteVoyageId(null);
+    }
 
     const handlers = [
       map.scrollZoom,
@@ -163,40 +220,39 @@ const VoyageMap = ({
         return Array.isArray(coordinates) ? coordinates : [];
       };
 
-      clearWaypointLayerHandlers(map);
+      const activeArticle = articles.find((article) => article.id === (hoveredArticleId ?? selectedArticleId)) || null;
+      const activeArticleFocus = activeArticle ? getArticleVoyageFocus(activeArticle) : null;
+      const routeFocusVoyageId = activeArticleFocus?.voyageId || highlightedVoyageId || null;
+      const hoverFocusVoyageId = routeFocusVoyageId ? null : hoveredRouteVoyageId;
 
-      // Remove old sources/layers
-      voyages.forEach((v) => {
-        const lineId = `voyage-line-${v.id}`;
-        const wpId = `voyage-wp-${v.id}`;
-        if (map.getLayer(lineId)) map.removeLayer(lineId);
-        if (map.getSource(lineId)) map.removeSource(lineId);
-        if (map.getLayer(wpId)) map.removeLayer(wpId);
-        if (map.getSource(wpId)) map.removeSource(wpId);
-      });
+      clearInteractiveLayerHandlers(map);
 
-      // Clean stale layers from previous renders
       const style = map.getStyle();
       if (style) {
-        style.layers.forEach((l) => {
-          if (l.id.startsWith("voyage-line-") || l.id.startsWith("voyage-wp-")) {
+        [...style.layers].reverse().forEach((l) => {
+          if (l.id.startsWith("voyage-")) {
             map.removeLayer(l.id);
+          }
+        });
+
+        Object.keys(style.sources).forEach((sourceId) => {
+          if (sourceId.startsWith("voyage-") && map.getSource(sourceId)) {
+            map.removeSource(sourceId);
           }
         });
       }
 
-      voyages.forEach((voyage) => {
+      voyages.forEach((voyage, voyageIndex) => {
         const wps = waypointsMap[voyage.id] || [];
         if (!wps.length) return;
 
-        const isWater = voyage.type === "water";
-        const isHighlighted = highlightedVoyageId === voyage.id;
+        const isFocused = routeFocusVoyageId === voyage.id;
+        const isHovered = hoverFocusVoyageId === voyage.id;
         const isActive = voyage.status === "active";
-        const isCompleted = voyage.status === "completed";
-
-        const lineColor = isWater
-          ? isCompleted ? "hsl(220, 40%, 15%)" : isActive ? "hsl(210, 60%, 45%)" : "hsl(210, 30%, 65%)"
-          : isCompleted ? "hsl(30, 30%, 25%)" : isActive ? "hsl(30, 50%, 40%)" : "hsl(30, 20%, 60%)";
+        const hasComparisonFocus = Boolean(routeFocusVoyageId || hoverFocusVoyageId);
+        const isDimmed = hasComparisonFocus && !isFocused && !isHovered;
+        const baseColor = getVoyageStrokeColor(voyage, voyageIndex, "base");
+        const focusColor = getVoyageStrokeColor(voyage, voyageIndex, "focus");
 
         const routeCoordinates = buildPublicVoyageGeometry(
           wps,
@@ -207,6 +263,7 @@ const VoyageMap = ({
         );
 
         const lineId = `voyage-line-${voyage.id}`;
+        const lineHitId = `voyage-hit-${voyage.id}`;
         if (routeCoordinates.length >= 2) {
           map.addSource(lineId, {
             type: "geojson",
@@ -225,107 +282,259 @@ const VoyageMap = ({
             type: "line",
             source: lineId,
             paint: {
-              "line-color": lineColor,
-              "line-width": isHighlighted ? 5 : isActive ? 4 : 3,
-              "line-opacity": voyage.status === "planned" ? 0.5 : isHighlighted ? 1 : 0.7,
+              "line-color": baseColor,
+              "line-width": isFocused
+                ? activeArticleFocus?.mode === "voyage" ? 5.5 : 4.4
+                : isHovered
+                  ? 5
+                  : isActive
+                    ? 4
+                    : 3,
+              "line-opacity": isDimmed
+                ? 0.16
+                : voyage.status === "planned"
+                  ? isFocused || isHovered ? 0.72 : 0.5
+                  : isFocused || isHovered
+                    ? 0.96
+                    : 0.72,
               ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
             },
           });
+
+          map.addLayer({
+            id: lineHitId,
+            type: "line",
+            source: lineId,
+            paint: {
+              "line-color": baseColor,
+              "line-width": 18,
+              "line-opacity": 0,
+            },
+          });
+
+          const lineHandlers = {
+            mouseenter: () => {
+              map.getCanvas().style.cursor = "pointer";
+              setHoveredRouteVoyageId((current) => current === voyage.id ? current : voyage.id);
+            },
+            mouseleave: () => {
+              map.getCanvas().style.cursor = "";
+              setHoveredRouteVoyageId((current) => current === voyage.id ? null : current);
+            },
+          };
+
+          lineLayerHandlersRef.current[lineHitId] = lineHandlers;
+          map.on("mouseenter", lineHitId, lineHandlers.mouseenter);
+          map.on("mouseleave", lineHitId, lineHandlers.mouseleave);
         }
 
-        const visibleWaypoints = getPublicVoyageWaypoints(wps, articles, voyage.id);
-        if (!visibleWaypoints.length) return;
-
-        const wpId = `voyage-wp-${voyage.id}`;
-        map.addSource(wpId, {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: visibleWaypoints.map((w, visibleIndex) => {
-              const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
-              const safeIndex = routeIndex >= 0 ? routeIndex : visibleIndex;
-              const associatedArticle = getAssociatedArticleForWaypoint(articles, voyage.id, safeIndex);
-              const isStart = safeIndex === 0;
-              const isEnd = safeIndex === wps.length - 1;
-              return {
-                type: "Feature" as const,
-                geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
-                properties: {
-                  name: getLocalizedWaypointName(w, lang, safeIndex),
-                  articleTitle: associatedArticle
-                    ? lang === "en"
-                      ? associatedArticle.title_en
-                      : associatedArticle.title_it || associatedArticle.title_en
-                    : "",
-                  markerColor: isStart ? "hsl(136, 42%, 42%)" : isEnd ? "hsl(8, 65%, 54%)" : isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)",
-                  markerRadius: isStart || isEnd ? 5 : isActive ? 5 : 4,
+        if (activeArticleFocus?.voyageId === voyage.id) {
+          if (activeArticleFocus.mode === "voyage" && routeCoordinates.length >= 2) {
+            const focusLineId = `voyage-line-focus-${voyage.id}`;
+            map.addSource(focusLineId, {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                geometry: {
+                  type: "LineString",
+                  coordinates: routeCoordinates,
                 },
-              };
-            }),
-          },
-        });
+                properties: {},
+              },
+            });
 
-        map.addLayer({
-          id: wpId,
-          type: "circle",
-          source: wpId,
-          paint: {
-            "circle-radius": ["coalesce", ["get", "markerRadius"], isActive ? 5 : 4],
-            "circle-color": ["coalesce", ["get", "markerColor"], isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)"],
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#fff",
-          },
-        });
-
-        const renderWaypointHoverPopup = (event: maplibregl.MapLayerMouseEvent) => {
-          const feature = event.features?.[0];
-          if (!feature?.geometry || feature.geometry.type !== "Point") return;
-          const coords = feature.geometry.coordinates as [number, number];
-          const name = String(feature.properties?.name || "");
-          const articleTitle = String(feature.properties?.articleTitle || "");
-          if (!name) return;
-
-          const popupHtml = `
-            <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:160px;max-width:240px;">
-              <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(name)}</strong>
-              ${articleTitle
-                ? `<span style="font-size:11px;line-height:1.4;color:hsl(220,15%,40%);">${lang === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
-                : ""}
-            </div>
-          `;
-
-          if (!popupRef.current) {
-            popupRef.current = new maplibregl.Popup({
-              offset: 12,
-              closeButton: false,
-              closeOnClick: false,
-              closeOnMove: false,
-              maxWidth: "260px",
+            map.addLayer({
+              id: focusLineId,
+              type: "line",
+              source: focusLineId,
+              paint: {
+                "line-color": focusColor,
+                "line-width": 7,
+                "line-opacity": 0.96,
+              },
             });
           }
 
-          popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
-        };
+          if (
+            activeArticleFocus.mode === "segment" &&
+            activeArticleFocus.startIndex != null &&
+            activeArticleFocus.endIndex != null
+          ) {
+            const focusSegmentCoordinates = getArticleSegmentGeometry(
+              wps,
+              voyage.type,
+              activeArticleFocus.startIndex,
+              activeArticleFocus.endIndex
+            );
 
-        const handlers = {
-          mouseenter: (event: maplibregl.MapLayerMouseEvent) => {
-            map.getCanvas().style.cursor = "pointer";
-            renderWaypointHoverPopup(event);
-          },
-          mousemove: (event: maplibregl.MapLayerMouseEvent) => {
-            renderWaypointHoverPopup(event);
-          },
-          mouseleave: () => {
-            map.getCanvas().style.cursor = "";
-            popupRef.current?.remove();
-            popupRef.current = null;
-          },
-        };
+            if (focusSegmentCoordinates.length >= 2) {
+              const focusSegmentId = `voyage-line-focus-${voyage.id}`;
+              map.addSource(focusSegmentId, {
+                type: "geojson",
+                data: {
+                  type: "Feature",
+                  geometry: {
+                    type: "LineString",
+                    coordinates: focusSegmentCoordinates,
+                  },
+                  properties: {},
+                },
+              });
 
-        waypointLayerHandlersRef.current[wpId] = handlers;
-        map.on("mouseenter", wpId, handlers.mouseenter);
-        map.on("mousemove", wpId, handlers.mousemove);
-        map.on("mouseleave", wpId, handlers.mouseleave);
+              map.addLayer({
+                id: focusSegmentId,
+                type: "line",
+                source: focusSegmentId,
+                paint: {
+                  "line-color": focusColor,
+                  "line-width": 7,
+                  "line-opacity": 0.96,
+                },
+              });
+            }
+          }
+        }
+
+        const visibleWaypoints = getPublicVoyageWaypoints(wps, articles, voyage.id);
+        if (visibleWaypoints.length) {
+          const wpId = `voyage-wp-${voyage.id}`;
+          map.addSource(wpId, {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: visibleWaypoints.map((w, visibleIndex) => {
+                const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
+                const safeIndex = routeIndex >= 0 ? routeIndex : visibleIndex;
+                const associatedArticle = getAssociatedArticleForWaypoint(articles, voyage.id, safeIndex);
+                const isStart = safeIndex === 0;
+                const isEnd = safeIndex === wps.length - 1;
+                return {
+                  type: "Feature" as const,
+                  geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
+                  properties: {
+                    name: getLocalizedWaypointName(w, lang, safeIndex),
+                    articleTitle: associatedArticle
+                      ? lang === "en"
+                        ? associatedArticle.title_en
+                        : associatedArticle.title_it || associatedArticle.title_en
+                      : "",
+                    markerColor: isStart
+                      ? "hsl(136, 42%, 42%)"
+                      : isEnd
+                        ? "hsl(8, 65%, 54%)"
+                        : isActive
+                          ? "hsl(180, 20%, 35%)"
+                          : "hsl(220, 10%, 70%)",
+                    markerRadius: isStart || isEnd ? 5 : isActive ? 5 : 4,
+                  },
+                };
+              }),
+            },
+          });
+
+          map.addLayer({
+            id: wpId,
+            type: "circle",
+            source: wpId,
+            paint: {
+              "circle-radius": ["coalesce", ["get", "markerRadius"], isActive ? 5 : 4],
+              "circle-color": ["coalesce", ["get", "markerColor"], isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)"],
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#fff",
+              "circle-opacity": isDimmed ? 0.24 : 1,
+              "circle-stroke-opacity": isDimmed ? 0.45 : 1,
+            },
+          });
+
+          if (
+            activeArticleFocus?.voyageId === voyage.id &&
+            activeArticleFocus.mode === "point" &&
+            activeArticleFocus.startIndex != null
+          ) {
+            const focusPointIndex = clampWaypointIndex(activeArticleFocus.startIndex, wps.length - 1);
+            const focusWaypoint = wps[focusPointIndex];
+            const focusPointId = `voyage-point-focus-${voyage.id}`;
+
+            if (focusWaypoint) {
+              map.addSource(focusPointId, {
+                type: "geojson",
+                data: {
+                  type: "FeatureCollection",
+                  features: [{
+                    type: "Feature",
+                    geometry: {
+                      type: "Point",
+                      coordinates: [focusWaypoint.lng, focusWaypoint.lat],
+                    },
+                    properties: {},
+                  }],
+                },
+              });
+
+              map.addLayer({
+                id: focusPointId,
+                type: "circle",
+                source: focusPointId,
+                paint: {
+                  "circle-radius": 8,
+                  "circle-color": focusColor,
+                  "circle-stroke-width": 3,
+                  "circle-stroke-color": "#fff",
+                },
+              });
+            }
+          }
+
+          const renderWaypointHoverPopup = (event: maplibregl.MapLayerMouseEvent) => {
+            const feature = event.features?.[0];
+            if (!feature?.geometry || feature.geometry.type !== "Point") return;
+            const coords = feature.geometry.coordinates as [number, number];
+            const name = String(feature.properties?.name || "");
+            const articleTitle = String(feature.properties?.articleTitle || "");
+            if (!name) return;
+
+            const popupHtml = `
+              <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:160px;max-width:240px;">
+                <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(name)}</strong>
+                ${articleTitle
+                  ? `<span style="font-size:11px;line-height:1.4;color:hsl(220,15%,40%);">${lang === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
+                  : ""}
+              </div>
+            `;
+
+            if (!popupRef.current) {
+              popupRef.current = new maplibregl.Popup({
+                offset: 12,
+                closeButton: false,
+                closeOnClick: false,
+                closeOnMove: false,
+                maxWidth: "260px",
+              });
+            }
+
+            popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
+          };
+
+          const handlers = {
+            mouseenter: (event: maplibregl.MapLayerMouseEvent) => {
+              map.getCanvas().style.cursor = "pointer";
+              renderWaypointHoverPopup(event);
+            },
+            mousemove: (event: maplibregl.MapLayerMouseEvent) => {
+              renderWaypointHoverPopup(event);
+            },
+            mouseleave: () => {
+              map.getCanvas().style.cursor = "";
+              popupRef.current?.remove();
+              popupRef.current = null;
+            },
+          };
+
+          waypointLayerHandlersRef.current[wpId] = handlers;
+          map.on("mouseenter", wpId, handlers.mouseenter);
+          map.on("mousemove", wpId, handlers.mousemove);
+          map.on("mouseleave", wpId, handlers.mouseleave);
+        }
       });
     };
 
@@ -334,7 +543,17 @@ const VoyageMap = ({
     } else {
       map.on("load", draw);
     }
-  }, [articles, clearWaypointLayerHandlers, highlightedVoyageId, lang, voyages, waypointsMap]);
+  }, [
+    articles,
+    clearInteractiveLayerHandlers,
+    highlightedVoyageId,
+    hoveredArticleId,
+    hoveredRouteVoyageId,
+    lang,
+    selectedArticleId,
+    voyages,
+    waypointsMap,
+  ]);
 
   // Draw article markers
   useEffect(() => {
@@ -342,6 +561,8 @@ const VoyageMap = ({
     if (!map) return;
 
     const draw = () => {
+      const markerFocusVoyageId = highlightedVoyageId || hoveredRouteVoyageId || null;
+
       // Clear old markers
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
@@ -355,16 +576,12 @@ const VoyageMap = ({
         if (article.voyage_id) {
           const wps = waypointsMap[article.voyage_id] || [];
           if (wps.length < 1) return null;
-          if (article.voyage_segment_start != null && article.voyage_segment_end != null) {
-            // Segment midpoint
-            const start = Math.min(article.voyage_segment_start, wps.length - 1);
-            const end = Math.min(article.voyage_segment_end, wps.length - 1);
+          const range = getArticleWaypointRange(article);
+          if (range) {
+            const start = clampWaypointIndex(range[0], wps.length - 1);
+            const end = clampWaypointIndex(range[1], wps.length - 1);
             const midIdx = Math.round((start + end) / 2);
             const wp = wps[midIdx] || wps[0];
-            return { ...article, displayLat: wp.lat, displayLng: wp.lng };
-          }
-          if (article.voyage_segment_start != null) {
-            const wp = wps[Math.min(article.voyage_segment_start, wps.length - 1)];
             return { ...article, displayLat: wp.lat, displayLng: wp.lng };
           }
           // Full voyage - use midpoint
@@ -376,19 +593,22 @@ const VoyageMap = ({
 
       positionedArticles.forEach((article) => {
         const isSelected = article.id === selectedArticleId;
+        const isHovered = article.id === hoveredArticleId;
+        const isFocused = isSelected || isHovered;
+        const isDimmed = Boolean(markerFocusVoyageId && article.voyage_id !== markerFocusVoyageId && !isFocused);
         const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-        const size = isSelected ? 56 : 44;
+        const size = isFocused ? 56 : isDimmed ? 38 : 44;
 
         const el = document.createElement("div");
         el.className = "voyage-marker-wrap";
-        el.style.cssText = `cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;`;
+        el.style.cssText = `cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
 
         const circle = document.createElement("div");
         circle.style.cssText = `
           width:${size}px;height:${size}px;border-radius:50%;
-          border:3px solid ${isSelected ? "hsl(180,20%,35%)" : "#fff"};
+          border:3px solid ${isFocused ? "hsl(180,20%,35%)" : "#fff"};
           background:${article.cover_image ? `url(${article.cover_image}) center/cover` : "hsl(220,40%,15%)"};
-          box-shadow:${isSelected ? "0 0 0 3px hsla(180,20%,35%,0.3),0 4px 12px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.25)"};
+          box-shadow:${isFocused ? "0 0 0 3px hsla(180,20%,35%,0.3),0 4px 12px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.25)"};
           transition:all 0.3s ease;
         `;
 
@@ -402,10 +622,10 @@ const VoyageMap = ({
           box-shadow:0 2px 10px rgba(0,0,0,0.12);
           max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
           text-align:center;pointer-events:none;
-          opacity:${isSelected ? "1" : "0"};transition:opacity 0.2s,max-width 0.2s ease,box-shadow 0.2s;
+          opacity:${isFocused ? "1" : "0"};transition:opacity 0.2s,max-width 0.2s ease,box-shadow 0.2s;
         `;
         label.style.cssText = labelBase;
-        if (isSelected) {
+        if (isFocused) {
           label.style.maxWidth = "min(280px,calc(100vw - 48px))";
           label.style.whiteSpace = "normal";
           label.style.overflow = "visible";
@@ -417,6 +637,7 @@ const VoyageMap = ({
 
         el.addEventListener("mouseenter", () => {
           circle.style.transform = "scale(1.1)";
+          el.style.opacity = "1";
           label.style.opacity = "1";
           label.style.maxWidth = "min(280px,calc(100vw - 48px))";
           label.style.whiteSpace = "normal";
@@ -424,8 +645,9 @@ const VoyageMap = ({
           label.style.textOverflow = "clip";
         });
         el.addEventListener("mouseleave", () => {
-          if (article.id !== selectedArticleId) {
+          if (article.id !== selectedArticleId && article.id !== hoveredArticleId) {
             circle.style.transform = "scale(1)";
+            el.style.opacity = isDimmed ? "0.32" : "1";
             label.style.opacity = "0";
             label.style.maxWidth = "120px";
             label.style.whiteSpace = "nowrap";
@@ -451,7 +673,7 @@ const VoyageMap = ({
     } else {
       map.on("load", draw);
     }
-  }, [articles, selectedArticleId, lang, waypointsMap]);
+  }, [articles, highlightedVoyageId, hoveredArticleId, hoveredRouteVoyageId, lang, selectedArticleId, waypointsMap]);
 
   // Fly to selected article with smart bounds
   useEffect(() => {

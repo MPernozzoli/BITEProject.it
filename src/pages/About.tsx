@@ -10,8 +10,24 @@ import snowSami from "@/assets/snow-sami.webp";
 import duodji from "@/assets/duodji.webp";
 import freya from "@/assets/freya.webp";
 
+const calculateAge = (birthDate: string) => {
+  const today = new Date();
+  const [year, month, day] = birthDate.split("-").map(Number);
+  let age = today.getFullYear() - year;
+  const hasHadBirthdayThisYear =
+    today.getMonth() + 1 > month || (today.getMonth() + 1 === month && today.getDate() >= day);
+
+  if (!hasHadBirthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
+};
+
 const TheCrew = () => {
   const { t, lang } = useI18n();
+  const massimoAge = calculateAge("1996-10-16");
+  const samiAge = calculateAge("1999-05-25");
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
@@ -112,13 +128,13 @@ const TheCrew = () => {
             <div className="glass-panel-soft rounded-[28px] p-6 md:p-8">
               <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.massimo.title")}</h3>
               <p className="editorial-body text-muted-foreground leading-relaxed">
-                {t("crew.massimo.text")}
+                {t("crew.massimo.text", { age: massimoAge })}
               </p>
             </div>
             <div className="glass-panel-soft rounded-[28px] p-6 md:p-8">
               <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.sami.title")}</h3>
               <p className="editorial-body text-muted-foreground leading-relaxed">
-                {t("crew.sami.text")}
+                {t("crew.sami.text", { age: samiAge })}
               </p>
             </div>
           </div>

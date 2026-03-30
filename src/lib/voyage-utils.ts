@@ -242,7 +242,7 @@ export function getLocalizedWaypointDescription(
   return value || null;
 }
 
-const getArticleWaypointRange = (
+export const getArticleWaypointRange = (
   article: Pick<GeoArticle, "voyage_segment_start" | "voyage_segment_end">
 ) => {
   if (article.voyage_segment_start == null && article.voyage_segment_end == null) return null;
@@ -251,6 +251,41 @@ const getArticleWaypointRange = (
   const end = article.voyage_segment_end ?? article.voyage_segment_start ?? start;
   return [Math.min(start, end), Math.max(start, end)] as const;
 };
+
+export function getArticleVoyageFocus(
+  article: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">
+): {
+  voyageId: string | null;
+  mode: "none" | "point" | "segment" | "voyage";
+  startIndex: number | null;
+  endIndex: number | null;
+} {
+  if (!article.voyage_id) {
+    return {
+      voyageId: null,
+      mode: "none",
+      startIndex: null,
+      endIndex: null,
+    };
+  }
+
+  const range = getArticleWaypointRange(article);
+  if (!range) {
+    return {
+      voyageId: article.voyage_id,
+      mode: "voyage",
+      startIndex: null,
+      endIndex: null,
+    };
+  }
+
+  return {
+    voyageId: article.voyage_id,
+    mode: range[0] === range[1] ? "point" : "segment",
+    startIndex: range[0],
+    endIndex: range[1],
+  };
+}
 
 const collectArticleLinkedWaypointIndexes = (
   articles: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[],

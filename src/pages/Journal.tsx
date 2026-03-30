@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Navigation, Anchor, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Navigation, Anchor, ChevronUp, ChevronDown, Check } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,7 +12,8 @@ import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
-import { totalWaypointDistance } from "@/lib/voyage-utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { getArticleVoyageFocus, getLocalizedVoyageName, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -27,11 +28,14 @@ const Journal = () => {
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
   const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
   const [panelProfileId, setPanelProfileId] = useState<string | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<{ slug: string; originRect: ExpandedArticleOrigin } | null>(null);
   const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [focusedVoyageId, setFocusedVoyageId] = useState<string | null>(null);
+  const [voyageFilterOpen, setVoyageFilterOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
@@ -208,20 +212,33 @@ const Journal = () => {
   }, []);
 
   const handleArticleClick = useCallback((article: GeoArticle) => {
+    setHoveredArticleId(null);
     setSelectedArticleId(article.id);
     setPanelArticle(article);
     setPanelProfileId(null);
+    setFocusedVoyageId(article.voyage_id || null);
     scrollToArticle(article.id);
   }, [scrollToArticle]);
 
   const handleListArticleClick = useCallback((article: GeoArticle) => {
+    setHoveredArticleId(null);
     setSelectedArticleId(article.id);
     setPanelArticle(article);
     setPanelProfileId(null);
+    setFocusedVoyageId(article.voyage_id || null);
     if (isMobile) {
       setMobileSidebarMode("expanded");
     }
   }, [isMobile]);
+
+  const handleVoyageFilterSelect = useCallback((voyageId: string | null) => {
+    setFocusedVoyageId(voyageId);
+    setHoveredArticleId(null);
+    setSelectedArticleId(null);
+    setPanelArticle(null);
+    setPanelProfileId(null);
+    setVoyageFilterOpen(false);
+  }, []);
 
   const handleProfilePreviewOpen = useCallback((profileId: string) => {
     setPanelProfileId(profileId);
@@ -381,11 +398,23 @@ const Journal = () => {
   }, [isMobile]);
 
   // Highlighted voyage based on selected article
+  const selectedArticle = useMemo(
+    () => articles.find((article) => article.id === selectedArticleId) || null,
+    [articles, selectedArticleId]
+  );
+  const hoveredArticle = useMemo(
+    () => articles.find((article) => article.id === hoveredArticleId) || null,
+    [articles, hoveredArticleId]
+  );
   const highlightedVoyageId = useMemo(() => {
-    if (!selectedArticleId) return null;
-    const article = articles.find((a) => a.id === selectedArticleId);
-    return article?.voyage_id || null;
-  }, [selectedArticleId, articles]);
+    const hoveredFocus = hoveredArticle ? getArticleVoyageFocus(hoveredArticle) : null;
+    if (hoveredFocus?.voyageId) return hoveredFocus.voyageId;
+
+    const selectedFocus = selectedArticle ? getArticleVoyageFocus(selectedArticle) : null;
+    if (selectedFocus?.voyageId) return selectedFocus.voyageId;
+
+    return focusedVoyageId;
+  }, [focusedVoyageId, hoveredArticle, selectedArticle]);
 
   const articleReaderActive = Boolean(expandedArticle);
   const showPreviewPanel = Boolean(panelArticle) && (!articleReaderActive || expandedArticlePhase === "closing");
@@ -422,6 +451,7 @@ const Journal = () => {
             waypointsMap={waypointsMap}
             articles={filtered}
             selectedArticleId={selectedArticleId}
+            hoveredArticleId={hoveredArticleId}
             highlightedVoyageId={highlightedVoyageId}
             onArticleClick={handleArticleClick}
             lang={lang}
@@ -469,14 +499,60 @@ const Journal = () => {
                 <Ship size={10} /> {stats.totalNM.toLocaleString()} NM
               </span>
               <span className="w-px h-3 bg-border" />
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground">
-                <Navigation size={10} /> {stats.voyageCount} {lang === "it" ? "viaggi" : "voyages"}
-              </span>
+              <Popover open={voyageFilterOpen} onOpenChange={setVoyageFilterOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-sans tracking-wider uppercase transition-colors ${
+                      focusedVoyageId ? "bg-accent/12 text-accent" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Navigation size={10} />
+                    {stats.voyageCount} {lang === "it" ? "viaggi" : "voyages"}
+                    <ChevronDown size={10} className={`transition-transform ${voyageFilterOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="center" sideOffset={12} className="w-[280px] rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl">
+                  <div className="mb-1 px-2 py-1">
+                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {lang === "it" ? "Focus viaggio" : "Voyage focus"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => handleVoyageFilterSelect(null)}
+                      className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors ${
+                        !focusedVoyageId ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
+                      }`}
+                    >
+                      <span>{lang === "it" ? "Tutti i viaggi" : "All voyages"}</span>
+                      {!focusedVoyageId ? <Check size={12} className="text-accent" /> : null}
+                    </button>
+                    {voyages.map((voyage) => {
+                      const isSelected = focusedVoyageId === voyage.id;
+                      return (
+                        <button
+                          key={voyage.id}
+                          type="button"
+                          onClick={() => handleVoyageFilterSelect(voyage.id)}
+                          className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors ${
+                            isSelected ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
+                          }`}
+                        >
+                          <span className="truncate">{getLocalizedVoyageName(voyage, lang)}</span>
+                          {isSelected ? <Check size={12} className="text-accent shrink-0" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
               {stats.activeVoyage && (
                 <>
                   <span className="w-px h-3 bg-border" />
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-accent">
-                    <Anchor size={10} /> {stats.activeVoyage.name}
+                    <Anchor size={10} /> {getLocalizedVoyageName(stats.activeVoyage, lang)}
                   </span>
                 </>
               )}
@@ -562,7 +638,10 @@ const Journal = () => {
                     article={article}
                     lang={lang}
                     isActive={selectedArticleId === article.id}
+                    isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
                     isRead={isRead(article.id)}
+                    onMouseEnter={() => setHoveredArticleId(article.id)}
+                    onMouseLeave={() => setHoveredArticleId((current) => (current === article.id ? null : current))}
                     onClick={() => handleListArticleClick(article)}
                   />
                 ))

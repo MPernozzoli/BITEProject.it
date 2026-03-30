@@ -17,6 +17,7 @@ export const ALL_LANGUAGES: { code: ExtendedLanguage; label: string }[] = [
 export const SITE_LANGUAGES: Language[] = ["it", "en"];
 
 type Translations = Record<string, Record<Language, string>>;
+type TranslationParams = Record<string, string | number>;
 
 const translations: Translations = {
   // Nav
@@ -99,9 +100,9 @@ const translations: Translations = {
   "crew.project.title": { en: "The Project", it: "Il Progetto" },
   "crew.project.text": { en: "BITE was born in 2023 when we bought our first travel vehicle: Duodji, a 1990 FIAT Ducato camper that we drove across Europe, from Lecce (IT) to Oslo (NO). When the engine failed beyond repair, we decided to try something radically different: a sailboat. A few months later we found Spritz — then called Paddy — for sale in Greece, and by late 2024 she was ours.", it: "BITE è nato nel 2023, quando abbiamo acquistato il nostro primo mezzo di viaggio: Duodji, un camper FIAT Ducato del 1990 che abbiamo portato in giro per l'Europa, da Lecce a Oslo. Quando il camper ci ha abbandonati a causa di un guasto irreparabile al motore, abbiamo deciso di provare qualcosa di radicalmente diverso: una barca a vela. Pochi mesi dopo abbiamo trovato Spritz — all'epoca Paddy — in vendita in Grecia, e a fine 2024 era nostra." },
   "crew.massimo.title": { en: "Massimo", it: "Massimo" },
-  "crew.massimo.text": { en: "30 years old, originally from Potenza. He moved to Milan at 18 in 2015 and after nearly a decade in the city, he felt ready for a change. His lifelong passion for travel led him to dream bigger — first a camper across Europe, now a sailboat across the Mediterranean.", it: "30 anni, originario di Potenza. Si è trasferito a Milano a 18 anni nel 2015 e dopo quasi dieci anni nella città meneghina si sentiva pronto a cambiare. La sua passione di sempre per il viaggio lo ha spinto a sognare in grande — prima un camper attraverso l'Europa, ora una barca a vela nel Mediterraneo." },
+  "crew.massimo.text": { en: "{{age}} years old, originally from Potenza. He moved to Milan at 18 in 2015 and after nearly a decade in the city, he felt ready for a change. His lifelong passion for travel led him to dream bigger — first a camper across Europe, now a sailboat across the Mediterranean.", it: "{{age}} anni, originario di Potenza. Si è trasferito a Milano a 18 anni nel 2015 e dopo quasi dieci anni nella città meneghina si sentiva pronto a cambiare. La sua passione di sempre per il viaggio lo ha spinto a sognare in grande — prima un camper attraverso l'Europa, ora una barca a vela nel Mediterraneo." },
   "crew.sami.title": { en: "Sami", it: "Sami" },
-  "crew.sami.text": { en: "26 years old, of Brazilian heritage. After years of going back and forth between Italy and Brazil, he settled in Sesto San Giovanni at the age of 8. Milan was home and he had never even thought of leaving it — until he met Massimo.", it: "26 anni, di origini brasiliane. Dopo un continuo via vai tra Italia e Brasile all’età di 8 anni si è stabilizzato a Sesto San Giovanni. Milano era la sua casa e non aveva neanche mai pensato di lasciarla — finché non ha conosciuto Massimo." },
+  "crew.sami.text": { en: "{{age}} years old, of Brazilian heritage. After years of going back and forth between Italy and Brazil, he settled in Sesto San Giovanni at the age of 8. Milan was home and he had never even thought of leaving it — until he met Massimo.", it: "{{age}} anni, di origini brasiliane. Dopo un continuo via vai tra Italia e Brasile all’età di 8 anni si è stabilizzato a Sesto San Giovanni. Milano era la sua casa e non aveva neanche mai pensato di lasciarla — finché non ha conosciuto Massimo." },
   "crew.godot.title": { en: "Godot", it: "Godot" },
   "crew.godot.text": { en: "A 6-year-old American Akita who lives with canine autism and epilepsy. He has always struggled to socialize with other dogs and doesn't handle solitude well. He has had a lifelong passion for water — but ironically, he's terrified of depths where his paws can't touch the bottom. He can swim; he simply doesn't enjoy it. He loves watching the sea from Spritz's deck or the shore.", it: "Un Akita Americano di 6 anni che convive con autismo canino ed epilessia. Ha sempre avuto difficoltà a socializzare con gli altri cani e non sa gestire bene la solitudine. Ha sempre avuto la passione dell'acqua — ma, ironicamente, ha anche sempre avuto una paura immensa della profondità e di dove non tocca con le zampe. Sa nuotare, semplicemente non gli piace. Ama guardare il mare dal ponte di Spritz o dalla spiaggia." },
   "crew.freya.title": { en: "Freya", it: "Freya" },
@@ -158,7 +159,7 @@ const translations: Translations = {
 interface I18nContextType {
   lang: Language;
   setLang: (lang: Language) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: TranslationParams) => string;
 }
 
 const I18nContext = createContext<I18nContextType>({
@@ -235,8 +236,13 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const t = useCallback(
-    (key: string) => {
-      return translations[key]?.[lang] ?? key;
+    (key: string, params?: TranslationParams) => {
+      const template = translations[key]?.[lang] ?? key;
+      if (!params) return template;
+
+      return Object.entries(params).reduce((result, [paramKey, value]) => {
+        return result.replaceAll(`{{${paramKey}}}`, String(value));
+      }, template);
     },
     [lang]
   );
