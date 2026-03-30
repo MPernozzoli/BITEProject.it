@@ -383,7 +383,7 @@ const AdminVoyageManager = () => {
       changes: Partial<VoyageWaypoint>,
       options?: { successMessage?: string | null; syncGeometry?: boolean }
     ) => {
-      const payload = changes as TablesUpdate<"voyage_waypoints">;
+      const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
       let appliedChanges = changes;
       let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
 
