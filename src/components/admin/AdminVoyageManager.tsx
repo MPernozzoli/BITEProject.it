@@ -100,10 +100,10 @@ const stripUnsupportedWaypointMetadata = (payload: Record<string, unknown>) =>
     )
   );
 
-type VoyageRecord = Record<string, unknown> &
+type VoyageRecord = Record<string, any> &
   Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Record<string, unknown> &
+type WaypointRecord = Record<string, any> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
@@ -383,7 +383,7 @@ const AdminVoyageManager = () => {
       changes: Partial<VoyageWaypoint>,
       options?: { successMessage?: string | null; syncGeometry?: boolean }
     ) => {
-      const payload = changes as TablesUpdate<"voyage_waypoints">;
+      const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
       let appliedChanges = changes;
       let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
 
@@ -396,7 +396,7 @@ const AdminVoyageManager = () => {
 
         const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
         error = fallbackResult.error;
-        appliedChanges = legacyPayload as Partial<VoyageWaypoint>;
+        appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
       }
 
       if (error) {
@@ -1120,7 +1120,7 @@ const AdminVoyageManager = () => {
     };
 
     if (editingVoyage) {
-      let appliedData: Partial<Voyage> = data;
+      let appliedData: Partial<Voyage> = data as unknown as Partial<Voyage>;
       let { error } = await supabase.from("voyages").update(data).eq("id", editingVoyage.id);
       if (error && isMissingVoyageDateColumnError(error)) {
         const fallbackResult = await supabase.from("voyages").update(legacyData).eq("id", editingVoyage.id);
