@@ -4,14 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
 import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon } from "lucide-react";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { buildPublicVoyageGeometry, geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
-import CoverFocalPicker from "@/components/admin/CoverFocalPicker";
+import CoverCropDialog from "@/components/admin/CoverCropDialog";
 import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 import { normalizeArticleMapScenes } from "@/lib/article-map";
@@ -103,6 +103,7 @@ const ArticleEditor = () => {
   const [contentIt, setContentIt] = useState<object>({});
   const [articleMapScenes, setArticleMapScenes] = useState(() => normalizeArticleMapScenes(null));
   const [coverImage, setCoverImage] = useState("");
+  const [coverCropOpen, setCoverCropOpen] = useState(false);
   const [instagramStoryImageEn, setInstagramStoryImageEn] = useState("");
   const [instagramStoryImageIt, setInstagramStoryImageIt] = useState("");
   const [instagramStoryUseCoverEn, setInstagramStoryUseCoverEn] = useState(true);
@@ -535,6 +536,12 @@ const ArticleEditor = () => {
     if (!publicUrl) return;
     setCoverImage(publicUrl);
     setCoverFocal({ ...DEFAULT_COVER_FOCAL });
+    setCoverCropOpen(true);
+  };
+
+  const handleCoverCropConfirm = async (nextCoverFocal: CoverFocal) => {
+    setCoverFocal(nextCoverFocal);
+    setCoverCropOpen(false);
   };
 
   const handleInstagramStoryUpload = async (language: ArticleLanguage, file: File) => {
@@ -1416,13 +1423,26 @@ const ArticleEditor = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => { setCoverImage(""); setCoverFocal({ ...DEFAULT_COVER_FOCAL }); }}
+                      onClick={() => setCoverCropOpen(true)}
+                      className="absolute top-2 right-20 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 inline-flex items-center gap-1.5"
+                    >
+                      <Crop size={12} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setCoverImage(""); setCoverFocal({ ...DEFAULT_COVER_FOCAL }); setCoverCropOpen(false); }}
                       className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
                     >
                       Remove
                     </button>
                   </div>
-                  <CoverFocalPicker imageUrl={coverImage} value={coverFocal} onChange={setCoverFocal} />
+                  <button
+                    type="button"
+                    onClick={() => setCoverCropOpen(true)}
+                    className="inline-flex items-center gap-2 text-[11px] font-sans text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Crop size={13} /> Modifica ritaglio copertina
+                  </button>
                 </>
               ) : (
                 <button type="button" onClick={() => coverInputRef.current?.click()} className="w-full aspect-[16/10] border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-accent hover:text-accent transition-colors">
@@ -1431,6 +1451,16 @@ const ArticleEditor = () => {
               )}
               <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCoverUpload(file); e.target.value = ""; }} />
             </div>
+            <CoverCropDialog
+              open={coverCropOpen}
+              imageUrl={coverImage || null}
+              value={coverFocal}
+              onOpenChange={(nextOpen) => {
+                if (!nextOpen) setCoverCropOpen(false);
+              }}
+              onCancel={() => setCoverCropOpen(false)}
+              onConfirm={handleCoverCropConfirm}
+            />
 
             <div className="space-y-3">
               <div>

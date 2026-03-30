@@ -255,7 +255,11 @@ const UserLogin = () => {
   const location = useLocation();
 
   const authMode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
-  const redirectTo = (location.state as { from?: string } | null)?.from || "/";
+  const requestedRedirect = (location.state as { from?: string } | null)?.from;
+  const redirectTo =
+    requestedRedirect && !["/login", "/signup"].includes(requestedRedirect)
+      ? requestedRedirect
+      : "/profile";
   const ui = AUTH_COPY[lang === "it" ? "it" : "en"];
   const heroContent = ui.hero[authMode];
   const formContent = ui.form[authMode];

@@ -501,14 +501,23 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
               {lang === "it" ? "Torna all'anteprima" : "Back to preview"}
             </button>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/8 bg-white text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={lang === "it" ? "Chiudi articolo" : "Close article"}
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                to={`/logbook/${slug}`}
+                className="inline-flex items-center rounded-full border border-black/8 bg-white px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-white/90"
+              >
+                {lang === "it" ? "Apri articolo" : "Open article"}
+              </Link>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/8 bg-white text-muted-foreground transition-colors hover:text-foreground"
+                aria-label={lang === "it" ? "Chiudi articolo" : "Close article"}
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5" style={{ touchAction: "pan-y" }}>
