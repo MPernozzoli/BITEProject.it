@@ -15,6 +15,31 @@ export type ArticleMapScene = {
   anchor_block_en: number;
   anchor_block_it: number;
   wind_angle: number | null;
+  show_main_route: boolean;
+  vessels: ArticleMapVessel[];
+  overlays: ArticleMapOverlay[];
+};
+
+export type ArticleMapVessel = {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  heading: number | null;
+  route_heading: number | null;
+  route_distance_nm: number | null;
+};
+
+export type ArticleMapOverlayKind = "anchor" | "buoy" | "current" | "wind";
+
+export type ArticleMapOverlay = {
+  id: string;
+  kind: ArticleMapOverlayKind;
+  label_en: string;
+  label_it: string;
+  latitude: number | null;
+  longitude: number | null;
+  angle: number | null;
 };
 
 export type ArticleContentBlockOption = {
@@ -61,8 +86,34 @@ const normalizeAnchorIndex = (value: unknown) => {
   return Math.max(0, Math.round(parsed ?? 0));
 };
 
+const createNestedId = (prefix: string, seed?: number) =>
+  globalThis.crypto?.randomUUID?.() ?? `${prefix}-${Date.now()}-${seed ?? Math.random().toString(36).slice(2, 8)}`;
+
+export const createEmptyArticleMapVessel = (seed?: number): ArticleMapVessel => ({
+  id: createNestedId("vessel", seed),
+  name: "",
+  latitude: null,
+  longitude: null,
+  heading: null,
+  route_heading: null,
+  route_distance_nm: null,
+});
+
+export const createEmptyArticleMapOverlay = (
+  kind: ArticleMapOverlayKind = "anchor",
+  seed?: number
+): ArticleMapOverlay => ({
+  id: createNestedId("overlay", seed),
+  kind,
+  label_en: "",
+  label_it: "",
+  latitude: null,
+  longitude: null,
+  angle: null,
+});
+
 export const createEmptyArticleMapScene = (seed?: number): ArticleMapScene => ({
-  id: globalThis.crypto?.randomUUID?.() ?? `scene-${Date.now()}-${seed ?? Math.random().toString(36).slice(2, 8)}`,
+  id: createNestedId("scene", seed),
   title_en: "",
   title_it: "",
   description_en: "",
@@ -75,6 +126,9 @@ export const createEmptyArticleMapScene = (seed?: number): ArticleMapScene => ({
   anchor_block_en: 0,
   anchor_block_it: 0,
   wind_angle: null,
+  show_main_route: false,
+  vessels: [],
+  overlays: [],
 });
 
 export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScene[] => {
@@ -86,6 +140,44 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
     const scene = createEmptyArticleMapScene(index);
     const latitude = normalizeNumber(item.latitude);
     const longitude = normalizeNumber(item.longitude);
+    const vessels = Array.isArray(item.vessels)
+      ? item.vessels.flatMap((entry, vesselIndex) => {
+          if (!isRecord(entry)) return [];
+
+          const vessel = createEmptyArticleMapVessel(vesselIndex);
+          return [{
+            ...vessel,
+            id: normalizeString(entry.id) || vessel.id,
+            name: normalizeString(entry.name),
+            latitude: normalizeNumber(entry.latitude),
+            longitude: normalizeNumber(entry.longitude),
+            heading: normalizeNumber(entry.heading),
+            route_heading: normalizeNumber(entry.route_heading),
+            route_distance_nm: normalizeNumber(entry.route_distance_nm),
+          }];
+        })
+      : [];
+    const overlays = Array.isArray(item.overlays)
+      ? item.overlays.flatMap((entry, overlayIndex) => {
+          if (!isRecord(entry)) return [];
+
+          const overlay = createEmptyArticleMapOverlay("anchor", overlayIndex);
+          const kind = entry.kind === "anchor" || entry.kind === "buoy" || entry.kind === "current" || entry.kind === "wind"
+            ? entry.kind
+            : "anchor";
+
+          return [{
+            ...overlay,
+            id: normalizeString(entry.id) || overlay.id,
+            kind,
+            label_en: normalizeString(entry.label_en),
+            label_it: normalizeString(entry.label_it),
+            latitude: normalizeNumber(entry.latitude),
+            longitude: normalizeNumber(entry.longitude),
+            angle: normalizeNumber(entry.angle),
+          }];
+        })
+      : [];
 
     return [{
       ...scene,
@@ -102,6 +194,9 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
       anchor_block_en: normalizeAnchorIndex(item.anchor_block_en),
       anchor_block_it: normalizeAnchorIndex(item.anchor_block_it),
       wind_angle: normalizeNumber(item.wind_angle),
+      show_main_route: Boolean(item.show_main_route),
+      vessels,
+      overlays,
     }];
   });
 };
@@ -117,6 +212,9 @@ export const getArticleSceneDescription = (scene: ArticleMapScene, lang: Languag
 
 export const getArticleSceneWindLabel = (scene: ArticleMapScene, lang: Language) =>
   (lang === "it" ? scene.wind_label_it : scene.wind_label_en) || scene.wind_label_en || scene.wind_label_it;
+
+export const getArticleOverlayLabel = (overlay: ArticleMapOverlay, lang: Language) =>
+  (lang === "it" ? overlay.label_it : overlay.label_en) || overlay.label_en || overlay.label_it;
 
 export const getArticleContentBlocks = (value: Json | unknown, lang: Language): ArticleContentBlockOption[] => {
   if (!isRecord(value) || !Array.isArray(value.content)) return [];

@@ -475,6 +475,10 @@ export type Database = {
           excerpt_en: string | null
           excerpt_it: string | null
           id: string
+          instagram_story_image_en: string | null
+          instagram_story_image_it: string | null
+          instagram_story_use_cover_en: boolean
+          instagram_story_use_cover_it: boolean
           latitude: number | null
           location_name: string | null
           longitude: number | null
@@ -504,6 +508,10 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          instagram_story_image_en?: string | null
+          instagram_story_image_it?: string | null
+          instagram_story_use_cover_en?: boolean
+          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null
@@ -533,6 +541,10 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          instagram_story_image_en?: string | null
+          instagram_story_image_it?: string | null
+          instagram_story_use_cover_en?: boolean
+          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null

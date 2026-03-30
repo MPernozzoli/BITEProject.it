@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapPin, Navigation } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
 
 export interface ArticleMapSceneView {
   id: string;
@@ -13,6 +14,9 @@ export interface ArticleMapSceneView {
   longitude: number;
   zoom: number;
   windAngle: number | null;
+  showMainRoute?: boolean;
+  vessels?: ArticleMapVessel[];
+  overlays?: Array<ArticleMapOverlay & { label?: string }>;
 }
 
 interface ArticleMapAsideProps {
@@ -26,6 +30,7 @@ interface ArticleMapAsideProps {
     longitude: number;
     zoom: number;
   } | null;
+  primaryRouteCoordinates?: [number, number][] | null;
 }
 
 const ArticleMapAside = ({
@@ -35,11 +40,13 @@ const ArticleMapAside = ({
   scenes = [],
   activeSceneId = null,
   camera = null,
+  primaryRouteCoordinates = null,
 }: ArticleMapAsideProps) => {
   const { lang } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const windMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const sceneMarkersRef = useRef<maplibregl.Marker[]>([]);
   const [mapUnavailable, setMapUnavailable] = useState(false);
 
   const normalizedScenes = useMemo(
@@ -47,6 +54,57 @@ const ArticleMapAside = ({
     [scenes]
   );
   const activeScene = normalizedScenes.find((scene) => scene.id === activeSceneId) ?? normalizedScenes[0] ?? null;
+  const activeVessels = useMemo(() => activeScene?.vessels ?? [], [activeScene]);
+  const activeOverlays = useMemo(() => activeScene?.overlays ?? [], [activeScene]);
+
+  const destinationPoint = (latitudeValue: number, longitudeValue: number, bearingDegrees: number, distanceNm: number) => {
+    const earthRadiusKm = 6371;
+    const distanceKm = distanceNm * 1.852;
+    const angularDistance = distanceKm / earthRadiusKm;
+    const bearing = (bearingDegrees * Math.PI) / 180;
+    const latitudeRadians = (latitudeValue * Math.PI) / 180;
+    const longitudeRadians = (longitudeValue * Math.PI) / 180;
+
+    const nextLatitude = Math.asin(
+      Math.sin(latitudeRadians) * Math.cos(angularDistance) +
+      Math.cos(latitudeRadians) * Math.sin(angularDistance) * Math.cos(bearing)
+    );
+
+    const nextLongitude = longitudeRadians + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latitudeRadians),
+      Math.cos(angularDistance) - Math.sin(latitudeRadians) * Math.sin(nextLatitude)
+    );
+
+    return {
+      latitude: (nextLatitude * 180) / Math.PI,
+      longitude: (nextLongitude * 180) / Math.PI,
+    };
+  };
+
+  const createMarkerElement = (kind: "vessel" | "anchor" | "buoy" | "current" | "wind", angle?: number | null, titleText?: string) => {
+    const element = document.createElement("div");
+    const palette = {
+      vessel: "hsl(201, 58%, 35%)",
+      anchor: "hsl(209, 46%, 32%)",
+      buoy: "hsl(18, 76%, 46%)",
+      current: "hsl(168, 52%, 34%)",
+      wind: "hsl(201, 58%, 35%)",
+    } as const;
+    const symbol = {
+      vessel: "⛵",
+      anchor: "⚓",
+      buoy: "●",
+      current: "➝",
+      wind: "➤",
+    } as const;
+
+    element.className = "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-white/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
+    element.innerHTML = `
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;font-size:14px;color:${palette[kind]};transform:rotate(${angle ?? 0}deg);">${symbol[kind]}</span>
+      ${titleText ? `<span style="font:600 11px/1.2 ui-sans-serif,system-ui;color:rgba(15,23,42,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${titleText}</span>` : ""}
+    `;
+    return element;
+  };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
@@ -82,6 +140,8 @@ const ArticleMapAside = ({
       console.error("Failed to initialize article map", error);
       windMarkerRef.current?.remove();
       windMarkerRef.current = null;
+      sceneMarkersRef.current.forEach((marker) => marker.remove());
+      sceneMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
       setMapUnavailable(true);
@@ -90,6 +150,8 @@ const ArticleMapAside = ({
     return () => {
       windMarkerRef.current?.remove();
       windMarkerRef.current = null;
+      sceneMarkersRef.current.forEach((marker) => marker.remove());
+      sceneMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -103,11 +165,17 @@ const ArticleMapAside = ({
       const pathCoordinates = normalizedScenes.map((scene) => [scene.longitude, scene.latitude]);
       const pointSourceId = "article-map-points";
       const pathSourceId = "article-map-path";
+      const vesselRouteSourceId = "article-map-vessel-routes";
+      const primaryRouteSourceId = "article-map-primary-route";
 
       if (map.getLayer(pathSourceId)) map.removeLayer(pathSourceId);
       if (map.getLayer(pointSourceId)) map.removeLayer(pointSourceId);
+      if (map.getLayer(vesselRouteSourceId)) map.removeLayer(vesselRouteSourceId);
+      if (map.getLayer(primaryRouteSourceId)) map.removeLayer(primaryRouteSourceId);
       if (map.getSource(pathSourceId)) map.removeSource(pathSourceId);
       if (map.getSource(pointSourceId)) map.removeSource(pointSourceId);
+      if (map.getSource(vesselRouteSourceId)) map.removeSource(vesselRouteSourceId);
+      if (map.getSource(primaryRouteSourceId)) map.removeSource(primaryRouteSourceId);
 
       if (pathCoordinates.length > 1) {
         map.addSource(pathSourceId, {
@@ -126,6 +194,27 @@ const ArticleMapAside = ({
             "line-color": "hsl(201, 52%, 48%)",
             "line-width": 3,
             "line-opacity": 0.55,
+          },
+        });
+      }
+
+      if (activeScene?.showMainRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1) {
+        map.addSource(primaryRouteSourceId, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: primaryRouteCoordinates },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: primaryRouteSourceId,
+          type: "line",
+          source: primaryRouteSourceId,
+          paint: {
+            "line-color": "hsl(30, 85%, 48%)",
+            "line-width": 3,
+            "line-opacity": 0.75,
           },
         });
       }
@@ -163,6 +252,8 @@ const ArticleMapAside = ({
 
       windMarkerRef.current?.remove();
       windMarkerRef.current = null;
+      sceneMarkersRef.current.forEach((marker) => marker.remove());
+      sceneMarkersRef.current = [];
 
       if (activeScene?.windAngle != null) {
         const markerEl = document.createElement("div");
@@ -172,11 +263,86 @@ const ArticleMapAside = ({
           .setLngLat([activeScene.longitude, activeScene.latitude])
           .addTo(map);
       }
+
+      const vesselRouteFeatures = activeVessels.flatMap((vessel) => {
+        if (
+          typeof vessel.latitude !== "number" ||
+          typeof vessel.longitude !== "number" ||
+          typeof vessel.route_heading !== "number" ||
+          typeof vessel.route_distance_nm !== "number" ||
+          vessel.route_distance_nm <= 0
+        ) {
+          return [];
+        }
+
+        const destination = destinationPoint(
+          vessel.latitude,
+          vessel.longitude,
+          vessel.route_heading,
+          vessel.route_distance_nm
+        );
+
+        return [{
+          type: "Feature" as const,
+          geometry: {
+            type: "LineString" as const,
+            coordinates: [
+              [vessel.longitude, vessel.latitude],
+              [destination.longitude, destination.latitude],
+            ],
+          },
+          properties: {},
+        }];
+      });
+
+      if (vesselRouteFeatures.length) {
+        map.addSource(vesselRouteSourceId, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: vesselRouteFeatures },
+        });
+        map.addLayer({
+          id: vesselRouteSourceId,
+          type: "line",
+          source: vesselRouteSourceId,
+          paint: {
+            "line-color": "hsl(201, 68%, 34%)",
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+            "line-opacity": 0.7,
+          },
+        });
+      }
+
+      const vesselMarkers = activeVessels.flatMap((vessel) => {
+        if (typeof vessel.latitude !== "number" || typeof vessel.longitude !== "number") return [];
+        return [
+          new maplibregl.Marker({
+            element: createMarkerElement("vessel", vessel.heading, vessel.name || undefined),
+            anchor: "center",
+          })
+            .setLngLat([vessel.longitude, vessel.latitude])
+            .addTo(map),
+        ];
+      });
+
+      const overlayMarkers = activeOverlays.flatMap((overlay) => {
+        if (typeof overlay.latitude !== "number" || typeof overlay.longitude !== "number") return [];
+        return [
+          new maplibregl.Marker({
+            element: createMarkerElement(overlay.kind, overlay.angle, overlay.label),
+            anchor: "center",
+          })
+            .setLngLat([overlay.longitude, overlay.latitude])
+            .addTo(map),
+        ];
+      });
+
+      sceneMarkersRef.current = [...vesselMarkers, ...overlayMarkers];
     };
 
     if (map.isStyleLoaded()) draw();
     else map.once("load", draw);
-  }, [activeScene, activeSceneId, normalizedScenes]);
+  }, [activeOverlays, activeScene, activeSceneId, activeVessels, normalizedScenes, primaryRouteCoordinates]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -233,6 +399,25 @@ const ArticleMapAside = ({
                 <p className="inline-flex items-center gap-2 text-xs font-sans text-foreground">
                   <Navigation size={12} className="text-accent" />
                   {activeScene.windLabel}
+                </p>
+              )}
+              {(activeVessels.length > 0 || activeOverlays.length > 0) && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {activeVessels.map((vessel) => (
+                    <span key={vessel.id} className="rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                      {vessel.name || (lang === "it" ? "Barca" : "Boat")}
+                    </span>
+                  ))}
+                  {activeOverlays.map((overlay) => (
+                    <span key={overlay.id} className="rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-muted-foreground">
+                      {overlay.label || overlay.kind}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {activeScene.showMainRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1 && (
+                <p className="text-[11px] font-sans text-muted-foreground">
+                  {lang === "it" ? "Rotta principale visibile" : "Main route visible"}
                 </p>
               )}
             </div>

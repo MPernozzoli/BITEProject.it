@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
@@ -7,7 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { geocodePlace } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
@@ -17,6 +17,72 @@ import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal 
 import { normalizeArticleMapScenes } from "@/lib/article-map";
 
 type ArticleLanguage = "en" | "it";
+
+const ARTICLE_DRAFT_STORAGE_PREFIX = "bite_article_editor_draft";
+
+type ArticleEditorDraft = {
+  titleEn: string;
+  titleIt: string;
+  slug: string;
+  excerptEn: string;
+  excerptIt: string;
+  contentEn: object;
+  contentIt: object;
+  articleMapScenes: ReturnType<typeof normalizeArticleMapScenes>;
+  coverImage: string;
+  instagramStoryImageEn: string;
+  instagramStoryImageIt: string;
+  instagramStoryUseCoverEn: boolean;
+  instagramStoryUseCoverIt: boolean;
+  coverFocal: CoverFocal;
+  category: string;
+  publishDate: string;
+  authorIds: string[];
+  selectedTagIds: string[];
+  selectedStoryId: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string;
+  selectedVoyageId: string | null;
+  voyageSegStart: number | null;
+  voyageSegEnd: number | null;
+};
+
+const getSaveErrorMessage = (error: { code?: string; message?: string }) => {
+  if (error.code === "23505") return "Esiste già un articolo con questo slug.";
+  if (error.message?.includes("instagram_story_")) {
+    return "Il database non è aggiornato: applica la migration delle colonne Instagram Stories.";
+  }
+  return "Salvataggio non riuscito.";
+};
+
+const getWaypointOptionLabel = (waypoint: VoyageWaypoint, index: number, total: number) => {
+  const customName = waypoint.name_en?.trim() || waypoint.name_it?.trim() || waypoint.name?.trim();
+  const prefix = index === 0
+    ? "Start"
+    : index === total - 1
+      ? "Arrival"
+      : `WP ${String(index + 1).padStart(2, "0")}`;
+
+  return customName ? `${prefix} · ${customName}` : prefix;
+};
+
+const inferAssociationMode = (
+  voyageId: string | null,
+  start: number | null,
+  end: number | null,
+  lat: number | null,
+  lng: number | null
+): "point" | "segment" | "full" => {
+  if (!voyageId) return "point";
+  if (start == null && end == null) {
+    return lat != null && lng != null ? "point" : "full";
+  }
+
+  const safeStart = start ?? end;
+  const safeEnd = end ?? start;
+  return safeStart === safeEnd ? "point" : "segment";
+};
 
 const ArticleEditor = () => {
   const { id } = useParams();
@@ -71,11 +137,84 @@ const ArticleEditor = () => {
   const geoMapInstanceRef = useRef<maplibregl.Map | null>(null);
   const geoMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [associationMode, setAssociationMode] = useState<"point" | "segment" | "full">("point");
-  const segmentClicksRef = useRef<number[]>([]);
+  const geoWaypointClickHandlerRef = useRef<((event: maplibregl.MapLayerMouseEvent) => void) | null>(null);
+  const geoWaypointMouseEnterRef = useRef<(() => void) | null>(null);
+  const geoWaypointMouseLeaveRef = useRef<(() => void) | null>(null);
+  const fittedVoyageIdRef = useRef<string | null>(null);
+  const hydratedDraftRef = useRef(false);
+  const skipNextDraftSaveRef = useRef(true);
+  const hasLocalChangesRef = useRef(false);
+  const draftStorageKey = `${ARTICLE_DRAFT_STORAGE_PREFIX}:${id ?? "new"}`;
 
   useEffect(() => { init(); }, [id]);
 
+  useEffect(() => {
+    hydratedDraftRef.current = false;
+    skipNextDraftSaveRef.current = true;
+    hasLocalChangesRef.current = false;
+  }, [draftStorageKey]);
+
   const loginPath = () => navigate("/login", { state: { from: `/admin/article/${id}` } });
+
+  const applyDraft = useCallback((draft: ArticleEditorDraft) => {
+    setTitleEn(draft.titleEn || "");
+    setTitleIt(draft.titleIt || "");
+    setSlug(draft.slug || "");
+    setExcerptEn(draft.excerptEn || "");
+    setExcerptIt(draft.excerptIt || "");
+    setContentEn(draft.contentEn || {});
+    setContentIt(draft.contentIt || {});
+    setArticleMapScenes(normalizeArticleMapScenes(draft.articleMapScenes));
+    setCoverImage(draft.coverImage || "");
+    setInstagramStoryImageEn(draft.instagramStoryImageEn || "");
+    setInstagramStoryImageIt(draft.instagramStoryImageIt || "");
+    setInstagramStoryUseCoverEn(draft.instagramStoryUseCoverEn ?? true);
+    setInstagramStoryUseCoverIt(draft.instagramStoryUseCoverIt ?? true);
+    setCoverFocal(
+      clampCoverFocal(
+        Number(draft.coverFocal?.focalX ?? DEFAULT_COVER_FOCAL.focalX),
+        Number(draft.coverFocal?.focalY ?? DEFAULT_COVER_FOCAL.focalY),
+        Number(draft.coverFocal?.zoom ?? DEFAULT_COVER_FOCAL.zoom)
+      )
+    );
+    setCategory(draft.category || "Notes from the Boat");
+    setPublishDate(draft.publishDate || "");
+    setAuthorIds(Array.isArray(draft.authorIds) ? draft.authorIds : []);
+    setSelectedTagIds(Array.isArray(draft.selectedTagIds) ? draft.selectedTagIds : []);
+    setSelectedStoryId(draft.selectedStoryId || null);
+    setLatitude(typeof draft.latitude === "number" ? draft.latitude : null);
+    setLongitude(typeof draft.longitude === "number" ? draft.longitude : null);
+    setLocationName(draft.locationName || "");
+    setSelectedVoyageId(draft.selectedVoyageId || null);
+    setVoyageSegStart(typeof draft.voyageSegStart === "number" ? draft.voyageSegStart : null);
+    setVoyageSegEnd(typeof draft.voyageSegEnd === "number" ? draft.voyageSegEnd : null);
+    setAssociationMode(
+      inferAssociationMode(
+        draft.selectedVoyageId || null,
+        typeof draft.voyageSegStart === "number" ? draft.voyageSegStart : null,
+        typeof draft.voyageSegEnd === "number" ? draft.voyageSegEnd : null,
+        typeof draft.latitude === "number" ? draft.latitude : null,
+        typeof draft.longitude === "number" ? draft.longitude : null
+      )
+    );
+  }, []);
+
+  const restoreDraftFromStorage = useCallback(() => {
+    if (hydratedDraftRef.current) return;
+
+    const rawDraft = window.localStorage.getItem(draftStorageKey);
+    hydratedDraftRef.current = true;
+    if (!rawDraft) return;
+
+    try {
+      applyDraft(JSON.parse(rawDraft) as ArticleEditorDraft);
+      hasLocalChangesRef.current = true;
+      toast.message("Bozza locale ripristinata.");
+    } catch (error) {
+      console.error("Failed to restore local article draft", error);
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  }, [applyDraft, draftStorageKey]);
 
   const init = async () => {
     const { session } = await validateSessionOrSignOut();
@@ -114,6 +253,7 @@ const ArticleEditor = () => {
     if (isNew) {
       setAuthorIds([session.user.id]);
       setPublishDate(new Date().toISOString().slice(0, 16));
+      restoreDraftFromStorage();
     } else {
       loadArticle(session.user.id);
     }
@@ -159,6 +299,15 @@ const ArticleEditor = () => {
     setSelectedVoyageId((data as any).voyage_id || null);
     setVoyageSegStart((data as any).voyage_segment_start ?? null);
     setVoyageSegEnd((data as any).voyage_segment_end ?? null);
+    setAssociationMode(
+      inferAssociationMode(
+        (data as any).voyage_id || null,
+        (data as any).voyage_segment_start ?? null,
+        (data as any).voyage_segment_end ?? null,
+        (data as any).latitude || null,
+        (data as any).longitude || null
+      )
+    );
 
     // Load waypoints if voyage selected
     if ((data as any).voyage_id) {
@@ -174,7 +323,188 @@ const ArticleEditor = () => {
     if (authorsRes.data?.length) setAuthorIds(authorsRes.data.map((a) => a.profile_id));
     else setAuthorIds([userId]);
     if (tagsRes.data?.length) setSelectedTagIds(tagsRes.data.map((t) => t.tag_id));
+
+    restoreDraftFromStorage();
   };
+
+  const selectPointWaypoint = useCallback((index: number | null) => {
+    if (index == null) {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegStart(index);
+    setVoyageSegEnd(index);
+  }, []);
+
+  const selectSegmentWaypoint = useCallback((index: number) => {
+    if (voyageSegStart == null || voyageSegEnd != null) {
+      setVoyageSegStart(index);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegStart(Math.min(voyageSegStart, index));
+    setVoyageSegEnd(Math.max(voyageSegStart, index));
+  }, [voyageSegEnd, voyageSegStart]);
+
+  const handleAssociationModeChange = useCallback((nextMode: "point" | "segment" | "full") => {
+    setAssociationMode(nextMode);
+
+    if (nextMode === "full") {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    if (nextMode === "point") {
+      const selectedIndex = voyageSegStart ?? voyageSegEnd;
+      if (selectedIndex == null) {
+        setVoyageSegStart(null);
+        setVoyageSegEnd(null);
+        return;
+      }
+
+      setVoyageSegStart(selectedIndex);
+      setVoyageSegEnd(selectedIndex);
+      return;
+    }
+
+    if (voyageSegStart != null && voyageSegEnd != null && voyageSegStart === voyageSegEnd) {
+      setVoyageSegEnd(null);
+    }
+  }, [voyageSegEnd, voyageSegStart]);
+
+  const handleVoyageWaypointMapSelect = useCallback((index: number) => {
+    if (associationMode === "full") return;
+    if (associationMode === "point") {
+      selectPointWaypoint(index);
+      return;
+    }
+
+    selectSegmentWaypoint(index);
+  }, [associationMode, selectPointWaypoint, selectSegmentWaypoint]);
+
+  const handleSegmentStartChange = useCallback((value: string) => {
+    if (!value) {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    const nextStart = Number(value);
+    if (!Number.isFinite(nextStart)) return;
+
+    if (voyageSegEnd != null && nextStart > voyageSegEnd) {
+      setVoyageSegStart(voyageSegEnd);
+      setVoyageSegEnd(nextStart);
+      return;
+    }
+
+    setVoyageSegStart(nextStart);
+  }, [voyageSegEnd]);
+
+  const handleSegmentEndChange = useCallback((value: string) => {
+    if (!value) {
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    const nextEnd = Number(value);
+    if (!Number.isFinite(nextEnd)) return;
+
+    if (voyageSegStart == null) {
+      setVoyageSegStart(nextEnd);
+      setVoyageSegEnd(nextEnd);
+      return;
+    }
+
+    if (nextEnd < voyageSegStart) {
+      setVoyageSegStart(nextEnd);
+      setVoyageSegEnd(voyageSegStart);
+      return;
+    }
+
+    setVoyageSegEnd(nextEnd);
+  }, [voyageSegStart]);
+
+  useEffect(() => {
+    if (!hydratedDraftRef.current) return;
+    if (skipNextDraftSaveRef.current) {
+      skipNextDraftSaveRef.current = false;
+      return;
+    }
+
+    const draft: ArticleEditorDraft = {
+      titleEn,
+      titleIt,
+      slug,
+      excerptEn,
+      excerptIt,
+      contentEn: contentEn as object,
+      contentIt: contentIt as object,
+      articleMapScenes,
+      coverImage,
+      instagramStoryImageEn,
+      instagramStoryImageIt,
+      instagramStoryUseCoverEn,
+      instagramStoryUseCoverIt,
+      coverFocal,
+      category,
+      publishDate,
+      authorIds,
+      selectedTagIds,
+      selectedStoryId,
+      latitude,
+      longitude,
+      locationName,
+      selectedVoyageId,
+      voyageSegStart,
+      voyageSegEnd,
+    };
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    hasLocalChangesRef.current = true;
+  }, [
+    articleMapScenes,
+    authorIds,
+    category,
+    contentEn,
+    contentIt,
+    coverFocal,
+    coverImage,
+    draftStorageKey,
+    excerptEn,
+    excerptIt,
+    instagramStoryImageEn,
+    instagramStoryImageIt,
+    instagramStoryUseCoverEn,
+    instagramStoryUseCoverIt,
+    latitude,
+    locationName,
+    longitude,
+    publishDate,
+    selectedStoryId,
+    selectedTagIds,
+    selectedVoyageId,
+    slug,
+    titleEn,
+    titleIt,
+    voyageSegEnd,
+    voyageSegStart,
+  ]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasLocalChangesRef.current || saving) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [saving]);
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
@@ -287,6 +617,36 @@ const ArticleEditor = () => {
     let finalStatus: "draft" | "scheduled" | "published";
     let publishedAt: string | null = null;
     let scheduledAt: string | null = null;
+    const trimmedSlug = slug.trim();
+
+    if (!trimmedSlug) {
+      toast.error("Inserisci almeno un titolo inglese o uno slug prima di salvare.");
+      setSaving(false);
+      return;
+    }
+
+    let normalizedVoyageSegStart: number | null = null;
+    let normalizedVoyageSegEnd: number | null = null;
+    if (selectedVoyageId) {
+      if (associationMode === "point") {
+        const selectedIndex = voyageSegStart ?? voyageSegEnd;
+        if (selectedIndex == null) {
+          toast.error("Seleziona un waypoint della rotta per associare l'articolo a un punto.");
+          setSaving(false);
+          return;
+        }
+        normalizedVoyageSegStart = selectedIndex;
+        normalizedVoyageSegEnd = selectedIndex;
+      } else if (associationMode === "segment") {
+        if (voyageSegStart == null || voyageSegEnd == null) {
+          toast.error("Seleziona due waypoint della rotta per definire il segmento.");
+          setSaving(false);
+          return;
+        }
+        normalizedVoyageSegStart = Math.min(voyageSegStart, voyageSegEnd);
+        normalizedVoyageSegEnd = Math.max(voyageSegStart, voyageSegEnd);
+      }
+    }
 
     if (action === "draft") {
       finalStatus = "draft";
@@ -298,10 +658,10 @@ const ArticleEditor = () => {
       publishedAt = selectedDate.toISOString();
     }
 
-    const articleData: any = {
+    const articleData = {
       title_en: titleEn,
       title_it: titleIt,
-      slug,
+      slug: trimmedSlug,
       excerpt_en: excerptEn,
       excerpt_it: excerptIt,
       content_en: contentEn as Json,
@@ -321,8 +681,8 @@ const ArticleEditor = () => {
       longitude,
       location_name: locationName || null,
       voyage_id: selectedVoyageId || null,
-      voyage_segment_start: voyageSegStart,
-      voyage_segment_end: voyageSegEnd,
+      voyage_segment_start: normalizedVoyageSegStart,
+      voyage_segment_end: normalizedVoyageSegEnd,
       cover_focal_x: coverFocal.focalX,
       cover_focal_y: coverFocal.focalY,
       cover_zoom: coverFocal.zoom,
@@ -336,7 +696,7 @@ const ArticleEditor = () => {
         if (isAuthFailureError(error)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/new` } });
-        } else toast.error("Salvataggio non riuscito.");
+        } else toast.error(getSaveErrorMessage(error));
         setSaving(false);
         return;
       }
@@ -354,7 +714,7 @@ const ArticleEditor = () => {
         if (isAuthFailureError(upErr)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/${id}` } });
-        } else toast.error("Salvataggio non riuscito.");
+        } else toast.error(getSaveErrorMessage(upErr));
         setSaving(false);
         return;
       }
@@ -424,13 +784,16 @@ const ArticleEditor = () => {
       }
     }
 
+    window.localStorage.removeItem(draftStorageKey);
+    hasLocalChangesRef.current = false;
+
     if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
       window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
       return;
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories, draftStorageKey]);
 
   // Geo map initialization
   useEffect(() => {
@@ -457,6 +820,9 @@ const ArticleEditor = () => {
     }
 
     map.on("click", (e) => {
+      const clickedWaypointFeatures = map.queryRenderedFeatures(e.point, { layers: ["editor-waypoints"] });
+      if (clickedWaypointFeatures.length) return;
+
       const lat = e.lngLat.lat;
       const lng = e.lngLat.lng;
       setLatitude(lat);
@@ -472,10 +838,20 @@ const ArticleEditor = () => {
 
   // Load voyage waypoints when voyage changes
   useEffect(() => {
-    if (!selectedVoyageId) { setVoyageWaypoints([]); return; }
+    fittedVoyageIdRef.current = null;
+    if (!selectedVoyageId) {
+      setVoyageWaypoints([]);
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
     (async () => {
       const { data } = await supabase.from("voyage_waypoints").select("*").eq("voyage_id", selectedVoyageId).order("sort_order", { ascending: true });
-      setVoyageWaypoints((data || []) as unknown as VoyageWaypoint[]);
+      const nextWaypoints = (data || []) as unknown as VoyageWaypoint[];
+      setVoyageWaypoints(nextWaypoints);
+      setVoyageSegStart((current) => current != null && current < nextWaypoints.length ? current : null);
+      setVoyageSegEnd((current) => current != null && current < nextWaypoints.length ? current : null);
     })();
   }, [selectedVoyageId]);
 
@@ -483,24 +859,264 @@ const ArticleEditor = () => {
   useEffect(() => {
     const map = geoMapInstanceRef.current;
     if (!map) return;
+
     const draw = () => {
-      if (map.getLayer("editor-route")) map.removeLayer("editor-route");
-      if (map.getSource("editor-route")) map.removeSource("editor-route");
-      if (voyageWaypoints.length < 2) return;
-      map.addSource("editor-route", {
+      if (geoWaypointClickHandlerRef.current) {
+        map.off("click", "editor-waypoints", geoWaypointClickHandlerRef.current);
+        geoWaypointClickHandlerRef.current = null;
+      }
+      if (geoWaypointMouseEnterRef.current) {
+        map.off("mouseenter", "editor-waypoints", geoWaypointMouseEnterRef.current);
+        geoWaypointMouseEnterRef.current = null;
+      }
+      if (geoWaypointMouseLeaveRef.current) {
+        map.off("mouseleave", "editor-waypoints", geoWaypointMouseLeaveRef.current);
+        geoWaypointMouseLeaveRef.current = null;
+      }
+
+      [
+        "editor-route-highlight",
+        "editor-route",
+        "editor-waypoints-selected",
+        "editor-waypoints",
+      ].forEach((layerId) => {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(layerId)) map.removeSource(layerId);
+      });
+
+      if (!selectedVoyageId || !voyageWaypoints.length) return;
+
+      const routeCoordinates = voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number]);
+
+      if (routeCoordinates.length >= 2) {
+        map.addSource("editor-route", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: routeCoordinates },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route",
+          type: "line",
+          source: "editor-route",
+          paint: { "line-color": "hsl(210,60%,45%)", "line-width": 3, "line-opacity": 0.42 },
+        });
+      }
+
+      map.addSource("editor-waypoints", {
         type: "geojson",
-        data: { type: "Feature", geometry: { type: "LineString", coordinates: voyageWaypoints.map((w) => [w.lng, w.lat]) }, properties: {} },
+        data: {
+          type: "FeatureCollection",
+          features: voyageWaypoints.map((waypoint, index) => ({
+            type: "Feature" as const,
+            geometry: {
+              type: "Point" as const,
+              coordinates: [waypoint.lng, waypoint.lat],
+            },
+            properties: {
+              index,
+              label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
+              isTerminal: index === 0 || index === voyageWaypoints.length - 1,
+            },
+          })),
+        },
       });
       map.addLayer({
-        id: "editor-route",
-        type: "line",
-        source: "editor-route",
-        paint: { "line-color": "hsl(210,60%,45%)", "line-width": 3, "line-opacity": 0.6 },
+        id: "editor-waypoints",
+        type: "circle",
+        source: "editor-waypoints",
+        paint: {
+          "circle-radius": ["case", ["boolean", ["get", "isTerminal"], false], 6, 4.5],
+          "circle-color": ["case", ["boolean", ["get", "isTerminal"], false], "hsl(210,60%,45%)", "hsl(215,20%,58%)"],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+          "circle-opacity": 0.96,
+        },
       });
+
+      const selectedFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
+      if (associationMode === "point" && voyageSegStart != null && voyageWaypoints[voyageSegStart]) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegStart].lng, voyageWaypoints[voyageSegStart].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (associationMode === "segment" && voyageSegStart != null && voyageWaypoints[voyageSegStart]) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegStart].lng, voyageWaypoints[voyageSegStart].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (
+        associationMode === "segment" &&
+        voyageSegStart != null &&
+        voyageSegEnd != null &&
+        voyageWaypoints[voyageSegEnd]
+      ) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegEnd].lng, voyageWaypoints[voyageSegEnd].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (associationMode === "full" && routeCoordinates.length >= 2) {
+        map.addSource("editor-route-highlight", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: routeCoordinates },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route-highlight",
+          type: "line",
+          source: "editor-route-highlight",
+          paint: { "line-color": "hsl(210,60%,45%)", "line-width": 5, "line-opacity": 0.82 },
+        });
+      }
+
+      if (
+        associationMode === "segment" &&
+        voyageSegStart != null &&
+        voyageSegEnd != null
+      ) {
+        const segmentWaypoints = voyageWaypoints.slice(
+          Math.min(voyageSegStart, voyageSegEnd),
+          Math.max(voyageSegStart, voyageSegEnd) + 1
+        );
+        if (segmentWaypoints.length >= 2) {
+          map.addSource("editor-route-highlight", {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: segmentWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat]),
+              },
+              properties: {},
+            },
+          });
+          map.addLayer({
+            id: "editor-route-highlight",
+            type: "line",
+            source: "editor-route-highlight",
+            paint: { "line-color": "hsl(180,68%,34%)", "line-width": 5, "line-opacity": 0.9 },
+          });
+        }
+      }
+
+      if (selectedFeatures.length) {
+        map.addSource("editor-waypoints-selected", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: selectedFeatures,
+          },
+        });
+        map.addLayer({
+          id: "editor-waypoints-selected",
+          type: "circle",
+          source: "editor-waypoints-selected",
+          paint: {
+            "circle-radius": 7.5,
+            "circle-color": "hsl(180,68%,34%)",
+            "circle-stroke-width": 3,
+            "circle-stroke-color": "#fff",
+          },
+        });
+      }
+
+      geoWaypointClickHandlerRef.current = (event: maplibregl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+        const index = Number(feature?.properties?.index);
+        if (!Number.isFinite(index)) return;
+        handleVoyageWaypointMapSelect(index);
+      };
+      geoWaypointMouseEnterRef.current = () => {
+        map.getCanvas().style.cursor = associationMode === "full" ? "" : "pointer";
+      };
+      geoWaypointMouseLeaveRef.current = () => {
+        map.getCanvas().style.cursor = "";
+      };
+
+      map.on("click", "editor-waypoints", geoWaypointClickHandlerRef.current);
+      map.on("mouseenter", "editor-waypoints", geoWaypointMouseEnterRef.current);
+      map.on("mouseleave", "editor-waypoints", geoWaypointMouseLeaveRef.current);
     };
+
     if (map.isStyleLoaded()) draw();
     else map.on("load", draw);
-  }, [voyageWaypoints]);
+  }, [associationMode, handleVoyageWaypointMapSelect, selectedVoyageId, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+
+  useEffect(() => {
+    const map = geoMapInstanceRef.current;
+    if (!map || !selectedVoyageId || !voyageWaypoints.length) return;
+    if (fittedVoyageIdRef.current === selectedVoyageId) return;
+
+    const fit = () => {
+      const coordinates = voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number]);
+      if (!coordinates.length) return;
+
+      if (coordinates.length === 1) {
+        map.flyTo({ center: coordinates[0], zoom: 9, duration: 500 });
+      } else {
+        const bounds = coordinates.reduce(
+          (accumulator, coordinate) => accumulator.extend(coordinate),
+          new maplibregl.LngLatBounds(coordinates[0], coordinates[0])
+        );
+        map.fitBounds(bounds, { padding: 42, duration: 500, maxZoom: 9.5 });
+      }
+
+      fittedVoyageIdRef.current = selectedVoyageId;
+    };
+
+    if (map.isStyleLoaded()) fit();
+    else map.once("load", fit);
+  }, [selectedVoyageId, voyageWaypoints]);
+
+  useEffect(() => {
+    if (
+      associationMode !== "point" ||
+      !selectedVoyageId ||
+      voyageSegStart != null ||
+      voyageSegEnd != null ||
+      latitude == null ||
+      longitude == null ||
+      !voyageWaypoints.length
+    ) {
+      return;
+    }
+
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    voyageWaypoints.forEach((waypoint, index) => {
+      const distance = Math.hypot(waypoint.lat - latitude, waypoint.lng - longitude);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    setVoyageSegStart(nearestIndex);
+    setVoyageSegEnd(nearestIndex);
+  }, [associationMode, latitude, longitude, selectedVoyageId, voyageSegEnd, voyageSegStart, voyageWaypoints]);
 
   const handleGeoSearch = async () => {
     if (!geoSearchQuery.trim()) return;
@@ -524,6 +1140,35 @@ const ArticleEditor = () => {
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
+  const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+  const primaryRouteCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return null;
+
+    const geometrySource = selectedVoyage.cached_geometry as { coordinates?: [number, number][] } | null;
+    const cachedGeometry = Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
+
+    if (voyageSegStart != null || voyageSegEnd != null) {
+      const start = Math.max(0, Math.min(voyageSegStart ?? voyageSegEnd ?? 0, voyageWaypoints.length - 1));
+      const end = Math.max(0, Math.min(voyageSegEnd ?? voyageSegStart ?? start, voyageWaypoints.length - 1));
+      const segmentWaypoints = voyageWaypoints.slice(Math.min(start, end), Math.max(start, end) + 1);
+      if (segmentWaypoints.length < 2) return null;
+      return buildPublicVoyageGeometry(segmentWaypoints, selectedVoyage.type, []);
+    }
+
+    return buildPublicVoyageGeometry(voyageWaypoints, selectedVoyage.type, [], selectedVoyage.id, cachedGeometry);
+  }, [selectedVoyage, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+  const voyageWaypointOptions = voyageWaypoints.map((waypoint, index) => ({
+    value: String(index),
+    label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
+  }));
+  const selectedPointWaypointLabel =
+    associationMode === "point" && voyageSegStart != null
+      ? voyageWaypointOptions[voyageSegStart]?.label || null
+      : null;
+  const selectedSegmentSummary =
+    associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null
+      ? `${voyageWaypointOptions[voyageSegStart]?.label || `WP ${voyageSegStart + 1}`} → ${voyageWaypointOptions[voyageSegEnd]?.label || `WP ${voyageSegEnd + 1}`}`
+      : null;
 
   const renderInstagramStorySection = ({
     language,
@@ -677,6 +1322,7 @@ const ArticleEditor = () => {
               contentEn={contentEn as Json}
               contentIt={contentIt as Json}
               activeLanguage={activeTab}
+              primaryRouteCoordinates={primaryRouteCoordinates}
             />
           </div>
 
@@ -856,9 +1502,11 @@ const ArticleEditor = () => {
                 <select
                   value={selectedVoyageId || ""}
                   onChange={(e) => {
-                    setSelectedVoyageId(e.target.value || null);
+                    const nextVoyageId = e.target.value || null;
+                    setSelectedVoyageId(nextVoyageId);
                     setVoyageSegStart(null);
                     setVoyageSegEnd(null);
+                    setAssociationMode(nextVoyageId ? "full" : "point");
                   }}
                   className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
                 >
@@ -875,40 +1523,101 @@ const ArticleEditor = () => {
                   <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground block">Association</label>
                   <div className="flex gap-1">
                     <button
-                      onClick={() => { setAssociationMode("full"); setVoyageSegStart(null); setVoyageSegEnd(null); }}
+                      onClick={() => handleAssociationModeChange("full")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "full" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Full voyage
                     </button>
                     <button
-                      onClick={() => setAssociationMode("point")}
+                      onClick={() => handleAssociationModeChange("point")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "point" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Point
                     </button>
                     <button
-                      onClick={() => setAssociationMode("segment")}
+                      onClick={() => handleAssociationModeChange("segment")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "segment" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Segment
                     </button>
                   </div>
 
-                  {associationMode === "point" && latitude && (
+                  {!voyageWaypoints.length ? (
                     <p className="text-[10px] text-muted-foreground">
-                      Point set at {latitude.toFixed(4)}, {longitude?.toFixed(4)}
+                      This voyage has no waypoints yet.
+                    </p>
+                  ) : null}
+
+                  {associationMode === "full" && voyageWaypoints.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      The full traced voyage is associated with this article.
                     </p>
                   )}
-                  {associationMode === "segment" && (
-                    <div className="grid grid-cols-2 gap-2">
+
+                  {associationMode === "point" && voyageWaypoints.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        Click a waypoint on the minimap or choose it below.
+                      </p>
                       <div>
-                        <label className="text-[10px] font-sans text-muted-foreground block">Start WP #</label>
-                        <input type="number" min={0} value={voyageSegStart ?? ""} onChange={(e) => setVoyageSegStart(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                        <label className="text-[10px] font-sans text-muted-foreground block">Waypoint</label>
+                        <select
+                          value={voyageSegStart != null ? String(voyageSegStart) : ""}
+                          onChange={(e) => selectPointWaypoint(e.target.value ? Number(e.target.value) : null)}
+                          className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                        >
+                          <option value="">Choose a waypoint</option>
+                          {voyageWaypointOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
                       </div>
-                      <div>
-                        <label className="text-[10px] font-sans text-muted-foreground block">End WP #</label>
-                        <input type="number" min={0} value={voyageSegEnd ?? ""} onChange={(e) => setVoyageSegEnd(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                      {selectedPointWaypointLabel && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Selected: {selectedPointWaypointLabel}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {associationMode === "segment" && voyageWaypoints.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        Click two waypoints on the minimap or choose them below.
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div>
+                          <label className="text-[10px] font-sans text-muted-foreground block">From</label>
+                          <select
+                            value={voyageSegStart != null ? String(voyageSegStart) : ""}
+                            onChange={(e) => handleSegmentStartChange(e.target.value)}
+                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                          >
+                            <option value="">Choose start waypoint</option>
+                            {voyageWaypointOptions.map((option) => (
+                              <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-sans text-muted-foreground block">To</label>
+                          <select
+                            value={voyageSegEnd != null ? String(voyageSegEnd) : ""}
+                            onChange={(e) => handleSegmentEndChange(e.target.value)}
+                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                          >
+                            <option value="">Choose end waypoint</option>
+                            {voyageWaypointOptions.map((option) => (
+                              <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
+                      {selectedSegmentSummary && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Selected: {selectedSegmentSummary}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

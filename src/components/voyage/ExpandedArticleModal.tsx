@@ -17,11 +17,14 @@ import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import {
   getArticleSceneAnchorIndex,
   getArticleSceneDescription,
+  getArticleOverlayLabel,
   getArticleSceneTitle,
   getArticleSceneWindLabel,
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
 } from "@/lib/article-map";
+import { buildPublicVoyageGeometry } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -123,6 +126,28 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
         .filter((tag): tag is { id: string; name: string } => Boolean(tag));
     },
   });
+  const { data: linkedVoyage } = useQuery({
+    queryKey: ["expanded-article-linked-voyage", article?.voyage_id],
+    enabled: Boolean(article?.voyage_id),
+    queryFn: async () => {
+      const { data, error } = await supabase.from("voyages").select("*").eq("id", article!.voyage_id).single();
+      if (error) throw error;
+      return data as Voyage;
+    },
+  });
+  const { data: linkedVoyageWaypoints = [] } = useQuery({
+    queryKey: ["expanded-article-linked-voyage-waypoints", article?.voyage_id],
+    enabled: Boolean(article?.voyage_id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_waypoints")
+        .select("*")
+        .eq("voyage_id", article!.voyage_id)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as VoyageWaypoint[];
+    },
+  });
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -218,8 +243,29 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       zoom: scene.zoom,
       windAngle: scene.wind_angle,
       anchorIndex: getArticleSceneAnchorIndex(scene, lang),
+      showMainRoute: scene.show_main_route,
+      vessels: scene.vessels,
+      overlays: scene.overlays.map((overlay) => ({
+        ...overlay,
+        label: getArticleOverlayLabel(overlay, lang),
+      })),
     }));
   }, [articleScenes, lang]);
+  const primaryRouteCoordinates = useMemo(() => {
+    if (!article?.voyage_id || !linkedVoyage || linkedVoyageWaypoints.length < 2) return null;
+    const geometrySource = linkedVoyage.cached_geometry as { coordinates?: [number, number][] } | null;
+    const cachedGeometry = Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
+
+    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
+      const start = Math.max(0, Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, linkedVoyageWaypoints.length - 1));
+      const end = Math.max(0, Math.min(article.voyage_segment_end ?? article.voyage_segment_start ?? start, linkedVoyageWaypoints.length - 1));
+      const segmentWaypoints = linkedVoyageWaypoints.slice(Math.min(start, end), Math.max(start, end) + 1);
+      if (segmentWaypoints.length < 2) return null;
+      return buildPublicVoyageGeometry(segmentWaypoints, linkedVoyage.type, []);
+    }
+
+    return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
 
   const { htmlContent, contentRenderFailed } = useMemo(() => {
     const hasStructuredContent = Boolean(
@@ -541,6 +587,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                           scenes={localizedScenes}
                           activeSceneId={activeSceneId}
                           camera={mapCamera}
+                          primaryRouteCoordinates={primaryRouteCoordinates}
                         />
                       </aside>
                     )}

@@ -145,6 +145,8 @@ const Index = () => {
   const [isHeroCrossfadeQueued, setIsHeroCrossfadeQueued] = useState(false);
   const heroPlaybackTimeoutRef = useRef<number | null>(null);
   const heroCrossfadeTimeoutRef = useRef<number | null>(null);
+  const pendingHeroVideoRef = useRef<HTMLVideoElement | null>(null);
+  const pendingHeroPlaybackDurationRef = useRef<number>(HERO_MAX_VIDEO_SEGMENT_SECONDS * 1000);
 
   const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
@@ -237,6 +239,12 @@ const Index = () => {
   const startHeroCrossfade = () => {
     if (!pendingHeroTransition || isHeroCrossfading) return;
     if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
+    if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
+
+    pendingHeroVideoRef.current?.play().catch(() => undefined);
+    heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+      queueHeroCrossfade();
+    }, Math.max(pendingHeroPlaybackDurationRef.current - HERO_CROSSFADE_DURATION_MS, 0));
 
     setIsHeroCrossfadeQueued(false);
     setIsHeroCrossfading(true);
@@ -288,9 +296,15 @@ const Index = () => {
     const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const maxStartTime = Math.max(duration - HERO_MAX_VIDEO_SEGMENT_SECONDS, 0);
     const startTime = maxStartTime > 0 ? Math.random() * maxStartTime : 0;
+    const remainingDuration = duration > 0 ? Math.max(duration - startTime, 0) : HERO_MAX_VIDEO_SEGMENT_SECONDS;
+    pendingHeroPlaybackDurationRef.current = Math.max(
+      800,
+      Math.min(remainingDuration, HERO_MAX_VIDEO_SEGMENT_SECONDS) * 1000
+    );
 
     if (startTime > 0) {
       const handleSeeked = () => {
+        video.pause();
         setIsPendingHeroReady(true);
         video.removeEventListener("seeked", handleSeeked);
       };
@@ -299,6 +313,7 @@ const Index = () => {
       return;
     }
 
+    video.pause();
     setIsPendingHeroReady(true);
   };
 
@@ -316,9 +331,10 @@ const Index = () => {
     return (
       <video
         key={media.src}
+        ref={mode === "pending" ? pendingHeroVideoRef : undefined}
         className={baseClassName}
         poster={media.poster}
-        autoPlay
+        autoPlay={mode === "active"}
         muted
         playsInline
         preload="auto"
