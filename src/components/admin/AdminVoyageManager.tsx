@@ -225,7 +225,6 @@ const AdminVoyageManager = () => {
   const voyagesRef = useRef<Voyage[]>([]);
   const waypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
   const selectedVoyageRef = useRef<string | null>(null);
-  const pendingPopupWaypointIdRef = useRef<string | null>(null);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
   const segmentInsertRef = useRef<{ voyageId: string; insertIndex: number } | null>(null);
@@ -486,7 +485,6 @@ const AdminVoyageManager = () => {
       }
 
       const createdWaypoint = normalizeWaypoint(data);
-      pendingPopupWaypointIdRef.current = createdWaypoint.id;
       const nextWaypoints = commitWaypoints(voyageId, [
         ...shiftedWaypoints.slice(0, boundedIndex),
         createdWaypoint,
@@ -585,7 +583,11 @@ const AdminVoyageManager = () => {
     const popup = marker.getPopup();
     if (!popup) return;
 
-    if (popup.isOpen()) return;
+    if (popup.isOpen()) {
+      popup.remove();
+      return;
+    }
+
     marker.togglePopup();
     void focusWaypointOnMap(waypointId);
   }, [focusWaypointOnMap]);
@@ -914,7 +916,7 @@ const AdminVoyageManager = () => {
 
     selectedWaypoints.forEach((waypoint, index) => {
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
-      const popup = new maplibregl.Popup({ offset: 14, closeButton: false, closeOnMove: false, maxWidth: "240px" });
+      const popup = new maplibregl.Popup({ offset: 14, closeButton: true, closeOnClick: false, closeOnMove: false, maxWidth: "240px" });
       popup.setDOMContent(createWaypointPopupContent(waypoint, index, selectedWaypoints.length, popup));
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
@@ -935,10 +937,7 @@ const AdminVoyageManager = () => {
       markersRef.current.push(marker);
       markersByWaypointRef.current[waypoint.id] = marker;
 
-      if (pendingPopupWaypointIdRef.current === waypoint.id) {
-        pendingPopupWaypointIdRef.current = null;
-        requestAnimationFrame(() => openWaypointPopup(waypoint.id));
-      } else if (openedPopupWaypointId === waypoint.id) {
+      if (openedPopupWaypointId === waypoint.id) {
         requestAnimationFrame(() => {
           const nextPopup = marker.getPopup();
           if (nextPopup && !nextPopup.isOpen()) {
@@ -947,7 +946,7 @@ const AdminVoyageManager = () => {
         });
       }
     });
-  }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, openWaypointPopup, updateWaypoint]);
+  }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, updateWaypoint]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -1013,6 +1012,14 @@ const AdminVoyageManager = () => {
 
       const target = event.originalEvent.target as HTMLElement | null;
       if (target?.closest(".voyage-admin-marker") || target?.closest(".maplibregl-popup")) return;
+
+      const openedPopupMarker = Object.values(markersByWaypointRef.current).find((marker) =>
+        marker.getPopup()?.isOpen()
+      );
+      if (openedPopupMarker) {
+        openedPopupMarker.getPopup()?.remove();
+        return;
+      }
 
       void insertWaypointAtIndex(
         voyageId,
