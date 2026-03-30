@@ -9,6 +9,8 @@ import {
   formatVoyageDateRange,
   formatWaypointCoordinateLabel,
   getAssociatedArticleForWaypoint,
+  getLocalizedVoyageDescription,
+  getLocalizedVoyageName,
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
@@ -102,24 +104,26 @@ const VoyagePage = () => {
   const arrivalLabel = arrivalEntry
     ? getLocalizedWaypointName(arrivalEntry.waypoint, lang, arrivalEntry.originalIndex)
     : null;
+  const voyageName = voyage ? getLocalizedVoyageName(voyage, lang) : null;
+  const voyageDescription = voyage ? getLocalizedVoyageDescription(voyage, lang) : null;
 
   useEffect(() => {
     if (!voyage) return;
 
-    const description = voyage.description?.trim()
+    const description = voyageDescription
       || (lang === "it"
-        ? `Rotta ${voyage.name} con partenza da ${departureLabel || "punto iniziale"}, arrivo a ${arrivalLabel || "punto finale"} e ${publicWaypoints.length} waypoint pubblici.`
-        : `Route ${voyage.name} with departure from ${departureLabel || "starting point"}, arrival at ${arrivalLabel || "final point"}, and ${publicWaypoints.length} public waypoints.`);
+        ? `Rotta ${voyageName || "senza nome"} con partenza da ${departureLabel || "punto iniziale"}, arrivo a ${arrivalLabel || "punto finale"} e ${publicWaypoints.length} waypoint pubblici.`
+        : `Route ${voyageName || "untitled route"} with departure from ${departureLabel || "starting point"}, arrival at ${arrivalLabel || "final point"}, and ${publicWaypoints.length} public waypoints.`);
 
     applySeo({
-      title: `${voyage.name} | Routes | BITE`,
+      title: `${voyageName || voyage.name} | Routes | BITE`,
       description,
       pathname: canonicalPath,
       type: "collection",
       structuredData: {
         "@context": "https://schema.org",
         "@type": "Trip",
-        name: voyage.name,
+        name: voyageName || voyage.name,
         description,
         url: `${window.location.origin}${canonicalPath}`,
         itinerary: publicWaypointEntries.map(({ waypoint, originalIndex }) => ({
@@ -145,7 +149,7 @@ const VoyagePage = () => {
         inLanguage: lang,
       },
     });
-  }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, lang, publicWaypointEntries, publicWaypoints.length, voyage]);
+  }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, lang, publicWaypointEntries, publicWaypoints.length, voyage, voyageDescription, voyageName]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading route...</p></div>;
@@ -165,7 +169,7 @@ const VoyagePage = () => {
   }
 
   const dateRange = formatVoyageDateRange(voyage, locale);
-  const description = voyage.description?.trim() || DEFAULT_DESCRIPTION;
+  const description = voyageDescription || DEFAULT_DESCRIPTION;
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
@@ -178,7 +182,7 @@ const VoyagePage = () => {
             <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-6">
               {lang === "it" ? "Rotta pubblica" : "Public route"}
             </p>
-            <h1 className="editorial-heading text-4xl md:text-6xl mb-6">{voyage.name}</h1>
+            <h1 className="editorial-heading text-4xl md:text-6xl mb-6">{voyageName || voyage.name}</h1>
             <p className="editorial-body text-lg text-muted-foreground leading-relaxed mb-8">{description}</p>
             <div className="grid gap-4 md:grid-cols-4">
               <div className="glass-panel-soft rounded-[24px] p-4">

@@ -105,8 +105,33 @@ export function slugifyVoyageName(value: string): string {
     .replace(/^-+|-+$/g, "") || "voyage";
 }
 
-export function buildVoyagePath(voyage: Pick<Voyage, "id" | "name">): string {
-  return `/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`;
+const getVoyageSlugSource = (voyage: Pick<Voyage, "name" | "name_en" | "name_it">) =>
+  voyage.name_en?.trim() || voyage.name_it?.trim() || voyage.name;
+
+export function getLocalizedVoyageName(
+  voyage: Pick<Voyage, "name" | "name_en" | "name_it">,
+  lang: Language
+): string {
+  if (lang === "it") {
+    return voyage.name_it?.trim() || voyage.name_en?.trim() || voyage.name;
+  }
+
+  return voyage.name_en?.trim() || voyage.name_it?.trim() || voyage.name;
+}
+
+export function getLocalizedVoyageDescription(
+  voyage: Pick<Voyage, "description" | "description_en" | "description_it">,
+  lang: Language
+): string | null {
+  const value = lang === "it"
+    ? voyage.description_it?.trim() || voyage.description_en?.trim() || voyage.description?.trim()
+    : voyage.description_en?.trim() || voyage.description_it?.trim() || voyage.description?.trim();
+
+  return value || null;
+}
+
+export function buildVoyagePath(voyage: Pick<Voyage, "id" | "name" | "name_en" | "name_it">): string {
+  return `/voyages/${voyage.id}--${slugifyVoyageName(getVoyageSlugSource(voyage))}`;
 }
 
 export function getVoyageIdFromRouteParam(value?: string | null): string | null {
@@ -357,7 +382,11 @@ export type VoyageGeometry = { type: "LineString"; coordinates: [number, number]
 export interface Voyage {
   id: string;
   name: string;
+  name_en: string | null;
+  name_it: string | null;
   description: string;
+  description_en: string | null;
+  description_it: string | null;
   type: VoyageType;
   status: VoyageStatus;
   sort_order: number;

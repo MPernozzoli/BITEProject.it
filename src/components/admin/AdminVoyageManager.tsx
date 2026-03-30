@@ -26,6 +26,7 @@ import {
   formatWaypointCoordinateLabel,
   buildVoyageGeometry,
   getLocalizedWaypointName,
+  getLocalizedVoyageName,
   getWaypointEffectiveType,
   getStraightVoyageGeometry,
   normalizeWaypointMedia,
@@ -34,8 +35,10 @@ import type { Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voya
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 interface VoyageFormState {
-  name: string;
-  description: string;
+  name_it: string;
+  name_en: string;
+  description_it: string;
+  description_en: string;
   type: "water" | "land";
   status: "planned" | "active" | "completed";
   start_date: string;
@@ -45,8 +48,10 @@ interface VoyageFormState {
 }
 
 const emptyVoyageForm: VoyageFormState = {
-  name: "",
-  description: "",
+  name_it: "",
+  name_en: "",
+  description_it: "",
+  description_en: "",
   type: "water",
   status: "planned",
   start_date: "",
@@ -84,7 +89,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "end_date", "end_time"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -119,7 +124,12 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
 
 const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   ...voyage,
-  description: voyage?.description ?? "",
+  name: voyage?.name ?? voyage?.name_it ?? voyage?.name_en ?? "",
+  name_it: voyage?.name_it ?? voyage?.name ?? "",
+  name_en: voyage?.name_en ?? voyage?.name ?? "",
+  description: voyage?.description ?? voyage?.description_it ?? voyage?.description_en ?? "",
+  description_it: voyage?.description_it ?? voyage?.description ?? "",
+  description_en: voyage?.description_en ?? voyage?.description ?? "",
   cached_geometry: voyage?.cached_geometry ?? null,
   start_date: voyage?.start_date ?? null,
   start_time: voyage?.start_time ?? null,
@@ -1027,8 +1037,10 @@ const AdminVoyageManager = () => {
     if (voyage) {
       setEditingVoyage(voyage);
       setVoyageForm({
-        name: voyage.name,
-        description: voyage.description || "",
+        name_it: voyage.name_it || voyage.name || "",
+        name_en: voyage.name_en || voyage.name || "",
+        description_it: voyage.description_it || voyage.description || "",
+        description_en: voyage.description_en || voyage.description || "",
         type: voyage.type,
         status: voyage.status,
         start_date: voyage.start_date || "",
@@ -1044,9 +1056,19 @@ const AdminVoyageManager = () => {
   }, []);
 
   const saveVoyage = useCallback(async () => {
+    const nameIt = voyageForm.name_it.trim();
+    const nameEn = voyageForm.name_en.trim();
+    const descriptionIt = voyageForm.description_it.trim();
+    const descriptionEn = voyageForm.description_en.trim();
+    const legacyName = nameEn || nameIt || "Untitled voyage";
+    const legacyDescription = descriptionEn || descriptionIt || null;
     const data: TablesInsert<"voyages"> = {
-      name: voyageForm.name,
-      description: voyageForm.description,
+      name: legacyName,
+      name_it: nameIt || null,
+      name_en: nameEn || null,
+      description: legacyDescription,
+      description_it: descriptionIt || null,
+      description_en: descriptionEn || null,
       type: voyageForm.type,
       status: voyageForm.status,
       start_date: voyageForm.start_date || null,
@@ -1185,14 +1207,23 @@ const AdminVoyageManager = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Name</label>
-              <input
-                type="text"
-                value={voyageForm.name}
-                onChange={(event) => setVoyageForm((form) => ({ ...form, name: event.target.value }))}
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-              />
+            <div className="space-y-3">
+              {popupLanguageOptions.map(({ code, label }) => (
+                <div key={`voyage-name-${code}`}>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                    Name · {label}
+                  </label>
+                  <input
+                    type="text"
+                    value={code === "it" ? voyageForm.name_it : voyageForm.name_en}
+                    onChange={(event) => setVoyageForm((form) => ({
+                      ...form,
+                      [code === "it" ? "name_it" : "name_en"]: event.target.value,
+                    }))}
+                    className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  />
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1223,14 +1254,23 @@ const AdminVoyageManager = () => {
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description</label>
-            <textarea
-              value={voyageForm.description}
-              onChange={(event) => setVoyageForm((form) => ({ ...form, description: event.target.value }))}
-              rows={2}
-              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {popupLanguageOptions.map(({ code, label }) => (
+              <div key={`voyage-description-${code}`}>
+                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                  Description · {label}
+                </label>
+                <textarea
+                  value={code === "it" ? voyageForm.description_it : voyageForm.description_en}
+                  onChange={(event) => setVoyageForm((form) => ({
+                    ...form,
+                    [code === "it" ? "description_it" : "description_en"]: event.target.value,
+                  }))}
+                  rows={3}
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
+                />
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1285,6 +1325,7 @@ const AdminVoyageManager = () => {
       <div className="space-y-0">
         {voyages.map((voyage) => {
           const dateRange = formatVoyageDateRange(voyage);
+          const displayName = getLocalizedVoyageName(voyage, lang);
           return (
             <div
               key={voyage.id}
@@ -1300,7 +1341,7 @@ const AdminVoyageManager = () => {
                   <Mountain size={14} className="text-amber-600 shrink-0" />
                 )}
                 <div className="min-w-0">
-                  <h4 className="text-sm font-sans font-medium truncate">{voyage.name}</h4>
+                  <h4 className="text-sm font-sans font-medium truncate">{displayName}</h4>
                   <div className="flex items-center gap-2 text-[10px] font-sans uppercase tracking-wider text-muted-foreground">
                     <span>{voyage.status}</span>
                     {dateRange && (
@@ -1327,7 +1368,7 @@ const AdminVoyageManager = () => {
                 <button
                   onClick={(event) => {
                     event.stopPropagation();
-                    void deleteVoyage(voyage.id, voyage.name);
+                    void deleteVoyage(voyage.id, displayName);
                   }}
                   className="p-1.5 text-muted-foreground hover:text-destructive"
                 >

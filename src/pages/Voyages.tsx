@@ -5,6 +5,8 @@ import { useI18n } from "@/lib/i18n";
 import {
   buildVoyagePath,
   formatVoyageDateRange,
+  getLocalizedVoyageDescription,
+  getLocalizedVoyageName,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   totalWaypointDistance,
@@ -92,7 +94,7 @@ const VoyagesPage = () => {
         url: `${window.location.origin}/voyages`,
         hasPart: voyages.map((voyage) => ({
           "@type": "Trip",
-          name: voyage.name,
+          name: getLocalizedVoyageName(voyage, lang),
           url: `${window.location.origin}${buildVoyagePath(voyage)}`,
         })),
         publisher: { "@id": ORGANIZATION_ID },
@@ -137,6 +139,8 @@ const VoyagesPage = () => {
             const arrivalIndex = arrival ? voyageWaypoints.findIndex((item) => item.id === arrival.id) : -1;
             const distance = Math.round(totalWaypointDistance(voyageWaypoints));
             const dateRange = formatVoyageDateRange(voyage, locale);
+            const voyageName = getLocalizedVoyageName(voyage, lang);
+            const voyageDescription = getLocalizedVoyageDescription(voyage, lang);
 
             return (
               <Link
@@ -152,10 +156,10 @@ const VoyagesPage = () => {
                       </span>
                       <span className="text-xs text-muted-foreground">{voyage.type}</span>
                     </div>
-                    <h2 className="editorial-heading text-2xl md:text-4xl mb-3">{voyage.name}</h2>
-                    {voyage.description && (
+                    <h2 className="editorial-heading text-2xl md:text-4xl mb-3">{voyageName}</h2>
+                    {voyageDescription && (
                       <p className="editorial-body text-muted-foreground leading-relaxed max-w-3xl">
-                        {voyage.description}
+                        {voyageDescription}
                       </p>
                     )}
                   </div>

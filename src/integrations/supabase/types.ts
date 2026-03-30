@@ -900,10 +900,14 @@ export type Database = {
           cached_geometry: Json | null
           created_at: string
           description: string | null
+          description_en: string | null
+          description_it: string | null
           end_date: string | null
           end_time: string | null
           id: string
           name: string
+          name_en: string | null
+          name_it: string | null
           sort_order: number
           start_date: string | null
           start_time: string | null
@@ -915,10 +919,14 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          description_en?: string | null
+          description_it?: string | null
           end_date?: string | null
           end_time?: string | null
           id?: string
           name?: string
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_time?: string | null
@@ -930,10 +938,14 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          description_en?: string | null
+          description_it?: string | null
           end_date?: string | null
           end_time?: string | null
           id?: string
           name?: string
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_time?: string | null
