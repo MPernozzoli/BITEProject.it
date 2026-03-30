@@ -345,8 +345,13 @@ const ArticleEditor = () => {
       return;
     }
 
-    setVoyageSegStart(Math.min(voyageSegStart, index));
-    setVoyageSegEnd(Math.max(voyageSegStart, index));
+    if (index <= voyageSegStart) {
+      setVoyageSegStart(index);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegEnd(index);
   }, [voyageSegEnd, voyageSegStart]);
 
   const handleAssociationModeChange = useCallback((nextMode: "point" | "segment" | "full") => {
@@ -396,14 +401,9 @@ const ArticleEditor = () => {
     const nextStart = Number(value);
     if (!Number.isFinite(nextStart)) return;
 
-    if (voyageSegEnd != null && nextStart > voyageSegEnd) {
-      setVoyageSegStart(voyageSegEnd);
-      setVoyageSegEnd(nextStart);
-      return;
-    }
-
     setVoyageSegStart(nextStart);
-  }, [voyageSegEnd]);
+    setVoyageSegEnd((currentEnd) => currentEnd != null && currentEnd > nextStart ? currentEnd : null);
+  }, []);
 
   const handleSegmentEndChange = useCallback((value: string) => {
     if (!value) {
@@ -416,13 +416,12 @@ const ArticleEditor = () => {
 
     if (voyageSegStart == null) {
       setVoyageSegStart(nextEnd);
-      setVoyageSegEnd(nextEnd);
+      setVoyageSegEnd(null);
       return;
     }
 
-    if (nextEnd < voyageSegStart) {
-      setVoyageSegStart(nextEnd);
-      setVoyageSegEnd(voyageSegStart);
+    if (nextEnd <= voyageSegStart) {
+      setVoyageSegEnd(null);
       return;
     }
 
@@ -638,7 +637,7 @@ const ArticleEditor = () => {
         normalizedVoyageSegStart = selectedIndex;
         normalizedVoyageSegEnd = selectedIndex;
       } else if (associationMode === "segment") {
-        if (voyageSegStart == null || voyageSegEnd == null) {
+        if (voyageSegStart == null || voyageSegEnd == null || voyageSegEnd <= voyageSegStart) {
           toast.error("Seleziona due waypoint della rotta per definire il segmento.");
           setSaving(false);
           return;
@@ -656,6 +655,41 @@ const ArticleEditor = () => {
     } else {
       finalStatus = "published";
       publishedAt = selectedDate.toISOString();
+    }
+
+    if (action === "publish" && articleMapScenes.length > 0) {
+      const incompleteScenes = articleMapScenes.filter((scene) => {
+        const hasEnAnchor = Boolean(scene.anchor_id_en?.trim());
+        const hasItAnchor = Boolean(scene.anchor_id_it?.trim());
+        return !hasEnAnchor || !hasItAnchor;
+      });
+
+      if (incompleteScenes.length > 0) {
+        const warningLines = incompleteScenes.map((scene, index) => {
+          const sceneLabel = scene.title_en || scene.title_it || `Scene ${index + 1}`;
+          const hasEnAnchor = Boolean(scene.anchor_id_en?.trim());
+          const hasItAnchor = Boolean(scene.anchor_id_it?.trim());
+
+          if (!hasEnAnchor && !hasItAnchor) return `- ${sceneLabel}: non agganciata in EN e IT`;
+          if (!hasEnAnchor) return `- ${sceneLabel}: manca aggancio EN`;
+          return `- ${sceneLabel}: manca aggancio IT`;
+        });
+
+        const shouldContinue = window.confirm(
+          [
+            isFuture
+              ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi programmare comunque l'articolo?"
+              : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?",
+            "",
+            ...warningLines,
+          ].join("\n")
+        );
+
+        if (!shouldContinue) {
+          setSaving(false);
+          return;
+        }
+      }
     }
 
     const articleData = {
@@ -887,6 +921,9 @@ const ArticleEditor = () => {
       if (!selectedVoyageId || !voyageWaypoints.length) return;
 
       const routeCoordinates = voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number]);
+      const hasSpecificSelection =
+        (associationMode === "point" && voyageSegStart != null) ||
+        (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null);
 
       if (routeCoordinates.length >= 2) {
         map.addSource("editor-route", {
@@ -901,7 +938,11 @@ const ArticleEditor = () => {
           id: "editor-route",
           type: "line",
           source: "editor-route",
-          paint: { "line-color": "hsl(210,60%,45%)", "line-width": 3, "line-opacity": 0.42 },
+          paint: {
+            "line-color": "hsl(210,60%,45%)",
+            "line-width": hasSpecificSelection ? 4 : 3,
+            "line-opacity": hasSpecificSelection ? 0.72 : 0.42,
+          },
         });
       }
 
@@ -1180,6 +1221,10 @@ const ArticleEditor = () => {
     value: String(index),
     label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
   }));
+  const segmentEndWaypointOptions =
+    voyageSegStart == null
+      ? []
+      : voyageWaypointOptions.slice(voyageSegStart + 1);
   const selectedPointWaypointLabel =
     associationMode === "point" && voyageSegStart != null
       ? voyageWaypointOptions[voyageSegStart]?.label || null
@@ -1633,10 +1678,17 @@ const ArticleEditor = () => {
                           <select
                             value={voyageSegEnd != null ? String(voyageSegEnd) : ""}
                             onChange={(e) => handleSegmentEndChange(e.target.value)}
+                            disabled={voyageSegStart == null || !segmentEndWaypointOptions.length}
                             className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
                           >
-                            <option value="">Choose end waypoint</option>
-                            {voyageWaypointOptions.map((option) => (
+                            <option value="">
+                              {voyageSegStart == null
+                                ? "Choose start first"
+                                : segmentEndWaypointOptions.length
+                                  ? "Choose end waypoint"
+                                  : "No later waypoint available"}
+                            </option>
+                            {segmentEndWaypointOptions.map((option) => (
                               <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
                             ))}
                           </select>
