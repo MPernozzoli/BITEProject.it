@@ -100,10 +100,10 @@ const stripUnsupportedWaypointMetadata = (payload: Record<string, unknown>) =>
     )
   );
 
-type VoyageRecord = Record<string, unknown> &
+type VoyageRecord = Record<string, any> &
   Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Record<string, unknown> &
+type WaypointRecord = Record<string, any> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
