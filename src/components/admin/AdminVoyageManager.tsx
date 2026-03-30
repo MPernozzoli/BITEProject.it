@@ -1120,7 +1120,7 @@ const AdminVoyageManager = () => {
     };
 
     if (editingVoyage) {
-      let appliedData: Partial<Voyage> = data;
+      let appliedData: Partial<Voyage> = data as unknown as Partial<Voyage>;
       let { error } = await supabase.from("voyages").update(data).eq("id", editingVoyage.id);
       if (error && isMissingVoyageDateColumnError(error)) {
         const fallbackResult = await supabase.from("voyages").update(legacyData).eq("id", editingVoyage.id);

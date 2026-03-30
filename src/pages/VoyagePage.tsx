@@ -50,7 +50,7 @@ const VoyagePage = () => {
         .eq("voyage_id", voyageId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data || []) as VoyageWaypoint[];
+      return (data || []) as unknown as VoyageWaypoint[];
     },
   });
 
