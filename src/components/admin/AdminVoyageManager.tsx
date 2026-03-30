@@ -79,6 +79,15 @@ const isMissingWaypointMetadataColumnError = (
     (text.includes("column") || text.includes("schema cache"));
 };
 
+const isMissingVoyageDateColumnError = (
+  error: { message?: string | null; details?: string | null; hint?: string | null } | null
+) => {
+  if (!error) return false;
+  const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+  return ["start_date", "start_time", "end_date", "end_time"].some((column) => text.includes(column)) &&
+    (text.includes("column") || text.includes("schema cache"));
+};
+
 const stripUnsupportedWaypointMetadata = (payload: Record<string, unknown>) =>
   Object.fromEntries(
     Object.entries(payload).filter(([key]) =>
@@ -1046,16 +1055,29 @@ const AdminVoyageManager = () => {
       end_time: voyageForm.end_time || null,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
     };
+    const legacyData: Pick<TablesInsert<"voyages">, "name" | "description" | "type" | "status" | "sort_order"> = {
+      name: data.name,
+      description: data.description,
+      type: data.type,
+      status: data.status,
+      sort_order: data.sort_order,
+    };
 
     if (editingVoyage) {
-      const { error } = await supabase.from("voyages").update(data).eq("id", editingVoyage.id);
+      let appliedData: Partial<Voyage> = data;
+      let { error } = await supabase.from("voyages").update(data).eq("id", editingVoyage.id);
+      if (error && isMissingVoyageDateColumnError(error)) {
+        const fallbackResult = await supabase.from("voyages").update(legacyData).eq("id", editingVoyage.id);
+        error = fallbackResult.error;
+        appliedData = legacyData;
+      }
       if (error) {
         toast.error(getErrorMessage(error, "Unable to update voyage"));
         return;
       }
 
       const nextVoyages = voyagesRef.current.map((voyage) =>
-        voyage.id === editingVoyage.id ? normalizeVoyage({ ...voyage, ...data }) : voyage
+        voyage.id === editingVoyage.id ? normalizeVoyage({ ...voyage, ...appliedData }) : voyage
       );
       commitVoyages(nextVoyages);
       if ((waypointsRef.current[editingVoyage.id] || []).length >= 2) {
@@ -1063,7 +1085,10 @@ const AdminVoyageManager = () => {
       }
       toast.success("Voyage updated");
     } else {
-      const { data: newVoyage, error } = await supabase.from("voyages").insert(data).select().single();
+      let { data: newVoyage, error } = await supabase.from("voyages").insert(data).select().single();
+      if ((error || !newVoyage) && isMissingVoyageDateColumnError(error)) {
+        ({ data: newVoyage, error } = await supabase.from("voyages").insert(legacyData).select().single());
+      }
       if (error || !newVoyage) {
         toast.error(getErrorMessage(error, "Unable to create voyage"));
         return;
