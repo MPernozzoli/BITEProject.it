@@ -11,7 +11,7 @@ import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
@@ -19,6 +19,14 @@ import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
+import {
+  getArticleSceneAnchorIndex,
+  getArticleSceneDescription,
+  getArticleSceneTitle,
+  getArticleSceneWindLabel,
+  normalizeArticleMapScenes,
+  sortArticleMapScenesForLanguage,
+} from "@/lib/article-map";
 
 type StoryChapter = {
   id: string;
@@ -31,6 +39,9 @@ type StoryChapter = {
 const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
+  const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -132,34 +143,21 @@ const ArticlePage = () => {
       !Number.isNaN(article.latitude) &&
       !Number.isNaN(article.longitude)
   );
+  const articleScenes = useMemo(
+    () => normalizeArticleMapScenes((article as any)?.article_map_scenes),
+    [article]
+  );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center pt-20">
-        <div className="animate-pulse space-y-4 w-full max-w-2xl px-6">
-          <div className="h-8 bg-muted rounded w-3/4" />
-          <div className="h-4 bg-muted rounded w-1/2" />
-          <div className="h-64 bg-muted rounded" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!article) {
-    return (
-      <div className="min-h-screen flex items-center justify-center pt-20">
-        <div className="text-center">
-          <p className="text-muted-foreground mb-4">Article not found.</p>
-          <Link to="/logbook" className="text-accent hover:text-foreground transition-colors text-sm">
-            ← Back to Logbook
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-  const content = lang === "en" ? article.content_en : (article.content_it || article.content_en);
+  const title = article
+    ? (lang === "en" ? article.title_en : (article.title_it || article.title_en))
+    : "";
+  const content = article
+    ? (lang === "en" ? article.content_en : (article.content_it || article.content_en))
+    : null;
+  const contentNodes = useMemo(() => {
+    if (!content || typeof content !== "object" || !Array.isArray((content as any).content)) return [];
+    return (content as any).content as Record<string, unknown>[];
+  }, [content]);
   const hasStructuredContent = Boolean(
     content && typeof content === "object" && Object.keys(content).length > 0
   );
@@ -175,18 +173,33 @@ const ArticlePage = () => {
     }
   }
 
-  const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
-  const dateLabel = article.published_at ? format(new Date(article.published_at), dateFmt) : null;
-  const views = Number((article as any).view_count ?? 0);
+  const localizedScenes = useMemo(() => {
+    const sortedScenes = sortArticleMapScenesForLanguage(articleScenes, lang);
+    return sortedScenes.map((scene) => ({
+      id: scene.id,
+      title: getArticleSceneTitle(scene, lang),
+      description: getArticleSceneDescription(scene, lang),
+      windLabel: getArticleSceneWindLabel(scene, lang),
+      latitude: scene.latitude as number,
+      longitude: scene.longitude as number,
+      zoom: scene.zoom,
+      windAngle: scene.wind_angle,
+      anchorIndex: getArticleSceneAnchorIndex(scene, lang),
+    }));
+  }, [articleScenes, lang]);
 
-  const coverStyle = article.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
+  const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
+  const dateLabel = article?.published_at ? format(new Date(article.published_at), dateFmt) : null;
+  const views = Number((article as any)?.view_count ?? 0);
+
+  const coverStyle = article?.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
   const instagramStoryImage = lang === "en"
-    ? ((article as any).instagram_story_use_cover_en ?? true)
-      ? article.cover_image
-      : (article as any).instagram_story_image_en || article.cover_image
-    : ((article as any).instagram_story_use_cover_it ?? true)
-      ? article.cover_image
-      : (article as any).instagram_story_image_it || article.cover_image;
+    ? ((article as any)?.instagram_story_use_cover_en ?? true)
+      ? article?.cover_image
+      : (article as any)?.instagram_story_image_en || article?.cover_image
+    : ((article as any)?.instagram_story_use_cover_it ?? true)
+      ? article?.cover_image
+      : (article as any)?.instagram_story_image_it || article?.cover_image;
   const shareUrl =
     typeof window === "undefined"
       ? ""
@@ -265,6 +278,114 @@ const ArticlePage = () => {
       ],
     });
   }, [article, authors, lang, tags, title]);
+
+  useEffect(() => {
+    if (!article) return;
+
+    if (!localizedScenes.length) {
+      setActiveSceneId(null);
+      setMapCamera(hasGeo ? { latitude: article.latitude!, longitude: article.longitude!, zoom: 7 } : null);
+      return;
+    }
+
+    const updateFromScroll = () => {
+      const scenePositions = localizedScenes.map((scene) => {
+        const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
+        const anchorElement = articleBlockRefs.current[anchorIndex];
+        const top = anchorElement
+          ? anchorElement.getBoundingClientRect().top + window.scrollY
+          : window.scrollY;
+
+        return { ...scene, top };
+      });
+
+      const currentY = window.scrollY + window.innerHeight * 0.34;
+
+      if (scenePositions.length === 1) {
+        const [scene] = scenePositions;
+        setActiveSceneId(scene.id);
+        setMapCamera({ latitude: scene.latitude, longitude: scene.longitude, zoom: scene.zoom });
+        return;
+      }
+
+      if (currentY <= scenePositions[0].top) {
+        const firstScene = scenePositions[0];
+        setActiveSceneId(firstScene.id);
+        setMapCamera({ latitude: firstScene.latitude, longitude: firstScene.longitude, zoom: firstScene.zoom });
+        return;
+      }
+
+      const lastScene = scenePositions[scenePositions.length - 1];
+      if (currentY >= lastScene.top) {
+        setActiveSceneId(lastScene.id);
+        setMapCamera({ latitude: lastScene.latitude, longitude: lastScene.longitude, zoom: lastScene.zoom });
+        return;
+      }
+
+      for (let index = 0; index < scenePositions.length - 1; index += 1) {
+        const currentScene = scenePositions[index];
+        const nextScene = scenePositions[index + 1];
+
+        if (currentY < currentScene.top || currentY > nextScene.top) continue;
+
+        const span = Math.max(nextScene.top - currentScene.top, 1);
+        const progress = Math.min(Math.max((currentY - currentScene.top) / span, 0), 1);
+        const interpolate = (start: number, end: number) => start + (end - start) * progress;
+        const nearestScene = progress < 0.5 ? currentScene : nextScene;
+
+        setActiveSceneId(nearestScene.id);
+        setMapCamera({
+          latitude: interpolate(currentScene.latitude, nextScene.latitude),
+          longitude: interpolate(currentScene.longitude, nextScene.longitude),
+          zoom: interpolate(currentScene.zoom, nextScene.zoom),
+        });
+        return;
+      }
+    };
+
+    let frameId = 0;
+    const requestUpdate = () => {
+      cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    requestUpdate();
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+    window.addEventListener("load", requestUpdate);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+      window.removeEventListener("load", requestUpdate);
+    };
+  }, [article, contentNodes.length, hasGeo, localizedScenes]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-20">
+        <div className="animate-pulse space-y-4 w-full max-w-2xl px-6">
+          <div className="h-8 bg-muted rounded w-3/4" />
+          <div className="h-4 bg-muted rounded w-1/2" />
+          <div className="h-64 bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!article) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-20">
+        <div className="text-center">
+          <p className="text-muted-foreground mb-4">Article not found.</p>
+          <Link to="/logbook" className="text-accent hover:text-foreground transition-colors text-sm">
+            ← Back to Logbook
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
@@ -388,7 +509,30 @@ const ArticlePage = () => {
                 <LiveReadCounter count={views} lang={lang} />
               </div>
 
-              {htmlContent && (
+              {contentNodes.length > 0 && (
+                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
+                  <div className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
+                    {contentNodes.map((node, index) => {
+                      const blockHtml = generateHTML(
+                        { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
+                        articleContentExtensions
+                      );
+
+                      return (
+                        <div
+                          key={`article-block-${index}`}
+                          ref={(element) => {
+                            articleBlockRefs.current[index] = element;
+                          }}
+                          data-article-block-index={index}
+                          dangerouslySetInnerHTML={{ __html: blockHtml }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {contentNodes.length === 0 && htmlContent && (
                 <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
                   <div
                     className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic"
@@ -433,7 +577,14 @@ const ArticlePage = () => {
             <aside className="min-w-0 space-y-8">
               {hasGeo && (
                 <div className="lg:sticky lg:top-24 space-y-8">
-                  <LazyArticleMapAside latitude={article.latitude!} longitude={article.longitude!} title={title} />
+                  <LazyArticleMapAside
+                    latitude={article.latitude!}
+                    longitude={article.longitude!}
+                    title={title}
+                    scenes={localizedScenes}
+                    activeSceneId={activeSceneId}
+                    camera={mapCamera}
+                  />
                   <div>
                     <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                   </div>

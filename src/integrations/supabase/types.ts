@@ -463,6 +463,7 @@ export type Database = {
       }
       logbook_articles: {
         Row: {
+          article_map_scenes: Json | null
           category: string
           content_en: Json | null
           content_it: Json | null
@@ -491,6 +492,7 @@ export type Database = {
           voyage_segment_start: number | null
         }
         Insert: {
+          article_map_scenes?: Json | null
           category?: string
           content_en?: Json | null
           content_it?: Json | null
@@ -519,6 +521,7 @@ export type Database = {
           voyage_segment_start?: number | null
         }
         Update: {
+          article_map_scenes?: Json | null
           category?: string
           content_en?: Json | null
           content_it?: Json | null

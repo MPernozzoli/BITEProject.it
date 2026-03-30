@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { generateHTML } from "@tiptap/react";
 import { Link } from "react-router-dom";
@@ -13,6 +13,15 @@ import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArt
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import LazyArticleMapAside from "@/components/LazyArticleMapAside";
+import {
+  getArticleSceneAnchorIndex,
+  getArticleSceneDescription,
+  getArticleSceneTitle,
+  getArticleSceneWindLabel,
+  normalizeArticleMapScenes,
+  sortArticleMapScenesForLanguage,
+} from "@/lib/article-map";
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -55,6 +64,10 @@ const buildTargetRect = (viewportWidth: number, viewportHeight: number): Expande
 
 const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = [], onClose }: ExpandedArticleModalProps) => {
   const [viewport, setViewport] = useState(getViewportRect);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -164,6 +177,10 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       ? article.content_en
       : article.content_it || article.content_en
     : null;
+  const contentNodes = useMemo(() => {
+    if (!content || typeof content !== "object" || !Array.isArray((content as { content?: unknown[] }).content)) return [];
+    return (content as { content: Record<string, unknown>[] }).content;
+  }, [content]);
   const dateLabel = article?.published_at
     ? format(new Date(article.published_at), lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy")
     : null;
@@ -178,6 +195,31 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     [article?.cover_focal_x, article?.cover_focal_y, article?.cover_zoom]
   );
   const coverStyle = article?.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
+  const hasGeo = Boolean(
+    article &&
+      typeof article.latitude === "number" &&
+      typeof article.longitude === "number" &&
+      !Number.isNaN(article.latitude) &&
+      !Number.isNaN(article.longitude)
+  );
+  const articleScenes = useMemo(
+    () => normalizeArticleMapScenes((article as { article_map_scenes?: unknown } | null)?.article_map_scenes),
+    [article]
+  );
+  const localizedScenes = useMemo(() => {
+    const sortedScenes = sortArticleMapScenesForLanguage(articleScenes, lang);
+    return sortedScenes.map((scene) => ({
+      id: scene.id,
+      title: getArticleSceneTitle(scene, lang),
+      description: getArticleSceneDescription(scene, lang),
+      windLabel: getArticleSceneWindLabel(scene, lang),
+      latitude: scene.latitude as number,
+      longitude: scene.longitude as number,
+      zoom: scene.zoom,
+      windAngle: scene.wind_angle,
+      anchorIndex: getArticleSceneAnchorIndex(scene, lang),
+    }));
+  }, [articleScenes, lang]);
 
   const { htmlContent, contentRenderFailed } = useMemo(() => {
     const hasStructuredContent = Boolean(
@@ -198,6 +240,90 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       return { htmlContent: "", contentRenderFailed: true };
     }
   }, [content]);
+
+  useEffect(() => {
+    if (!article || !scrollContainerRef.current) return;
+
+    if (!localizedScenes.length) {
+      setActiveSceneId(null);
+      setMapCamera(hasGeo ? { latitude: article.latitude!, longitude: article.longitude!, zoom: 7 } : null);
+      return;
+    }
+
+    const scrollContainer = scrollContainerRef.current;
+    let frameId = 0;
+
+    const updateFromScroll = () => {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const scenePositions = localizedScenes.map((scene) => {
+        const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
+        const anchorElement = articleBlockRefs.current[anchorIndex];
+        const top = anchorElement
+          ? anchorElement.getBoundingClientRect().top - containerRect.top + scrollContainer.scrollTop
+          : scrollContainer.scrollTop;
+
+        return { ...scene, top };
+      });
+
+      const currentY = scrollContainer.scrollTop + scrollContainer.clientHeight * 0.34;
+
+      if (scenePositions.length === 1) {
+        const [scene] = scenePositions;
+        setActiveSceneId(scene.id);
+        setMapCamera({ latitude: scene.latitude, longitude: scene.longitude, zoom: scene.zoom });
+        return;
+      }
+
+      if (currentY <= scenePositions[0].top) {
+        const firstScene = scenePositions[0];
+        setActiveSceneId(firstScene.id);
+        setMapCamera({ latitude: firstScene.latitude, longitude: firstScene.longitude, zoom: firstScene.zoom });
+        return;
+      }
+
+      const lastScene = scenePositions[scenePositions.length - 1];
+      if (currentY >= lastScene.top) {
+        setActiveSceneId(lastScene.id);
+        setMapCamera({ latitude: lastScene.latitude, longitude: lastScene.longitude, zoom: lastScene.zoom });
+        return;
+      }
+
+      for (let index = 0; index < scenePositions.length - 1; index += 1) {
+        const currentScene = scenePositions[index];
+        const nextScene = scenePositions[index + 1];
+
+        if (currentY < currentScene.top || currentY > nextScene.top) continue;
+
+        const span = Math.max(nextScene.top - currentScene.top, 1);
+        const progress = Math.min(Math.max((currentY - currentScene.top) / span, 0), 1);
+        const interpolate = (start: number, end: number) => start + (end - start) * progress;
+        const nearestScene = progress < 0.5 ? currentScene : nextScene;
+
+        setActiveSceneId(nearestScene.id);
+        setMapCamera({
+          latitude: interpolate(currentScene.latitude, nextScene.latitude),
+          longitude: interpolate(currentScene.longitude, nextScene.longitude),
+          zoom: interpolate(currentScene.zoom, nextScene.zoom),
+        });
+        return;
+      }
+    };
+
+    const requestUpdate = () => {
+      cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    requestUpdate();
+    scrollContainer.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      scrollContainer.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+    };
+  }, [article, contentNodes.length, hasGeo, localizedScenes]);
 
   const shareUrl = useMemo(() => {
     if (!slug || typeof window === "undefined") return "";
@@ -273,7 +399,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5" style={{ touchAction: "pan-y" }}>
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5" style={{ touchAction: "pan-y" }}>
             {isLoading ? (
               <div className="mx-auto max-w-4xl space-y-4 animate-pulse">
                 <div className="h-[34vh] rounded-[30px] bg-neutral-100" />
@@ -361,24 +487,63 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                 </section>
 
                 <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
-                  {htmlContent && (
-                    <div
-                      className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
-                      dangerouslySetInnerHTML={{ __html: htmlContent }}
-                    />
-                  )}
+                  <div className={`grid gap-6 ${hasGeo ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-1"}`}>
+                    <div className="min-w-0">
+                      {contentNodes.length > 0 && (
+                        <div className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
+                          {contentNodes.map((node, index) => {
+                            const blockHtml = generateHTML(
+                              { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
+                              articleContentExtensions
+                            );
 
-                  {contentRenderFailed && (
-                    <p className="text-sm font-sans text-muted-foreground">
-                      {lang === "it"
-                        ? "Il contenuto di questo articolo non puo essere mostrato al momento."
-                        : "This article content cannot be displayed right now."}
-                    </p>
-                  )}
+                            return (
+                              <div
+                                key={`modal-article-block-${index}`}
+                                ref={(element) => {
+                                  articleBlockRefs.current[index] = element;
+                                }}
+                                data-article-block-index={index}
+                                dangerouslySetInnerHTML={{ __html: blockHtml }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
 
-                  <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
-                    <LikeButton articleId={article.id} />
-                    <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
+                      {contentNodes.length === 0 && htmlContent && (
+                        <div
+                          className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
+                          dangerouslySetInnerHTML={{ __html: htmlContent }}
+                        />
+                      )}
+
+                      {contentRenderFailed && (
+                        <p className="text-sm font-sans text-muted-foreground">
+                          {lang === "it"
+                            ? "Il contenuto di questo articolo non puo essere mostrato al momento."
+                            : "This article content cannot be displayed right now."}
+                        </p>
+                      )}
+
+                      <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
+                        <LikeButton articleId={article.id} />
+                        <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
+                      </div>
+                    </div>
+
+                    {hasGeo && (
+                      <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+                        <LazyArticleMapAside
+                          latitude={article.latitude!}
+                          longitude={article.longitude!}
+                          title={title}
+                          scenes={localizedScenes}
+                          activeSceneId={activeSceneId}
+                          camera={mapCamera}
+                        />
+                      </aside>
+                    )}
                   </div>
                 </section>
 

@@ -11,6 +11,7 @@ interface AuthContext {
   session: Session | null;
   isAdmin: boolean;
   loading: boolean;
+  adminLoading: boolean;
   /** Rivalida JWT col server; se invalido esegue logout. */
   revalidateSession: () => Promise<void>;
 }
@@ -19,6 +20,7 @@ const AuthCtx = createContext<AuthContext>({
   session: null,
   isAdmin: false,
   loading: true,
+  adminLoading: true,
   revalidateSession: async () => {},
 });
 
@@ -26,6 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [adminLoading, setAdminLoading] = useState(true);
   const authBootstrapDoneRef = useRef(false);
   const authStateVersionRef = useRef(0);
 
@@ -36,13 +39,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) {
         console.error("Failed to resolve admin role", error);
         setIsAdmin(false);
+        setAdminLoading(false);
         return;
       }
       setIsAdmin(!!data);
+      setAdminLoading(false);
     } catch (error) {
       if (version !== authStateVersionRef.current) return;
       console.error("Failed to resolve admin role", error);
       setIsAdmin(false);
+      setAdminLoading(false);
     }
   }, []);
 
@@ -51,10 +57,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const version = ++authStateVersionRef.current;
       setSession(next);
       if (next?.user) {
-        setIsAdmin(false);
+        setAdminLoading(true);
         void checkAdmin(next.user.id, version);
       } else {
         setIsAdmin(false);
+        setAdminLoading(false);
       }
     },
     [checkAdmin]
@@ -146,7 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [applySession]);
 
   return (
-    <AuthCtx.Provider value={{ session, isAdmin, loading, revalidateSession }}>
+    <AuthCtx.Provider value={{ session, isAdmin, loading, adminLoading, revalidateSession }}>
       {children}
     </AuthCtx.Provider>
   );

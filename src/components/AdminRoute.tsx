@@ -3,9 +3,9 @@ import { useAuth } from "@/hooks/useAuth";
 
 const AdminRoute = ({ children }: { children: JSX.Element }) => {
   const location = useLocation();
-  const { session, isAdmin, loading } = useAuth();
+  const { session, isAdmin, loading, adminLoading } = useAuth();
 
-  if (loading) {
+  if (loading || (session && adminLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-24">
         <p className="text-sm font-sans text-muted-foreground animate-pulse">Checking access...</p>

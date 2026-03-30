@@ -12,7 +12,9 @@ import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
 import CoverFocalPicker from "@/components/admin/CoverFocalPicker";
+import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
+import { normalizeArticleMapScenes } from "@/lib/article-map";
 
 type ArticleLanguage = "en" | "it";
 
@@ -33,6 +35,7 @@ const ArticleEditor = () => {
   const [excerptIt, setExcerptIt] = useState("");
   const [contentEn, setContentEn] = useState<object>({});
   const [contentIt, setContentIt] = useState<object>({});
+  const [articleMapScenes, setArticleMapScenes] = useState(() => normalizeArticleMapScenes(null));
   const [coverImage, setCoverImage] = useState("");
   const [instagramStoryImageEn, setInstagramStoryImageEn] = useState("");
   const [instagramStoryImageIt, setInstagramStoryImageIt] = useState("");
@@ -134,6 +137,7 @@ const ArticleEditor = () => {
     setExcerptIt(data.excerpt_it || "");
     setContentEn(data.content_en as object || {});
     setContentIt(data.content_it as object || {});
+    setArticleMapScenes(normalizeArticleMapScenes((data as any).article_map_scenes));
     setCoverImage(data.cover_image || "");
     setInstagramStoryImageEn((data as any).instagram_story_image_en || "");
     setInstagramStoryImageIt((data as any).instagram_story_image_it || "");
@@ -302,6 +306,7 @@ const ArticleEditor = () => {
       excerpt_it: excerptIt,
       content_en: contentEn as Json,
       content_it: contentIt as Json,
+      article_map_scenes: articleMapScenes as unknown as Json,
       cover_image: coverImage,
       instagram_story_image_en: instagramStoryImageEn || null,
       instagram_story_image_it: instagramStoryImageIt || null,
@@ -425,7 +430,7 @@ const ArticleEditor = () => {
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
 
   // Geo map initialization
   useEffect(() => {
@@ -665,6 +670,14 @@ const ArticleEditor = () => {
             ) : (
               <RichTextEditor content={contentIt} onChange={setContentIt} placeholder="Inizia a scrivere l'articolo in italiano..." />
             )}
+
+            <ArticleMiniMapEditor
+              value={articleMapScenes}
+              onChange={setArticleMapScenes}
+              contentEn={contentEn as Json}
+              contentIt={contentIt as Json}
+              activeLanguage={activeTab}
+            />
           </div>
 
           {/* Sidebar */}
