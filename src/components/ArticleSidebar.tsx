@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
 import { useArticleReads } from "@/hooks/useArticleReads";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import { BookOpen, TrendingUp, Clock, Eye } from "lucide-react";
 
 interface ArticleSidebarProps {
@@ -22,11 +24,69 @@ type SidebarArticle = {
 const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
   const { lang } = useI18n();
   const { isRead } = useArticleReads();
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
+  const snapshotArticles = publicContent?.articles ?? null;
+
+  const snapshotStoryChapters = useMemo(() => {
+    if (!storyId || !snapshotArticles) return null;
+
+    return snapshotArticles
+      .filter((article) => article.story_id === storyId)
+      .sort((a, b) => {
+        const left = a.published_at ? new Date(a.published_at).getTime() : 0;
+        const right = b.published_at ? new Date(b.published_at).getTime() : 0;
+        return left - right;
+      })
+      .map((article) => ({
+        id: article.id,
+        slug: article.slug,
+        title_en: article.title_en,
+        title_it: article.title_it,
+        published_at: article.published_at,
+      }));
+  }, [snapshotArticles, storyId]);
+
+  const snapshotPopularArticles = useMemo(() => {
+    if (!snapshotArticles) return null;
+
+    return snapshotArticles
+      .filter((article) => article.id !== currentArticleId)
+      .sort((a, b) => (Number(b.likeCount ?? 0) - Number(a.likeCount ?? 0)))
+      .slice(0, 5)
+      .map((article) => ({
+        id: article.id,
+        slug: article.slug,
+        title_en: article.title_en,
+        title_it: article.title_it,
+        cover_image: article.cover_image,
+      }));
+  }, [currentArticleId, snapshotArticles]);
+
+  const snapshotRecentArticles = useMemo(() => {
+    if (!snapshotArticles) return null;
+
+    return snapshotArticles
+      .filter((article) => article.id !== currentArticleId)
+      .sort((a, b) => {
+        const left = a.published_at ? new Date(a.published_at).getTime() : 0;
+        const right = b.published_at ? new Date(b.published_at).getTime() : 0;
+        return right - left;
+      })
+      .slice(0, 5)
+      .map((article) => ({
+        id: article.id,
+        slug: article.slug,
+        title_en: article.title_en,
+        title_it: article.title_it,
+        cover_image: article.cover_image,
+        published_at: article.published_at,
+      }));
+  }, [currentArticleId, snapshotArticles]);
 
   // Story chapters
-  const { data: storyChapters = [] } = useQuery({
+  const { data: liveStoryChapters = [] } = useQuery({
     queryKey: ["story-chapters-sidebar", storyId],
-    enabled: !!storyId,
+    enabled: !!storyId && !snapshotArticles && !isPublicContentLoading,
     queryFn: async () => {
       const { data } = await supabase
         .from("logbook_articles")
@@ -37,10 +97,12 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
       return data || [];
     },
   });
+  const storyChapters = snapshotStoryChapters ?? liveStoryChapters;
 
   // Popular articles
-  const { data: popularArticles = [] } = useQuery({
+  const { data: livePopularArticles = [] } = useQuery({
     queryKey: ["popular-articles-sidebar"],
+    enabled: !snapshotArticles && !isPublicContentLoading,
     queryFn: async () => {
       const { data: likes } = await supabase
         .from("article_likes")
@@ -63,10 +125,12 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
       return (data || []).sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
     },
   });
+  const popularArticles = snapshotPopularArticles ?? livePopularArticles;
 
   // Recent articles
-  const { data: recentArticles = [] } = useQuery({
+  const { data: liveRecentArticles = [] } = useQuery({
     queryKey: ["recent-articles-sidebar"],
+    enabled: !snapshotArticles && !isPublicContentLoading,
     queryFn: async () => {
       const { data } = await supabase
         .from("logbook_articles")
@@ -78,6 +142,7 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
       return data || [];
     },
   });
+  const recentArticles = snapshotRecentArticles ?? liveRecentArticles;
 
   const getTitle = (a: Pick<SidebarArticle, "title_en" | "title_it">) => lang === "en" ? a.title_en : (a.title_it || a.title_en);
 
@@ -88,7 +153,7 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
     >
       {article.cover_image && (
         <div className="glass-frame w-12 h-12 flex-shrink-0 rounded-[16px] p-1">
-          <img src={article.cover_image} alt="" className="img-cover" />
+          <img src={article.cover_image} alt="" className="img-cover" loading="lazy" decoding="async" />
         </div>
       )}
       <div className="flex-1 min-w-0">

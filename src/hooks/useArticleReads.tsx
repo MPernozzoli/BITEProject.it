@@ -48,6 +48,30 @@ function patchArticleViewCountInCache(
       };
     });
   });
+
+  queryClient.setQueryData(["public-content-snapshot"], (old: unknown) => {
+    if (!old || typeof old !== "object") return old;
+
+    const snapshot = old as {
+      articles?: Array<Record<string, unknown>>;
+    };
+
+    if (!Array.isArray(snapshot.articles)) return old;
+
+    return {
+      ...snapshot,
+      articles: snapshot.articles.map((entry) => {
+        if (!entry || typeof entry !== "object") return entry;
+        if (entry.id !== articleId) return entry;
+
+        return {
+          ...entry,
+          view_count: count,
+          viewCount: count,
+        };
+      }),
+    };
+  });
 }
 
 export function useArticleReads() {

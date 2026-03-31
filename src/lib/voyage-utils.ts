@@ -162,6 +162,22 @@ export function formatVoyageDateRange(
   return start || end;
 }
 
+export function formatWaypointMoment(
+  waypoint: Pick<VoyageWaypoint, "event_date" | "event_time" | "date_start" | "date_end">,
+  locale = "en-US"
+): string | null {
+  const eventDate = formatIsoDate(waypoint.event_date, locale);
+  if (eventDate) {
+    const eventTime = waypoint.event_time?.slice(0, 5);
+    return eventTime ? `${eventDate} · ${eventTime}` : eventDate;
+  }
+
+  const start = formatIsoDate(waypoint.date_start, locale);
+  const end = formatIsoDate(waypoint.date_end, locale);
+  if (start && end) return start === end ? start : `${start} → ${end}`;
+  return start || end;
+}
+
 export function buildWaypointDefaultLocalizedNames(
   index: number,
   lat: number,
@@ -456,7 +472,7 @@ export interface VoyageWaypoint {
 export interface GeoArticle {
   id: string;
   title_en: string;
-  title_it: string;
+  title_it: string | null;
   slug: string;
   cover_image: string | null;
   cover_focal_x?: number | null;
@@ -471,6 +487,8 @@ export interface GeoArticle {
   voyage_segment_start: number | null;
   voyage_segment_end: number | null;
   location_name: string | null;
+  category?: string | null;
+  story_id?: string | null;
   authors?: { id: string; name: string; avatar_url: string | null }[];
   tags?: { id: string; name: string }[];
   likeCount?: number;

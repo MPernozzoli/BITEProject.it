@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import {
   buildVoyagePath,
   formatVoyageDateRange,
@@ -21,9 +22,11 @@ import { ArrowRight, MapPinned } from "lucide-react";
 const VoyagesPage = () => {
   const { lang } = useI18n();
   const locale = lang === "it" ? "it-IT" : "en-US";
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
-  const { data: voyages = [], isLoading } = useQuery<Voyage[]>({
+  const { data: liveVoyages = [], isLoading: isLiveVoyagesLoading } = useQuery<Voyage[]>({
     queryKey: ["public-voyages"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyages")
@@ -33,9 +36,12 @@ const VoyagesPage = () => {
       return (data || []) as Voyage[];
     },
   });
+  const voyages = publicContent?.voyages ?? liveVoyages;
+  const isLoading = !publicContent && (isPublicContentLoading || isLiveVoyagesLoading);
 
-  const { data: waypoints = [] } = useQuery<VoyageWaypoint[]>({
+  const { data: liveWaypoints = [] } = useQuery<VoyageWaypoint[]>({
     queryKey: ["public-voyage-waypoints"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints")
@@ -45,9 +51,11 @@ const VoyagesPage = () => {
       return (data || []) as unknown as VoyageWaypoint[];
     },
   });
+  const waypoints = publicContent?.voyageWaypoints ?? liveWaypoints;
 
-  const { data: articleLinks = [] } = useQuery<Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]>({
+  const { data: liveArticleLinks = [] } = useQuery<Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]>({
     queryKey: ["public-voyage-article-links"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -58,6 +66,17 @@ const VoyagesPage = () => {
       return (data || []) as Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[];
     },
   });
+  const articleLinks = useMemo(() => {
+    if (!publicContent) return liveArticleLinks;
+
+    return publicContent.articles
+      .filter((article) => article.voyage_id)
+      .map((article) => ({
+        voyage_id: article.voyage_id,
+        voyage_segment_start: article.voyage_segment_start,
+        voyage_segment_end: article.voyage_segment_end,
+      }));
+  }, [liveArticleLinks, publicContent]);
 
   const waypointMap = useMemo(() => {
     const map: Record<string, VoyageWaypoint[]> = {};

@@ -37,4 +37,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-sitemap
+Sitemap: https://biteproject.it/sitemap.xml

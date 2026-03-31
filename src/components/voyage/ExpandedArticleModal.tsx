@@ -557,7 +557,14 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                 {article.cover_image && (
                   <div className="overflow-hidden rounded-[32px] border border-black/6 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                     <div className="aspect-[16/8.8] overflow-hidden bg-neutral-100">
-                      <img src={article.cover_image} alt={title} className="h-full w-full max-w-none" style={coverStyle} />
+                      <img
+                        src={article.cover_image}
+                        alt={title}
+                        className="h-full w-full max-w-none"
+                        style={coverStyle}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     </div>
                   </div>
                 )}

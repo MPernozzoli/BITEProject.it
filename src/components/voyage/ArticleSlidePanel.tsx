@@ -96,7 +96,14 @@ const ArticleSlidePanel = ({
             {article.cover_image && (
               <div className="overflow-hidden rounded-[26px] border border-white/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
                 <div className="aspect-[16/10] overflow-hidden bg-muted shrink-0">
-                  <img src={article.cover_image} alt="" className="w-full h-full max-w-none" style={coverStyle} />
+                  <img
+                    src={article.cover_image}
+                    alt=""
+                    className="w-full h-full max-w-none"
+                    style={coverStyle}
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               </div>
             )}

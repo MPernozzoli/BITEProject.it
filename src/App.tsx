@@ -1,5 +1,7 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,7 +11,28 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import AdminRoute from "@/components/AdminRoute";
 
-const queryClient = new QueryClient();
+const createAppQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5,
+        gcTime: 1000 * 60 * 30,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 1,
+      },
+    },
+  });
+
+const createAppPersister = () => {
+  if (typeof window === "undefined") return null;
+
+  return createSyncStoragePersister({
+    storage: window.localStorage,
+    key: "bite-query-cache-v1",
+    throttleTime: 2000,
+  });
+};
 
 const Index = lazy(() => import("./pages/Index"));
 const TheCrew = lazy(() => import("./pages/About"));
@@ -38,8 +61,11 @@ const RouteFallback = () => (
   </div>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+const App = () => {
+  const [queryClient] = useState(createAppQueryClient);
+  const [queryPersister] = useState(createAppPersister);
+
+  const appTree = (
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -80,7 +106,32 @@ const App = () => (
         </AuthProvider>
       </I18nProvider>
     </TooltipProvider>
-  </QueryClientProvider>
-);
+  );
+
+  if (!queryPersister) {
+    return <QueryClientProvider client={queryClient}>{appTree}</QueryClientProvider>;
+  }
+
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryPersister,
+        maxAge: 1000 * 60 * 60 * 24,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) =>
+            query.meta?.persist === true
+            && query.state.status === "success"
+            && query.state.data != null,
+        },
+      }}
+      onSuccess={() => {
+        void queryClient.resumePausedMutations().catch(() => undefined);
+      }}
+    >
+      {appTree}
+    </PersistQueryClientProvider>
+  );
+};
 
 export default App;

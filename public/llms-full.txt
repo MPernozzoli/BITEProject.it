@@ -24,7 +24,7 @@ BITE is an editorial project documenting voyages aboard S/Y Spritz. The site com
 - Preferred attribution: `BITE` followed by the canonical source URL on `https://biteproject.it/`.
 - For route data, cite the specific `/voyages/:id--slug` page whenever possible.
 - For editorial content, cite the specific article or story page instead of only the homepage.
-- Dynamic AI feed endpoint: `https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-llms`
+- LLMs feed: `https://biteproject.it/llms.txt`
 
 ## Reliability notes
 

@@ -10,6 +10,7 @@ import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
+import ArticleVoyageMediaWidget from "@/components/ArticleVoyageMediaWidget";
 import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
@@ -32,7 +33,14 @@ import {
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
 } from "@/lib/article-map";
-import { buildPublicVoyageGeometry, totalWaypointDistance } from "@/lib/voyage-utils";
+import {
+  buildPublicVoyageGeometry,
+  formatWaypointMoment,
+  getLocalizedWaypointDescription,
+  getLocalizedWaypointName,
+  normalizeWaypointMedia,
+  totalWaypointDistance,
+} from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 type StoryChapter = {
@@ -257,6 +265,47 @@ const ArticlePage = () => {
     if (relevantWaypoints.length < 2) return null;
     return totalWaypointDistance(relevantWaypoints);
   }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyageWaypoints]);
+  const articleVoyageMediaItems = useMemo(() => {
+    if (!article?.voyage_id || linkedVoyageWaypoints.length === 0) return [];
+
+    const hasExplicitSegment = article.voyage_segment_start != null || article.voyage_segment_end != null;
+    const startIndex = hasExplicitSegment
+      ? Math.max(
+          0,
+          Math.min(
+            Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, article.voyage_segment_end ?? article.voyage_segment_start ?? 0),
+            linkedVoyageWaypoints.length - 1
+          )
+        )
+      : 0;
+    const endIndex = hasExplicitSegment
+      ? Math.max(
+          0,
+          Math.min(
+            Math.max(article.voyage_segment_end ?? article.voyage_segment_start ?? startIndex, article.voyage_segment_start ?? article.voyage_segment_end ?? startIndex),
+            linkedVoyageWaypoints.length - 1
+          )
+        )
+      : linkedVoyageWaypoints.length - 1;
+
+    return linkedVoyageWaypoints.slice(startIndex, endIndex + 1).flatMap((waypoint, relativeIndex) => {
+      const originalIndex = startIndex + relativeIndex;
+      const waypointName = getLocalizedWaypointName(waypoint, lang, originalIndex);
+      const waypointDescription = getLocalizedWaypointDescription(waypoint, lang);
+      const waypointDate = formatWaypointMoment(waypoint, lang === "it" ? "it-IT" : "en-US");
+      const waypointCoordinates = `Lat ${waypoint.lat.toFixed(5)} · Long ${waypoint.lng.toFixed(5)}`;
+
+      return normalizeWaypointMedia(waypoint.media).map((mediaItem, mediaIndex) => ({
+        id: `${waypoint.id}-${mediaIndex}-${mediaItem.url}`,
+        waypointId: waypoint.id,
+        waypointName,
+        waypointDescription,
+        waypointCoordinates,
+        waypointDate,
+        media: mediaItem,
+      }));
+    });
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, lang, linkedVoyageWaypoints]);
   const fallbackSceneCoordinates = useMemo(() => {
     if (hasGeo && article) {
       return {
@@ -702,6 +751,9 @@ const ArticlePage = () => {
                     primaryRouteCoordinates={primaryRouteCoordinates}
                     nauticalMiles={articleNauticalMiles}
                   />
+                  {articleVoyageMediaItems.length > 0 && (
+                    <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
+                  )}
                   <div>
                     <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                   </div>
@@ -709,6 +761,11 @@ const ArticlePage = () => {
               )}
               {!shouldShowMapWidget && (
                 <div className="lg:sticky lg:top-24">
+                  {articleVoyageMediaItems.length > 0 && (
+                    <div className="mb-8">
+                      <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
+                    </div>
+                  )}
                   <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                 </div>
               )}

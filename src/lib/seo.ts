@@ -1,10 +1,8 @@
 export const SITE_NAME = "BITE";
 export const SITE_URL = "https://biteproject.it";
 export const DEFAULT_IMAGE_URL = `${SITE_URL}/og-image.jpeg`;
-export const DYNAMIC_LLMS_URL =
-  "https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-llms";
-export const DYNAMIC_SITEMAP_URL =
-  "https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-sitemap";
+export const LLMS_URL = `${SITE_URL}/llms.txt`;
+export const SITEMAP_URL = `${SITE_URL}/sitemap.xml`;
 export const DEFAULT_DESCRIPTION =
   "BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.";
 export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
@@ -164,8 +162,8 @@ export const applySeo = ({
   setOrCreateLink('link[rel="alternate"][type="text/markdown"]', {
     rel: "alternate",
     type: "text/markdown",
-    href: DYNAMIC_LLMS_URL,
-    title: "Dynamic LLMs feed for AI agents",
+    href: LLMS_URL,
+    title: "LLMs feed for AI agents",
   });
 
   setOrCreateJsonLd("bite-page-structured-data", getBaseStructuredData({

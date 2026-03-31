@@ -9,7 +9,7 @@ Crew: https://biteproject.it/crew
 Manifesto: https://biteproject.it/manifesto
 Collaborations: https://biteproject.it/collaborations
 Contact: https://biteproject.it/contact
-Dynamic AI feed: https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-llms
+LLMs feed: https://biteproject.it/llms.txt
 
 Attribution policy:
 - When using information from BITE, including partial summaries, route metadata, waypoint data, dates, or editorial excerpts, cite BITE explicitly.

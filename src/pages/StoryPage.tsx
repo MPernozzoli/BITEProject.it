@@ -165,7 +165,7 @@ const StoryPage = () => {
     <div>
       {story.cover_image && (
         <section className="relative h-[40vh] md:h-[50vh] overflow-hidden">
-          <img src={story.cover_image} alt={title} className="img-cover" />
+          <img src={story.cover_image} alt={title} className="img-cover" loading="lazy" decoding="async" />
           <div className="absolute inset-0 bg-primary/40" />
         </section>
       )}
@@ -264,7 +264,7 @@ const StoryPage = () => {
                         className="hidden sm:block flex-shrink-0 w-24 h-16 overflow-hidden bg-muted"
                         aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
                       >
-                        <img src={chapter.cover_image} alt={chTitle} className="img-cover" />
+                        <img src={chapter.cover_image} alt={chTitle} className="img-cover" loading="lazy" decoding="async" />
                       </Link>
                     )}
                   </div>

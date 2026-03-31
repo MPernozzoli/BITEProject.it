@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import {
   buildVoyagePath,
-  formatIsoDate,
+  formatWaypointMoment,
   formatVoyageDateRange,
   formatWaypointCoordinateLabel,
   getAssociatedArticleForWaypoint,
@@ -29,20 +30,36 @@ const VoyagePage = () => {
   const voyageId = getVoyageIdFromRouteParam(voyageRef);
   const { lang } = useI18n();
   const locale = lang === "it" ? "it-IT" : "en-US";
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
-  const { data: voyage, isLoading } = useQuery<Voyage | null>({
+  const snapshotVoyage = useMemo(
+    () => publicContent?.voyages.find((entry) => entry.id === voyageId) ?? null,
+    [publicContent, voyageId]
+  );
+  const snapshotWaypoints = useMemo(
+    () => publicContent?.voyageWaypoints.filter((entry) => entry.voyage_id === voyageId) ?? null,
+    [publicContent, voyageId]
+  );
+  const snapshotArticles = useMemo(
+    () => publicContent?.articles.filter((entry) => entry.voyage_id === voyageId) ?? null,
+    [publicContent, voyageId]
+  );
+
+  const { data: liveVoyage, isLoading: isLiveVoyageLoading } = useQuery<Voyage | null>({
     queryKey: ["voyage", voyageId],
-    enabled: Boolean(voyageId),
+    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase.from("voyages").select("*").eq("id", voyageId).maybeSingle();
       if (error) throw error;
       return (data || null) as Voyage | null;
     },
   });
+  const voyage = snapshotVoyage ?? liveVoyage;
+  const isLoading = !publicContent && (isPublicContentLoading || isLiveVoyageLoading);
 
-  const { data: waypoints = [] } = useQuery<VoyageWaypoint[]>({
+  const { data: liveWaypoints = [] } = useQuery<VoyageWaypoint[]>({
     queryKey: ["voyage-waypoints", voyageId],
-    enabled: Boolean(voyageId),
+    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints")
@@ -53,10 +70,11 @@ const VoyagePage = () => {
       return (data || []) as unknown as VoyageWaypoint[];
     },
   });
+  const waypoints = snapshotWaypoints ?? liveWaypoints;
 
-  const { data: articles = [] } = useQuery<GeoArticle[]>({
+  const { data: liveArticles = [] } = useQuery<GeoArticle[]>({
     queryKey: ["voyage-articles", voyageId],
-    enabled: Boolean(voyageId),
+    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -68,6 +86,7 @@ const VoyagePage = () => {
       return (data || []) as GeoArticle[];
     },
   });
+  const articles = snapshotArticles ?? liveArticles;
 
   const publicWaypoints = useMemo(
     () => getPublicVoyageWaypoints(waypoints, articles, voyageId),
@@ -92,12 +111,6 @@ const VoyagePage = () => {
   const arrival = arrivalEntry?.waypoint;
   const totalNm = useMemo(() => Math.round(totalWaypointDistance(waypoints)), [waypoints]);
   const canonicalPath = voyage ? buildVoyagePath(voyage) : voyageId ? `/voyages/${voyageId}` : "/voyages";
-  const formatWaypointMoment = (date?: string | null, time?: string | null) => {
-    const formattedDate = formatIsoDate(date, locale);
-    if (!formattedDate) return null;
-    const formattedTime = time?.slice(0, 5);
-    return formattedTime ? `${formattedDate} · ${formattedTime}` : formattedDate;
-  };
   const departureLabel = departureEntry
     ? getLocalizedWaypointName(departureEntry.waypoint, lang, departureEntry.originalIndex)
     : null;
@@ -228,7 +241,7 @@ const VoyagePage = () => {
                     ? article.title_it || article.title_en
                     : article.title_en
                   : null;
-                const waypointMoment = formatWaypointMoment(waypoint.event_date, waypoint.event_time);
+                const waypointMoment = formatWaypointMoment(waypoint, locale);
 
                 return (
                   <article key={waypoint.id} className="glass-panel-soft rounded-[26px] p-5">
@@ -259,9 +272,21 @@ const VoyagePage = () => {
                         {mediaItems.map((mediaItem, mediaIndex) => (
                           <div key={`${waypoint.id}-${mediaIndex}`} className="overflow-hidden rounded-[20px] border border-border/60 bg-background/40">
                             {mediaItem.kind === "image" ? (
-                              <img src={mediaItem.url} alt={mediaItem.name || waypointName} className="h-44 w-full object-cover" />
+                              <img
+                                src={mediaItem.url}
+                                alt={mediaItem.name || waypointName}
+                                className="h-44 w-full object-cover"
+                                loading="lazy"
+                                decoding="async"
+                              />
                             ) : mediaItem.kind === "video" ? (
-                              <video src={mediaItem.url} controls playsInline className="h-44 w-full object-cover" />
+                              <video
+                                src={mediaItem.url}
+                                controls
+                                playsInline
+                                preload="metadata"
+                                className="h-44 w-full object-cover"
+                              />
                             ) : (
                               <a
                                 href={mediaItem.url}

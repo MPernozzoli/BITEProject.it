@@ -7,6 +7,7 @@ import { Search, Plus, Map, List, Ship, Navigation, Anchor, ChevronUp, ChevronDo
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
@@ -45,6 +46,7 @@ const Journal = () => {
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
   const mobileSidebarTouchStartRef = useRef<number | null>(null);
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
   const buildFallbackPanelRect = useCallback((): ExpandedArticleOrigin => {
     const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -89,8 +91,9 @@ const Journal = () => {
   }, [buildFallbackPanelRect]);
 
   // Fetch articles with geo data
-  const { data: articles = [], isLoading: isArticlesLoading } = useQuery({
+  const { data: liveArticles = [], isLoading: isLiveArticlesLoading } = useQuery({
     queryKey: ["logbook-articles-geo"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -142,10 +145,13 @@ const Journal = () => {
       })) as GeoArticle[];
     },
   });
+  const articles = publicContent?.articles ?? liveArticles;
+  const isArticlesLoading = !publicContent && (isPublicContentLoading || isLiveArticlesLoading);
 
   // Fetch voyages
-  const { data: voyages = [], isLoading: isVoyagesLoading } = useQuery({
+  const { data: liveVoyages = [], isLoading: isLiveVoyagesLoading } = useQuery({
     queryKey: ["voyages"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data } = await supabase
         .from("voyages" as any)
@@ -154,10 +160,13 @@ const Journal = () => {
       return (data || []) as unknown as Voyage[];
     },
   });
+  const voyages = publicContent?.voyages ?? liveVoyages;
+  const isVoyagesLoading = !publicContent && (isPublicContentLoading || isLiveVoyagesLoading);
 
   // Fetch waypoints for all voyages
-  const { data: allWaypoints = [], isLoading: isWaypointsLoading } = useQuery({
+  const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery({
     queryKey: ["voyage-waypoints"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data } = await supabase
         .from("voyage_waypoints" as any)
@@ -166,6 +175,8 @@ const Journal = () => {
       return (data || []) as unknown as VoyageWaypoint[];
     },
   });
+  const allWaypoints = publicContent?.voyageWaypoints ?? liveAllWaypoints;
+  const isWaypointsLoading = !publicContent && (isPublicContentLoading || isLiveWaypointsLoading);
 
   const waypointsMap = useMemo(() => {
     const map: Record<string, VoyageWaypoint[]> = {};

@@ -9,10 +9,12 @@ import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
 import { useIsMobile } from "@/hooks/use-mobile";
+import type { HeroMedia, HomepageHeroVideoPool } from "@/lib/public-content";
 
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
@@ -39,19 +41,6 @@ interface HomeArticle {
 interface ArticleTagRelation {
   article_id: string;
   tags: HomeTag | null;
-}
-
-interface HeroMedia {
-  kind: "video";
-  src: string;
-  alt: string;
-  poster?: string;
-  mimeType?: string;
-}
-
-interface HomepageHeroVideoPool {
-  desktop: HeroMedia[];
-  mobile: HeroMedia[];
 }
 
 interface StorageListItem {
@@ -149,9 +138,11 @@ const Index = () => {
   const heroCrossfadeTimeoutRef = useRef<number | null>(null);
   const pendingHeroVideoRef = useRef<HTMLVideoElement | null>(null);
   const pendingHeroPlaybackDurationRef = useRef<number>(HERO_MAX_VIDEO_SEGMENT_SECONDS * 1000);
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
-  const { data: heroVideoPool } = useQuery<HomepageHeroVideoPool>({
+  const { data: liveHeroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const [desktopResult, mobileResult] = await Promise.all([
         supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_HORIZONTAL_FOLDER, {
@@ -184,6 +175,7 @@ const Index = () => {
     staleTime: 1000 * 60 * 10,
     retry: false,
   });
+  const heroVideoPool = publicContent?.heroVideoPool ?? liveHeroVideoPool;
 
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
@@ -339,7 +331,7 @@ const Index = () => {
         autoPlay={mode === "active"}
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
@@ -349,8 +341,9 @@ const Index = () => {
   };
 
   // Fetch real articles for the journal preview
-  const { data: latestArticles = [] } = useQuery<HomeArticle[]>({
+  const { data: liveLatestArticles = [] } = useQuery<HomeArticle[]>({
     queryKey: ["home-latest-articles"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -377,9 +370,26 @@ const Index = () => {
       return (data || []).map((a) => ({ ...a, tags: [] })) as HomeArticle[];
     },
   });
+  const latestArticles = useMemo<HomeArticle[]>(() => {
+    if (!publicContent) return liveLatestArticles;
 
-  const { data: mapArticles = [], isLoading: isMapArticlesLoading } = useQuery<GeoArticle[]>({
+    return publicContent.articles.slice(0, 3).map((article) => ({
+      id: article.id,
+      title_en: article.title_en,
+      title_it: article.title_it,
+      slug: article.slug,
+      excerpt_en: article.excerpt_en,
+      excerpt_it: article.excerpt_it,
+      cover_image: article.cover_image,
+      published_at: article.published_at,
+      category: article.category ?? "logbook",
+      tags: article.tags ?? [],
+    }));
+  }, [liveLatestArticles, publicContent]);
+
+  const { data: liveMapArticles = [], isLoading: isLiveMapArticlesLoading } = useQuery<GeoArticle[]>({
     queryKey: ["home-logbook-map-articles"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
@@ -392,9 +402,11 @@ const Index = () => {
       return (data || []) as GeoArticle[];
     },
   });
+  const mapArticles = publicContent?.articles ?? liveMapArticles;
 
-  const { data: voyages = [], isLoading: isVoyagesLoading } = useQuery<Voyage[]>({
+  const { data: liveVoyages = [], isLoading: isLiveVoyagesLoading } = useQuery<Voyage[]>({
     queryKey: ["home-voyages"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyages" as any)
@@ -405,9 +417,11 @@ const Index = () => {
       return (data || []) as unknown as Voyage[];
     },
   });
+  const voyages = publicContent?.voyages ?? liveVoyages;
 
-  const { data: allWaypoints = [], isLoading: isWaypointsLoading } = useQuery<VoyageWaypoint[]>({
+  const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery<VoyageWaypoint[]>({
     queryKey: ["home-voyage-waypoints"],
+    enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints" as any)
@@ -418,6 +432,7 @@ const Index = () => {
       return (data || []) as unknown as VoyageWaypoint[];
     },
   });
+  const allWaypoints = publicContent?.voyageWaypoints ?? liveAllWaypoints;
 
   const waypointsMap = useMemo(() => {
     const map: Record<string, VoyageWaypoint[]> = {};
@@ -428,7 +443,12 @@ const Index = () => {
     return map;
   }, [allWaypoints]);
 
-  const isHomeMapReady = !isMapArticlesLoading && !isVoyagesLoading && !isWaypointsLoading;
+  const isHomeMapReady = Boolean(publicContent) || (
+    !isPublicContentLoading
+    && !isLiveMapArticlesLoading
+    && !isLiveVoyagesLoading
+    && !isLiveWaypointsLoading
+  );
 
   const handleNewsletterSubscribe = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
