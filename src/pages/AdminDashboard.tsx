@@ -18,6 +18,8 @@ import {
   ArrowUpRight,
   CalendarClock,
   Award,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -82,6 +84,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route" | "newsletter" | "badges">("articles");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
@@ -143,6 +146,10 @@ const AdminDashboard = () => {
   useEffect(() => {
     void checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    setSidebarCollapsed(activeSection === "newsletter");
+  }, [activeSection]);
 
   const deleteArticle = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
@@ -274,9 +281,22 @@ const AdminDashboard = () => {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[0.92fr_2.08fr] gap-6">
-          <aside className="glass-panel rounded-[34px] p-5 md:p-6 h-fit">
-            <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-4">Sezioni</p>
+        <section className={`grid grid-cols-1 gap-6 ${sidebarCollapsed ? "xl:grid-cols-[96px_minmax(0,1fr)]" : "xl:grid-cols-[0.92fr_2.08fr]"}`}>
+          <aside className={`glass-panel rounded-[34px] p-5 md:p-6 h-fit transition-all ${sidebarCollapsed ? "xl:px-3" : ""}`}>
+            <div className={`mb-4 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between gap-3"}`}>
+              {!sidebarCollapsed && (
+                <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">Sezioni</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((prev) => !prev)}
+                className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                title={sidebarCollapsed ? "Espandi sidebar" : "Comprimi sidebar"}
+                aria-label={sidebarCollapsed ? "Espandi sidebar" : "Comprimi sidebar"}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+              </button>
+            </div>
             <div className="space-y-2">
               {sectionTabs.map((tab) => {
                 const Icon = tab.icon;
@@ -285,49 +305,54 @@ const AdminDashboard = () => {
                   <button
                     key={tab.id}
                     onClick={() => setActiveSection(tab.id)}
-                    className={`w-full rounded-[22px] px-4 py-3 text-left transition-all ${
+                    className={`w-full rounded-[22px] py-3 text-left transition-all ${
                       active
                         ? "bg-white/82 border border-stone-200/90 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
                         : "glass-panel-soft hover:border-accent"
-                    }`}
+                    } ${sidebarCollapsed ? "px-2" : "px-4"}`}
+                    title={sidebarCollapsed ? tab.label : undefined}
                   >
-                    <span className="flex items-center gap-3">
+                    <span className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
                       <span className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
                         <Icon size={15} className={active ? "text-accent" : undefined} />
                       </span>
-                      <span>
-                        <span className="block font-sans text-sm text-foreground">{tab.label}</span>
-                        <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
-                          {tab.id === "articles" && "Publishing"}
-                          {tab.id === "stories" && "Narrative arcs"}
-                          {tab.id === "badges" && "Profile rewards"}
-                          {tab.id === "route" && "Voyage map"}
-                          {tab.id === "newsletter" && "Audience"}
+                      {!sidebarCollapsed && (
+                        <span>
+                          <span className="block font-sans text-sm text-foreground">{tab.label}</span>
+                          <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
+                            {tab.id === "articles" && "Publishing"}
+                            {tab.id === "stories" && "Narrative arcs"}
+                            {tab.id === "badges" && "Profile rewards"}
+                            {tab.id === "route" && "Voyage map"}
+                            {tab.id === "newsletter" && "Audience"}
+                          </span>
                         </span>
-                      </span>
+                      )}
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="glass-panel-soft rounded-[26px] p-5 mt-6">
-              <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-3">Snapshot</p>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-sans text-muted-foreground mb-1">Ultimo articolo</p>
-                  <p className="font-serif text-lg leading-tight text-foreground">
-                    {latestArticle ? latestArticle.title_en || latestArticle.title_it || "Untitled" : "Nessun articolo"}
-                  </p>
-                </div>
-                <div className="pt-4 border-t glass-divider">
-                  <p className="text-xs font-sans text-muted-foreground mb-1">Ultima story</p>
-                  <p className="font-serif text-lg leading-tight text-foreground">
-                    {latestStory ? latestStory.title_en || latestStory.title_it : "Nessuna story"}
-                  </p>
+            {!sidebarCollapsed && (
+              <div className="glass-panel-soft rounded-[26px] p-5 mt-6">
+                <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-3">Snapshot</p>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-sans text-muted-foreground mb-1">Ultimo articolo</p>
+                    <p className="font-serif text-lg leading-tight text-foreground">
+                      {latestArticle ? latestArticle.title_en || latestArticle.title_it || "Untitled" : "Nessun articolo"}
+                    </p>
+                  </div>
+                  <div className="pt-4 border-t glass-divider">
+                    <p className="text-xs font-sans text-muted-foreground mb-1">Ultima story</p>
+                    <p className="font-serif text-lg leading-tight text-foreground">
+                      {latestStory ? latestStory.title_en || latestStory.title_it : "Nessuna story"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </aside>
 
           <main className="glass-panel rounded-[34px] p-5 md:p-6 lg:p-8">

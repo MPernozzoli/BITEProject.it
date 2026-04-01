@@ -130,28 +130,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     void bootstrap();
 
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      void (async () => {
-        if (!authBootstrapDoneRef.current) return;
-        const { data: { session: cur } } = await supabase.auth.getSession();
-        if (!cur) return;
-        try {
-          const { session: next } = await validateSessionOrSignOut();
-          if (!cancelled) applySession(next);
-        } catch (error) {
-          console.error("Visibility session revalidation failed", error);
-          if (!cancelled) applySession(null);
-        }
-      })();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
     return () => {
       cancelled = true;
       authBootstrapDoneRef.current = false;
       subscription.unsubscribe();
-      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [applySession]);
 
