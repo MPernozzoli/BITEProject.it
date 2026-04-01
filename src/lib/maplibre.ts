@@ -43,9 +43,33 @@ export const createCartoRasterStyle = () => {
 };
 
 export const isMapLibreSupported = () =>
-  maplibregl.supported({
-    failIfMajorPerformanceCaveat: false,
-  });
+{
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return false;
+  }
+
+  try {
+    if (maplibregl.supported({
+      failIfMajorPerformanceCaveat: false,
+    })) {
+      return true;
+    }
+  } catch {
+    // Fall through to a less strict WebGL capability check.
+  }
+
+  try {
+    const canvas = document.createElement("canvas");
+    const context =
+      canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: false })
+      || canvas.getContext("webgl", { failIfMajorPerformanceCaveat: false })
+      || canvas.getContext("experimental-webgl", { failIfMajorPerformanceCaveat: false });
+
+    return Boolean(context);
+  } catch {
+    return false;
+  }
+};
 
 export const requestMapResize = (map: maplibregl.Map) => {
   if (typeof window === "undefined") return () => undefined;
