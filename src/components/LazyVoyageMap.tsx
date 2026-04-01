@@ -1,7 +1,15 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { ComponentProps } from "react";
+import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
-const VoyageMap = lazy(() => import("@/components/voyage/VoyageMap"));
+let voyageMapImportPromise: Promise<typeof import("@/components/voyage/VoyageMap")> | null = null;
+
+const loadVoyageMap = () => {
+  voyageMapImportPromise ??= import("@/components/voyage/VoyageMap");
+  return voyageMapImportPromise;
+};
+
+const VoyageMap = lazy(loadVoyageMap);
 
 type LazyVoyageMapProps = ComponentProps<typeof VoyageMap> & {
   fallbackHeightClassName?: string;
@@ -17,7 +25,15 @@ const LazyVoyageMap = ({
   const [shouldRenderMap, setShouldRenderMap] = useState(!deferUntilVisible);
 
   useEffect(() => {
+    void loadVoyageMap();
+  }, []);
+
+  useEffect(() => {
     if (!deferUntilVisible || shouldRenderMap || !containerRef.current) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldRenderMap(true);
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -35,10 +51,9 @@ const LazyVoyageMap = ({
   }, [deferUntilVisible, shouldRenderMap]);
 
   const fallback = (
-    <div
-      className="w-full h-full bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]"
-      aria-hidden
-    />
+    <div className="relative h-full w-full">
+      <MapLoadingPlaceholder label={props.lang === "it" ? "Caricamento mappa" : "Loading map"} />
+    </div>
   );
 
   return (

@@ -10,6 +10,8 @@ import {
   getPublicVoyageWaypoints,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import { bindMapToContainerResize, createCartoRasterStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
+import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
 interface VoyageMapProps {
   voyages: Voyage[];
@@ -99,7 +101,9 @@ const VoyageMap = ({
   }>>({});
   const onArticleClickRef = useRef(onArticleClick);
   const hasPerformedInitialFitRef = useRef(false);
+  const mapResizeCleanupRef = useRef<(() => void) | null>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredRouteVoyageId, setHoveredRouteVoyageId] = useState<string | null>(null);
 
   const clearInteractiveLayerHandlers = useCallback((map: maplibregl.Map) => {
@@ -127,32 +131,39 @@ const VoyageMap = ({
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
     try {
-      mapRef.current = new maplibregl.Map({
+      if (!isMapLibreSupported()) {
+        setMapUnavailable(true);
+        return;
+      }
+
+      setMapLoaded(false);
+
+      const map = new maplibregl.Map({
         container: containerRef.current,
-        style: {
-          version: 8,
-          sources: {
-            carto: {
-              type: "raster",
-              tiles: [
-                "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-                "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              ],
-              tileSize: 256,
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-            },
-          },
-          layers: [
-            { id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 },
-          ],
-        },
+        style: createCartoRasterStyle(),
         center: [15, 40],
         zoom: 5,
         attributionControl: false,
       });
 
-      mapRef.current.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
-      mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      map.on("load", () => {
+        setMapLoaded(true);
+        requestMapResize(map);
+      });
+
+      map.on("webglcontextlost", () => {
+        setMapLoaded(false);
+      });
+
+      map.on("webglcontextrestored", () => {
+        requestMapResize(map);
+      });
+
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+
+      mapResizeCleanupRef.current = bindMapToContainerResize(map, containerRef.current);
+      mapRef.current = map;
     } catch (error) {
       console.error("Failed to initialize voyage map", error);
       popupRef.current?.remove();
@@ -162,12 +173,17 @@ const VoyageMap = ({
       }
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      mapResizeCleanupRef.current?.();
+      mapResizeCleanupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       setMapUnavailable(true);
     }
 
     return () => {
+      setMapLoaded(false);
+      mapResizeCleanupRef.current?.();
+      mapResizeCleanupRef.current = null;
       if (mapRef.current) {
         clearInteractiveLayerHandlers(mapRef.current);
       }
@@ -795,7 +811,14 @@ const VoyageMap = ({
     );
   }
 
-  return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div className="relative h-full w-full" aria-busy={!mapLoaded}>
+      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      {!mapLoaded && !mapUnavailable ? (
+        <MapLoadingPlaceholder label={lang === "it" ? "Caricamento mappa" : "Loading map"} />
+      ) : null}
+    </div>
+  );
 };
 
 export default VoyageMap;

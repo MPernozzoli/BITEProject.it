@@ -53,6 +53,11 @@ interface HeroTransitionTarget {
   playlist: HeroMedia[];
 }
 
+interface NavigatorConnectionInfo {
+  effectiveType?: string;
+  saveData?: boolean;
+}
+
 const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
@@ -60,6 +65,33 @@ const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
+
+const getNavigatorConnectionInfo = (): NavigatorConnectionInfo | null => {
+  if (typeof navigator === "undefined") return null;
+
+  const connectionNavigator = navigator as Navigator & {
+    connection?: NavigatorConnectionInfo;
+    mozConnection?: NavigatorConnectionInfo;
+    webkitConnection?: NavigatorConnectionInfo;
+  };
+
+  return connectionNavigator.connection
+    ?? connectionNavigator.mozConnection
+    ?? connectionNavigator.webkitConnection
+    ?? null;
+};
+
+const shouldWarmHeroCacheAggressively = (isMobile: boolean) => {
+  if (isMobile) return false;
+
+  const connection = getNavigatorConnectionInfo();
+  if (connection?.saveData) return false;
+
+  const effectiveType = connection?.effectiveType?.toLowerCase();
+  if (!effectiveType) return true;
+
+  return !(effectiveType.includes("2g") || effectiveType === "3g");
+};
 
 const shuffleHeroMedia = (items: HeroMedia[], avoidSrc?: string) => {
   const nextItems = [...items];
@@ -133,8 +165,6 @@ const Index = () => {
   const [heroPlaylistIndex, setHeroPlaylistIndex] = useState(0);
   const [pendingHeroTransition, setPendingHeroTransition] = useState<HeroTransitionTarget | null>(null);
   const [isHeroCrossfading, setIsHeroCrossfading] = useState(false);
-  const [isPendingHeroReady, setIsPendingHeroReady] = useState(false);
-  const [isHeroCrossfadeQueued, setIsHeroCrossfadeQueued] = useState(false);
   const heroPlaybackTimeoutRef = useRef<number | null>(null);
   const heroCrossfadeTimeoutRef = useRef<number | null>(null);
   const pendingHeroVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -184,6 +214,10 @@ const Index = () => {
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
   }, [heroVideoPool, isMobile]);
+  const shouldAggressivelyWarmHeroCache = useMemo(
+    () => shouldWarmHeroCacheAggressively(isMobile),
+    [isMobile]
+  );
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
   const heroPriorityMedia = useMemo(() => {
@@ -261,15 +295,11 @@ const Index = () => {
     const nextTransition = getNextHeroTransition(0, nextPlaylist, currentHeroPool);
     setPendingHeroTransition(nextTransition);
     setIsHeroCrossfading(false);
-    setIsPendingHeroReady(false);
-    setIsHeroCrossfadeQueued(false);
   }, [currentHeroPool, isMobile]);
 
   useEffect(() => {
     const nextTransition = getNextHeroTransition(heroPlaylistIndex, heroPlaylist, currentHeroPool);
     setPendingHeroTransition(nextTransition);
-    setIsPendingHeroReady(false);
-    setIsHeroCrossfadeQueued(false);
     setIsHeroCrossfading(false);
   }, [currentHeroPool, heroPlaylist, heroPlaylistIndex]);
 
@@ -277,11 +307,7 @@ const Index = () => {
     if (heroPlaylist.length <= 1 || !pendingHeroTransition || isHeroCrossfading) return;
 
     if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
-    if (isPendingHeroReady) {
-      startHeroCrossfade();
-      return;
-    }
-    setIsHeroCrossfadeQueued(true);
+    startHeroCrossfade();
   };
 
   useEffect(() => {
@@ -306,6 +332,12 @@ const Index = () => {
       void cacheHeroVideoLocally(media);
     });
 
+    if (!shouldAggressivelyWarmHeroCache) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const warmRemainingHeroVideos = async () => {
       for (const media of currentHeroPool) {
         if (cancelled || prioritizedSources.has(media.src)) continue;
@@ -313,12 +345,53 @@ const Index = () => {
       }
     };
 
-    void warmRemainingHeroVideos();
+    const scheduleIdleWarmup = () => {
+      if (typeof window === "undefined") {
+        void warmRemainingHeroVideos();
+        return;
+      }
+
+      if ("requestIdleCallback" in window) {
+        const idleId = window.requestIdleCallback(() => {
+          if (!cancelled) {
+            void warmRemainingHeroVideos();
+          }
+        }, { timeout: 2500 });
+
+        return () => {
+          window.cancelIdleCallback(idleId);
+        };
+      }
+
+      const timeoutId = window.setTimeout(() => {
+        if (!cancelled) {
+          void warmRemainingHeroVideos();
+        }
+      }, 1500);
+
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
+    };
+
+    const cancelScheduledWarmup = scheduleIdleWarmup();
 
     return () => {
       cancelled = true;
+      cancelScheduledWarmup?.();
     };
-  }, [cacheHeroVideoLocally, currentHeroPool, heroPriorityMedia]);
+  }, [cacheHeroVideoLocally, currentHeroPool, heroPriorityMedia, shouldAggressivelyWarmHeroCache]);
+
+  const pendingHeroPlaybackSrc = pendingHeroTransition
+    ? getHeroPlaybackSrc(pendingHeroTransition.media)
+    : null;
+
+  useEffect(() => {
+    const pendingVideo = pendingHeroVideoRef.current;
+    if (!pendingVideo || !pendingHeroTransition) return;
+
+    pendingVideo.load();
+  }, [pendingHeroPlaybackSrc, pendingHeroTransition]);
 
   const finalizeHeroCrossfade = () => {
     if (!pendingHeroTransition) return;
@@ -326,8 +399,6 @@ const Index = () => {
     setHeroPlaylistIndex(pendingHeroTransition.index);
     setPendingHeroTransition(null);
     setIsHeroCrossfading(false);
-    setIsPendingHeroReady(false);
-    setIsHeroCrossfadeQueued(false);
   };
 
   const startHeroCrossfade = () => {
@@ -340,18 +411,11 @@ const Index = () => {
       queueHeroCrossfade();
     }, Math.max(pendingHeroPlaybackDurationRef.current - HERO_CROSSFADE_DURATION_MS, 0));
 
-    setIsHeroCrossfadeQueued(false);
     setIsHeroCrossfading(true);
     heroCrossfadeTimeoutRef.current = window.setTimeout(() => {
       finalizeHeroCrossfade();
     }, HERO_CROSSFADE_DURATION_MS);
   };
-
-  useEffect(() => {
-    if (isPendingHeroReady && isHeroCrossfadeQueued && pendingHeroTransition && !isHeroCrossfading) {
-      startHeroCrossfade();
-    }
-  }, [isPendingHeroReady, isHeroCrossfadeQueued, pendingHeroTransition, isHeroCrossfading]);
 
   const handleHeroVideoMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const video = event.currentTarget;
@@ -409,14 +473,12 @@ const Index = () => {
     video.pause();
   };
 
-  const handlePendingHeroCanPlay = (event: React.SyntheticEvent<HTMLVideoElement>) => {
-    event.currentTarget.pause();
-    setIsPendingHeroReady(true);
-  };
-
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
     const playbackSrc = getHeroPlaybackSrc(media);
-    const shouldEagerPreload = mode === "pending" || playbackSrc !== media.src;
+    const shouldEagerPreload =
+      mode === "pending"
+      || playbackSrc !== media.src
+      || media.src === heroMedia?.src;
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -438,7 +500,6 @@ const Index = () => {
         playsInline
         preload={shouldEagerPreload ? "auto" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
-        onCanPlayThrough={mode === "pending" ? handlePendingHeroCanPlay : undefined}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
         <source src={playbackSrc} type={media.mimeType ?? "video/mp4"} />

@@ -4,6 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { MapPin, Navigation, Ship } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
+import { bindMapToContainerResize, createCartoRasterStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
+import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
 export interface ArticleMapSceneView {
   id: string;
@@ -49,7 +51,9 @@ const ArticleMapAside = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const windMarkerRef = useRef<maplibregl.Marker | null>(null);
   const sceneMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const mapResizeCleanupRef = useRef<(() => void) | null>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const normalizedScenes = useMemo(
     () => scenes.filter((scene) => Number.isFinite(scene.latitude) && Number.isFinite(scene.longitude)),
@@ -113,23 +117,16 @@ const ArticleMapAside = ({
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
     try {
+      if (!isMapLibreSupported()) {
+        setMapUnavailable(true);
+        return;
+      }
+
+      setMapLoaded(false);
+
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: {
-          version: 8,
-          sources: {
-            carto: {
-              type: "raster",
-              tiles: [
-                "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-                "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              ],
-              tileSize: 256,
-              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-            },
-          },
-          layers: [{ id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 }],
-        },
+        style: createCartoRasterStyle(),
         center: [longitude, latitude],
         zoom: 7,
         attributionControl: false,
@@ -137,7 +134,17 @@ const ArticleMapAside = ({
 
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      map.once("load", () => requestAnimationFrame(() => map.resize()));
+      map.once("load", () => {
+        setMapLoaded(true);
+        requestMapResize(map);
+      });
+      map.on("webglcontextlost", () => {
+        setMapLoaded(false);
+      });
+      map.on("webglcontextrestored", () => {
+        requestMapResize(map);
+      });
+      mapResizeCleanupRef.current = bindMapToContainerResize(map, containerRef.current);
       mapRef.current = map;
     } catch (error) {
       console.error("Failed to initialize article map", error);
@@ -145,12 +152,17 @@ const ArticleMapAside = ({
       windMarkerRef.current = null;
       sceneMarkersRef.current.forEach((marker) => marker.remove());
       sceneMarkersRef.current = [];
+      mapResizeCleanupRef.current?.();
+      mapResizeCleanupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       setMapUnavailable(true);
     }
 
     return () => {
+      setMapLoaded(false);
+      mapResizeCleanupRef.current?.();
+      mapResizeCleanupRef.current = null;
       windMarkerRef.current?.remove();
       windMarkerRef.current = null;
       sceneMarkersRef.current.forEach((marker) => marker.remove());
@@ -399,7 +411,15 @@ const ArticleMapAside = ({
         </div>
       ) : (
         <>
-          <div ref={containerRef} className="w-full h-[280px] md:h-[320px]" />
+          <div className="relative">
+            <div ref={containerRef} className="w-full h-[280px] md:h-[320px]" aria-busy={!mapLoaded} />
+            {!mapLoaded ? (
+              <MapLoadingPlaceholder
+                label={lang === "it" ? "Caricamento minimappa" : "Loading minimap"}
+                className="bg-[radial-gradient(circle_at_top_left,rgba(159,207,214,0.18)_0%,transparent_55%)]"
+              />
+            ) : null}
+          </div>
           {(activeScene?.description || activeScene?.windLabel || (nauticalMiles ?? 0) > 0) && (
             <div className="border-t glass-divider px-4 py-3 space-y-2">
               {activeScene?.description && (

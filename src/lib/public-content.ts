@@ -19,8 +19,18 @@ export interface PublicContentArticle extends GeoArticle {
   story_id: string | null;
 }
 
+export interface PublicContentVersion {
+  articlesCount: number;
+  articlesUpdatedAt: string | null;
+  voyagesCount: number;
+  voyagesUpdatedAt: string | null;
+  voyageWaypointsCount: number;
+  voyageWaypointsUpdatedAt: string | null;
+}
+
 export interface PublicContentSnapshot {
   generatedAt: string;
+  version: PublicContentVersion;
   heroVideoPool: HomepageHeroVideoPool;
   articles: PublicContentArticle[];
   voyages: Voyage[];
@@ -98,13 +108,115 @@ const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
   }
 };
 
+const getLatestTimestamp = (values: Array<string | null | undefined>) =>
+  values.reduce<string | null>((latest, value) => {
+    if (!value) return latest;
+    if (!latest) return value;
+    return new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+  }, null);
+
+const buildPublicContentVersion = ({
+  articles,
+  voyages,
+  voyageWaypoints,
+}: {
+  articles: Array<{ updated_at?: string | null; published_at?: string | null }>;
+  voyages: Array<{ updated_at?: string | null }>;
+  voyageWaypoints: Array<{ created_at?: string | null }>;
+}): PublicContentVersion => ({
+  articlesCount: articles.length,
+  articlesUpdatedAt: getLatestTimestamp(
+    articles.map((article) => article.updated_at ?? article.published_at ?? null)
+  ),
+  voyagesCount: voyages.length,
+  voyagesUpdatedAt: getLatestTimestamp(voyages.map((voyage) => voyage.updated_at ?? null)),
+  voyageWaypointsCount: voyageWaypoints.length,
+  voyageWaypointsUpdatedAt: getLatestTimestamp(
+    voyageWaypoints.map((waypoint) => waypoint.created_at ?? null)
+  ),
+});
+
+export const isPublicContentVersionEqual = (
+  left: PublicContentVersion | null | undefined,
+  right: PublicContentVersion | null | undefined
+) => (
+  !!left
+  && !!right
+  && left.articlesCount === right.articlesCount
+  && left.articlesUpdatedAt === right.articlesUpdatedAt
+  && left.voyagesCount === right.voyagesCount
+  && left.voyagesUpdatedAt === right.voyagesUpdatedAt
+  && left.voyageWaypointsCount === right.voyageWaypointsCount
+  && left.voyageWaypointsUpdatedAt === right.voyageWaypointsUpdatedAt
+);
+
+export async function fetchPublicContentVersion(): Promise<PublicContentVersion> {
+  const [
+    articleCountResponse,
+    latestArticleResponse,
+    voyageCountResponse,
+    latestVoyageResponse,
+    waypointCountResponse,
+    latestWaypointResponse,
+  ] = await Promise.all([
+    supabase
+      .from("logbook_articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published"),
+    supabase
+      .from("logbook_articles")
+      .select("updated_at, published_at")
+      .eq("status", "published")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("voyages")
+      .select("id", { count: "exact", head: true }),
+    supabase
+      .from("voyages")
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("voyage_waypoints")
+      .select("id", { count: "exact", head: true }),
+    supabase
+      .from("voyage_waypoints")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (articleCountResponse.error) throw articleCountResponse.error;
+  if (latestArticleResponse.error) throw latestArticleResponse.error;
+  if (voyageCountResponse.error) throw voyageCountResponse.error;
+  if (latestVoyageResponse.error) throw latestVoyageResponse.error;
+  if (waypointCountResponse.error) throw waypointCountResponse.error;
+  if (latestWaypointResponse.error) throw latestWaypointResponse.error;
+
+  return {
+    articlesCount: articleCountResponse.count ?? 0,
+    articlesUpdatedAt:
+      latestArticleResponse.data?.updated_at
+      ?? latestArticleResponse.data?.published_at
+      ?? null,
+    voyagesCount: voyageCountResponse.count ?? 0,
+    voyagesUpdatedAt: latestVoyageResponse.data?.updated_at ?? null,
+    voyageWaypointsCount: waypointCountResponse.count ?? 0,
+    voyageWaypointsUpdatedAt: latestWaypointResponse.data?.created_at ?? null,
+  };
+}
+
 export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapshot> {
   const [heroVideoPool, articlesResponse, voyagesResponse, voyageWaypointsResponse] = await Promise.all([
     fetchHeroVideoPool(),
     supabase
       .from("logbook_articles")
       .select(
-        "id, title_en, title_it, slug, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, location_name, story_id, category, view_count"
+        "id, title_en, title_it, slug, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, updated_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, location_name, story_id, category, view_count"
       )
       .eq("status", "published")
       .order("published_at", { ascending: false, nullsFirst: false })
@@ -188,8 +300,15 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
     likeCounts[like.article_id] = (likeCounts[like.article_id] || 0) + 1;
   });
 
+  const snapshotVersion = buildPublicContentVersion({
+    articles,
+    voyages: voyagesResponse.data ?? [],
+    voyageWaypoints: voyageWaypointsResponse.data ?? [],
+  });
+
   return {
     generatedAt: new Date().toISOString(),
+    version: snapshotVersion,
     heroVideoPool,
     articles: articles.map((article) => ({
       id: article.id,
