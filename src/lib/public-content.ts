@@ -147,7 +147,7 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
 
   const [profilesResponse, tagsResponse] = await Promise.all([
     profileIds.length
-      ? supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
+      ? supabase.from("public_profiles").select("id, name, avatar_url").in("id", profileIds)
       : Promise.resolve({ data: [], error: null }),
     tagIds.length
       ? supabase.from("tags").select("id, name").in("id", tagIds)

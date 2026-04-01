@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     return pixelResponse()
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
   const { data: delivery } = await supabase
     .from('newsletter_deliveries')
     .select('id, status, tracker_token, open_count')

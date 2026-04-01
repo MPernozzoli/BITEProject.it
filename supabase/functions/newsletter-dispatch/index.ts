@@ -414,7 +414,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
   const authorization = await authorizeRequest(req, supabase)
   if (!authorization.ok) {
     return authorization.response

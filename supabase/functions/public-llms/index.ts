@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     return new Response('Missing Supabase configuration', { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
   const url = new URL(req.url)
   const fullMode = url.searchParams.get('full') === '1'
 

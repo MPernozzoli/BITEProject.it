@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     decodedTarget = PUBLIC_SITE_URL
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
   const { data: delivery } = await supabase
     .from('newsletter_deliveries')
     .select('id, click_count, tracker_token')

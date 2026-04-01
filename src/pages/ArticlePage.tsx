@@ -103,7 +103,7 @@ const ArticlePage = () => {
       if (!authorLinks?.length) return [];
       const ids = authorLinks.map((a) => a.profile_id);
       const { data: profiles } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, avatar_url")
         .in("id", ids);
       return profiles || [];
