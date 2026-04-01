@@ -828,35 +828,41 @@ const AdminNewsletterManager = () => {
     return <p className="text-sm text-muted-foreground">Caricamento newsletter...</p>;
   }
 
-  const renderLanguageEditor = (language: ExtendedLanguage, required = false) => {
+  const renderLanguageEditor = (
+    language: ExtendedLanguage,
+    required = false,
+    standalone = true
+  ) => {
     const selectedBodyMode = form.bodyModeTranslations[language];
     const hasBody = hasBodyForLanguage(form.bodyHtmlTranslations, form.bodyJsonTranslations, language);
     const subjectReady = form.subjectTranslations[language].trim().length > 0;
 
     return (
-      <section key={language} className="rounded-[28px] border border-border/70 bg-background p-5">
-        <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="editorial-heading text-xl">{getLanguageLabel(language)}</p>
-              <StatusPill ok={subjectReady && hasBody} label={required ? "Richiesta" : "Opzionale"} />
+      <section key={language} className={standalone ? "rounded-[28px] border border-border/70 bg-background p-5" : ""}>
+        {standalone && (
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="editorial-heading text-xl">{getLanguageLabel(language)}</p>
+                <StatusPill ok={subjectReady && hasBody} label={required ? "Richiesta" : "Opzionale"} />
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Subject e contenuto vengono usati per chi ha questa lingua come preferenza o fallback.
+              </p>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Subject e contenuto vengono usati per chi ha questa lingua come preferenza o fallback.
-            </p>
+            <button
+              type="button"
+              onClick={() => setSelectedLanguage(language)}
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-sans transition-colors ${
+                selectedLanguage === language
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Eye size={14} /> Anteprima
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setSelectedLanguage(language)}
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-sans transition-colors ${
-              selectedLanguage === language
-                ? "border-accent bg-accent/10 text-accent"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Eye size={14} /> Anteprima
-          </button>
-        </div>
+        )}
 
         <div className="grid gap-4">
           <div>
@@ -1652,8 +1658,53 @@ const AdminNewsletterManager = () => {
                 </div>
               </div>
 
-              <div className="grid gap-5 xl:grid-cols-2">
-                {requiredLanguages.map((language) => renderLanguageEditor(language, true))}
+              <div className="rounded-[28px] border border-border/70 bg-background p-5">
+                <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="editorial-heading text-xl">{getLanguageLabel(selectedLanguage)}</p>
+                      <StatusPill
+                        ok={
+                          form.subjectTranslations[selectedLanguage].trim().length > 0 &&
+                          hasBodyForLanguage(
+                            form.bodyHtmlTranslations,
+                            form.bodyJsonTranslations,
+                            selectedLanguage
+                          )
+                        }
+                        label="Richiesta"
+                      />
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Subject e contenuto vengono usati per chi ha questa lingua come preferenza o fallback.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full border border-accent bg-accent/10 px-4 py-2 text-sm font-sans text-accent"
+                  >
+                    <Eye size={14} /> Anteprima
+                  </button>
+                </div>
+
+                <div className="mb-5 flex gap-4 border-b border-border">
+                  {requiredLanguages.map((language) => (
+                    <button
+                      key={language}
+                      type="button"
+                      onClick={() => setSelectedLanguage(language)}
+                      className={`pb-3 text-sm font-sans tracking-wide transition-colors border-b-2 ${
+                        selectedLanguage === language
+                          ? "border-foreground text-foreground"
+                          : "border-transparent text-muted-foreground"
+                      }`}
+                    >
+                      {getLanguageLabel(language)}
+                    </button>
+                  ))}
+                </div>
+
+                {renderLanguageEditor(selectedLanguage, true, false)}
               </div>
 
               <div className="mt-5">
