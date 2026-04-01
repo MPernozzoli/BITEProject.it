@@ -562,6 +562,8 @@ const AdminProfile = () => {
     setSaving(true);
     const userId = session.user.id;
     const currentEmail = (session.user.email || email).trim().toLowerCase();
+    let profileSaved = false;
+    let newsletterSaved = false;
 
     try {
       const { error: directProfileError } = await supabase
@@ -591,18 +593,54 @@ const AdminProfile = () => {
           },
         });
 
-        if (functionError) throw functionError;
+        if (functionError) {
+          console.error("Profile save fallback failed:", functionError);
+        } else {
+          profileSaved = true;
+          newsletterSaved = true;
+        }
       } else {
-        await syncNewsletterPreference(userId, currentEmail, newsletterSubscribed);
+        profileSaved = true;
       }
 
-      toast.success(copy.actions.saveSuccess);
+      if (!newsletterSaved) {
+        try {
+          await syncNewsletterPreference(userId, currentEmail, newsletterSubscribed);
+          newsletterSaved = true;
+        } catch (newsletterError) {
+          console.error("Newsletter sync error:", newsletterError);
+        }
+      }
+
+      if (profileSaved && newsletterSaved) {
+        toast.success(copy.actions.saveSuccess);
+        return;
+      }
+
+      if (!profileSaved && newsletterSaved) {
+        toast.error(
+          lang === "en"
+            ? "Newsletter updated, but the profile could not be saved."
+            : "Newsletter aggiornata, ma il profilo non è stato salvato.",
+        );
+        return;
+      }
+
+      if (profileSaved && !newsletterSaved) {
+        toast.error(
+          lang === "en"
+            ? "Profile saved, but the newsletter subscription could not be updated."
+            : "Profilo salvato, ma l'iscrizione newsletter non è stata aggiornata.",
+        );
+        return;
+      }
     } catch (error) {
       console.error("Profile save error:", error);
-      toast.error(copy.actions.saveError);
     } finally {
       setSaving(false);
     }
+
+    toast.error(copy.actions.saveError);
   };
 
   if (authLoading || (!profileLoaded && session)) {
@@ -625,9 +663,6 @@ const AdminProfile = () => {
           <div className="relative grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6 p-6 md:p-8 lg:p-10">
             <div className="space-y-6">
               <div className="space-y-3">
-                <span className="inline-flex items-center rounded-full border border-white/65 bg-white/60 px-4 py-1.5 text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">
-                  {copy.badge}
-                </span>
                 <div className="space-y-3 max-w-2xl">
                   <h1 className="editorial-heading text-4xl md:text-5xl lg:text-6xl leading-none">{copy.title}</h1>
                   <p className="editorial-body text-sm md:text-base leading-relaxed text-foreground/75">

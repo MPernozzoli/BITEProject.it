@@ -25,6 +25,17 @@ type ActivationResult = {
   alreadySubscribed: boolean
 }
 
+function isMissingRelationError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (
+    error.code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('could not find the table') ||
+    message.includes('relation') && message.includes('not exist')
+  )
+}
+
 export async function activateNewsletterSubscription({
   supabase,
   supabaseUrl,
@@ -66,13 +77,16 @@ export async function activateNewsletterSubscription({
       .maybeSingle(),
   ])
 
-  if (preferenceLookupError) {
+  const preferencesTableAvailable = !isMissingRelationError(preferenceLookupError)
+  const automationsTableAvailable = !isMissingRelationError(welcomeAutomationError)
+
+  if (preferenceLookupError && preferencesTableAvailable) {
     throw new Error(
       `Failed to load email preferences for activation: ${preferenceLookupError.message}`
     )
   }
 
-  if (welcomeAutomationError) {
+  if (welcomeAutomationError && automationsTableAvailable) {
     throw new Error(
       `Failed to load welcome automation for activation: ${welcomeAutomationError.message}`
     )
@@ -89,18 +103,20 @@ export async function activateNewsletterSubscription({
   const now = new Date().toISOString()
   const wasSubscribed = Boolean(existingSubscriber?.subscribed)
 
-  const { error: preferenceError } = await supabase
-    .from('email_notification_preferences')
-    .upsert({
-      email: normalizedEmail,
-      ...nextPreferences,
-      updated_at: now,
-    })
+  if (preferencesTableAvailable) {
+    const { error: preferenceError } = await supabase
+      .from('email_notification_preferences')
+      .upsert({
+        email: normalizedEmail,
+        ...nextPreferences,
+        updated_at: now,
+      })
 
-  if (preferenceError) {
-    throw new Error(
-      `Failed to activate email preferences for ${normalizedEmail}: ${preferenceError.message}`
-    )
+    if (preferenceError && !isMissingRelationError(preferenceError)) {
+      throw new Error(
+        `Failed to activate email preferences for ${normalizedEmail}: ${preferenceError.message}`
+      )
+    }
   }
 
   const subscriberPayload = {
@@ -171,7 +187,7 @@ export async function activateNewsletterSubscription({
       .update({ used_at: now })
       .eq('id', confirmationTokenId)
 
-    if (tokenUpdateError) {
+    if (tokenUpdateError && !isMissingRelationError(tokenUpdateError)) {
       console.error('Failed to mark confirmation token as used', tokenUpdateError)
     }
   } else if (markAllConfirmationTokensUsed) {
@@ -181,15 +197,23 @@ export async function activateNewsletterSubscription({
       .eq('email', normalizedEmail)
       .is('used_at', null)
 
-    if (tokenUpdateError) {
+    if (tokenUpdateError && !isMissingRelationError(tokenUpdateError)) {
       console.error('Failed to mark pending confirmation tokens as used', tokenUpdateError)
     }
   }
 
-  const welcomeAutomation = normalizeSystemEmailAutomation(
-    welcomeAutomationRow,
-    'newsletter-welcome'
-  )
+  const welcomeAutomation = automationsTableAvailable
+    ? normalizeSystemEmailAutomation(
+        welcomeAutomationRow,
+        'newsletter-welcome'
+      )
+    : {
+        key: 'newsletter-welcome',
+        enabled: true,
+        config: {},
+        last_run_at: null,
+        last_sent_at: null,
+      }
 
   if (welcomeAutomation.enabled && !wasSubscribed) {
     const response = await fetch(
@@ -214,7 +238,7 @@ export async function activateNewsletterSubscription({
 
     if (!response.ok) {
       console.error('Failed to queue welcome email after activation', await response.text())
-    } else {
+    } else if (automationsTableAvailable) {
       const { error: automationUpdateError } = await supabase
         .from('system_email_automations')
         .upsert({
@@ -226,7 +250,7 @@ export async function activateNewsletterSubscription({
           updated_at: now,
         })
 
-      if (automationUpdateError) {
+      if (automationUpdateError && !isMissingRelationError(automationUpdateError)) {
         console.error(
           'Failed to update welcome automation timestamps after activation',
           automationUpdateError

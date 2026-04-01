@@ -28,6 +28,17 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+function isMissingRelationError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (
+    error.code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('could not find the table') ||
+    message.includes('relation') && message.includes('not exist')
+  )
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -167,23 +178,27 @@ Deno.serve(async (req) => {
     return successResponse()
   }
 
+  const activateDirectly = async () => {
+    await activateNewsletterSubscription({
+      supabase,
+      supabaseUrl,
+      serviceRoleKey,
+      email: normalizedEmail,
+      profileId:
+        matchingProfile?.id ?? existingSubscriber?.profile_id ?? requesterUserId,
+      preferredLanguage:
+        matchingProfile?.preferred_language ??
+        existingSubscriber?.preferred_language ??
+        preferredLanguage,
+      recipientName: matchingProfile?.name ?? null,
+      source,
+      markAllConfirmationTokensUsed: true,
+    })
+  }
+
   if (isAuthenticatedOwnEmail) {
     try {
-      await activateNewsletterSubscription({
-        supabase,
-        supabaseUrl,
-        serviceRoleKey,
-        email: normalizedEmail,
-        profileId:
-          matchingProfile?.id ?? existingSubscriber?.profile_id ?? requesterUserId,
-        preferredLanguage:
-          matchingProfile?.preferred_language ??
-          existingSubscriber?.preferred_language ??
-          preferredLanguage,
-        recipientName: matchingProfile?.name ?? null,
-        source,
-        markAllConfirmationTokensUsed: true,
-      })
+      await activateDirectly()
       return successResponse()
     } catch (error) {
       console.error('Failed to activate verified newsletter subscription', error)
@@ -198,6 +213,15 @@ Deno.serve(async (req) => {
     .maybeSingle()
 
   if (automationLookupError) {
+    if (isMissingRelationError(automationLookupError)) {
+      try {
+        await activateDirectly()
+        return successResponse()
+      } catch (error) {
+        console.error('Failed to subscribe with legacy fallback', error)
+        return jsonResponse({ error: 'Failed to subscribe' }, 500)
+      }
+    }
     console.error('Failed to load system automation settings', automationLookupError)
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
@@ -208,7 +232,13 @@ Deno.serve(async (req) => {
   )
 
   if (!confirmationAutomation.enabled) {
-    return successResponse()
+    try {
+      await activateDirectly()
+      return successResponse()
+    } catch (error) {
+      console.error('Failed to activate direct subscription when confirmation is disabled', error)
+      return jsonResponse({ error: 'Failed to subscribe' }, 500)
+    }
   }
 
   const resendCooldownMinutes =
@@ -224,6 +254,15 @@ Deno.serve(async (req) => {
     .maybeSingle()
 
   if (tokenLookupError) {
+    if (isMissingRelationError(tokenLookupError)) {
+      try {
+        await activateDirectly()
+        return successResponse()
+      } catch (error) {
+        console.error('Failed to subscribe with legacy token fallback', error)
+        return jsonResponse({ error: 'Failed to subscribe' }, 500)
+      }
+    }
     console.error('Failed to load newsletter confirmation token', tokenLookupError)
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
@@ -274,6 +313,15 @@ Deno.serve(async (req) => {
   const { error: tokenMutationError } = await tokenMutation
 
   if (tokenMutationError) {
+    if (isMissingRelationError(tokenMutationError)) {
+      try {
+        await activateDirectly()
+        return successResponse()
+      } catch (error) {
+        console.error('Failed to subscribe with legacy token save fallback', error)
+        return jsonResponse({ error: 'Failed to subscribe' }, 500)
+      }
+    }
     console.error('Failed to save newsletter confirmation token', tokenMutationError)
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
