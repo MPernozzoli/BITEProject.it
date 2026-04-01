@@ -235,7 +235,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   })
 
   // Enqueue email for async processing by the dispatcher (process-email-queue).
-  const supabase = createClient(
+  const supabase = createClient<any>(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
