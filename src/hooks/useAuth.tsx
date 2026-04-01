@@ -7,6 +7,8 @@ import {
   validateSessionOrSignOut,
 } from "@/lib/supabase-auth";
 
+const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
+
 interface AuthContext {
   session: Session | null;
   isAdmin: boolean;
@@ -31,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [adminLoading, setAdminLoading] = useState(true);
   const authBootstrapDoneRef = useRef(false);
   const authStateVersionRef = useRef(0);
+  const newsletterSyncInFlightRef = useRef(false);
 
   const checkAdmin = useCallback(async (userId: string, version: number) => {
     try {
@@ -151,6 +154,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [applySession]);
+
+  useEffect(() => {
+    if (!session?.user || newsletterSyncInFlightRef.current) return;
+
+    const raw = window.localStorage.getItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+    if (!raw) return;
+
+    let payload: { enabled?: boolean; source?: string; createdAt?: string } | null = null;
+    try {
+      payload = JSON.parse(raw) as { enabled?: boolean; source?: string; createdAt?: string };
+    } catch {
+      window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+      return;
+    }
+
+    const createdAtMs = payload?.createdAt ? Date.parse(payload.createdAt) : NaN;
+    const isExpired =
+      Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 1000 * 60 * 60;
+
+    if (isExpired || !payload?.enabled) {
+      window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+      return;
+    }
+
+    newsletterSyncInFlightRef.current = true;
+
+    void (async () => {
+      try {
+        const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
+          body: {
+            subscribed: true,
+            source: payload?.source || "signup_google",
+          },
+        });
+
+        if (error) {
+          console.error("Failed to sync pending signup newsletter preference", error);
+          return;
+        }
+
+        window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+      } finally {
+        newsletterSyncInFlightRef.current = false;
+      }
+    })();
+  }, [session]);
 
   return (
     <AuthCtx.Provider value={{ session, isAdmin, loading, adminLoading, revalidateSession }}>

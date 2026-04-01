@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon, BookOpen, X } from "lucide-react";
@@ -22,6 +22,16 @@ const XIcon = ({ size = 16 }: { size?: number }) => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 );
+
+type StorySubscriptionRow = {
+  id: string;
+  story_id: string;
+  stories: {
+    title_it: string;
+    title_en: string;
+    slug: string;
+  } | null;
+};
 
 const AdminProfile = () => {
   const { session, loading: authLoading } = useAuth();
@@ -52,26 +62,9 @@ const AdminProfile = () => {
   const [storySubscriptions, setStorySubscriptions] = useState<Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>>([]);
   const { lang } = useI18n();
 
-  const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as any);
+  const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!session) {
-      navigate("/login", { state: { from: "/profile" }, replace: true });
-      return;
-    }
-    loadProfile();
-  }, [authLoading, session]);
-
-  useEffect(() => {
-    return () => {
-      if (pendingAvatarUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(pendingAvatarUrl);
-      }
-    };
-  }, [pendingAvatarUrl]);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
       setProfileLoaded(true);
@@ -113,23 +106,17 @@ const AdminProfile = () => {
         });
       }
 
-      const currentEmail = (session?.user.email || "").trim().toLowerCase();
-      const newsletterQuery = supabase
-        .from("newsletter_subscribers")
-        .select("*");
-      const { data: sub, error: subError } = await (currentEmail
-        ? newsletterQuery.or(`profile_id.eq.${userId},email.eq.${currentEmail}`)
-        : newsletterQuery.eq("profile_id", userId))
-        .maybeSingle();
-      if (subError) {
-        if (isAuthFailureError(subError)) {
-          await supabase.auth.signOut();
-          navigate("/login", { state: { from: "/profile" }, replace: true });
-          return;
+      const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
+        "my-newsletter-subscription",
+        {
+          body: {},
         }
-        console.error("Newsletter subscription load error:", subError);
+      );
+      if (newsletterError) {
+        console.error("Newsletter subscription load error:", newsletterError);
+      } else {
+        setNewsletterSubscribed(Boolean(newsletterState?.subscribed));
       }
-      if (sub) setNewsletterSubscribed(sub.subscribed);
 
       const { data: storySubs, error: storySubsError } = await supabase
         .from("story_subscriptions")
@@ -147,13 +134,40 @@ const AdminProfile = () => {
 
       if (storySubs) {
         setStorySubscriptions(
-          storySubs.map((s: any) => ({ id: s.id, story_id: s.story_id, story: s.stories }))
+          (storySubs as StorySubscriptionRow[])
+            .filter((s) => Boolean(s.stories))
+            .map((s) => ({
+              id: s.id,
+              story_id: s.story_id,
+              story: s.stories as StorySubscriptionRow["stories"] & {
+                title_it: string;
+                title_en: string;
+                slug: string;
+              },
+            }))
         );
       }
     } finally {
       setProfileLoaded(true);
     }
-  };
+  }, [navigate, session]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!session) {
+      navigate("/login", { state: { from: "/profile" }, replace: true });
+      return;
+    }
+    void loadProfile();
+  }, [authLoading, loadProfile, navigate, session]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingAvatarUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(pendingAvatarUrl);
+      }
+    };
+  }, [pendingAvatarUrl]);
 
   const resetPendingAvatar = () => {
     setPendingAvatarUrl(null);
@@ -196,9 +210,9 @@ const AdminProfile = () => {
 
   const handleLanguageChange = (lang: ExtendedLanguage) => {
     setPreferredLanguage(lang);
-    if (SITE_LANGUAGES.includes(lang as any)) {
+    if (SITE_LANGUAGES.includes(lang as "it" | "en")) {
       setSecondaryLanguage(null);
-    } else if (!secondaryLanguage || !SITE_LANGUAGES.includes(secondaryLanguage as any)) {
+    } else if (!secondaryLanguage || !SITE_LANGUAGES.includes(secondaryLanguage as "it" | "en")) {
       setSecondaryLanguage("it");
     }
   };
@@ -207,45 +221,42 @@ const AdminProfile = () => {
     if (!session) return;
     setSaving(true);
     const userId = session.user.id;
-    await supabase.from("profiles").update({
-      name,
-      bio,
-      avatar_url: avatarUrl,
-      preferred_language: preferredLanguage,
-      secondary_language: isSiteNative ? null : secondaryLanguage,
-      ...socials,
-    }).eq("id", userId);
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const subscriptionQuery = supabase
-      .from("newsletter_subscribers")
-      .select("id");
-    const { data: existingSub } = await (normalizedEmail
-      ? subscriptionQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
-      : subscriptionQuery.eq("profile_id", userId))
-      .maybeSingle();
-    if (existingSub) {
-      await supabase
-        .from("newsletter_subscribers")
-        .update({
-          profile_id: userId,
-          subscribed: newsletterSubscribed,
-          email: normalizedEmail,
-          preferred_language: preferredLanguage,
-          source: "profile",
-        })
-        .eq("id", existingSub.id);
-    } else {
-      await supabase.from("newsletter_subscribers").insert({
-        profile_id: userId,
-        email: normalizedEmail,
-        subscribed: newsletterSubscribed,
+    try {
+      const { error: profileError } = await supabase.from("profiles").update({
+        name,
+        bio,
+        avatar_url: avatarUrl,
         preferred_language: preferredLanguage,
-        source: "profile",
-      });
-    }
+        secondary_language: isSiteNative ? null : secondaryLanguage,
+        ...socials,
+      }).eq("id", userId);
 
-    setSaving(false);
+      if (profileError) {
+        throw profileError;
+      }
+
+      const { error: newsletterError } = await supabase.functions.invoke(
+        "my-newsletter-subscription",
+        {
+          body: {
+            subscribed: newsletterSubscribed,
+            source: "profile",
+          },
+        }
+      );
+
+      if (newsletterError) {
+        throw newsletterError;
+      }
+
+      toast.success("Profilo aggiornato.");
+    } catch (error) {
+      console.error("Profile save error:", error);
+      toast.error("Impossibile salvare il profilo.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (authLoading || (!profileLoaded && session)) {

@@ -18,6 +18,7 @@ type AuthMethod = "google" | "email";
 
 const OTP_LENGTH = 8;
 const LAST_AUTH_METHOD_STORAGE_KEY = "bite_last_auth_method";
+const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 const AUTH_COPY = {
@@ -81,6 +82,9 @@ const AUTH_COPY = {
       emailPlaceholder: "la-tua@email.com",
       rememberLabel: "Ricordami su questo dispositivo",
       rememberHint: "Disattivalo se stai usando un computer condiviso o pubblico.",
+      newsletterLabel: "Iscrivimi anche alla newsletter",
+      newsletterHint:
+        "Default attivo. Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
       divider: "oppure",
       google: "Continua con Google",
       emailMethod: "Continua via email",
@@ -179,6 +183,9 @@ const AUTH_COPY = {
       emailPlaceholder: "your@email.com",
       rememberLabel: "Keep me signed in on this device",
       rememberHint: "Turn it off if you're using a shared or public computer.",
+      newsletterLabel: "Subscribe me to the newsletter too",
+      newsletterHint:
+        "Enabled by default. You will receive editorial updates and periodic digests, and you can unsubscribe anytime.",
       divider: "or",
       google: "Continue with Google",
       emailMethod: "Continue with email",
@@ -248,7 +255,9 @@ const UserLogin = () => {
   const [error, setError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [rememberMe, setRememberMe] = useState(true);
+  const [signupNewsletterOptIn, setSignupNewsletterOptIn] = useState(true);
   const [lastUsedMethod, setLastUsedMethod] = useState<AuthMethod | null>(null);
+  const [submittedNewsletterOptIn, setSubmittedNewsletterOptIn] = useState(true);
   const { lang } = useI18n();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -300,6 +309,7 @@ const UserLogin = () => {
     setOtp("");
     setError("");
     setSubmittedEmail("");
+    setSubmittedNewsletterOptIn(true);
     setResendCooldown(0);
   }, [authMode]);
 
@@ -342,6 +352,7 @@ const UserLogin = () => {
     setSubmittedEmail(normalizedEmail);
     setSubmittedName(trimmedName);
     setSubmittedMode(mode);
+    setSubmittedNewsletterOptIn(mode === "signup" ? signupNewsletterOptIn : false);
     setResendCooldown(30);
     return true;
   };
@@ -398,6 +409,22 @@ const UserLogin = () => {
         return;
       }
 
+      if (submittedMode === "signup" && submittedNewsletterOptIn) {
+        const { error: newsletterError } = await supabase.functions.invoke(
+          "my-newsletter-subscription",
+          {
+            body: {
+              subscribed: true,
+              source: "signup_email",
+            },
+          }
+        );
+
+        if (newsletterError) {
+          console.error("Signup newsletter sync failed", newsletterError);
+        }
+      }
+
       navigate(redirectTo, { replace: true });
     } catch (caughtError) {
       const message =
@@ -412,11 +439,27 @@ const UserLogin = () => {
     setLoading(true);
     setError("");
 
+    if (authMode === "signup") {
+      window.localStorage.setItem(
+        PENDING_SIGNUP_NEWSLETTER_KEY,
+        JSON.stringify({
+          enabled: signupNewsletterOptIn,
+          source: "signup_google",
+          createdAt: new Date().toISOString(),
+        })
+      );
+    } else {
+      window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+    }
+
     const { error: oauthError } = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: window.location.origin,
     });
 
     if (oauthError) {
+      if (authMode === "signup") {
+        window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
+      }
       setError(oauthError.message || ui.errors.oauth);
     } else {
       localStorage.setItem(LAST_AUTH_METHOD_STORAGE_KEY, "google");
@@ -658,6 +701,25 @@ const UserLogin = () => {
                       </span>
                     </span>
                   </label>
+
+                  {authMode === "signup" && (
+                    <label className="flex cursor-pointer items-start gap-3 rounded-[1.5rem] border border-[hsl(var(--accent)/0.18)] bg-[hsl(var(--accent)/0.05)] p-4">
+                      <input
+                        type="checkbox"
+                        checked={signupNewsletterOptIn}
+                        onChange={(e) => setSignupNewsletterOptIn(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-border accent-[hsl(var(--accent))]"
+                      />
+                      <span className="space-y-1">
+                        <span className="block text-sm font-medium text-foreground">
+                          {ui.form.newsletterLabel}
+                        </span>
+                        <span className="block text-xs leading-5 text-muted-foreground">
+                          {ui.form.newsletterHint}
+                        </span>
+                      </span>
+                    </label>
+                  )}
 
                   <div className="flex gap-3 rounded-[1.5rem] border border-[hsl(var(--accent)/0.16)] bg-[hsl(var(--accent)/0.06)] p-4">
                     <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
