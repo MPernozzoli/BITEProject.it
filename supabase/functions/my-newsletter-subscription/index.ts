@@ -20,6 +20,17 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   })
 }
 
+function isMissingRelationError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (
+    error.code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('could not find the table') ||
+    message.includes('relation') && message.includes('not exist')
+  )
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -68,7 +79,7 @@ Deno.serve(async (req) => {
       ? body.source.trim().slice(0, 64)
       : 'profile'
 
-  const [{ data: profile }, { data: preferenceRow }, { data: existingSubscriber }, { data: suppressionRow }] =
+  const [{ data: profile }, { data: preferenceRow, error: preferenceLookupError }, { data: existingSubscriber }, { data: suppressionRow }] =
     await Promise.all([
       supabase
         .from('profiles')
@@ -82,7 +93,7 @@ Deno.serve(async (req) => {
         .maybeSingle(),
       supabase
         .from('newsletter_subscribers')
-        .select('id, subscribed, preferred_language, profile_id')
+        .select('id, subscribed, profile_id')
         .eq('email', normalizedEmail)
         .maybeSingle(),
       supabase
@@ -93,7 +104,8 @@ Deno.serve(async (req) => {
         .maybeSingle(),
     ])
 
-  const currentPreferences = normalizeEmailNotificationPreferences(preferenceRow)
+  const preferencesTableAvailable = !isMissingRelationError(preferenceLookupError)
+  const currentPreferences = normalizeEmailNotificationPreferences(preferencesTableAvailable ? preferenceRow : null)
   const currentSubscribed = preferenceRow
     ? hasAnyNewsletterNotificationsEnabled(currentPreferences)
     : Boolean(existingSubscriber?.subscribed)
@@ -150,17 +162,19 @@ Deno.serve(async (req) => {
   const shouldGloballySuppress = !hasAnyEmailNotificationsEnabled(nextPreferences)
   const now = new Date().toISOString()
 
-  const { error: preferenceError } = await supabase
-    .from('email_notification_preferences')
-    .upsert({
-      email: normalizedEmail,
-      ...nextPreferences,
-      updated_at: now,
-    })
+  if (preferencesTableAvailable) {
+    const { error: preferenceError } = await supabase
+      .from('email_notification_preferences')
+      .upsert({
+        email: normalizedEmail,
+        ...nextPreferences,
+        updated_at: now,
+      })
 
-  if (preferenceError) {
-    console.error('Failed to update own email preferences', preferenceError)
-    return jsonResponse({ error: 'Failed to update newsletter subscription' }, 500)
+    if (preferenceError && !isMissingRelationError(preferenceError)) {
+      console.error('Failed to update own email preferences', preferenceError)
+      return jsonResponse({ error: 'Failed to update newsletter subscription' }, 500)
+    }
   }
 
   if (shouldGloballySuppress) {
@@ -201,13 +215,7 @@ Deno.serve(async (req) => {
       .update({
         profile_id: profile?.id ?? existingSubscriber.profile_id ?? user.id,
         email: normalizedEmail,
-        preferred_language:
-          profile?.preferred_language ??
-          existingSubscriber.preferred_language ??
-          normalizeLanguage(profile?.preferred_language ?? null),
         subscribed: false,
-        source,
-        unsubscribed_at: now,
       })
       .eq('id', existingSubscriber.id)
 

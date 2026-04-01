@@ -62,7 +62,7 @@ export async function activateNewsletterSubscription({
       .maybeSingle(),
     supabase
       .from('newsletter_subscribers')
-      .select('id, preferred_language, subscribed, profile_id')
+      .select('id, subscribed, profile_id')
       .eq('email', normalizedEmail)
       .maybeSingle(),
     supabase
@@ -93,7 +93,7 @@ export async function activateNewsletterSubscription({
   }
 
   const language = normalizeLanguage(
-    preferredLanguage ?? profile?.preferred_language ?? existingSubscriber?.preferred_language
+    preferredLanguage ?? profile?.preferred_language
   )
   const nextPreferences = normalizeEmailNotificationPreferences({
     ...(preferenceRow ?? {}),
@@ -122,14 +122,7 @@ export async function activateNewsletterSubscription({
   const subscriberPayload = {
     email: normalizedEmail,
     profile_id: profileId ?? profile?.id ?? existingSubscriber?.profile_id ?? null,
-    preferred_language:
-      preferredLanguage ??
-      profile?.preferred_language ??
-      existingSubscriber?.preferred_language ??
-      language,
     subscribed: hasAnyNewsletterNotificationsEnabled(nextPreferences),
-    source: source || 'homepage',
-    unsubscribed_at: null,
   }
 
   const subscriberMutation = existingSubscriber
@@ -172,7 +165,7 @@ export async function activateNewsletterSubscription({
       subscriber_id: subscriberId,
       email: normalizedEmail,
       event_type: 'subscribed',
-      preferred_language: subscriberPayload.preferred_language,
+      preferred_language: preferredLanguage ?? profile?.preferred_language ?? language,
       occurred_at: now,
     })
 
@@ -229,7 +222,7 @@ export async function activateNewsletterSubscription({
           recipientEmail: normalizedEmail,
           idempotencyKey: `newsletter-welcome:${normalizedEmail}:${crypto.randomUUID()}`,
           templateData: {
-            language: subscriberPayload.preferred_language,
+            language: preferredLanguage ?? profile?.preferred_language ?? language,
             recipientName: recipientName ?? profile?.name ?? null,
           },
         }),

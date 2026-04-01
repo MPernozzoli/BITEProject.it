@@ -381,10 +381,7 @@ const AdminProfile = () => {
           .update({
             profile_id: userId,
             email: normalizedEmail,
-            preferred_language: preferredLanguage,
             subscribed: false,
-            source: "profile",
-            unsubscribed_at: now,
           })
           .eq("id", existingSub.id);
 

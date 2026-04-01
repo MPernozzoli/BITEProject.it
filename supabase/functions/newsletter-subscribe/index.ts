@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
 
   const { data: existingSubscriber, error: lookupError } = await supabase
     .from('newsletter_subscribers')
-    .select('id, subscribed, profile_id, preferred_language')
+    .select('id, subscribed, profile_id')
     .or(
       matchingProfile?.id
         ? `email.eq.${normalizedEmail},profile_id.eq.${matchingProfile.id}`
@@ -188,7 +188,6 @@ Deno.serve(async (req) => {
         matchingProfile?.id ?? existingSubscriber?.profile_id ?? requesterUserId,
       preferredLanguage:
         matchingProfile?.preferred_language ??
-        existingSubscriber?.preferred_language ??
         preferredLanguage,
       recipientName: matchingProfile?.name ?? null,
       source,
@@ -277,7 +276,6 @@ Deno.serve(async (req) => {
 
   const preferredLanguageForToken =
     matchingProfile?.preferred_language ??
-    existingSubscriber?.preferred_language ??
     preferredLanguage
 
   let confirmationToken = existingConfirmationToken?.token ?? crypto.randomUUID().replaceAll('-', '')

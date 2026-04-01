@@ -31,6 +31,17 @@ function readNullableString(value: unknown, maxLength: number): string | null {
   return normalized || null
 }
 
+function isMissingRelationError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (
+    error.code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('could not find the table') ||
+    message.includes('relation') && message.includes('not exist')
+  )
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -115,7 +126,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to save profile' }, 500)
   }
 
-  const [{ data: preferenceRow }, { data: existingSubscriber }] = await Promise.all([
+  const [{ data: preferenceRow, error: preferenceLookupError }, { data: existingSubscriber }] = await Promise.all([
     supabase
       .from('email_notification_preferences')
       .select('newsletter_enabled, digest_enabled, story_notifications_enabled')
@@ -123,7 +134,7 @@ Deno.serve(async (req) => {
       .maybeSingle(),
     supabase
       .from('newsletter_subscribers')
-      .select('id, preferred_language, profile_id')
+      .select('id, profile_id')
       .eq('email', normalizedEmail)
       .maybeSingle(),
   ])
@@ -146,7 +157,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Failed to save newsletter settings' }, 500)
     }
   } else {
-    const currentPreferences = normalizeEmailNotificationPreferences(preferenceRow)
+    const preferencesTableAvailable = !isMissingRelationError(preferenceLookupError)
+    const currentPreferences = normalizeEmailNotificationPreferences(
+      preferencesTableAvailable ? preferenceRow : null
+    )
     const nextPreferences = normalizeEmailNotificationPreferences({
       ...currentPreferences,
       newsletter_enabled: false,
@@ -156,17 +170,19 @@ Deno.serve(async (req) => {
       hasAnyNewsletterNotificationsEnabled(currentPreferences)
     const shouldGloballySuppress = !hasAnyEmailNotificationsEnabled(nextPreferences)
 
-    const { error: preferenceError } = await supabase
-      .from('email_notification_preferences')
-      .upsert({
-        email: normalizedEmail,
-        ...nextPreferences,
-        updated_at: now,
-      })
+    if (preferencesTableAvailable) {
+      const { error: preferenceError } = await supabase
+        .from('email_notification_preferences')
+        .upsert({
+          email: normalizedEmail,
+          ...nextPreferences,
+          updated_at: now,
+        })
 
-    if (preferenceError) {
-      console.error('Failed to update newsletter preferences during profile save', preferenceError)
-      return jsonResponse({ error: 'Failed to save newsletter settings' }, 500)
+      if (preferenceError && !isMissingRelationError(preferenceError)) {
+        console.error('Failed to update newsletter preferences during profile save', preferenceError)
+        return jsonResponse({ error: 'Failed to save newsletter settings' }, 500)
+      }
     }
 
     if (shouldGloballySuppress) {
@@ -207,10 +223,7 @@ Deno.serve(async (req) => {
         .update({
           email: normalizedEmail,
           profile_id: user.id,
-          preferred_language: preferredLanguage,
           subscribed: false,
-          source: 'profile',
-          unsubscribed_at: now,
         })
         .eq('id', existingSubscriber.id)
 
