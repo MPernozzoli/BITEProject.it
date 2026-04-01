@@ -457,6 +457,26 @@ const Journal = () => {
   const isMapInteractionLocked =
     viewMode === "map" &&
     (articleReaderActive || showPreviewPanel || Boolean(panelProfileId) || (isMobile && mobileSidebarVisible));
+  const routeStatusLegend = [
+    {
+      id: "completed",
+      label: lang === "it" ? "Completata" : "Completed",
+      swatchClassName: "bg-[hsl(210,18%,26%)]",
+      lineClassName: "h-[3px]",
+    },
+    {
+      id: "active",
+      label: lang === "it" ? "Attiva" : "Active",
+      swatchClassName: "bg-[hsl(202,72%,44%)] shadow-[0_0_0_4px_hsla(202,72%,44%,0.18)]",
+      lineClassName: "h-[4px]",
+    },
+    {
+      id: "planned",
+      label: lang === "it" ? "Pianificata" : "Planned",
+      swatchClassName: "bg-[repeating-linear-gradient(90deg,hsl(208,22%,72%)_0_12px,transparent_12px_20px)]",
+      lineClassName: "h-[3px]",
+    },
+  ] as const;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -576,6 +596,17 @@ const Journal = () => {
             </div>
           )}
 
+          <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 hidden -translate-x-1/2 md:block">
+            <div className="flex items-center gap-3 rounded-full border border-white/60 bg-background/78 px-4 py-2 backdrop-blur-xl shadow-lg">
+              {routeStatusLegend.map((item) => (
+                <span key={item.id} className="inline-flex items-center gap-2 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  <span className={`w-10 rounded-full ${item.lineClassName} ${item.swatchClassName}`} aria-hidden />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {/* Floating sidebar — article list */}
           <div
             className={`fixed z-30 overflow-hidden bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] flex flex-col transition-all duration-300 ease-out ${
@@ -624,6 +655,19 @@ const Journal = () => {
                   className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
                 />
               </div>
+              {isMobile && viewMode === "map" && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {routeStatusLegend.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-background/75 px-3 py-1.5 text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground"
+                    >
+                      <span className={`w-8 rounded-full ${item.lineClassName} ${item.swatchClassName}`} aria-hidden />
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Article list */}

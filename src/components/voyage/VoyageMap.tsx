@@ -60,6 +60,77 @@ const getVoyageStrokeColor = (voyage: Voyage, index: number, variant: "base" | "
   return `hsl(${hue}, 44%, 44%)`;
 };
 
+const getVoyageStatusDashArray = (voyage: Voyage): number[] | undefined => {
+  if (voyage.status === "planned") {
+    return voyage.type === "water" ? [2.2, 2.8] : [1.6, 2.2];
+  }
+
+  return undefined;
+};
+
+const getVoyageStatusCasingColor = (voyage: Voyage, index: number) => {
+  const toneShift = ((index % 5) - 2) * (voyage.type === "water" ? 5 : 4);
+
+  if (voyage.type === "water") {
+    const hue = 206 + toneShift;
+    if (voyage.status === "active") return `hsla(${hue}, 82%, 45%, 0.22)`;
+    if (voyage.status === "planned") return `hsla(${hue + 4}, 28%, 72%, 0.18)`;
+    return `hsla(${hue - 6}, 28%, 22%, 0.18)`;
+  }
+
+  const hue = 26 + toneShift;
+  if (voyage.status === "active") return `hsla(${hue}, 80%, 44%, 0.22)`;
+  if (voyage.status === "planned") return `hsla(${hue + 4}, 24%, 70%, 0.16)`;
+  return `hsla(${hue}, 24%, 24%, 0.16)`;
+};
+
+const getVoyageLineMetrics = (
+  voyage: Voyage,
+  state: { isFocused: boolean; isHovered: boolean; isDimmed: boolean; activeArticleFocusMode?: "voyage" | "segment" | "point" | null }
+) => {
+  const { isFocused, isHovered, isDimmed, activeArticleFocusMode } = state;
+
+  const width = isFocused
+    ? activeArticleFocusMode === "voyage" ? 5.8 : 4.8
+    : isHovered
+      ? 5.2
+      : voyage.status === "active"
+        ? 4.6
+        : voyage.status === "planned"
+          ? 3.2
+          : 3.4;
+
+  const opacity = isDimmed
+    ? 0.16
+    : voyage.status === "planned"
+      ? isFocused || isHovered ? 0.82 : 0.58
+      : voyage.status === "active"
+        ? isFocused || isHovered ? 1 : 0.94
+        : isFocused || isHovered
+          ? 0.98
+          : 0.78;
+
+  const casingWidth = isFocused
+    ? width + 4
+    : isHovered
+      ? width + 3.4
+      : voyage.status === "active"
+        ? width + 3
+        : width + 2.4;
+
+  const casingOpacity = isDimmed
+    ? 0.08
+    : voyage.status === "active"
+      ? isFocused || isHovered ? 0.42 : 0.3
+      : voyage.status === "planned"
+        ? isFocused || isHovered ? 0.24 : 0.16
+        : isFocused || isHovered
+          ? 0.24
+          : 0.16;
+
+  return { width, opacity, casingWidth, casingOpacity };
+};
+
 const getArticleSegmentGeometry = (
   waypoints: VoyageWaypoint[],
   type: Voyage["type"],
@@ -283,6 +354,7 @@ const VoyageMap = ({
         );
 
         const lineId = `voyage-line-${voyage.id}`;
+        const lineCasingId = `voyage-line-casing-${voyage.id}`;
         const lineHitId = `voyage-hit-${voyage.id}`;
         if (routeCoordinates.length >= 2) {
           map.addSource(lineId, {
@@ -297,27 +369,42 @@ const VoyageMap = ({
             },
           });
 
+          const lineMetrics = getVoyageLineMetrics(voyage, {
+            isFocused,
+            isHovered,
+            isDimmed,
+            activeArticleFocusMode: activeArticleFocus?.voyageId === voyage.id ? activeArticleFocus.mode : null,
+          });
+
+          map.addLayer({
+            id: lineCasingId,
+            type: "line",
+            source: lineId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": getVoyageStatusCasingColor(voyage, voyageIndex),
+              "line-width": lineMetrics.casingWidth,
+              "line-opacity": lineMetrics.casingOpacity,
+              ...(voyage.status === "planned" ? { "line-dasharray": [2.6, 3.4] } : {}),
+            },
+          });
+
           map.addLayer({
             id: lineId,
             type: "line",
             source: lineId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
             paint: {
               "line-color": baseColor,
-              "line-width": isFocused
-                ? activeArticleFocus?.mode === "voyage" ? 5.5 : 4.4
-                : isHovered
-                  ? 5
-                  : isActive
-                    ? 4
-                    : 3,
-              "line-opacity": isDimmed
-                ? 0.16
-                : voyage.status === "planned"
-                  ? isFocused || isHovered ? 0.72 : 0.5
-                  : isFocused || isHovered
-                    ? 0.96
-                    : 0.72,
-              ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
+              "line-width": lineMetrics.width,
+              "line-opacity": lineMetrics.opacity,
+              ...(getVoyageStatusDashArray(voyage) ? { "line-dasharray": getVoyageStatusDashArray(voyage) } : {}),
             },
           });
 
@@ -405,11 +492,11 @@ const VoyageMap = ({
                 id: focusSegmentId,
                 type: "line",
                 source: focusSegmentId,
-                paint: {
-                  "line-color": focusColor,
-                  "line-width": 7,
-                  "line-opacity": 0.96,
-                },
+              paint: {
+                "line-color": focusColor,
+                "line-width": 7,
+                "line-opacity": 0.96,
+              },
               });
             }
           }
