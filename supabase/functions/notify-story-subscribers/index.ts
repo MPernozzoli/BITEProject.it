@@ -35,7 +35,7 @@ function parseJwtClaims(token: string): Claims {
 
 async function authorizeRequest(
   req: Request,
-  supabase: ReturnType<typeof createClient>
+  supabase: ReturnType<typeof createClient<any>>
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
