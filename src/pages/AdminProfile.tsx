@@ -220,34 +220,25 @@ const AdminProfile = () => {
   const saveProfile = async () => {
     if (!session) return;
     setSaving(true);
-    const userId = session.user.id;
 
     try {
-      const { error: profileError } = await supabase.from("profiles").update({
-        name,
-        bio,
-        avatar_url: avatarUrl,
-        preferred_language: preferredLanguage,
-        secondary_language: isSiteNative ? null : secondaryLanguage,
-        ...socials,
-      }).eq("id", userId);
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      const { error: newsletterError } = await supabase.functions.invoke(
-        "my-newsletter-subscription",
+      const { error } = await supabase.functions.invoke(
+        "update-my-profile",
         {
           body: {
-            subscribed: newsletterSubscribed,
-            source: "profile",
+            name,
+            bio,
+            avatar_url: avatarUrl,
+            preferred_language: preferredLanguage,
+            secondary_language: isSiteNative ? null : secondaryLanguage,
+            newsletter_subscribed: newsletterSubscribed,
+            ...socials,
           },
         }
       );
 
-      if (newsletterError) {
-        throw newsletterError;
+      if (error) {
+        throw error;
       }
 
       toast.success("Profilo aggiornato.");
