@@ -64,7 +64,7 @@ function getNewsletterDeliveryId(payload: Record<string, unknown>): string | nul
 }
 
 async function updateNewsletterDelivery(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   payload: Record<string, unknown>,
   values: Record<string, unknown>
 ): Promise<void> {

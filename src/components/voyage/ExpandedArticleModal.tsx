@@ -109,7 +109,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
       const ids = authorLinks.map((entry) => entry.profile_id);
       const { data: profiles } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, avatar_url")
         .in("id", ids);
 
