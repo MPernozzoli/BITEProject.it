@@ -51,7 +51,7 @@ export function parseTranslations(value: unknown): TranslationRecord {
       typeof key === 'string' && typeof entryValue === 'string'
   )
 
-  return Object.fromEntries(entries)
+  return Object.fromEntries(entries) as TranslationRecord
 }
 
 export function resolveTranslatedEntry(

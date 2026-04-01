@@ -241,7 +241,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
       if (!params) return template;
 
       return Object.entries(params).reduce((result, [paramKey, value]) => {
-        return result.replaceAll(`{{${paramKey}}}`, String(value));
+        return result.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), String(value));
       }, template);
     },
     [lang]
