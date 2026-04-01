@@ -136,19 +136,19 @@ const ArticlePage = () => {
     queryKey: ["article-linked-voyage", article?.voyage_id],
     enabled: Boolean(article?.voyage_id),
     queryFn: async () => {
-      const { data, error } = await supabase.from("voyages").select("*").eq("id", article!.voyage_id).single();
+      const { data, error } = await supabase.from("voyages").select("*").eq("id", article!.voyage_id).eq("is_published", true).maybeSingle();
       if (error) throw error;
-      return data as Voyage;
+      return (data ?? null) as Voyage | null;
     },
   });
   const { data: linkedVoyageWaypoints = [] } = useQuery({
     queryKey: ["article-linked-voyage-waypoints", article?.voyage_id],
-    enabled: Boolean(article?.voyage_id),
+    enabled: Boolean(linkedVoyage?.id),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints")
         .select("*")
-        .eq("voyage_id", article!.voyage_id)
+        .eq("voyage_id", linkedVoyage!.id)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as unknown as VoyageWaypoint[];

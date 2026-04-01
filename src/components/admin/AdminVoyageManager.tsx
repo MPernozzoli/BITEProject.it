@@ -14,6 +14,8 @@ import {
   EyeOff,
   LocateFixed,
   Clock3,
+  Loader2,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
@@ -25,13 +27,14 @@ import {
   buildWaypointDefaultLocalizedNames,
   formatWaypointCoordinateLabel,
   buildVoyageGeometry,
+  geocodePlaces,
   getLocalizedWaypointName,
   getLocalizedVoyageName,
   getWaypointEffectiveType,
   getStraightVoyageGeometry,
   normalizeWaypointMedia,
 } from "@/lib/voyage-utils";
-import type { Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
+import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 interface VoyageFormState {
@@ -41,6 +44,7 @@ interface VoyageFormState {
   description_en: string;
   type: "water" | "land";
   status: "planned" | "active" | "completed";
+  is_published: boolean;
   start_date: string;
   start_time: string;
   end_date: string;
@@ -54,6 +58,7 @@ const emptyVoyageForm: VoyageFormState = {
   description_en: "",
   type: "water",
   status: "planned",
+  is_published: true,
   start_date: "",
   start_time: "",
   end_date: "",
@@ -89,7 +94,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en", "is_published"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -100,10 +105,10 @@ const stripUnsupportedWaypointMetadata = (payload: Record<string, unknown>) =>
     )
   );
 
-type VoyageRecord = Record<string, any> &
-  Pick<Voyage, "id" | "name" | "type" | "status" | "sort_order" | "created_at" | "updated_at">;
+type VoyageRecord = Record<string, unknown> &
+  Pick<Voyage, "id" | "name" | "type" | "status" | "is_published" | "sort_order" | "created_at" | "updated_at">;
 
-type WaypointRecord = Record<string, any> &
+type WaypointRecord = Record<string, unknown> &
   Pick<VoyageWaypoint, "id" | "voyage_id" | "lat" | "lng" | "sort_order" | "created_at">;
 
 const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
@@ -131,6 +136,7 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   description_it: voyage?.description_it ?? voyage?.description ?? "",
   description_en: voyage?.description_en ?? voyage?.description ?? "",
   cached_geometry: voyage?.cached_geometry ?? null,
+  is_published: voyage?.is_published ?? true,
   start_date: voyage?.start_date ?? null,
   start_time: voyage?.start_time ?? null,
   end_date: voyage?.end_date ?? null,
@@ -233,6 +239,12 @@ const AdminVoyageManager = () => {
   const routeLineMouseEnterRef = useRef<(() => void) | null>(null);
   const routeLineMouseLeaveRef = useRef<(() => void) | null>(null);
   const suppressMapClickUntilRef = useRef(0);
+  const searchResultMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const searchRequestRef = useRef(0);
+
+  const [landSearchQuery, setLandSearchQuery] = useState("");
+  const [landSearchResults, setLandSearchResults] = useState<GeocodedPlace[]>([]);
+  const [landSearchLoading, setLandSearchLoading] = useState(false);
 
   const commitVoyages = useCallback((nextVoyages: Voyage[]) => {
     voyagesRef.current = nextVoyages;
@@ -282,6 +294,40 @@ const AdminVoyageManager = () => {
   const removeSegmentPreviewMarker = useCallback(() => {
     segmentPreviewMarkerRef.current?.remove();
     segmentPreviewMarkerRef.current = null;
+  }, []);
+
+  const clearSearchResultMarker = useCallback(() => {
+    searchResultMarkerRef.current?.remove();
+    searchResultMarkerRef.current = null;
+  }, []);
+
+  const focusSearchResult = useCallback((result: GeocodedPlace) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!searchResultMarkerRef.current) {
+      const markerEl = document.createElement("div");
+      markerEl.style.cssText = `
+        width:16px;
+        height:16px;
+        border-radius:999px;
+        border:2px solid white;
+        background:hsl(210, 62%, 45%);
+        box-shadow:0 2px 12px rgba(0,0,0,0.24);
+      `;
+      searchResultMarkerRef.current = new maplibregl.Marker({ element: markerEl })
+        .setLngLat([result.lng, result.lat])
+        .addTo(map);
+    } else {
+      searchResultMarkerRef.current.setLngLat([result.lng, result.lat]);
+    }
+
+    map.flyTo({
+      center: [result.lng, result.lat],
+      zoom: Math.max(map.getZoom(), 11),
+      duration: 500,
+      essential: true,
+    });
   }, []);
 
   const resetSegmentInsertState = useCallback(() => {
@@ -535,6 +581,41 @@ const AdminVoyageManager = () => {
     },
     [commitWaypoints, syncVoyageGeometry]
   );
+
+  const runLandSearch = useCallback(async () => {
+    const query = landSearchQuery.trim();
+    if (!query) {
+      setLandSearchResults([]);
+      clearSearchResultMarker();
+      return;
+    }
+
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    setLandSearchLoading(true);
+
+    const results = await geocodePlaces(query, 6);
+    if (searchRequestRef.current !== requestId) return;
+
+    setLandSearchLoading(false);
+    setLandSearchResults(results);
+
+    if (results[0]) {
+      focusSearchResult(results[0]);
+    } else {
+      clearSearchResultMarker();
+      toast.error("Nessun indirizzo o POI trovato");
+    }
+  }, [clearSearchResultMarker, focusSearchResult, landSearchQuery]);
+
+  const addSearchResultWaypoint = useCallback(async (result: GeocodedPlace) => {
+    const voyageId = selectedVoyageRef.current;
+    if (!voyageId) return;
+
+    focusSearchResult(result);
+    const insertIndex = waypointsRef.current[voyageId]?.length || 0;
+    await insertWaypointAtIndex(voyageId, result.lat, result.lng, insertIndex);
+  }, [focusSearchResult, insertWaypointAtIndex]);
 
   const fitMapToWaypoints = useCallback((candidateWaypoints: VoyageWaypoint[]) => {
     const map = mapRef.current;
@@ -1033,6 +1114,7 @@ const AdminVoyageManager = () => {
       window.removeEventListener("mouseup", handleWindowMouseUp);
       window.removeEventListener("blur", handleWindowMouseUp);
       resetSegmentInsertState();
+      clearSearchResultMarker();
       if (routeLineMouseDownRef.current) {
         mapRef.current?.off("mousedown", "admin-route-line", routeLineMouseDownRef.current);
         routeLineMouseDownRef.current = null;
@@ -1048,7 +1130,7 @@ const AdminVoyageManager = () => {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [ensureSegmentPreviewMarker, insertWaypointAtIndex, resetSegmentInsertState]);
+  }, [clearSearchResultMarker, ensureSegmentPreviewMarker, insertWaypointAtIndex, resetSegmentInsertState]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1084,6 +1166,7 @@ const AdminVoyageManager = () => {
         description_en: voyage.description_en || voyage.description || "",
         type: voyage.type,
         status: voyage.status,
+        is_published: voyage.is_published,
         start_date: voyage.start_date || "",
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
         end_date: voyage.end_date || "",
@@ -1112,6 +1195,7 @@ const AdminVoyageManager = () => {
       description_en: descriptionEn || null,
       type: voyageForm.type,
       status: voyageForm.status,
+      is_published: voyageForm.is_published,
       start_date: voyageForm.start_date || null,
       start_time: voyageForm.start_time || null,
       end_date: voyageForm.end_date || null,
@@ -1226,6 +1310,14 @@ const AdminVoyageManager = () => {
   const distance = selectedWaypoints.length >= 2 ? totalWaypointDistance(selectedWaypoints) : 0;
   const voyageDates = selectedVoyage ? formatVoyageDateRange(selectedVoyage) : null;
 
+  useEffect(() => {
+    if (selectedVoyage?.type === "land") return;
+    setLandSearchQuery("");
+    setLandSearchResults([]);
+    setLandSearchLoading(false);
+    clearSearchResultMarker();
+  }, [clearSearchResultMarker, selectedVoyage?.type]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -1293,6 +1385,25 @@ const AdminVoyageManager = () => {
                 </select>
               </div>
             </div>
+
+            <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
+              <input
+                type="checkbox"
+                checked={voyageForm.is_published}
+                onChange={(event) => setVoyageForm((form) => ({ ...form, is_published: event.target.checked }))}
+                className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                  {voyageForm.is_published ? "Published route" : "Draft route"}
+                </span>
+                <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
+                  {voyageForm.is_published
+                    ? "Visible on public maps and included in mileage totals."
+                    : "Hidden from public maps, voyage pages, and mileage counters until published."}
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1385,6 +1496,15 @@ const AdminVoyageManager = () => {
                   <h4 className="text-sm font-sans font-medium truncate">{displayName}</h4>
                   <div className="flex items-center gap-2 text-[10px] font-sans uppercase tracking-wider text-muted-foreground">
                     <span>{voyage.status}</span>
+                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                    <span className="inline-flex items-center gap-1">
+                      {voyage.is_published ? (
+                        <Eye size={10} className="text-accent shrink-0" />
+                      ) : (
+                        <EyeOff size={10} className="shrink-0" />
+                      )}
+                      {voyage.is_published ? "published" : "draft"}
+                    </span>
                     {dateRange && (
                       <>
                         <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
@@ -1434,13 +1554,79 @@ const AdminVoyageManager = () => {
 
         {selectedVoyageId && (
           <div className="p-4 border-t border-border space-y-4">
+            {selectedVoyage?.type === "land" && (
+              <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-sans font-medium">Cerca indirizzi e POI</h4>
+                    <p className="text-xs text-muted-foreground font-sans">
+                      Cerca un luogo, centrati sulla mappa e aggiungilo direttamente come waypoint.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={landSearchQuery}
+                    onChange={(event) => setLandSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      void runLandSearch();
+                    }}
+                    placeholder="Indirizzo, città, POI, stazione..."
+                    className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void runLandSearch()}
+                    disabled={landSearchLoading}
+                    className="inline-flex items-center justify-center gap-2 border border-border px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground disabled:opacity-60"
+                    title="Cerca sulla mappa"
+                  >
+                    {landSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  </button>
+                </div>
+
+                {landSearchResults.length > 0 && (
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                    {landSearchResults.map((result, index) => (
+                      <div
+                        key={`${result.lat}-${result.lng}-${index}`}
+                        className="flex items-start gap-2 rounded-[18px] border border-border/60 bg-background/60 px-3 py-2"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => focusSearchResult(result)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <span className="block text-sm font-sans text-foreground truncate">{result.name.split(",")[0]}</span>
+                          <span className="block text-[11px] text-muted-foreground font-sans break-words">{result.name}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void addSearchResultWaypoint(result)}
+                          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-sans text-foreground hover:border-accent hover:text-accent"
+                        >
+                          Aggiungi
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
                 <p className="text-xs text-muted-foreground font-sans">
                   {selectedWaypoints.length >= 2
                     ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                    : voyageDates || "The first and last waypoints stay public by default. Intermediate ones are technical."}
+                    : voyageDates || (selectedVoyage?.type === "land"
+                      ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
+                      : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                 </p>
               </div>
             </div>

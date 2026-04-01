@@ -31,6 +31,7 @@ const VoyagesPage = () => {
       const { data, error } = await supabase
         .from("voyages")
         .select("*")
+        .eq("is_published", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as Voyage[];
@@ -41,11 +42,12 @@ const VoyagesPage = () => {
 
   const { data: liveWaypoints = [] } = useQuery<VoyageWaypoint[]>({
     queryKey: ["public-voyage-waypoints"],
-    enabled: !publicContent && !isPublicContentLoading,
+    enabled: !publicContent && !isPublicContentLoading && liveVoyages.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints")
         .select("*")
+        .in("voyage_id", liveVoyages.map((voyage) => voyage.id))
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as unknown as VoyageWaypoint[];

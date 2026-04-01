@@ -610,6 +610,7 @@ const Index = () => {
       const { data, error } = await supabase
         .from("voyages" as any)
         .select("*")
+        .eq("is_published", true)
         .order("sort_order", { ascending: true });
 
       if (error) throw error;
@@ -620,11 +621,12 @@ const Index = () => {
 
   const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery<VoyageWaypoint[]>({
     queryKey: ["home-voyage-waypoints"],
-    enabled: !publicContent && !isPublicContentLoading,
+    enabled: !publicContent && !isPublicContentLoading && liveVoyages.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints" as any)
         .select("*")
+        .in("voyage_id", liveVoyages.map((voyage) => voyage.id))
         .order("sort_order", { ascending: true });
 
       if (error) throw error;

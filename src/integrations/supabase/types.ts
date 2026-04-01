@@ -990,6 +990,7 @@ export type Database = {
           end_date: string | null
           end_time: string | null
           id: string
+          is_published: boolean
           name: string
           name_en: string | null
           name_it: string | null
@@ -1009,6 +1010,7 @@ export type Database = {
           end_date?: string | null
           end_time?: string | null
           id?: string
+          is_published?: boolean
           name?: string
           name_en?: string | null
           name_it?: string | null
@@ -1028,6 +1030,7 @@ export type Database = {
           end_date?: string | null
           end_time?: string | null
           id?: string
+          is_published?: boolean
           name?: string
           name_en?: string | null
           name_it?: string | null

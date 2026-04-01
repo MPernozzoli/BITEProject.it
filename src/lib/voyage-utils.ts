@@ -1,5 +1,8 @@
 import type { Language } from "@/lib/i18n";
 
+const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
+const OSRM_BASE_URL = "https://router.project-osrm.org";
+
 // Haversine distance in nautical miles
 export function haversineNM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 3440.065; // Earth radius in NM
@@ -28,7 +31,7 @@ export async function fetchOSRMRoute(
 ): Promise<{ geometry: [number, number][]; distanceKm: number } | null> {
   if (waypoints.length < 2) return null;
   const coords = waypoints.map((w) => `${w.lng},${w.lat}`).join(";");
-  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  const url = `${OSRM_BASE_URL}/route/v1/driving/${coords}?overview=full&geometries=geojson`;
   try {
     const res = await fetch(url);
     const data = await res.json();
@@ -44,26 +47,81 @@ export async function fetchOSRMRoute(
   }
 }
 
-// Nominatim geocoding
-export async function geocodePlace(query: string): Promise<{ lat: number; lng: number; name: string } | null> {
+export interface GeocodedPlace {
+  lat: number;
+  lng: number;
+  name: string;
+}
+
+const normalizeGeocodedPlace = (item: unknown): GeocodedPlace | null => {
+  if (!item || typeof item !== "object") return null;
+
+  const candidate = item as {
+    lat?: string | number | null;
+    lon?: string | number | null;
+    display_name?: string | null;
+  };
+  const lat = Number(candidate.lat);
+  const lng = Number(candidate.lon);
+  const name = candidate.display_name?.trim();
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) return null;
+
+  return { lat, lng, name };
+};
+
+export async function snapPointToNearestRoad(
+  point: { lat: number; lng: number }
+): Promise<{ lat: number; lng: number; distanceMeters: number } | null> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
-      { headers: { "User-Agent": "BITE-Logbook/1.0" } }
+      `${OSRM_BASE_URL}/nearest/v1/driving/${point.lng},${point.lat}?number=1`
     );
     const data = await res.json();
-    if (!data?.[0]) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), name: data[0].display_name };
+    const waypoint = data?.waypoints?.[0];
+    const location = waypoint?.location;
+    if (!Array.isArray(location) || location.length < 2) return null;
+
+    return {
+      lat: Number(location[1]),
+      lng: Number(location[0]),
+      distanceMeters: Number(waypoint.distance) || 0,
+    };
   } catch {
     return null;
   }
+}
+
+export async function geocodePlaces(query: string, limit = 5): Promise<GeocodedPlace[]> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(trimmedQuery)}&limit=${Math.max(1, Math.min(limit, 10))}&addressdetails=1`,
+      { headers: { "User-Agent": BITE_MAPS_USER_AGENT } }
+    );
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data
+      .map((item) => normalizeGeocodedPlace(item))
+      .filter((item): item is GeocodedPlace => Boolean(item));
+  } catch {
+    return [];
+  }
+}
+
+// Nominatim geocoding
+export async function geocodePlace(query: string): Promise<GeocodedPlace | null> {
+  const [result] = await geocodePlaces(query, 1);
+  return result || null;
 }
 
 export async function reverseGeocodePlace(lat: number, lng: number): Promise<string | null> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}&zoom=12`,
-      { headers: { "User-Agent": "BITE-Logbook/1.0" } }
+      { headers: { "User-Agent": BITE_MAPS_USER_AGENT } }
     );
     const data = await res.json();
     const address = data?.address || {};
@@ -359,6 +417,20 @@ const lerpCoordinate = (from: [number, number], to: [number, number], amount: nu
 const getCoordinateDistance = ([ax, ay]: [number, number], [bx, by]: [number, number]) =>
   Math.hypot(ax - bx, ay - by);
 
+const areCoordinatesNearlyEqual = (first: [number, number], second: [number, number], epsilon = 1e-6) =>
+  Math.abs(first[0] - second[0]) <= epsilon && Math.abs(first[1] - second[1]) <= epsilon;
+
+const appendRouteCoordinates = (
+  accumulator: [number, number][],
+  coordinates: [number, number][]
+) => {
+  coordinates.forEach((coordinate) => {
+    const previous = accumulator[accumulator.length - 1];
+    if (previous && areCoordinatesNearlyEqual(previous, coordinate)) return;
+    accumulator.push(coordinate);
+  });
+};
+
 export function getStraightVoyageGeometry(waypoints: { lat: number; lng: number }[]): [number, number][] {
   return waypoints.map((waypoint) => [waypoint.lng, waypoint.lat]);
 }
@@ -418,10 +490,54 @@ export async function buildVoyageGeometry(
   if (waypoints.length < 2) return getStraightVoyageGeometry(waypoints);
   if (type !== "land") return getStraightVoyageGeometry(waypoints);
 
-  const route = await fetchOSRMRoute(waypoints);
-  if (!route?.geometry?.length) return getStraightVoyageGeometry(waypoints);
+  const snappedWaypointCache = new Map<string, { lat: number; lng: number }>();
+  const getSnappedWaypoint = async (waypoint: { lat: number; lng: number }) => {
+    const cacheKey = `${waypoint.lat.toFixed(6)},${waypoint.lng.toFixed(6)}`;
+    const cached = snappedWaypointCache.get(cacheKey);
+    if (cached) return cached;
 
-  return route.geometry.map(([lat, lng]) => [lng, lat]);
+    const snapped = await snapPointToNearestRoad(waypoint);
+    const resolved = snapped ? { lat: snapped.lat, lng: snapped.lng } : waypoint;
+    snappedWaypointCache.set(cacheKey, resolved);
+    return resolved;
+  };
+
+  const fullRoute: [number, number][] = [];
+
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const start = waypoints[index - 1];
+    const end = waypoints[index];
+    const snappedStart = await getSnappedWaypoint(start);
+    const snappedEnd = await getSnappedWaypoint(end);
+
+    if (areCoordinatesNearlyEqual(
+      [snappedStart.lng, snappedStart.lat],
+      [snappedEnd.lng, snappedEnd.lat]
+    )) {
+      appendRouteCoordinates(fullRoute, [[snappedStart.lng, snappedStart.lat]]);
+      appendRouteCoordinates(fullRoute, [[snappedEnd.lng, snappedEnd.lat]]);
+      continue;
+    }
+
+    const routedSegment =
+      await fetchOSRMRoute([snappedStart, snappedEnd]) ||
+      await fetchOSRMRoute([start, end]);
+
+    if (routedSegment?.geometry?.length) {
+      appendRouteCoordinates(
+        fullRoute,
+        routedSegment.geometry.map(([lat, lng]) => [lng, lat] as [number, number])
+      );
+      continue;
+    }
+
+    appendRouteCoordinates(fullRoute, [
+      [snappedStart.lng, snappedStart.lat],
+      [snappedEnd.lng, snappedEnd.lat],
+    ]);
+  }
+
+  return fullRoute.length >= 2 ? fullRoute : getStraightVoyageGeometry(waypoints);
 }
 
 export type VoyageType = "water" | "land";
@@ -438,6 +554,7 @@ export interface Voyage {
   description_it: string | null;
   type: VoyageType;
   status: VoyageStatus;
+  is_published: boolean;
   sort_order: number;
   cached_geometry: VoyageGeometry;
   start_date: string | null;

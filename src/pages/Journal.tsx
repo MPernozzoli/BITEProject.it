@@ -156,6 +156,7 @@ const Journal = () => {
       const { data } = await supabase
         .from("voyages" as any)
         .select("*")
+        .eq("is_published", true)
         .order("sort_order", { ascending: true });
       return (data || []) as unknown as Voyage[];
     },
@@ -166,11 +167,12 @@ const Journal = () => {
   // Fetch waypoints for all voyages
   const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery({
     queryKey: ["voyage-waypoints"],
-    enabled: !publicContent && !isPublicContentLoading,
+    enabled: !publicContent && !isPublicContentLoading && liveVoyages.length > 0,
     queryFn: async () => {
       const { data } = await supabase
         .from("voyage_waypoints" as any)
         .select("*")
+        .in("voyage_id", liveVoyages.map((voyage) => voyage.id))
         .order("sort_order", { ascending: true });
       return (data || []) as unknown as VoyageWaypoint[];
     },

@@ -49,7 +49,7 @@ const VoyagePage = () => {
     queryKey: ["voyage", voyageId],
     enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
-      const { data, error } = await supabase.from("voyages").select("*").eq("id", voyageId).maybeSingle();
+      const { data, error } = await supabase.from("voyages").select("*").eq("id", voyageId).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return (data || null) as Voyage | null;
     },
@@ -59,12 +59,12 @@ const VoyagePage = () => {
 
   const { data: liveWaypoints = [] } = useQuery<VoyageWaypoint[]>({
     queryKey: ["voyage-waypoints", voyageId],
-    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
+    enabled: Boolean(voyage?.id) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_waypoints")
         .select("*")
-        .eq("voyage_id", voyageId)
+        .eq("voyage_id", voyage!.id)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data || []) as unknown as VoyageWaypoint[];
@@ -74,13 +74,13 @@ const VoyagePage = () => {
 
   const { data: liveArticles = [] } = useQuery<GeoArticle[]>({
     queryKey: ["voyage-articles", voyageId],
-    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
+    enabled: Boolean(voyage?.id) && !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
         .select("id, title_en, title_it, slug, cover_image, excerpt_en, excerpt_it, published_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, location_name")
         .eq("status", "published")
-        .eq("voyage_id", voyageId)
+        .eq("voyage_id", voyage!.id)
         .order("published_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data || []) as GeoArticle[];

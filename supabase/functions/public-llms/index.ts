@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url)
   const fullMode = url.searchParams.get('full') === '1'
 
-  const [articlesRes, storiesRes, voyagesRes, waypointsRes] = await Promise.all([
+  const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
     supabase
       .from('logbook_articles')
       .select('slug, title_en, title_it, excerpt_en, excerpt_it, published_at, voyage_id')
@@ -46,21 +46,31 @@ Deno.serve(async (req) => {
     supabase
       .from('voyages')
       .select('id, name, description, start_date, end_date, updated_at')
+      .eq('is_published', true)
       .order('sort_order', { ascending: true })
       .limit(fullMode ? 30 : 12),
-    supabase
-      .from('voyage_waypoints')
-      .select('voyage_id, name, date_start, date_end, sort_order')
-      .order('sort_order', { ascending: true }),
   ])
 
-  if (articlesRes.error || storiesRes.error || voyagesRes.error || waypointsRes.error) {
+  if (articlesRes.error || storiesRes.error || voyagesRes.error) {
     console.error('public-llms fetch error', {
       articles: articlesRes.error,
       stories: storiesRes.error,
       voyages: voyagesRes.error,
-      waypoints: waypointsRes.error,
     })
+    return new Response('Unable to build LLM feed', { status: 500 })
+  }
+
+  const publishedVoyageIds = (voyagesRes.data || []).map((voyage) => voyage.id)
+  const waypointsRes = publishedVoyageIds.length
+    ? await supabase
+        .from('voyage_waypoints')
+        .select('voyage_id, name, date_start, date_end, sort_order')
+        .in('voyage_id', publishedVoyageIds)
+        .order('sort_order', { ascending: true })
+    : { data: [], error: null }
+
+  if (waypointsRes.error) {
+    console.error('public-llms fetch error', { waypoints: waypointsRes.error })
     return new Response('Unable to build LLM feed', { status: 500 })
   }
 

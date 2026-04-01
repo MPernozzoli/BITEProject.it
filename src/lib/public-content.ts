@@ -184,8 +184,7 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
     latestArticleResponse,
     voyageCountResponse,
     latestVoyageResponse,
-    waypointCountResponse,
-    latestWaypointResponse,
+    publishedVoyageIdsResponse,
   ] = await Promise.all([
     supabase
       .from("logbook_articles")
@@ -200,28 +199,47 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
       .maybeSingle(),
     supabase
       .from("voyages")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("is_published", true),
     supabase
       .from("voyages")
       .select("updated_at")
+      .eq("is_published", true)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
-      .from("voyage_waypoints")
-      .select("id", { count: "exact", head: true }),
-    supabase
-      .from("voyage_waypoints")
-      .select("created_at")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .from("voyages")
+      .select("id")
+      .eq("is_published", true),
   ]);
 
   if (articleCountResponse.error) throw articleCountResponse.error;
   if (latestArticleResponse.error) throw latestArticleResponse.error;
   if (voyageCountResponse.error) throw voyageCountResponse.error;
   if (latestVoyageResponse.error) throw latestVoyageResponse.error;
+  if (publishedVoyageIdsResponse.error) throw publishedVoyageIdsResponse.error;
+
+  const publishedVoyageIds = (publishedVoyageIdsResponse.data ?? []).map((voyage) => voyage.id);
+  const [waypointCountResponse, latestWaypointResponse] = publishedVoyageIds.length
+    ? await Promise.all([
+        supabase
+          .from("voyage_waypoints")
+          .select("id", { count: "exact", head: true })
+          .in("voyage_id", publishedVoyageIds),
+        supabase
+          .from("voyage_waypoints")
+          .select("created_at")
+          .in("voyage_id", publishedVoyageIds)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+    : [
+        { count: 0, error: null },
+        { data: null, error: null },
+      ];
+
   if (waypointCountResponse.error) throw waypointCountResponse.error;
   if (latestWaypointResponse.error) throw latestWaypointResponse.error;
 
@@ -239,7 +257,7 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
 }
 
 export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapshot> {
-  const [heroVideoPool, articlesResponse, voyagesResponse, voyageWaypointsResponse] = await Promise.all([
+  const [heroVideoPool, articlesResponse, voyagesResponse] = await Promise.all([
     fetchHeroVideoPool(),
     supabase
       .from("logbook_articles")
@@ -252,15 +270,20 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
     supabase
       .from("voyages")
       .select("*")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("voyage_waypoints")
-      .select("*")
+      .eq("is_published", true)
       .order("sort_order", { ascending: true }),
   ]);
 
   if (articlesResponse.error) throw articlesResponse.error;
   if (voyagesResponse.error) throw voyagesResponse.error;
+  const publishedVoyageIds = (voyagesResponse.data ?? []).map((voyage) => voyage.id);
+  const voyageWaypointsResponse = publishedVoyageIds.length
+    ? await supabase
+        .from("voyage_waypoints")
+        .select("*")
+        .in("voyage_id", publishedVoyageIds)
+        .order("sort_order", { ascending: true })
+    : { data: [], error: null };
   if (voyageWaypointsResponse.error) throw voyageWaypointsResponse.error;
 
   const articles = articlesResponse.data ?? [];

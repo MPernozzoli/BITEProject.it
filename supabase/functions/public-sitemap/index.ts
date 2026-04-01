@@ -74,6 +74,7 @@ Deno.serve(async () => {
     supabase
       .from('voyages')
       .select('id, name, updated_at')
+      .eq('is_published', true)
       .order('sort_order', { ascending: true }),
   ])
 
