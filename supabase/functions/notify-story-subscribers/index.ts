@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { normalizeSystemEmailAutomation } from '../_shared/system-email-automation.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -143,6 +144,26 @@ Deno.serve(async (req) => {
         .eq('id', articleId)
         .maybeSingle(),
     ])
+
+  const { data: storyAutomationRow, error: storyAutomationError } = await supabase
+    .from('system_email_automations')
+    .select('*')
+    .eq('key', 'story-new-article-notification')
+    .maybeSingle()
+
+  if (storyAutomationError) {
+    console.error('Failed to load story notification automation settings', storyAutomationError)
+    return jsonResponse({ error: 'Failed to load notification automation settings' }, 500)
+  }
+
+  const storyAutomation = normalizeSystemEmailAutomation(
+    storyAutomationRow,
+    'story-new-article-notification'
+  )
+
+  if (!storyAutomation.enabled) {
+    return jsonResponse({ success: true, queued: 0, failed: 0, skipped: 'automation_disabled' })
+  }
 
   if (storyError || !story) {
     console.error('Failed to load story for subscriber notification', storyError)
@@ -315,6 +336,22 @@ Deno.serve(async (req) => {
         .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
         .map((result) => result.reason)
     )
+  }
+
+  const now = new Date().toISOString()
+  const { error: automationUpdateError } = await supabase
+    .from('system_email_automations')
+    .upsert({
+      key: storyAutomation.key,
+      enabled: storyAutomation.enabled,
+      config: storyAutomation.config,
+      last_run_at: now,
+      last_sent_at: queued > 0 ? now : storyAutomation.last_sent_at ?? null,
+      updated_at: now,
+    })
+
+  if (automationUpdateError) {
+    console.error('Failed to update story notification automation timestamps', automationUpdateError)
   }
 
   return jsonResponse({ success: true, queued, failed })

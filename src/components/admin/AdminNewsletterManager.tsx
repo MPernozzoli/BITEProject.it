@@ -247,6 +247,13 @@ const defaultSystemAutomations: Record<string, SystemEmailAutomation> = {
     last_run_at: null,
     last_sent_at: null,
   },
+  "story-new-article-notification": {
+    key: "story-new-article-notification",
+    enabled: true,
+    config: {},
+    last_run_at: null,
+    last_sent_at: null,
+  },
 };
 
 const AdminNewsletterManager = () => {
@@ -1098,14 +1105,18 @@ const AdminNewsletterManager = () => {
                             ? "Conferma iscrizione"
                             : automation.key === "newsletter-welcome"
                               ? "Benvenuto post-conferma"
-                              : "Digest settimanale articoli"}
+                              : automation.key === "newsletter-weekly-digest"
+                                ? "Digest settimanale articoli"
+                                : "Nuovo articolo per storie seguite"}
                         </h4>
                         <p className="text-xs text-muted-foreground mt-2">
                           {automation.key === "newsletter-confirmation"
                             ? "Invio immediato della mail con link di double opt-in."
                             : automation.key === "newsletter-welcome"
                               ? "Invio dopo che l'utente ha confermato l'iscrizione."
-                              : "Invio solo se ci sono nuovi articoli pubblicati dall'ultimo recap."}
+                              : automation.key === "newsletter-weekly-digest"
+                                ? "Invio solo se ci sono nuovi articoli pubblicati dall'ultimo recap."
+                                : "Invio automatico quando pubblichi un nuovo articolo in una storia seguita."}
                         </p>
                         {automation.last_sent_at && (
                           <p className="text-xs text-muted-foreground mt-2">

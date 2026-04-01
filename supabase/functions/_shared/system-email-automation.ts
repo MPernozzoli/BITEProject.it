@@ -2,6 +2,7 @@ export type SystemEmailAutomationKey =
   | 'newsletter-confirmation'
   | 'newsletter-welcome'
   | 'newsletter-weekly-digest'
+  | 'story-new-article-notification'
 
 export type SystemEmailAutomationRow = {
   key: SystemEmailAutomationKey
@@ -42,6 +43,13 @@ export const DEFAULT_SYSTEM_EMAIL_AUTOMATIONS: Record<
       hour_local: 7,
       minute_local: 0,
     },
+    last_run_at: null,
+    last_sent_at: null,
+  },
+  'story-new-article-notification': {
+    key: 'story-new-article-notification',
+    enabled: true,
+    config: {},
     last_run_at: null,
     last_sent_at: null,
   },

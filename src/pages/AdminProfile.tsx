@@ -283,6 +283,119 @@ const AdminProfile = () => {
     { label: copy.stats.newsletter, value: newsletterSubscribed ? copy.newsletter.on : copy.newsletter.off, icon: Mail },
   ];
 
+  const loadNewsletterState = useCallback(
+    async (userId: string, currentEmail: string) => {
+      const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
+        "my-newsletter-subscription",
+        {
+          body: {},
+        },
+      );
+
+      if (!newsletterError) {
+        setNewsletterSubscribed(Boolean(newsletterState?.subscribed));
+        return;
+      }
+
+      console.error("Newsletter subscription load via function failed:", newsletterError);
+
+      const normalizedEmail = currentEmail.trim().toLowerCase();
+      const newsletterQuery = supabase.from("newsletter_subscribers").select("subscribed");
+      const { data: fallbackSubscription, error: fallbackError } = await (normalizedEmail
+        ? newsletterQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
+        : newsletterQuery.eq("profile_id", userId))
+        .maybeSingle();
+
+      if (fallbackError) {
+        console.error("Newsletter subscription fallback load error:", fallbackError);
+        return;
+      }
+
+      setNewsletterSubscribed(Boolean(fallbackSubscription?.subscribed));
+    },
+    [],
+  );
+
+  const syncNewsletterPreference = useCallback(
+    async (userId: string, currentEmail: string, subscribed: boolean) => {
+      const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
+        body: {
+          subscribed,
+          source: "profile",
+        },
+      });
+
+      if (!error) {
+        return;
+      }
+
+      console.error("Newsletter sync via function failed:", error);
+
+      const normalizedEmail = currentEmail.trim().toLowerCase();
+
+      if (subscribed) {
+        const { error: subscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
+          body: {
+            email: normalizedEmail,
+            consent: true,
+            source: "profile",
+            preferredLanguage,
+          },
+        });
+
+        if (subscribeError) {
+          throw subscribeError;
+        }
+
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { error: preferenceError } = await supabase
+        .from("email_notification_preferences")
+        .upsert({
+          email: normalizedEmail,
+          newsletter_enabled: false,
+          digest_enabled: false,
+          story_notifications_enabled: true,
+          updated_at: now,
+        });
+
+      if (preferenceError) {
+        throw preferenceError;
+      }
+
+      const subscriptionQuery = supabase.from("newsletter_subscribers").select("id");
+      const { data: existingSub, error: existingSubError } = await (normalizedEmail
+        ? subscriptionQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
+        : subscriptionQuery.eq("profile_id", userId))
+        .maybeSingle();
+
+      if (existingSubError) {
+        throw existingSubError;
+      }
+
+      if (existingSub?.id) {
+        const { error: subscriberError } = await supabase
+          .from("newsletter_subscribers")
+          .update({
+            profile_id: userId,
+            email: normalizedEmail,
+            preferred_language: preferredLanguage,
+            subscribed: false,
+            source: "profile",
+            unsubscribed_at: now,
+          })
+          .eq("id", existingSub.id);
+
+        if (subscriberError) {
+          throw subscriberError;
+        }
+      }
+    },
+    [preferredLanguage],
+  );
+
   const loadProfile = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
@@ -291,7 +404,8 @@ const AdminProfile = () => {
     }
 
     try {
-      setEmail(session?.user.email || "");
+      const currentEmail = session?.user.email || "";
+      setEmail(currentEmail);
 
       const { data, error } = await supabase
         .from("profiles")
@@ -327,17 +441,7 @@ const AdminProfile = () => {
         });
       }
 
-      const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
-        "my-newsletter-subscription",
-        {
-          body: {},
-        },
-      );
-      if (newsletterError) {
-        console.error("Newsletter subscription load error:", newsletterError);
-      } else {
-        setNewsletterSubscribed(Boolean(newsletterState?.subscribed));
-      }
+      await loadNewsletterState(userId, currentEmail);
 
       const { data: storySubs, error: storySubsError } = await supabase
         .from("story_subscriptions")
@@ -371,7 +475,7 @@ const AdminProfile = () => {
     } finally {
       setProfileLoaded(true);
     }
-  }, [navigate, session]);
+  }, [loadNewsletterState, navigate, session]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -456,21 +560,41 @@ const AdminProfile = () => {
   const saveProfile = async () => {
     if (!session) return;
     setSaving(true);
+    const userId = session.user.id;
+    const currentEmail = (session.user.email || email).trim().toLowerCase();
 
     try {
-      const { error } = await supabase.functions.invoke("update-my-profile", {
-        body: {
+      const { error: directProfileError } = await supabase
+        .from("profiles")
+        .update({
           name,
           bio,
           avatar_url: avatarUrl,
           preferred_language: preferredLanguage,
           secondary_language: isSiteNative ? null : secondaryLanguage,
-          newsletter_subscribed: newsletterSubscribed,
           ...socials,
-        },
-      });
+        })
+        .eq("id", userId);
 
-      if (error) throw error;
+      if (directProfileError) {
+        console.error("Direct profile update failed, trying edge function fallback:", directProfileError);
+
+        const { error: functionError } = await supabase.functions.invoke("update-my-profile", {
+          body: {
+            name,
+            bio,
+            avatar_url: avatarUrl,
+            preferred_language: preferredLanguage,
+            secondary_language: isSiteNative ? null : secondaryLanguage,
+            newsletter_subscribed: newsletterSubscribed,
+            ...socials,
+          },
+        });
+
+        if (functionError) throw functionError;
+      } else {
+        await syncNewsletterPreference(userId, currentEmail, newsletterSubscribed);
+      }
 
       toast.success(copy.actions.saveSuccess);
     } catch (error) {
