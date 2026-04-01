@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { MapPin, Navigation, Ship } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
+import { buildVesselRouteCoordinates, destinationPoint, getRouteTerminalAngle } from "@/lib/article-map";
 import { bindMapToContainerResize, createCartoRasterStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
@@ -64,31 +65,12 @@ const ArticleMapAside = ({
   const activeOverlays = useMemo(() => activeScene?.overlays ?? [], [activeScene]);
   const shouldFitPrimaryRoute = Boolean(activeScene?.showMainRoute && primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
 
-  const destinationPoint = (latitudeValue: number, longitudeValue: number, bearingDegrees: number, distanceNm: number) => {
-    const earthRadiusKm = 6371;
-    const distanceKm = distanceNm * 1.852;
-    const angularDistance = distanceKm / earthRadiusKm;
-    const bearing = (bearingDegrees * Math.PI) / 180;
-    const latitudeRadians = (latitudeValue * Math.PI) / 180;
-    const longitudeRadians = (longitudeValue * Math.PI) / 180;
-
-    const nextLatitude = Math.asin(
-      Math.sin(latitudeRadians) * Math.cos(angularDistance) +
-      Math.cos(latitudeRadians) * Math.sin(angularDistance) * Math.cos(bearing)
-    );
-
-    const nextLongitude = longitudeRadians + Math.atan2(
-      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latitudeRadians),
-      Math.cos(angularDistance) - Math.sin(latitudeRadians) * Math.sin(nextLatitude)
-    );
-
-    return {
-      latitude: (nextLatitude * 180) / Math.PI,
-      longitude: (nextLongitude * 180) / Math.PI,
-    };
-  };
-
-  const createMarkerElement = (kind: "vessel" | "anchor" | "buoy" | "current" | "wind", angle?: number | null, titleText?: string) => {
+  const createMarkerElement = (
+    kind: "vessel" | "anchor" | "buoy" | "current" | "wind",
+    angle?: number | null,
+    titleText?: string,
+    customColor?: string
+  ) => {
     const element = document.createElement("div");
     const palette = {
       vessel: "hsl(201, 58%, 35%)",
@@ -104,10 +86,11 @@ const ArticleMapAside = ({
       current: "➝",
       wind: "➤",
     } as const;
+    const color = customColor || palette[kind];
 
     element.className = "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-white/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
     element.innerHTML = `
-      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;font-size:14px;color:${palette[kind]};transform:rotate(${angle ?? 0}deg);">${symbol[kind]}</span>
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;font-size:14px;color:${color};transform:rotate(${angle ?? 0}deg);">${symbol[kind]}</span>
       ${titleText ? `<span style="font:600 11px/1.2 ui-sans-serif,system-ui;color:rgba(15,23,42,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${titleText}</span>` : ""}
     `;
     return element;
@@ -181,15 +164,18 @@ const ArticleMapAside = ({
       const pointSourceId = "article-map-points";
       const pathSourceId = "article-map-path";
       const vesselRouteSourceId = "article-map-vessel-routes";
+      const overlayRouteSourceId = "article-map-overlay-routes";
       const primaryRouteSourceId = "article-map-primary-route";
 
       if (map.getLayer(pathSourceId)) map.removeLayer(pathSourceId);
       if (map.getLayer(pointSourceId)) map.removeLayer(pointSourceId);
       if (map.getLayer(vesselRouteSourceId)) map.removeLayer(vesselRouteSourceId);
+      if (map.getLayer(overlayRouteSourceId)) map.removeLayer(overlayRouteSourceId);
       if (map.getLayer(primaryRouteSourceId)) map.removeLayer(primaryRouteSourceId);
       if (map.getSource(pathSourceId)) map.removeSource(pathSourceId);
       if (map.getSource(pointSourceId)) map.removeSource(pointSourceId);
       if (map.getSource(vesselRouteSourceId)) map.removeSource(vesselRouteSourceId);
+      if (map.getSource(overlayRouteSourceId)) map.removeSource(overlayRouteSourceId);
       if (map.getSource(primaryRouteSourceId)) map.removeSource(primaryRouteSourceId);
 
       if (pathCoordinates.length > 1) {
@@ -280,33 +266,18 @@ const ArticleMapAside = ({
       }
 
       const vesselRouteFeatures = activeVessels.flatMap((vessel) => {
-        if (
-          typeof vessel.latitude !== "number" ||
-          typeof vessel.longitude !== "number" ||
-          typeof vessel.route_heading !== "number" ||
-          typeof vessel.route_distance_nm !== "number" ||
-          vessel.route_distance_nm <= 0
-        ) {
-          return [];
-        }
-
-        const destination = destinationPoint(
-          vessel.latitude,
-          vessel.longitude,
-          vessel.route_heading,
-          vessel.route_distance_nm
-        );
+        const routeCoordinates = buildVesselRouteCoordinates(vessel);
+        if (routeCoordinates.length < 2) return [];
 
         return [{
           type: "Feature" as const,
           geometry: {
             type: "LineString" as const,
-            coordinates: [
-              [vessel.longitude, vessel.latitude],
-              [destination.longitude, destination.latitude],
-            ],
+            coordinates: routeCoordinates,
           },
-          properties: {},
+          properties: {
+            color: vessel.color,
+          },
         }];
       });
 
@@ -320,7 +291,65 @@ const ArticleMapAside = ({
           type: "line",
           source: vesselRouteSourceId,
           paint: {
-            "line-color": "hsl(201, 68%, 34%)",
+            "line-color": ["coalesce", ["get", "color"], "hsl(201, 68%, 34%)"],
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+            "line-opacity": 0.7,
+          },
+        });
+      }
+
+      const overlayRouteFeatures = activeOverlays.flatMap((overlay) => {
+        if (
+          (overlay.kind !== "current" && overlay.kind !== "wind") ||
+          typeof overlay.latitude !== "number" ||
+          typeof overlay.longitude !== "number" ||
+          typeof overlay.angle !== "number" ||
+          typeof overlay.route_distance_nm !== "number" ||
+          overlay.route_distance_nm <= 0
+        ) {
+          return [];
+        }
+
+        const destination = destinationPoint(
+          overlay.latitude,
+          overlay.longitude,
+          overlay.angle,
+          overlay.route_distance_nm
+        );
+
+        return [{
+          type: "Feature" as const,
+          geometry: {
+            type: "LineString" as const,
+            coordinates: [
+              [overlay.longitude, overlay.latitude],
+              [destination.longitude, destination.latitude],
+            ],
+          },
+          properties: {
+            kind: overlay.kind,
+          },
+        }];
+      });
+
+      if (overlayRouteFeatures.length) {
+        map.addSource(overlayRouteSourceId, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: overlayRouteFeatures },
+        });
+        map.addLayer({
+          id: overlayRouteSourceId,
+          type: "line",
+          source: overlayRouteSourceId,
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "kind"],
+              "current",
+              "hsl(168, 52%, 34%)",
+              "hsl(201, 58%, 35%)",
+            ],
             "line-width": 2,
             "line-dasharray": [2, 2],
             "line-opacity": 0.7,
@@ -330,13 +359,24 @@ const ArticleMapAside = ({
 
       const vesselMarkers = activeVessels.flatMap((vessel) => {
         if (typeof vessel.latitude !== "number" || typeof vessel.longitude !== "number") return [];
+        const routeCoordinates = buildVesselRouteCoordinates(vessel);
+        const routeAngle = getRouteTerminalAngle(routeCoordinates);
+        const routeEnd = routeCoordinates.length > 1 ? routeCoordinates[routeCoordinates.length - 1] : null;
         return [
           new maplibregl.Marker({
-            element: createMarkerElement("vessel", vessel.heading, vessel.name || undefined),
+            element: createMarkerElement("vessel", vessel.heading, vessel.name || undefined, vessel.color),
             anchor: "center",
           })
             .setLngLat([vessel.longitude, vessel.latitude])
             .addTo(map),
+          ...(routeEnd && routeAngle != null
+            ? [new maplibregl.Marker({
+                element: createMarkerElement("wind", routeAngle, undefined, vessel.color),
+                anchor: "center",
+              })
+                .setLngLat(routeEnd)
+                .addTo(map)]
+            : []),
         ];
       });
 
@@ -442,7 +482,12 @@ const ArticleMapAside = ({
               {(activeVessels.length > 0 || activeOverlays.length > 0) && (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {activeVessels.map((vessel) => (
-                    <span key={vessel.id} className="rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                    <span
+                      key={vessel.id}
+                      className="inline-flex items-center gap-1.5 rounded-full border bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground"
+                      style={{ borderColor: `${vessel.color}55` }}
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: vessel.color }} />
                       {vessel.name || (lang === "it" ? "Barca" : "Boat")}
                     </span>
                   ))}

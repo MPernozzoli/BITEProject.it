@@ -14,6 +14,7 @@ const SENDER_DOMAIN = "notify.biteproject.it"
 // When display_from_root is enabled, this can be the root domain for cleaner branding,
 // even though actual sending uses the subdomain above.
 const FROM_DOMAIN = "biteproject.it"
+const PUBLIC_SITE_URL = "https://biteproject.it"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
   let recipientEmail: string
   let idempotencyKey: string
   let messageId: string
-  let templateData: Record<string, any> = {}
+  let templateData: Record<string, unknown> = {}
   try {
     const body = await req.json()
     templateName = body.templateName || body.template_name
@@ -137,7 +138,7 @@ Deno.serve(async (req) => {
   }
 
   // Create Supabase client with service role (bypasses RLS)
-  const supabase = createClient<any>(supabaseUrl, supabaseServiceKey)
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
   // 2. Check suppression list (fail-closed: if we can't verify, don't send)
   const { data: suppressed, error: suppressionError } = await supabase
@@ -258,6 +259,14 @@ Deno.serve(async (req) => {
         'Unsubscribe token used but email missing from suppressed list',
     })
     return jsonResponse({ success: false, reason: 'email_suppressed' })
+  }
+
+  const unsubscribeUrl = `${PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}&context=${encodeURIComponent(templateName)}`
+  templateData = {
+    ...templateData,
+    siteName: templateData.siteName ?? SITE_NAME,
+    siteUrl: templateData.siteUrl ?? PUBLIC_SITE_URL,
+    unsubscribeUrl: templateData.unsubscribeUrl ?? unsubscribeUrl,
   }
 
   // 4. Render React Email template to HTML and plain text

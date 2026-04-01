@@ -6,6 +6,11 @@ import {
   PUBLIC_SITE_URL,
   SENDER_DOMAIN,
 } from '../_shared/email-config.ts'
+import {
+  DEFAULT_SYSTEM_EMAIL_AUTOMATIONS,
+  normalizeSystemEmailAutomation,
+  type SystemEmailAutomationRow,
+} from '../_shared/system-email-automation.ts'
 import { NewsletterEmail } from '../_shared/newsletter-email.tsx'
 import {
   buildMergeVariables,
@@ -52,6 +57,11 @@ type Recipient = {
   source: string | null
   subscribed: boolean
   profiles?: RecipientProfile | RecipientProfile[] | null
+  preferences?: {
+    newsletter_enabled: boolean
+    digest_enabled: boolean
+    story_notifications_enabled: boolean
+  } | null
 }
 
 type NewsletterEvent = {
@@ -61,6 +71,15 @@ type NewsletterEvent = {
   event_type: 'subscribed' | 'unsubscribed'
   preferred_language: string | null
   occurred_at: string
+}
+
+type ZonedDateParts = {
+  weekday: number
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
 }
 
 function jsonResponse(data: Record<string, unknown>, status = 200): Response {
@@ -95,9 +114,161 @@ function getRecipientProfile(
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
+function getZonedDateParts(date: Date, timeZone: string): ZonedDateParts {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    weekday: 'short',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(date)
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  const weekdayMap: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 7,
+  }
+
+  return {
+    weekday: weekdayMap[getPart('weekday')] ?? 0,
+    year: Number(getPart('year')),
+    month: Number(getPart('month')),
+    day: Number(getPart('day')),
+    hour: Number(getPart('hour')),
+    minute: Number(getPart('minute')),
+  }
+}
+
+function getLocalDateKey(parts: Pick<ZonedDateParts, 'year' | 'month' | 'day'>): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+}
+
+async function processWeeklyDigestAutomation(params: {
+  supabase: ReturnType<typeof createClient>
+  serviceRoleKey: string
+  supabaseUrl: string
+}): Promise<{ queued: number; skipped: boolean }> {
+  const { supabase, serviceRoleKey, supabaseUrl } = params
+  const { data: automationRow, error } = await supabase
+    .from('system_email_automations')
+    .select('*')
+    .eq('key', 'newsletter-weekly-digest')
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  const automation = normalizeSystemEmailAutomation(
+    automationRow as Partial<SystemEmailAutomationRow> | null,
+    'newsletter-weekly-digest'
+  )
+
+  const timeZone =
+    typeof automation.config.timezone === 'string'
+      ? automation.config.timezone
+      : DEFAULT_SYSTEM_EMAIL_AUTOMATIONS['newsletter-weekly-digest'].config
+          .timezone as string
+  const weekday =
+    typeof automation.config.weekday === 'number'
+      ? automation.config.weekday
+      : DEFAULT_SYSTEM_EMAIL_AUTOMATIONS['newsletter-weekly-digest'].config
+          .weekday as number
+  const hourLocal =
+    typeof automation.config.hour_local === 'number'
+      ? automation.config.hour_local
+      : DEFAULT_SYSTEM_EMAIL_AUTOMATIONS['newsletter-weekly-digest'].config
+          .hour_local as number
+  const minuteLocal =
+    typeof automation.config.minute_local === 'number'
+      ? automation.config.minute_local
+      : DEFAULT_SYSTEM_EMAIL_AUTOMATIONS['newsletter-weekly-digest'].config
+          .minute_local as number
+
+  const now = new Date()
+  const nowParts = getZonedDateParts(now, timeZone)
+  const currentDateKey = getLocalDateKey(nowParts)
+  const lastSentParts = automation.last_sent_at
+    ? getZonedDateParts(new Date(automation.last_sent_at), timeZone)
+    : null
+  const lastSentDateKey = lastSentParts ? getLocalDateKey(lastSentParts) : null
+
+  await supabase
+    .from('system_email_automations')
+    .upsert({
+      key: automation.key,
+      enabled: automation.enabled,
+      config: automation.config,
+      last_run_at: now.toISOString(),
+      last_sent_at: automation.last_sent_at ?? null,
+      updated_at: new Date().toISOString(),
+    })
+
+  if (!automation.enabled) {
+    return { queued: 0, skipped: true }
+  }
+
+  if (
+    nowParts.weekday !== weekday ||
+    nowParts.hour < hourLocal ||
+    (nowParts.hour === hourLocal && nowParts.minute < minuteLocal) ||
+    lastSentDateKey === currentDateKey
+  ) {
+    return { queued: 0, skipped: true }
+  }
+
+  const startDate = automation.last_sent_at
+    ? automation.last_sent_at
+    : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/send-newsletter-digest`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+    body: JSON.stringify({
+      startDate,
+      endDate: now.toISOString(),
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Weekly digest failed: ${await response.text()}`)
+  }
+
+  const result = await response.json()
+  const queued = typeof result.queued === 'number' ? result.queued : 0
+
+  if (queued > 0) {
+    await supabase
+      .from('system_email_automations')
+      .upsert({
+        key: automation.key,
+        enabled: automation.enabled,
+        config: automation.config,
+        last_run_at: now.toISOString(),
+        last_sent_at: now.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+  }
+
+  return { queued, skipped: queued === 0 }
+}
+
 async function authorizeRequest(
   req: Request,
-  supabase: ReturnType<typeof createClient<any>>
+  supabase: ReturnType<typeof createClient>
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -138,7 +309,7 @@ async function authorizeRequest(
 }
 
 async function ensureUnsubscribeToken(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof createClient>,
   email: string
 ): Promise<string> {
   const normalizedEmail = email.trim().toLowerCase()
@@ -178,7 +349,7 @@ async function ensureUnsubscribeToken(
 }
 
 async function markEventProcessed(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof createClient>,
   eventId: string,
   processingNote: string
 ): Promise<void> {
@@ -192,7 +363,7 @@ async function markEventProcessed(
 }
 
 async function createDeliveryRecord(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof createClient>,
   values: Record<string, unknown>
 ): Promise<boolean> {
   const { error } = await supabase.from('newsletter_deliveries').insert(values)
@@ -207,7 +378,7 @@ async function createDeliveryRecord(
 }
 
 async function queueNewsletterDelivery(
-  supabase: ReturnType<typeof createClient<any>>,
+  supabase: ReturnType<typeof createClient>,
   params: {
     message: NewsletterMessage
     recipientEmail: string
@@ -254,7 +425,7 @@ async function queueNewsletterDelivery(
   }
 
   const unsubscribeToken = await ensureUnsubscribeToken(supabase, normalizedEmail)
-  const unsubscribeUrl = `${PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}`
+  const unsubscribeUrl = `${PUBLIC_SITE_URL}/unsubscribe?token=${unsubscribeToken}&context=${encodeURIComponent(`newsletter:${params.message.id}`)}`
 
   const subjectEntry = resolveTranslatedEntry(
     params.message.subject_translations,
@@ -384,7 +555,7 @@ async function queueNewsletterDelivery(
 }
 
 async function loadActiveRecipients(
-  supabase: ReturnType<typeof createClient<any>>
+  supabase: ReturnType<typeof createClient>
 ): Promise<Recipient[]> {
   const { data, error } = await supabase
     .from('newsletter_subscribers')
@@ -394,8 +565,35 @@ async function loadActiveRecipients(
     .eq('subscribed', true)
 
   if (error) throw error
+  const recipients = (data ?? []) as Recipient[]
+  if (!recipients.length) return recipients
 
-  return (data ?? []) as Recipient[]
+  const emails = recipients.map((recipient) => recipient.email.toLowerCase())
+  const { data: preferenceRows, error: preferenceError } = await supabase
+    .from('email_notification_preferences')
+    .select('email, newsletter_enabled, digest_enabled, story_notifications_enabled')
+    .in('email', emails)
+
+  if (preferenceError) {
+    throw preferenceError
+  }
+
+  const preferenceMap = new Map(
+    (preferenceRows ?? []).map((row) => [
+      row.email.toLowerCase(),
+      {
+        newsletter_enabled: row.newsletter_enabled,
+        digest_enabled: row.digest_enabled,
+        story_notifications_enabled: row.story_notifications_enabled,
+      },
+    ])
+  )
+
+  return recipients.filter((recipient) => {
+    const preferences = preferenceMap.get(recipient.email.toLowerCase()) ?? null
+    recipient.preferences = preferences
+    return preferences ? preferences.newsletter_enabled : true
+  })
 }
 
 Deno.serve(async (req) => {
@@ -414,7 +612,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
-  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
   const authorization = await authorizeRequest(req, supabase)
   if (!authorization.ok) {
     return authorization.response
@@ -583,6 +781,16 @@ Deno.serve(async (req) => {
         .eq('email', event.email.toLowerCase())
         .maybeSingle()
 
+      const { data: preferenceRow } = await supabase
+        .from('email_notification_preferences')
+        .select('newsletter_enabled, digest_enabled, story_notifications_enabled')
+        .eq('email', event.email.toLowerCase())
+        .maybeSingle()
+
+      const canReceiveNewsletter = preferenceRow
+        ? preferenceRow.newsletter_enabled
+        : true
+
       let hasPendingAutomation = false
       let processedForEvent = 0
 
@@ -605,7 +813,8 @@ Deno.serve(async (req) => {
         if (
           event.event_type === 'unsubscribed' ||
           suppressedEmails.has(event.email.toLowerCase()) ||
-          !subscriber?.subscribed
+          !subscriber?.subscribed ||
+          !canReceiveNewsletter
         ) {
           const inserted = await createDeliveryRecord(supabase, {
             id: crypto.randomUUID(),
@@ -679,6 +888,20 @@ Deno.serve(async (req) => {
         summary.processedEvents++
       }
     }
+  }
+
+  try {
+    const weeklyDigestResult = await processWeeklyDigestAutomation({
+      supabase,
+      serviceRoleKey,
+      supabaseUrl,
+    })
+
+    if (weeklyDigestResult.queued > 0) {
+      summary.campaignsQueued += weeklyDigestResult.queued
+    }
+  } catch (error) {
+    console.error('Failed to process weekly digest automation', error)
   }
 
   return jsonResponse({ success: true, ...summary })

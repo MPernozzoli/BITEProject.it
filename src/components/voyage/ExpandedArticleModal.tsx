@@ -17,6 +17,7 @@ import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import {
+  getArticleSceneCameraCenter,
   getArticleSceneAnchorId,
   getArticleSceneAnchorIndex,
   getArticleSceneAnchorPreview,
@@ -238,25 +239,32 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
   );
   const localizedScenes = useMemo(() => {
     const sortedScenes = sortArticleMapScenesForLanguage(articleScenes, lang);
-    return sortedScenes.map((scene) => ({
-      id: scene.id,
-      title: getArticleSceneTitle(scene, lang),
-      description: getArticleSceneDescription(scene, lang),
-      windLabel: getArticleSceneWindLabel(scene, lang),
-      latitude: scene.latitude as number,
-      longitude: scene.longitude as number,
-      zoom: scene.zoom,
-      windAngle: scene.wind_angle,
-      anchorId: getArticleSceneAnchorId(scene, lang),
-      anchorPreview: getArticleSceneAnchorPreview(scene, lang),
-      anchorIndex: getArticleSceneAnchorIndex(scene, lang),
-      showMainRoute: scene.show_main_route,
-      vessels: scene.vessels,
-      overlays: scene.overlays.map((overlay) => ({
-        ...overlay,
-        label: getArticleOverlayLabel(overlay, lang),
-      })),
-    }));
+    return sortedScenes.flatMap((scene) => {
+      const cameraCenter = getArticleSceneCameraCenter(scene);
+      if (!cameraCenter || typeof scene.latitude !== "number" || typeof scene.longitude !== "number") return [];
+
+      return [{
+        cameraLatitude: cameraCenter.latitude,
+        cameraLongitude: cameraCenter.longitude,
+        id: scene.id,
+        title: getArticleSceneTitle(scene, lang),
+        description: getArticleSceneDescription(scene, lang),
+        windLabel: getArticleSceneWindLabel(scene, lang),
+        latitude: scene.latitude,
+        longitude: scene.longitude,
+        zoom: scene.zoom,
+        windAngle: scene.wind_angle,
+        anchorId: getArticleSceneAnchorId(scene, lang),
+        anchorPreview: getArticleSceneAnchorPreview(scene, lang),
+        anchorIndex: getArticleSceneAnchorIndex(scene, lang),
+        showMainRoute: scene.show_main_route,
+        vessels: scene.vessels,
+        overlays: scene.overlays.map((overlay) => ({
+          ...overlay,
+          label: getArticleOverlayLabel(overlay, lang),
+        })),
+      }];
+    });
   }, [articleScenes, lang]);
   const primaryRouteCoordinates = useMemo(() => {
     if (!article?.voyage_id || !linkedVoyage || linkedVoyageWaypoints.length < 2) return null;
@@ -385,21 +393,21 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       if (scenePositions.length === 1) {
         const [scene] = scenePositions;
         setActiveSceneId(scene.id);
-        setMapCamera({ latitude: scene.latitude, longitude: scene.longitude, zoom: scene.zoom });
+        setMapCamera({ latitude: scene.cameraLatitude, longitude: scene.cameraLongitude, zoom: scene.zoom });
         return;
       }
 
       if (currentY <= scenePositions[0].top) {
         const firstScene = scenePositions[0];
         setActiveSceneId(firstScene.id);
-        setMapCamera({ latitude: firstScene.latitude, longitude: firstScene.longitude, zoom: firstScene.zoom });
+        setMapCamera({ latitude: firstScene.cameraLatitude, longitude: firstScene.cameraLongitude, zoom: firstScene.zoom });
         return;
       }
 
       const lastScene = scenePositions[scenePositions.length - 1];
       if (currentY >= lastScene.top) {
         setActiveSceneId(lastScene.id);
-        setMapCamera({ latitude: lastScene.latitude, longitude: lastScene.longitude, zoom: lastScene.zoom });
+        setMapCamera({ latitude: lastScene.cameraLatitude, longitude: lastScene.cameraLongitude, zoom: lastScene.zoom });
         return;
       }
 
@@ -416,8 +424,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
         setActiveSceneId(nearestScene.id);
         setMapCamera({
-          latitude: interpolate(currentScene.latitude, nextScene.latitude),
-          longitude: interpolate(currentScene.longitude, nextScene.longitude),
+          latitude: interpolate(currentScene.cameraLatitude, nextScene.cameraLatitude),
+          longitude: interpolate(currentScene.cameraLongitude, nextScene.cameraLongitude),
           zoom: interpolate(currentScene.zoom, nextScene.zoom),
         });
         return;

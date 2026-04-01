@@ -17,9 +17,13 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.newsletter-dispatch]
     verify_jwt = true
+  [functions.send-newsletter-digest]
+    verify_jwt = true
   [functions.newsletter-track-open]
     verify_jwt = false
   [functions.newsletter-track-click]
+    verify_jwt = false
+  [functions.confirm-newsletter-subscription]
     verify_jwt = false
   [functions.notify-story-subscribers]
     verify_jwt = true

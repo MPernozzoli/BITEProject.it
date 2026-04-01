@@ -1,5 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { WebhookError, verifyWebhookRequest } from 'npm:@lovable.dev/webhooks-js'
+import {
+  normalizeEmailNotificationPreferences,
+} from '../_shared/email-preferences.ts'
 
 // Suppression event payload sent by the Go API when Mailgun reports
 // a bounce, complaint, or unsubscribe.
@@ -79,7 +82,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Internal error' }, 500)
   }
 
-  const supabase = createClient<any>(supabaseUrl, supabaseServiceKey)
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const normalizedEmail = payload.email.toLowerCase()
 
   // 1. Upsert to suppressed_emails (idempotent — safe for retries)
@@ -100,6 +103,82 @@ Deno.serve(async (req) => {
       email_redacted: normalizedEmail[0] + '***@' + normalizedEmail.split('@')[1],
     })
     return jsonResponse({ error: 'Failed to write suppression' }, 500)
+  }
+
+  const disabledPreferences = normalizeEmailNotificationPreferences({
+    newsletter_enabled: false,
+    digest_enabled: false,
+    story_notifications_enabled: false,
+  })
+
+  const { error: preferenceError } = await supabase
+    .from('email_notification_preferences')
+    .upsert({
+      email: normalizedEmail,
+      ...disabledPreferences,
+      updated_at: new Date().toISOString(),
+    })
+
+  if (preferenceError) {
+    console.warn('Failed to update email notification preferences after suppression', {
+      error: preferenceError,
+      email_redacted: normalizedEmail[0] + '***@' + normalizedEmail.split('@')[1],
+    })
+  }
+
+  const { data: subscriber } = await supabase
+    .from('newsletter_subscribers')
+    .select('id')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  const { error: subscriberUpdateError } = await supabase
+    .from('newsletter_subscribers')
+    .update({
+      subscribed: false,
+      source: `suppression:${payload.reason}`,
+      unsubscribed_at: new Date().toISOString(),
+    })
+    .eq('email', normalizedEmail)
+
+  if (subscriberUpdateError) {
+    console.warn('Failed to update newsletter subscriber after suppression', {
+      error: subscriberUpdateError,
+    })
+  }
+
+  if (payload.reason === 'unsubscribe') {
+    const { error: eventError } = await supabase.from('newsletter_events').insert({
+      subscriber_id: subscriber?.id ?? null,
+      email: normalizedEmail,
+      event_type: 'unsubscribed',
+      preferred_language: null,
+      occurred_at: new Date().toISOString(),
+    })
+
+    if (eventError) {
+      console.warn('Failed to record unsubscribe event from suppression webhook', {
+        error: eventError,
+      })
+    }
+
+    const { error: feedbackError } = await supabase
+      .from('newsletter_unsubscribe_feedback')
+      .insert({
+        email: normalizedEmail,
+        profile_id: null,
+        source: 'suppression_webhook',
+        reason_code: 'mailbox_provider_unsubscribe',
+        reason_text: null,
+        unsubscribe_scope: disabledPreferences,
+        message_context: payload.metadata ?? null,
+      })
+
+    if (feedbackError) {
+      console.warn('Failed to record suppression unsubscribe feedback', {
+        error: feedbackError,
+      })
+    }
   }
 
   // 2. Append a new log entry for the suppression event (never update existing rows)

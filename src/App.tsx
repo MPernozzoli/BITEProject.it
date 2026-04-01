@@ -51,6 +51,7 @@ const StoryPage = lazy(() => import("./pages/StoryPage"));
 const VoyagesPage = lazy(() => import("./pages/Voyages"));
 const VoyagePage = lazy(() => import("./pages/VoyagePage"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const NewsletterConfirm = lazy(() => import("./pages/NewsletterConfirm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
@@ -96,6 +97,7 @@ const App = () => {
                 <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
                 <Route path="/profile" element={<AdminProfile />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
+                <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                 <Route path="/cookie-policy" element={<CookiePolicy />} />
                 <Route path="*" element={<NotFound />} />

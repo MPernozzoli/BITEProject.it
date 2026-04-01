@@ -35,6 +35,14 @@ type NewsletterMessage = any;
 type NewsletterDelivery = any;
 type NewsletterSubscriber = Database["public"]["Tables"]["newsletter_subscribers"]["Row"];
 type NewsletterEvent = any;
+type NewsletterUnsubscribeFeedback = any;
+type SystemEmailAutomation = {
+  key: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  last_run_at?: string | null;
+  last_sent_at?: string | null;
+};
 
 type ComposerTab = "overview" | "campaigns" | "automations" | "editor";
 type NewsletterKind = "campaign" | "automation";
@@ -209,12 +217,46 @@ const MetricCard = ({
   </div>
 );
 
+const defaultSystemAutomations: Record<string, SystemEmailAutomation> = {
+  "newsletter-confirmation": {
+    key: "newsletter-confirmation",
+    enabled: true,
+    config: {
+      resend_cooldown_minutes: 15,
+      token_ttl_hours: 72,
+    },
+    last_run_at: null,
+    last_sent_at: null,
+  },
+  "newsletter-welcome": {
+    key: "newsletter-welcome",
+    enabled: true,
+    config: {},
+    last_run_at: null,
+    last_sent_at: null,
+  },
+  "newsletter-weekly-digest": {
+    key: "newsletter-weekly-digest",
+    enabled: true,
+    config: {
+      timezone: "Europe/Rome",
+      weekday: 2,
+      hour_local: 7,
+      minute_local: 0,
+    },
+    last_run_at: null,
+    last_sent_at: null,
+  },
+};
+
 const AdminNewsletterManager = () => {
   const [tab, setTab] = useState<ComposerTab>("overview");
   const [messages, setMessages] = useState<NewsletterMessage[]>([]);
   const [deliveries, setDeliveries] = useState<NewsletterDelivery[]>([]);
   const [subscribers, setSubscribers] = useState<NewsletterSubscriber[]>([]);
   const [events, setEvents] = useState<NewsletterEvent[]>([]);
+  const [unsubscribeFeedback, setUnsubscribeFeedback] = useState<NewsletterUnsubscribeFeedback[]>([]);
+  const [systemAutomations, setSystemAutomations] = useState<SystemEmailAutomation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -228,7 +270,7 @@ const AdminNewsletterManager = () => {
     if (withLoader) setLoading(true);
     setRefreshing(true);
 
-    const [messagesRes, deliveriesRes, subscribersRes, eventsRes] = await Promise.all([
+    const [messagesRes, deliveriesRes, subscribersRes, eventsRes, feedbackRes, systemAutomationsRes] = await Promise.all([
       (supabase as any)
         .from("newsletter_messages")
         .select("*")
@@ -247,14 +289,25 @@ const AdminNewsletterManager = () => {
         .select("*")
         .order("occurred_at", { ascending: false })
         .limit(100),
+      (supabase as any)
+        .from("newsletter_unsubscribe_feedback")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      (supabase as any)
+        .from("system_email_automations")
+        .select("*")
+        .order("key", { ascending: true }),
     ]);
 
-    if (messagesRes.error || deliveriesRes.error || subscribersRes.error || eventsRes.error) {
+    if (messagesRes.error || deliveriesRes.error || subscribersRes.error || eventsRes.error || feedbackRes.error || systemAutomationsRes.error) {
       console.error("Newsletter dashboard load failed", {
         messages: messagesRes.error,
         deliveries: deliveriesRes.error,
         subscribers: subscribersRes.error,
         events: eventsRes.error,
+        feedback: feedbackRes.error,
+        systemAutomations: systemAutomationsRes.error,
       });
       toast.error("Impossibile caricare i dati newsletter.");
     } else {
@@ -262,6 +315,15 @@ const AdminNewsletterManager = () => {
       setDeliveries(deliveriesRes.data ?? []);
       setSubscribers(subscribersRes.data ?? []);
       setEvents(eventsRes.data ?? []);
+      setUnsubscribeFeedback(feedbackRes.data ?? []);
+      const rows = systemAutomationsRes.data ?? [];
+      const merged = Object.values(defaultSystemAutomations).map((automation) => {
+        const override = rows.find((row: SystemEmailAutomation) => row.key === automation.key);
+        return override
+          ? { ...automation, ...override, config: { ...automation.config, ...(override.config || {}) } }
+          : automation;
+      });
+      setSystemAutomations(merged);
     }
 
     setLoading(false);
@@ -291,6 +353,7 @@ const AdminNewsletterManager = () => {
 
     return {
       totalSubscribers: activeSubscribers.length,
+      totalUnsubscribed: subscribers.filter((subscriber) => !subscriber.subscribed).length,
       totalDrafts: campaignMessages.filter((message) => message.status === "draft").length,
       totalSent: sentDeliveries.length,
       openRate: sentDeliveries.length
@@ -300,8 +363,70 @@ const AdminNewsletterManager = () => {
         ? Math.round((clickedDeliveries.length / sentDeliveries.length) * 100)
         : 0,
       waitingAutomations: events.filter((event) => !event.processed_at).length,
+      unsubscribeFeedbackCount: unsubscribeFeedback.length,
     };
-  }, [campaignMessages, deliveries, events, subscribers]);
+  }, [campaignMessages, deliveries, events, subscribers, unsubscribeFeedback]);
+
+  const unsubscribeReasonSummary = useMemo(() => {
+    const labels: Record<string, string> = {
+      too_many_emails: "Troppe email",
+      content_not_relevant: "Contenuti poco rilevanti",
+      prefer_social: "Preferisce social",
+      temporary_pause: "Pausa",
+      signed_up_by_mistake: "Iscrizione per errore",
+      mailbox_one_click: "One-click mailbox",
+      mailbox_provider_unsubscribe: "Unsubscribe provider",
+      other: "Altro",
+    };
+
+    return Object.entries(
+      unsubscribeFeedback.reduce<Record<string, number>>((accumulator, item) => {
+        const key = item.reason_code || "other";
+        accumulator[key] = (accumulator[key] || 0) + 1;
+        return accumulator;
+      }, {})
+    )
+      .map(([key, count]) => ({
+        key,
+        count,
+        label: labels[key] || key,
+      }))
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 6);
+  }, [unsubscribeFeedback]);
+
+  const updateSystemAutomation = async (
+    key: string,
+    updater: (current: SystemEmailAutomation) => SystemEmailAutomation
+  ) => {
+    const current = systemAutomations.find((automation) => automation.key === key);
+    if (!current) return;
+
+    const next = updater(current);
+    setSystemAutomations((items) =>
+      items.map((item) => (item.key === key ? next : item))
+    );
+
+    const { error } = await (supabase as any)
+      .from("system_email_automations")
+      .upsert({
+        key: next.key,
+        enabled: next.enabled,
+        config: next.config,
+        last_run_at: next.last_run_at ?? null,
+        last_sent_at: next.last_sent_at ?? null,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error("System automation update failed", error);
+      toast.error("Impossibile aggiornare l'automazione di sistema.");
+      await fetchNewsletterData();
+      return;
+    }
+
+    toast.success("Automazione di sistema aggiornata.");
+  };
 
   const populateForm = (message?: NewsletterMessage) => {
     if (!message) {
@@ -695,6 +820,12 @@ const AdminNewsletterManager = () => {
               icon={<Clock3 size={16} />}
             />
             <MetricCard
+              label="Disiscritti"
+              value={String(stats.totalUnsubscribed)}
+              hint="Contatti che hanno tolto almeno le email newsletter."
+              icon={<Pause size={16} />}
+            />
+            <MetricCard
               label="Eventi in attesa"
               value={String(stats.waitingAutomations)}
               hint="Trigger di automazione ancora non processati."
@@ -783,6 +914,83 @@ const AdminNewsletterManager = () => {
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-6">
+            <div className="border border-border bg-background p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="editorial-heading text-xl">Motivi di disiscrizione</h3>
+                <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  {stats.unsubscribeFeedbackCount} feedback
+                </span>
+              </div>
+              <div className="space-y-3">
+                {unsubscribeReasonSummary.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between border border-border/70 px-4 py-3"
+                  >
+                    <span className="text-sm font-sans">{item.label}</span>
+                    <span className="text-sm text-muted-foreground">{item.count}</span>
+                  </div>
+                ))}
+                {unsubscribeReasonSummary.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Nessun feedback raccolto finora.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="border border-border bg-background p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="editorial-heading text-xl">Feedback recenti</h3>
+                <span className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  Ultimi 100
+                </span>
+              </div>
+              <div className="space-y-3">
+                {unsubscribeFeedback.slice(0, 8).map((item) => {
+                  const scopes = [
+                    item.unsubscribe_scope?.newsletter_enabled === false ? "newsletter" : null,
+                    item.unsubscribe_scope?.digest_enabled === false ? "digest" : null,
+                    item.unsubscribe_scope?.story_notifications_enabled === false ? "stories" : null,
+                  ].filter(Boolean);
+
+                  return (
+                    <div key={item.id} className="border border-border/70 px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-sans truncate">{item.email}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {(item.reason_code || "nessun motivo").replaceAll("_", " ")}
+                            {item.reason_text ? ` · ${item.reason_text}` : ""}
+                          </p>
+                          {scopes.length > 0 && (
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mt-2">
+                              Scope: {scopes.join(" / ")}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(item.created_at), "dd/MM HH:mm")}
+                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mt-1">
+                            {item.source || "preferences_page"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {unsubscribeFeedback.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Nessun feedback recente disponibile.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -840,6 +1048,228 @@ const AdminNewsletterManager = () => {
 
       {tab === "automations" && (
         <div className="space-y-4">
+          <div className="border border-border bg-background p-5 space-y-5">
+            <div>
+              <p className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-1">
+                Automazioni di sistema
+              </p>
+              <h3 className="editorial-heading text-xl">Flussi automatici base</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Qui controlli double opt-in, welcome post-conferma e digest settimanale.
+              </p>
+            </div>
+
+            <div className="grid gap-4">
+              {systemAutomations.map((automation) => {
+                const resendCooldown =
+                  typeof automation.config.resend_cooldown_minutes === "number"
+                    ? automation.config.resend_cooldown_minutes
+                    : 15;
+                const tokenTtlHours =
+                  typeof automation.config.token_ttl_hours === "number"
+                    ? automation.config.token_ttl_hours
+                    : 72;
+                const hourLocal =
+                  typeof automation.config.hour_local === "number"
+                    ? automation.config.hour_local
+                    : 7;
+                const minuteLocal =
+                  typeof automation.config.minute_local === "number"
+                    ? automation.config.minute_local
+                    : 0;
+                const weekday =
+                  typeof automation.config.weekday === "number"
+                    ? automation.config.weekday
+                    : 2;
+                const timezone =
+                  typeof automation.config.timezone === "string"
+                    ? automation.config.timezone
+                    : "Europe/Rome";
+
+                return (
+                  <div key={automation.key} className="border border-border/70 p-4 space-y-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-1">
+                          {automation.enabled ? "Attiva" : "Pausa"}
+                        </p>
+                        <h4 className="font-sans text-base font-medium">
+                          {automation.key === "newsletter-confirmation"
+                            ? "Conferma iscrizione"
+                            : automation.key === "newsletter-welcome"
+                              ? "Benvenuto post-conferma"
+                              : "Digest settimanale articoli"}
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {automation.key === "newsletter-confirmation"
+                            ? "Invio immediato della mail con link di double opt-in."
+                            : automation.key === "newsletter-welcome"
+                              ? "Invio dopo che l'utente ha confermato l'iscrizione."
+                              : "Invio solo se ci sono nuovi articoli pubblicati dall'ultimo recap."}
+                        </p>
+                        {automation.last_sent_at && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Ultimo invio: {format(new Date(automation.last_sent_at), "dd/MM/yyyy HH:mm")}
+                          </p>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          void updateSystemAutomation(automation.key, (current) => ({
+                            ...current,
+                            enabled: !current.enabled,
+                          }))
+                        }
+                        className="inline-flex items-center gap-2 bg-primary px-4 py-2 text-sm font-sans font-medium text-primary-foreground hover:bg-navy-light transition-colors"
+                      >
+                        {automation.enabled ? <Pause size={14} /> : <Play size={14} />}
+                        {automation.enabled ? "Metti in pausa" : "Attiva"}
+                      </button>
+                    </div>
+
+                    {automation.key === "newsletter-confirmation" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Cooldown reinvio (min)
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={resendCooldown}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  resend_cooldown_minutes: Number(event.target.value || 15),
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Scadenza token (ore)
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={tokenTtlHours}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  token_ttl_hours: Number(event.target.value || 72),
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {automation.key === "newsletter-weekly-digest" && (
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Giorno
+                          </span>
+                          <select
+                            value={weekday}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  weekday: Number(event.target.value || 2),
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          >
+                            <option value={1}>Lunedì</option>
+                            <option value={2}>Martedì</option>
+                            <option value={3}>Mercoledì</option>
+                            <option value={4}>Giovedì</option>
+                            <option value={5}>Venerdì</option>
+                            <option value={6}>Sabato</option>
+                            <option value={7}>Domenica</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Timezone
+                          </span>
+                          <input
+                            type="text"
+                            value={timezone}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  timezone: event.target.value || "Europe/Rome",
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Ora locale
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={23}
+                            value={hourLocal}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  hour_local: Number(event.target.value || 7),
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-sans tracking-[0.22em] uppercase text-muted-foreground mb-2 block">
+                            Minuto locale
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={59}
+                            value={minuteLocal}
+                            onChange={(event) =>
+                              void updateSystemAutomation(automation.key, (current) => ({
+                                ...current,
+                                config: {
+                                  ...current.config,
+                                  minute_local: Number(event.target.value || 0),
+                                },
+                              }))
+                            }
+                            className="w-full border border-border bg-transparent px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {automationMessages.map((message) => {
             const metrics = getMessageMetrics(message.id);
             return (

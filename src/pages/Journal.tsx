@@ -18,6 +18,23 @@ import { getArticleVoyageFocus, getLocalizedVoyageName, totalWaypointDistance } 
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
+const getVoyageTypePillClassName = (voyageType: Voyage["type"]) =>
+  voyageType === "water"
+    ? "border-sky-200/55 bg-sky-50/70 text-sky-800"
+    : "border-orange-200/55 bg-orange-50/70 text-orange-800";
+
+const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
+  if (status === "planned") {
+    return "border border-dashed border-slate-300/80 bg-slate-50/65 text-slate-600";
+  }
+
+  if (status === "active") {
+    return "border border-sky-300/75 bg-sky-50/75 text-sky-800";
+  }
+
+  return "border border-slate-300/75 bg-white/70 text-slate-700";
+};
+
 const Journal = () => {
   const EXPANDED_READER_MS = 480;
   const MOBILE_SIDEBAR_PEEK = 220;
@@ -202,18 +219,30 @@ const Journal = () => {
 
   // Stats
   const stats = useMemo(() => {
-    let totalNM = 0;
+    let seaNM = 0;
+    let landNM = 0;
     const voyageCount = voyages.length;
     const activeVoyage = voyages.find((v) => v.status === "active");
 
     voyages.forEach((v) => {
       const wps = waypointsMap[v.id] || [];
       if (wps.length >= 2) {
-        totalNM += totalWaypointDistance(wps);
+        const waypointDistance = totalWaypointDistance(wps);
+        if (v.type === "water") {
+          seaNM += waypointDistance;
+        } else {
+          landNM += waypointDistance;
+        }
       }
     });
 
-    return { totalNM: Math.round(totalNM), voyageCount, activeVoyage };
+    return {
+      seaNM: Math.round(seaNM),
+      landNM: Math.round(landNM),
+      totalNM: Math.round(seaNM + landNM),
+      voyageCount,
+      activeVoyage,
+    };
   }, [voyages, waypointsMap]);
 
   // Scroll to article in list
@@ -514,9 +543,17 @@ const Journal = () => {
           {/* Floating stats bar — top center */}
           {stats.totalNM > 0 && (
             <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-muted-foreground">
-                <Ship size={10} /> {stats.totalNM.toLocaleString()} NM
-              </span>
+              {stats.seaNM > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-sky-800/85">
+                  <Ship size={10} /> {stats.seaNM.toLocaleString()} NM
+                </span>
+              ) : null}
+              {stats.seaNM > 0 && stats.landNM > 0 ? <span className="w-px h-3 bg-border" /> : null}
+              {stats.landNM > 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-orange-800/85">
+                  <Mountain size={10} /> {stats.landNM.toLocaleString()} NM
+                </span>
+              ) : null}
               <span className="w-px h-3 bg-border" />
               <Popover open={voyageFilterOpen} onOpenChange={setVoyageFilterOpen}>
                 <PopoverTrigger asChild>
@@ -531,7 +568,7 @@ const Journal = () => {
                     <ChevronDown size={10} className={`transition-transform ${voyageFilterOpen ? "rotate-180" : ""}`} />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="center" sideOffset={12} className="w-[280px] rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl">
+                <PopoverContent align="center" sideOffset={12} className="w-[340px] rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl">
                   <div className="mb-1 px-2 py-1">
                     <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
                       {lang === "it" ? "Focus viaggio" : "Voyage focus"}
@@ -551,6 +588,17 @@ const Journal = () => {
                     {voyages.map((voyage) => {
                       const isSelected = focusedVoyageId === voyage.id;
                       const isWaterVoyage = voyage.type === "water";
+                      const localizedStatus = lang === "it"
+                        ? voyage.status === "planned"
+                          ? "programmata"
+                          : voyage.status === "active"
+                            ? "in corso"
+                            : "completata"
+                        : voyage.status === "planned"
+                          ? "planned"
+                          : voyage.status === "active"
+                            ? "active"
+                            : "completed";
                       return (
                         <button
                           key={voyage.id}
@@ -560,17 +608,18 @@ const Journal = () => {
                             isSelected ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
                           }`}
                         >
-                          <span className="flex min-w-0 items-center gap-2">
+                          <span className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="truncate">{getLocalizedVoyageName(voyage, lang)}</span>
                             <span
-                              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${
-                                isWaterVoyage
-                                  ? "border-sky-200/80 bg-sky-50 text-sky-700"
-                                  : "border-orange-200/80 bg-orange-50 text-orange-700"
-                              }`}
+                              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${getVoyageTypePillClassName(voyage.type)}`}
                             >
                               {isWaterVoyage ? <Ship size={10} /> : <Mountain size={10} />}
                               {lang === "it" ? (isWaterVoyage ? "mare" : "terra") : (isWaterVoyage ? "water" : "land")}
+                            </span>
+                            <span
+                              className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${getVoyageStatusPillClassName(voyage.status)}`}
+                            >
+                              {localizedStatus}
                             </span>
                           </span>
                           {isSelected ? <Check size={12} className="text-accent shrink-0" /> : null}

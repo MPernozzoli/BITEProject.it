@@ -1,4 +1,10 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { activateNewsletterSubscription } from '../_shared/newsletter-subscription-activation.ts'
+import {
+  DEFAULT_SYSTEM_EMAIL_AUTOMATIONS,
+  normalizeSystemEmailAutomation,
+} from '../_shared/system-email-automation.ts'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 
 const corsHeaders = {
@@ -78,7 +84,33 @@ Deno.serve(async (req) => {
       ? body.source.trim().slice(0, 64)
       : 'homepage'
 
-  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
+  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const sendTransactionalTemplate = async (
+    templateName: string,
+    templateData: Record<string, unknown>
+  ) => {
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/send-transactional-email`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          templateName,
+          recipientEmail: normalizedEmail,
+          idempotencyKey: `${templateName}:${normalizedEmail}:${crypto.randomUUID()}`,
+          templateData,
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const message = await response.text()
+      throw new Error(`${templateName} failed: ${message}`)
+    }
+  }
   const authHeader = req.headers.get('Authorization')
   const accessToken = authHeader?.startsWith('Bearer ')
     ? authHeader.slice('Bearer '.length).trim()
@@ -96,13 +128,13 @@ Deno.serve(async (req) => {
 
   const { data: matchingProfile } = await supabase
     .from('profiles')
-    .select('id, preferred_language')
+    .select('id, name, preferred_language')
     .eq('email', normalizedEmail)
     .maybeSingle()
 
   const { data: existingSubscriber, error: lookupError } = await supabase
     .from('newsletter_subscribers')
-    .select('id, subscribed, profile_id')
+    .select('id, subscribed, profile_id, preferred_language')
     .or(
       matchingProfile?.id
         ? `email.eq.${normalizedEmail},profile_id.eq.${matchingProfile.id}`
@@ -118,7 +150,7 @@ Deno.serve(async (req) => {
 
   const { data: suppressedEmail, error: suppressionLookupError } = await supabase
     .from('suppressed_emails')
-    .select('email')
+    .select('email, reason')
     .eq('email', normalizedEmail)
     .maybeSingle()
 
@@ -127,49 +159,152 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
 
-  const hasVerifiedOwnership =
-    requesterEmail === normalizedEmail ||
-    (requesterUserId !== null &&
-      (matchingProfile?.id === requesterUserId ||
-        existingSubscriber?.profile_id === requesterUserId))
+  const isAuthenticatedOwnEmail =
+    requesterUserId !== null && requesterEmail === normalizedEmail
 
-  const shouldNoopForSafety =
-    !hasVerifiedOwnership &&
-    (Boolean(suppressedEmail) || Boolean(existingSubscriber))
-
-  if (shouldNoopForSafety) {
+  const isAlreadyNewsletterActive = Boolean(existingSubscriber?.subscribed)
+  if (!isAuthenticatedOwnEmail && isAlreadyNewsletterActive) {
     return successResponse()
   }
 
-  const payload = {
-    email: normalizedEmail,
-    profile_id: matchingProfile?.id ?? existingSubscriber?.profile_id ?? null,
-    preferred_language: matchingProfile?.preferred_language ?? preferredLanguage,
-    subscribed: true,
-    source,
-    unsubscribed_at: null,
+  if (isAuthenticatedOwnEmail) {
+    try {
+      await activateNewsletterSubscription({
+        supabase,
+        supabaseUrl,
+        serviceRoleKey,
+        email: normalizedEmail,
+        profileId:
+          matchingProfile?.id ?? existingSubscriber?.profile_id ?? requesterUserId,
+        preferredLanguage:
+          matchingProfile?.preferred_language ??
+          existingSubscriber?.preferred_language ??
+          preferredLanguage,
+        recipientName: matchingProfile?.name ?? null,
+        source,
+        markAllConfirmationTokensUsed: true,
+      })
+      return successResponse()
+    } catch (error) {
+      console.error('Failed to activate verified newsletter subscription', error)
+      return jsonResponse({ error: 'Failed to subscribe' }, 500)
+    }
   }
 
-  const mutation = existingSubscriber
-    ? supabase
-        .from('newsletter_subscribers')
-        .update(payload)
-        .eq('id', existingSubscriber.id)
-    : supabase.from('newsletter_subscribers').insert(payload)
+  const { data: confirmationAutomationRow, error: automationLookupError } = await supabase
+    .from('system_email_automations')
+    .select('*')
+    .eq('key', 'newsletter-confirmation')
+    .maybeSingle()
 
-  const { error: mutationError } = await mutation
-
-  if (mutationError) {
-    console.error('Failed to save newsletter subscriber', mutationError)
+  if (automationLookupError) {
+    console.error('Failed to load system automation settings', automationLookupError)
     return jsonResponse({ error: 'Failed to subscribe' }, 500)
   }
 
-  if (hasVerifiedOwnership) {
-    await supabase.from('suppressed_emails').delete().eq('email', normalizedEmail)
-    await supabase
-      .from('email_unsubscribe_tokens')
-      .update({ used_at: null })
-      .eq('email', normalizedEmail)
+  const confirmationAutomation = normalizeSystemEmailAutomation(
+    confirmationAutomationRow,
+    'newsletter-confirmation'
+  )
+
+  if (!confirmationAutomation.enabled) {
+    return successResponse()
+  }
+
+  const resendCooldownMinutes =
+    typeof confirmationAutomation.config.resend_cooldown_minutes === 'number'
+      ? confirmationAutomation.config.resend_cooldown_minutes
+      : DEFAULT_SYSTEM_EMAIL_AUTOMATIONS['newsletter-confirmation'].config
+          .resend_cooldown_minutes as number
+
+  const { data: existingConfirmationToken, error: tokenLookupError } = await supabase
+    .from('newsletter_confirmation_tokens')
+    .select('*')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  if (tokenLookupError) {
+    console.error('Failed to load newsletter confirmation token', tokenLookupError)
+    return jsonResponse({ error: 'Failed to subscribe' }, 500)
+  }
+
+  const now = new Date()
+  const lastSentAt = existingConfirmationToken?.last_sent_at
+    ? new Date(existingConfirmationToken.last_sent_at)
+    : null
+  const withinCooldown =
+    lastSentAt !== null &&
+    now.getTime() - lastSentAt.getTime() < resendCooldownMinutes * 60 * 1000
+
+  const preferredLanguageForToken =
+    matchingProfile?.preferred_language ??
+    existingSubscriber?.preferred_language ??
+    preferredLanguage
+
+  let confirmationToken = existingConfirmationToken?.token ?? crypto.randomUUID().replaceAll('-', '')
+  let confirmationTokenCreatedAt =
+    existingConfirmationToken?.created_at ?? now.toISOString()
+  let confirmationTokenLastSentAt =
+    existingConfirmationToken?.last_sent_at ?? now.toISOString()
+
+  if (existingConfirmationToken?.used_at || (suppressedEmail && suppressedEmail.reason === 'unsubscribe')) {
+    confirmationToken = crypto.randomUUID().replaceAll('-', '')
+    confirmationTokenCreatedAt = now.toISOString()
+    confirmationTokenLastSentAt = now.toISOString()
+  }
+
+  const tokenPayload = {
+    email: normalizedEmail,
+    token: confirmationToken,
+    profile_id: matchingProfile?.id ?? existingSubscriber?.profile_id ?? null,
+    preferred_language: preferredLanguageForToken,
+    source,
+    created_at: confirmationTokenCreatedAt,
+    last_sent_at: withinCooldown ? confirmationTokenLastSentAt : now.toISOString(),
+    used_at: null,
+  }
+
+  const tokenMutation = existingConfirmationToken
+    ? supabase
+        .from('newsletter_confirmation_tokens')
+        .update(tokenPayload)
+        .eq('id', existingConfirmationToken.id)
+    : supabase.from('newsletter_confirmation_tokens').insert(tokenPayload)
+
+  const { error: tokenMutationError } = await tokenMutation
+
+  if (tokenMutationError) {
+    console.error('Failed to save newsletter confirmation token', tokenMutationError)
+    return jsonResponse({ error: 'Failed to subscribe' }, 500)
+  }
+
+  if (!withinCooldown) {
+    const confirmationUrl = `${PUBLIC_SITE_URL}/newsletter/confirm?token=${confirmationToken}`
+    const templateData = {
+      language: preferredLanguageForToken,
+      recipientName: matchingProfile?.name ?? null,
+      confirmationUrl,
+    }
+
+    try {
+      await sendTransactionalTemplate(
+        'newsletter-subscription-confirmation',
+        templateData
+      )
+
+      await supabase
+        .from('system_email_automations')
+        .upsert({
+          key: confirmationAutomation.key,
+          enabled: confirmationAutomation.enabled,
+          config: confirmationAutomation.config,
+          last_run_at: now.toISOString(),
+          last_sent_at: now.toISOString(),
+          updated_at: now.toISOString(),
+        })
+    } catch (error) {
+      console.error('Failed to send newsletter confirmation email', error)
+    }
   }
 
   return successResponse()
