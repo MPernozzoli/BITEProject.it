@@ -318,53 +318,7 @@ const AdminProfile = () => {
 
   const syncNewsletterPreference = useCallback(
     async (userId: string, currentEmail: string, subscribed: boolean) => {
-      const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
-        body: {
-          subscribed,
-          source: "profile",
-        },
-      });
-
-      if (!error) {
-        return;
-      }
-
-      console.error("Newsletter sync via function failed:", error);
-
       const normalizedEmail = currentEmail.trim().toLowerCase();
-
-      if (subscribed) {
-        const { error: subscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
-          body: {
-            email: normalizedEmail,
-            consent: true,
-            source: "profile",
-            preferredLanguage,
-          },
-        });
-
-        if (subscribeError) {
-          throw subscribeError;
-        }
-
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const { error: preferenceError } = await supabase
-        .from("email_notification_preferences")
-        .upsert({
-          email: normalizedEmail,
-          newsletter_enabled: false,
-          digest_enabled: false,
-          story_notifications_enabled: true,
-          updated_at: now,
-        });
-
-      if (preferenceError) {
-        throw preferenceError;
-      }
-
       const subscriptionQuery = supabase.from("newsletter_subscribers").select("id");
       const { data: existingSub, error: existingSubError } = await (normalizedEmail
         ? subscriptionQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
@@ -372,7 +326,64 @@ const AdminProfile = () => {
         .maybeSingle();
 
       if (existingSubError) {
-        throw existingSubError;
+        console.error("Direct newsletter lookup failed, trying function fallback:", existingSubError);
+
+        const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
+          body: {
+            subscribed,
+            source: "profile",
+          },
+        });
+
+        if (!error) {
+          return;
+        }
+
+        console.error("Newsletter sync via function failed:", error);
+
+        if (subscribed) {
+          const { error: subscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
+            body: {
+              email: normalizedEmail,
+              consent: true,
+              source: "profile",
+              preferredLanguage,
+            },
+          });
+
+          if (subscribeError) {
+            throw subscribeError;
+          }
+
+          return;
+        }
+
+        throw error;
+      }
+
+      if (subscribed) {
+        const mutation = existingSub?.id
+          ? supabase
+              .from("newsletter_subscribers")
+              .update({
+                profile_id: userId,
+                email: normalizedEmail,
+                subscribed: true,
+              })
+              .eq("id", existingSub.id)
+          : supabase.from("newsletter_subscribers").insert({
+              profile_id: userId,
+              email: normalizedEmail,
+              subscribed: true,
+            });
+
+        const { error: subscribeError } = await mutation;
+
+        if (subscribeError) {
+          throw subscribeError;
+        }
+
+        return;
       }
 
       if (existingSub?.id) {

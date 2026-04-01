@@ -670,18 +670,54 @@ const Index = () => {
     }
 
     setNewsletterLoading(true);
-    const { error } = await supabase.functions.invoke("newsletter-subscribe", {
-      body: {
-        email: targetEmail,
-        preferredLanguage: lang,
-        source: session ? "homepage_logged_in" : "homepage",
-        consent: newsletterConsent,
-        website: newsletterWebsite,
-      },
-    });
-    setNewsletterLoading(false);
+    try {
+      if (session?.user?.id && session.user.email) {
+        const normalizedEmail = session.user.email.trim().toLowerCase();
+        const subscriptionQuery = supabase.from("newsletter_subscribers").select("id");
+        const { data: existingSub, error: existingSubError } = await subscriptionQuery
+          .or(`profile_id.eq.${session.user.id},email.eq.${normalizedEmail}`)
+          .maybeSingle();
 
-    if (error) {
+        if (existingSubError) {
+          throw existingSubError;
+        }
+
+        const mutation = existingSub?.id
+          ? supabase
+              .from("newsletter_subscribers")
+              .update({
+                profile_id: session.user.id,
+                email: normalizedEmail,
+                subscribed: true,
+              })
+              .eq("id", existingSub.id)
+          : supabase.from("newsletter_subscribers").insert({
+              profile_id: session.user.id,
+              email: normalizedEmail,
+              subscribed: true,
+            });
+
+        const { error: mutationError } = await mutation;
+        if (mutationError) {
+          throw mutationError;
+        }
+      } else {
+        const { error } = await supabase.functions.invoke("newsletter-subscribe", {
+          body: {
+            email: targetEmail,
+            preferredLanguage: lang,
+            source: session ? "homepage_logged_in" : "homepage",
+            consent: newsletterConsent,
+            website: newsletterWebsite,
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+    } catch (error) {
+      setNewsletterLoading(false);
       console.error("Newsletter subscribe failed", error);
       toast.error(
         lang === "it"
@@ -690,6 +726,8 @@ const Index = () => {
       );
       return;
     }
+
+    setNewsletterLoading(false);
 
     setNewsletterEmail("");
     setNewsletterConsent(false);
