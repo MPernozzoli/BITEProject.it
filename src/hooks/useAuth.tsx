@@ -6,6 +6,7 @@ import {
   getSupabaseAuthStorageKey,
   validateSessionOrSignOut,
 } from "@/lib/supabase-auth";
+import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 
 const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 
@@ -164,12 +165,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     void (async () => {
       try {
-        const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
-          body: {
+        const { error } = await invokeOptionalNewsletterFunction(
+          supabase.functions.invoke.bind(supabase.functions),
+          "my-newsletter-subscription",
+          {
             subscribed: true,
             source: payload?.source || "signup_google",
           },
-        });
+        );
 
         if (error) {
           console.error("Failed to sync pending signup newsletter preference", error);

@@ -25,6 +25,7 @@ import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { ALL_LANGUAGES, SITE_LANGUAGES, useI18n, type ExtendedLanguage } from "@/lib/i18n";
+import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -286,11 +287,12 @@ const AdminProfile = () => {
 
   const loadNewsletterState = useCallback(
     async (userId: string, currentEmail: string) => {
-      const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
+      const { data: newsletterState, error: newsletterError } = await invokeOptionalNewsletterFunction<{
+        subscribed?: boolean;
+      }>(
+        supabase.functions.invoke.bind(supabase.functions),
         "my-newsletter-subscription",
-        {
-          body: {},
-        },
+        {},
       );
 
       if (!newsletterError) {
@@ -325,12 +327,14 @@ const AdminProfile = () => {
     async (userId: string, currentEmail: string, subscribed: boolean) => {
       const normalizedEmail = currentEmail.trim().toLowerCase();
 
-      const { error: ownSubscriptionError } = await supabase.functions.invoke("my-newsletter-subscription", {
-        body: {
+      const { error: ownSubscriptionError } = await invokeOptionalNewsletterFunction(
+        supabase.functions.invoke.bind(supabase.functions),
+        "my-newsletter-subscription",
+        {
           subscribed,
           source: "profile",
         },
-      });
+      );
 
       if (!ownSubscriptionError) {
         return { backendHandled: true };

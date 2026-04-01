@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
+import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { validateSessionOrSignOut } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
 
@@ -410,14 +411,13 @@ const UserLogin = () => {
       }
 
       if (submittedMode === "signup" && submittedNewsletterOptIn) {
-        const { error: newsletterError } = await supabase.functions.invoke(
+        const { error: newsletterError } = await invokeOptionalNewsletterFunction(
+          supabase.functions.invoke.bind(supabase.functions),
           "my-newsletter-subscription",
           {
-            body: {
-              subscribed: true,
-              source: "signup_email",
-            },
-          }
+            subscribed: true,
+            source: "signup_email",
+          },
         );
 
         if (newsletterError) {

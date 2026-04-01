@@ -31,6 +31,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { ALL_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
 import {
   NEWSLETTER_MERGE_TAGS,
+  normalizeOptionalSelectResult,
   type NewsletterBodyMode,
   buildNewsletterPreviewVariables,
   renderNewsletterMergeTags,
@@ -355,7 +356,14 @@ const AdminNewsletterManager = () => {
     if (withLoader) setLoading(true);
     setRefreshing(true);
 
-    const [messagesRes, deliveriesRes, subscribersRes, eventsRes, feedbackRes, systemAutomationsRes] =
+    const [
+      rawMessagesRes,
+      rawDeliveriesRes,
+      subscribersRes,
+      rawEventsRes,
+      rawFeedbackRes,
+      rawSystemAutomationsRes,
+    ] =
       await Promise.all([
         (supabase as any).from("newsletter_messages").select("*").order("updated_at", { ascending: false }),
         (supabase as any).from("newsletter_deliveries").select("*").order("queued_at", { ascending: false }).limit(800),
@@ -368,6 +376,12 @@ const AdminNewsletterManager = () => {
           .limit(100),
         (supabase as any).from("system_email_automations").select("*").order("key", { ascending: true }),
       ]);
+
+    const messagesRes = normalizeOptionalSelectResult<NewsletterMessage>(rawMessagesRes);
+    const deliveriesRes = normalizeOptionalSelectResult<NewsletterDelivery>(rawDeliveriesRes);
+    const eventsRes = normalizeOptionalSelectResult<NewsletterEvent>(rawEventsRes);
+    const feedbackRes = normalizeOptionalSelectResult<NewsletterUnsubscribeFeedback>(rawFeedbackRes);
+    const systemAutomationsRes = normalizeOptionalSelectResult<SystemEmailAutomation>(rawSystemAutomationsRes);
 
     if (
       messagesRes.error ||
@@ -387,13 +401,13 @@ const AdminNewsletterManager = () => {
       });
       toast.error("Impossibile caricare i dati newsletter.");
     } else {
-      setMessages((messagesRes.data ?? []) as NewsletterMessage[]);
-      setDeliveries((deliveriesRes.data ?? []) as NewsletterDelivery[]);
+      setMessages(messagesRes.data);
+      setDeliveries(deliveriesRes.data);
       setSubscribers((subscribersRes.data ?? []) as NewsletterSubscriber[]);
-      setEvents((eventsRes.data ?? []) as NewsletterEvent[]);
-      setUnsubscribeFeedback((feedbackRes.data ?? []) as NewsletterUnsubscribeFeedback[]);
+      setEvents(eventsRes.data);
+      setUnsubscribeFeedback(feedbackRes.data);
 
-      const rows = (systemAutomationsRes.data ?? []) as SystemEmailAutomation[];
+      const rows = systemAutomationsRes.data;
       const merged = Object.values(defaultSystemAutomations).map((automation) => {
         const override = rows.find((row) => row.key === automation.key);
         return override

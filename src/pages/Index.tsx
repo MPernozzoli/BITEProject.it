@@ -21,6 +21,7 @@ import {
   type HeroVideoPoolVersion,
   type HomepageHeroVideoPool,
 } from "@/lib/public-content";
+import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
@@ -664,11 +665,12 @@ const Index = () => {
       }
 
       if (normalizedEmail) {
-        const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
+        const { data: newsletterState, error: newsletterError } = await invokeOptionalNewsletterFunction<{
+          subscribed?: boolean;
+        }>(
+          supabase.functions.invoke.bind(supabase.functions),
           "my-newsletter-subscription",
-          {
-            body: {},
-          },
+          {},
         );
 
         if (!newsletterError) {
@@ -729,13 +731,14 @@ const Index = () => {
         let fallbackUsed = false;
         let wasAlreadySubscribed = false;
 
-        const { data: ownSubscriptionState, error: ownSubscriptionError } = await supabase.functions.invoke(
+        const { data: ownSubscriptionState, error: ownSubscriptionError } = await invokeOptionalNewsletterFunction<{
+          subscribed?: boolean;
+        }>(
+          supabase.functions.invoke.bind(supabase.functions),
           "my-newsletter-subscription",
           {
-            body: {
-              subscribed: true,
-              source: "homepage_logged_in",
-            },
+            subscribed: true,
+            source: "homepage_logged_in",
           },
         );
 

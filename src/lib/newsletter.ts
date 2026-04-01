@@ -15,6 +15,68 @@ export const NEWSLETTER_MERGE_TAGS = [
   { token: "{{current_year}}", label: "Anno corrente" },
 ] as const;
 
+const unavailableEdgeFunctions = new Set<string>();
+
+const getErrorStatus = (error: unknown): number | undefined => {
+  if (!error || typeof error !== "object") return undefined;
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+};
+
+export const isMissingSupabaseResourceError = (error: unknown) => {
+  if (!error || typeof error !== "object") return false;
+
+  const status = getErrorStatus(error);
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  const details = "details" in error && typeof error.details === "string" ? error.details : "";
+  const code = "code" in error && typeof error.code === "string" ? error.code : "";
+  const hint = "hint" in error && typeof error.hint === "string" ? error.hint : "";
+  const combined = `${message} ${details} ${hint}`.toLowerCase();
+
+  return (
+    status === 404 ||
+    code === "42P01" ||
+    code === "PGRST205" ||
+    combined.includes("does not exist") ||
+    combined.includes("could not find the table") ||
+    combined.includes("relation") && combined.includes("does not exist")
+  );
+};
+
+export const invokeOptionalNewsletterFunction = async <TData = unknown>(
+  invoke: (name: string, options: { body: Record<string, unknown> }) => Promise<{ data: TData | null; error: unknown }>,
+  name: string,
+  body: Record<string, unknown>,
+) => {
+  if (unavailableEdgeFunctions.has(name)) {
+    return { data: null, error: null, unavailable: true };
+  }
+
+  const { data, error } = await invoke(name, { body });
+
+  if (isMissingSupabaseResourceError(error)) {
+    unavailableEdgeFunctions.add(name);
+    return { data: null, error: null, unavailable: true };
+  }
+
+  return { data, error, unavailable: false };
+};
+
+export const normalizeOptionalSelectResult = <TRow>(
+  result: { data: TRow[] | null; error: unknown },
+) => {
+  if (isMissingSupabaseResourceError(result.error)) {
+    return { data: [] as TRow[], error: null, unavailable: true };
+  }
+
+  return {
+    data: (result.data ?? []) as TRow[],
+    error: result.error,
+    unavailable: false,
+  };
+};
+
 export type NewsletterBodyMode = "richtext" | "html";
 
 export const renderNewsletterMergeTags = (
