@@ -36,28 +36,34 @@ const escapePopupHtml = (value: string) =>
 
 const clampWaypointIndex = (value: number, max: number) => Math.max(0, Math.min(value, max));
 
-const getVoyageStrokeColor = (voyage: Voyage, index: number, variant: "base" | "focus" = "base") => {
-  const toneShift = ((index % 5) - 2) * (voyage.type === "water" ? 5 : 4);
+const getVoyageYearTier = (voyage: Voyage) => {
+  if (!voyage.start_date) return 0;
+  const startDate = new Date(voyage.start_date);
+  if (Number.isNaN(startDate.getTime())) return 0;
 
+  return Math.max(0, new Date().getFullYear() - startDate.getFullYear());
+};
+
+const getVoyageLineWidthScale = (voyage: Voyage) => {
+  const yearTier = getVoyageYearTier(voyage);
+  if (yearTier <= 0) return 1;
+  if (yearTier === 1) return 0.76;
+  if (yearTier === 2) return 0.56;
+  return 0.34;
+};
+
+const getVoyageStrokeColor = (voyage: Voyage, variant: "base" | "focus" = "base") => {
   if (voyage.type === "water") {
-    const hue = 206 + toneShift;
-    if (variant === "focus") {
-      return `hsl(${hue}, 78%, 42%)`;
-    }
-
-    if (voyage.status === "completed") return `hsl(${hue - 6}, 34%, 26%)`;
-    if (voyage.status === "planned") return `hsl(${hue + 4}, 28%, 70%)`;
-    return `hsl(${hue}, 52%, 46%)`;
+    if (variant === "focus") return "hsl(206, 84%, 40%)";
+    if (voyage.status === "completed") return "hsl(208, 48%, 34%)";
+    if (voyage.status === "planned") return "hsl(205, 60%, 68%)";
+    return "hsl(206, 72%, 47%)";
   }
 
-  const hue = 26 + toneShift;
-  if (variant === "focus") {
-    return `hsl(${hue}, 76%, 42%)`;
-  }
-
-  if (voyage.status === "completed") return `hsl(${hue}, 28%, 28%)`;
-  if (voyage.status === "planned") return `hsl(${hue + 4}, 22%, 68%)`;
-  return `hsl(${hue}, 44%, 44%)`;
+  if (variant === "focus") return "hsl(28, 90%, 44%)";
+  if (voyage.status === "completed") return "hsl(28, 54%, 36%)";
+  if (voyage.status === "planned") return "hsl(31, 72%, 70%)";
+  return "hsl(30, 78%, 50%)";
 };
 
 const getVoyageStatusDashArray = (voyage: Voyage): number[] | undefined => {
@@ -68,20 +74,16 @@ const getVoyageStatusDashArray = (voyage: Voyage): number[] | undefined => {
   return undefined;
 };
 
-const getVoyageStatusCasingColor = (voyage: Voyage, index: number) => {
-  const toneShift = ((index % 5) - 2) * (voyage.type === "water" ? 5 : 4);
-
+const getVoyageStatusCasingColor = (voyage: Voyage) => {
   if (voyage.type === "water") {
-    const hue = 206 + toneShift;
-    if (voyage.status === "active") return `hsla(${hue}, 82%, 45%, 0.22)`;
-    if (voyage.status === "planned") return `hsla(${hue + 4}, 28%, 72%, 0.18)`;
-    return `hsla(${hue - 6}, 28%, 22%, 0.18)`;
+    if (voyage.status === "active") return "hsla(206, 80%, 44%, 0.22)";
+    if (voyage.status === "planned") return "hsla(205, 56%, 70%, 0.18)";
+    return "hsla(208, 46%, 24%, 0.18)";
   }
 
-  const hue = 26 + toneShift;
-  if (voyage.status === "active") return `hsla(${hue}, 80%, 44%, 0.22)`;
-  if (voyage.status === "planned") return `hsla(${hue + 4}, 24%, 70%, 0.16)`;
-  return `hsla(${hue}, 24%, 24%, 0.16)`;
+  if (voyage.status === "active") return "hsla(30, 84%, 46%, 0.22)";
+  if (voyage.status === "planned") return "hsla(31, 68%, 70%, 0.16)";
+  return "hsla(28, 44%, 28%, 0.16)";
 };
 
 const getVoyageLineMetrics = (
@@ -89,8 +91,9 @@ const getVoyageLineMetrics = (
   state: { isFocused: boolean; isHovered: boolean; isDimmed: boolean; activeArticleFocusMode?: "voyage" | "segment" | "point" | null }
 ) => {
   const { isFocused, isHovered, isDimmed, activeArticleFocusMode } = state;
+  const widthScale = getVoyageLineWidthScale(voyage);
 
-  const width = isFocused
+  const baseWidth = isFocused
     ? activeArticleFocusMode === "voyage" ? 5.8 : 4.8
     : isHovered
       ? 5.2
@@ -99,6 +102,7 @@ const getVoyageLineMetrics = (
         : voyage.status === "planned"
           ? 3.2
           : 3.4;
+  const width = Math.max(0.9, baseWidth * widthScale);
 
   const opacity = isDimmed
     ? 0.16
@@ -111,12 +115,12 @@ const getVoyageLineMetrics = (
           : 0.78;
 
   const casingWidth = isFocused
-    ? width + 4
+    ? width + Math.max(1.4, 4 * widthScale)
     : isHovered
-      ? width + 3.4
+      ? width + Math.max(1.2, 3.4 * widthScale)
       : voyage.status === "active"
-        ? width + 3
-        : width + 2.4;
+        ? width + Math.max(1.1, 3 * widthScale)
+        : width + Math.max(1, 2.4 * widthScale);
 
   const casingOpacity = isDimmed
     ? 0.08
@@ -333,7 +337,7 @@ const VoyageMap = ({
         });
       }
 
-      voyages.forEach((voyage, voyageIndex) => {
+      voyages.forEach((voyage) => {
         const wps = waypointsMap[voyage.id] || [];
         if (!wps.length) return;
 
@@ -342,8 +346,8 @@ const VoyageMap = ({
         const isActive = voyage.status === "active";
         const hasComparisonFocus = Boolean(routeFocusVoyageId || hoverFocusVoyageId);
         const isDimmed = hasComparisonFocus && !isFocused && !isHovered;
-        const baseColor = getVoyageStrokeColor(voyage, voyageIndex, "base");
-        const focusColor = getVoyageStrokeColor(voyage, voyageIndex, "focus");
+        const baseColor = getVoyageStrokeColor(voyage, "base");
+        const focusColor = getVoyageStrokeColor(voyage, "focus");
 
         const routeCoordinates = buildPublicVoyageGeometry(
           wps,
@@ -385,7 +389,7 @@ const VoyageMap = ({
               "line-join": "round",
             },
             paint: {
-              "line-color": getVoyageStatusCasingColor(voyage, voyageIndex),
+              "line-color": getVoyageStatusCasingColor(voyage),
               "line-width": lineMetrics.casingWidth,
               "line-opacity": lineMetrics.casingOpacity,
               ...(voyage.status === "planned" ? { "line-dasharray": [2.6, 3.4] } : {}),
@@ -456,7 +460,7 @@ const VoyageMap = ({
               source: focusLineId,
               paint: {
                 "line-color": focusColor,
-                "line-width": 7,
+                "line-width": Math.max(1.8, 7 * getVoyageLineWidthScale(voyage)),
                 "line-opacity": 0.96,
               },
             });
@@ -492,11 +496,11 @@ const VoyageMap = ({
                 id: focusSegmentId,
                 type: "line",
                 source: focusSegmentId,
-              paint: {
-                "line-color": focusColor,
-                "line-width": 7,
-                "line-opacity": 0.96,
-              },
+                paint: {
+                  "line-color": focusColor,
+                  "line-width": Math.max(1.8, 7 * getVoyageLineWidthScale(voyage)),
+                  "line-opacity": 0.96,
+                },
               });
             }
           }

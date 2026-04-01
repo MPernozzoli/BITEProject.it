@@ -215,6 +215,25 @@ const getNearestSegmentIndex = (
   return nearestSegmentIndex;
 };
 
+const getVoyageYearTier = (voyage: Pick<Voyage, "start_date">) => {
+  if (!voyage.start_date) return 0;
+  const startDate = new Date(voyage.start_date);
+  if (Number.isNaN(startDate.getTime())) return 0;
+
+  return Math.max(0, new Date().getFullYear() - startDate.getFullYear());
+};
+
+const getVoyageLineWidthScale = (voyage: Pick<Voyage, "start_date">) => {
+  const yearTier = getVoyageYearTier(voyage);
+  if (yearTier <= 0) return 1;
+  if (yearTier === 1) return 0.76;
+  if (yearTier === 2) return 0.56;
+  return 0.34;
+};
+
+const getVoyageRouteColor = (voyageType: Voyage["type"]) =>
+  voyageType === "water" ? "hsl(206, 72%, 47%)" : "hsl(30, 78%, 50%)";
+
 const AdminVoyageManager = () => {
   const { lang } = useI18n();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
@@ -941,6 +960,7 @@ const AdminVoyageManager = () => {
       geometryOverrideRef.current[selectedVoyageRef.current] ||
       getCachedGeometryCoordinates(selectedVoyage) ||
       getStraightVoyageGeometry(selectedWaypoints);
+    const routeWidth = Math.max(1, 3.4 * getVoyageLineWidthScale(selectedVoyage || { start_date: null }));
 
     if (geometry.length >= 2) {
       map.addSource("admin-route-line", {
@@ -957,8 +977,8 @@ const AdminVoyageManager = () => {
         type: "line",
         source: "admin-route-line",
         paint: {
-          "line-color": selectedVoyage?.type === "water" ? "hsl(210, 60%, 45%)" : "hsl(30, 50%, 40%)",
-          "line-width": 3,
+          "line-color": getVoyageRouteColor(selectedVoyage?.type === "water" ? "water" : "land"),
+          "line-width": routeWidth,
           "line-opacity": 0.9,
         },
       });
