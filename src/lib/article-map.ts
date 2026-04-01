@@ -177,7 +177,7 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
           return [{
             ...overlay,
             id: normalizeString(entry.id) || overlay.id,
-            kind,
+            kind: kind as ArticleMapOverlayKind,
             label_en: normalizeString(entry.label_en),
             label_it: normalizeString(entry.label_it),
             latitude: normalizeNumber(entry.latitude),

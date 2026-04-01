@@ -217,6 +217,6 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
       viewCount: Number(article.view_count ?? 0),
     })),
     voyages: (voyagesResponse.data ?? []) as Voyage[],
-    voyageWaypoints: (voyageWaypointsResponse.data ?? []) as VoyageWaypoint[],
+    voyageWaypoints: (voyageWaypointsResponse.data ?? []) as unknown as VoyageWaypoint[],
   };
 }

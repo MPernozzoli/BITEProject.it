@@ -151,7 +151,7 @@ const ArticlePage = () => {
         .eq("voyage_id", article!.voyage_id)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data || []) as VoyageWaypoint[];
+      return (data || []) as unknown as VoyageWaypoint[];
     },
   });
 

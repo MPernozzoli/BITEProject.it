@@ -97,7 +97,7 @@ function getRecipientProfile(
 
 async function authorizeRequest(
   req: Request,
-  supabase: ReturnType<typeof createClient>
+  supabase: ReturnType<typeof createClient<any>>
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -138,7 +138,7 @@ async function authorizeRequest(
 }
 
 async function ensureUnsubscribeToken(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   email: string
 ): Promise<string> {
   const normalizedEmail = email.trim().toLowerCase()
@@ -178,7 +178,7 @@ async function ensureUnsubscribeToken(
 }
 
 async function markEventProcessed(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   eventId: string,
   processingNote: string
 ): Promise<void> {
@@ -192,7 +192,7 @@ async function markEventProcessed(
 }
 
 async function createDeliveryRecord(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   values: Record<string, unknown>
 ): Promise<boolean> {
   const { error } = await supabase.from('newsletter_deliveries').insert(values)
@@ -207,7 +207,7 @@ async function createDeliveryRecord(
 }
 
 async function queueNewsletterDelivery(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   params: {
     message: NewsletterMessage
     recipientEmail: string
@@ -384,7 +384,7 @@ async function queueNewsletterDelivery(
 }
 
 async function loadActiveRecipients(
-  supabase: ReturnType<typeof createClient>
+  supabase: ReturnType<typeof createClient<any>>
 ): Promise<Recipient[]> {
   const { data, error } = await supabase
     .from('newsletter_subscribers')
