@@ -1,27 +1,66 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Save, Camera, Globe, Instagram, Youtube, Facebook, Linkedin, Link as LinkIcon, BookOpen, X } from "lucide-react";
-import { useI18n } from "@/lib/i18n";
-import { ALL_LANGUAGES, SITE_LANGUAGES, type ExtendedLanguage } from "@/lib/i18n";
-import { useAuth } from "@/hooks/useAuth";
-import { isAuthFailureError } from "@/lib/supabase-auth";
-import { toast } from "sonner";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  ArrowUpRight,
+  BookOpen,
+  Camera,
+  Facebook,
+  Globe,
+  Instagram,
+  Languages,
+  Linkedin,
+  Link as LinkIcon,
+  Mail,
+  Save,
+  UserRound,
+  X,
+  Youtube,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
+import { useAuth } from "@/hooks/useAuth";
+import { ALL_LANGUAGES, SITE_LANGUAGES, useI18n, type ExtendedLanguage } from "@/lib/i18n";
+import { isAuthFailureError } from "@/lib/supabase-auth";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-const TikTokIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+const TikTokIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
   </svg>
 );
 
-const XIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+const XIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 );
+
+type SocialFieldKey =
+  | "social_instagram"
+  | "social_youtube"
+  | "social_tiktok"
+  | "social_facebook"
+  | "social_x"
+  | "social_linkedin"
+  | "social_website"
+  | "social_seapeople";
 
 type StorySubscriptionRow = {
   id: string;
@@ -32,6 +71,153 @@ type StorySubscriptionRow = {
     slug: string;
   } | null;
 };
+
+const COPY = {
+  it: {
+    loading: "Caricamento...",
+    title: "Il mio profilo",
+    subtitle:
+      "Gestisci identita, preferenze e presenza pubblica con lo stesso linguaggio visivo del resto del sito.",
+    badge: "Area personale",
+    previewTitle: "Come appari alla community",
+    previewText:
+      "Nome, avatar, bio e link vengono riutilizzati nei commenti, nelle firme autore e nella scheda pubblica.",
+    changePhoto: "Cambia foto",
+    photoHint: "PNG o JPG. Puoi ritagliare l'immagine prima di salvarla.",
+    viewPublicProfile: "Apri profilo pubblico",
+    stats: {
+      primaryLanguage: "Lingua principale",
+      storySubscriptions: "Storie seguite",
+      socialLinks: "Link attivi",
+      newsletter: "Newsletter",
+    },
+    sections: {
+      identityEyebrow: "Identita",
+      identityTitle: "Nome, bio e riconoscibilita",
+      identityText: "Aggiorna le informazioni che compaiono nella tua presenza pubblica.",
+      preferencesEyebrow: "Preferenze",
+      preferencesTitle: "Lingua e comunicazioni",
+      preferencesText: "Definisci lingua madre, fallback del sito e aggiornamenti email.",
+      socialsEyebrow: "Dove ti si trova",
+      socialsTitle: "Social e link esterni",
+      socialsText: "Aggiungi solo i riferimenti che vuoi mostrare davvero nella scheda pubblica.",
+      subscriptionsEyebrow: "Follow",
+      subscriptionsTitle: "Storie che stai seguendo",
+      subscriptionsText: "Qui trovi le iscrizioni attive ai thread narrativi del progetto.",
+      saveEyebrow: "Salvataggio",
+      saveTitle: "Pubblica le modifiche del profilo",
+      saveText: "Le modifiche restano locali finche non salvi. Avatar incluso.",
+    },
+    fields: {
+      name: "Nome visibile",
+      email: "Email account",
+      bio: "Bio",
+      bioPlaceholder: "Racconta chi sei, cosa fai e cosa porti a bordo.",
+      preferredLanguage: "Lingua preferita",
+      secondaryLanguage: "Lingua dei contenuti del sito",
+      secondaryHint:
+        "Il sito e disponibile solo in italiano e inglese. Seleziona il fallback da usare per i contenuti.",
+      newsletterTitle: "Aggiornamenti editoriali via email",
+      newsletterHint:
+        "Attiva per ricevere nuovi articoli, digest e comunicazioni del progetto nella tua casella.",
+    },
+    newsletter: {
+      on: "Iscritta",
+      off: "Non iscritta",
+    },
+    subscription: {
+      empty: "Non stai seguendo nessuna storia al momento.",
+      remove: "Rimuovi",
+      removed: "Iscrizione rimossa.",
+      removeError: "Impossibile aggiornare le iscrizioni alle storie.",
+    },
+    actions: {
+      save: "Salva modifiche",
+      saving: "Salvataggio...",
+      upload: "Upload...",
+      avatarReady: "Foto profilo pronta. Salva il profilo per pubblicarla.",
+      avatarError: "Impossibile caricare la foto profilo.",
+      invalidImage: "Seleziona un file immagine valido.",
+      saveSuccess: "Profilo aggiornato.",
+      saveError: "Impossibile salvare il profilo.",
+    },
+    misc: {
+      noSecondaryLanguage: "Nessuna",
+    },
+  },
+  en: {
+    loading: "Loading...",
+    title: "My profile",
+    subtitle:
+      "Manage identity, preferences, and public presence using the same visual system as the rest of the site.",
+    badge: "Personal area",
+    previewTitle: "How you appear to the community",
+    previewText:
+      "Name, avatar, bio, and links are reused across comments, author signatures, and the public profile card.",
+    changePhoto: "Change photo",
+    photoHint: "PNG or JPG. You can crop the image before saving.",
+    viewPublicProfile: "Open public profile",
+    stats: {
+      primaryLanguage: "Primary language",
+      storySubscriptions: "Followed stories",
+      socialLinks: "Active links",
+      newsletter: "Newsletter",
+    },
+    sections: {
+      identityEyebrow: "Identity",
+      identityTitle: "Name, bio, and recognizability",
+      identityText: "Update the details that show up in your public presence.",
+      preferencesEyebrow: "Preferences",
+      preferencesTitle: "Language and communications",
+      preferencesText: "Set native language, site fallback, and email updates.",
+      socialsEyebrow: "Where to find you",
+      socialsTitle: "Social and external links",
+      socialsText: "Add only the references you actually want to expose on your public card.",
+      subscriptionsEyebrow: "Following",
+      subscriptionsTitle: "Stories you are following",
+      subscriptionsText: "Your active subscriptions to the narrative threads of the project live here.",
+      saveEyebrow: "Save",
+      saveTitle: "Publish profile changes",
+      saveText: "Changes stay local until you save them. Avatar included.",
+    },
+    fields: {
+      name: "Display name",
+      email: "Account email",
+      bio: "Bio",
+      bioPlaceholder: "Tell people who you are, what you do, and what you bring aboard.",
+      preferredLanguage: "Preferred language",
+      secondaryLanguage: "Site content language",
+      secondaryHint:
+        "The site is only available in Italian and English. Select the fallback language for editorial content.",
+      newsletterTitle: "Editorial updates by email",
+      newsletterHint:
+        "Enable this to receive new articles, digests, and project updates in your inbox.",
+    },
+    newsletter: {
+      on: "Subscribed",
+      off: "Off",
+    },
+    subscription: {
+      empty: "You are not following any stories right now.",
+      remove: "Remove",
+      removed: "Subscription removed.",
+      removeError: "Unable to update story subscriptions.",
+    },
+    actions: {
+      save: "Save changes",
+      saving: "Saving...",
+      upload: "Upload...",
+      avatarReady: "Profile photo ready. Save the profile to publish it.",
+      avatarError: "Unable to upload the profile photo.",
+      invalidImage: "Select a valid image file.",
+      saveSuccess: "Profile updated.",
+      saveError: "Unable to save the profile.",
+    },
+    misc: {
+      noSecondaryLanguage: "None",
+    },
+  },
+} as const;
 
 const AdminProfile = () => {
   const { session, loading: authLoading } = useAuth();
@@ -49,7 +235,11 @@ const AdminProfile = () => {
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
-  const [socials, setSocials] = useState({
+  const [storySubscriptions, setStorySubscriptions] = useState<
+    Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>
+  >([]);
+  const [removingStoryId, setRemovingStoryId] = useState<string | null>(null);
+  const [socials, setSocials] = useState<Record<SocialFieldKey, string>>({
     social_instagram: "",
     social_youtube: "",
     social_tiktok: "",
@@ -59,10 +249,39 @@ const AdminProfile = () => {
     social_website: "",
     social_seapeople: "",
   });
-  const [storySubscriptions, setStorySubscriptions] = useState<Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>>([]);
   const { lang } = useI18n();
 
+  const copy = COPY[lang === "en" ? "en" : "it"];
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
+  const activeSocialCount = Object.values(socials).filter((value) => value.trim()).length;
+  const preferredLanguageLabel =
+    ALL_LANGUAGES.find((language) => language.code === preferredLanguage)?.label ?? preferredLanguage;
+  const secondaryLanguageLabel = secondaryLanguage
+    ? ALL_LANGUAGES.find((language) => language.code === secondaryLanguage)?.label ?? secondaryLanguage
+    : copy.misc.noSecondaryLanguage;
+
+  const socialFields: Array<{
+    key: SocialFieldKey;
+    label: string;
+    placeholder: string;
+    icon: JSX.Element;
+  }> = [
+    { key: "social_instagram", label: "Instagram", placeholder: "@username", icon: <Instagram size={16} className="text-accent" /> },
+    { key: "social_youtube", label: "YouTube", placeholder: "@channel", icon: <Youtube size={16} className="text-accent" /> },
+    { key: "social_tiktok", label: "TikTok", placeholder: "@username", icon: <TikTokIcon size={16} className="text-accent" /> },
+    { key: "social_facebook", label: "Facebook", placeholder: lang === "en" ? "page or profile" : "pagina o profilo", icon: <Facebook size={16} className="text-accent" /> },
+    { key: "social_x", label: "X", placeholder: "@username", icon: <XIcon size={16} className="text-accent" /> },
+    { key: "social_linkedin", label: "LinkedIn", placeholder: "username", icon: <Linkedin size={16} className="text-accent" /> },
+    { key: "social_website", label: lang === "en" ? "Website" : "Sito web", placeholder: "https://example.com", icon: <Globe size={16} className="text-accent" /> },
+    { key: "social_seapeople", label: "SeaPeople", placeholder: lang === "en" ? "profile link or slug" : "link profilo o slug", icon: <SeaPeopleIcon size={16} className="text-accent" /> },
+  ];
+
+  const stats = [
+    { label: copy.stats.primaryLanguage, value: preferredLanguageLabel, icon: Languages },
+    { label: copy.stats.storySubscriptions, value: String(storySubscriptions.length).padStart(2, "0"), icon: BookOpen },
+    { label: copy.stats.socialLinks, value: String(activeSocialCount).padStart(2, "0"), icon: LinkIcon },
+    { label: copy.stats.newsletter, value: newsletterSubscribed ? copy.newsletter.on : copy.newsletter.off, icon: Mail },
+  ];
 
   const loadProfile = useCallback(async () => {
     const userId = session?.user?.id;
@@ -76,7 +295,9 @@ const AdminProfile = () => {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople")
+        .select(
+          "name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople",
+        )
         .eq("id", userId)
         .single();
       if (error) {
@@ -110,7 +331,7 @@ const AdminProfile = () => {
         "my-newsletter-subscription",
         {
           body: {},
-        }
+        },
       );
       if (newsletterError) {
         console.error("Newsletter subscription load error:", newsletterError);
@@ -135,16 +356,16 @@ const AdminProfile = () => {
       if (storySubs) {
         setStorySubscriptions(
           (storySubs as StorySubscriptionRow[])
-            .filter((s) => Boolean(s.stories))
-            .map((s) => ({
-              id: s.id,
-              story_id: s.story_id,
-              story: s.stories as StorySubscriptionRow["stories"] & {
+            .filter((subscription) => Boolean(subscription.stories))
+            .map((subscription) => ({
+              id: subscription.id,
+              story_id: subscription.story_id,
+              story: subscription.stories as StorySubscriptionRow["stories"] & {
                 title_it: string;
                 title_en: string;
                 slug: string;
               },
-            }))
+            })),
         );
       }
     } finally {
@@ -176,7 +397,7 @@ const AdminProfile = () => {
 
   const handleAvatarSelected = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      toast.error("Seleziona un file immagine valido.");
+      toast.error(copy.actions.invalidImage);
       return;
     }
 
@@ -199,21 +420,36 @@ const AdminProfile = () => {
       const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
       setAvatarUrl(urlData.publicUrl);
       resetPendingAvatar();
-      toast.success("Foto profilo pronta. Salva il profilo per pubblicarla.");
+      toast.success(copy.actions.avatarReady);
     } catch (error) {
       console.error("Avatar upload error:", error);
-      toast.error("Impossibile caricare la foto profilo.");
+      toast.error(copy.actions.avatarError);
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  const handleLanguageChange = (lang: ExtendedLanguage) => {
-    setPreferredLanguage(lang);
-    if (SITE_LANGUAGES.includes(lang as "it" | "en")) {
+  const handleLanguageChange = (language: ExtendedLanguage) => {
+    setPreferredLanguage(language);
+    if (SITE_LANGUAGES.includes(language as "it" | "en")) {
       setSecondaryLanguage(null);
     } else if (!secondaryLanguage || !SITE_LANGUAGES.includes(secondaryLanguage as "it" | "en")) {
       setSecondaryLanguage("it");
+    }
+  };
+
+  const handleStoryUnsubscribe = async (subscriptionId: string) => {
+    setRemovingStoryId(subscriptionId);
+    try {
+      const { error } = await supabase.from("story_subscriptions").delete().eq("id", subscriptionId);
+      if (error) throw error;
+      setStorySubscriptions((current) => current.filter((subscription) => subscription.id !== subscriptionId));
+      toast.success(copy.subscription.removed);
+    } catch (error) {
+      console.error("Story unsubscribe error:", error);
+      toast.error(copy.subscription.removeError);
+    } finally {
+      setRemovingStoryId(null);
     }
   };
 
@@ -222,29 +458,24 @@ const AdminProfile = () => {
     setSaving(true);
 
     try {
-      const { error } = await supabase.functions.invoke(
-        "update-my-profile",
-        {
-          body: {
-            name,
-            bio,
-            avatar_url: avatarUrl,
-            preferred_language: preferredLanguage,
-            secondary_language: isSiteNative ? null : secondaryLanguage,
-            newsletter_subscribed: newsletterSubscribed,
-            ...socials,
-          },
-        }
-      );
+      const { error } = await supabase.functions.invoke("update-my-profile", {
+        body: {
+          name,
+          bio,
+          avatar_url: avatarUrl,
+          preferred_language: preferredLanguage,
+          secondary_language: isSiteNative ? null : secondaryLanguage,
+          newsletter_subscribed: newsletterSubscribed,
+          ...socials,
+        },
+      });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      toast.success("Profilo aggiornato.");
+      toast.success(copy.actions.saveSuccess);
     } catch (error) {
       console.error("Profile save error:", error);
-      toast.error("Impossibile salvare il profilo.");
+      toast.error(copy.actions.saveError);
     } finally {
       setSaving(false);
     }
@@ -253,7 +484,7 @@ const AdminProfile = () => {
   if (authLoading || (!profileLoaded && session)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">Caricamento...</p>
+        <p className="text-sm text-muted-foreground">{copy.loading}</p>
       </div>
     );
   }
@@ -261,186 +492,389 @@ const AdminProfile = () => {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="editorial-heading text-3xl mb-8">Il mio profilo</h1>
+    <div className="min-h-screen pt-24 pb-20 px-6 md:px-12">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
+        <section className="relative overflow-hidden rounded-[38px] border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
+          <div className="absolute -top-20 right-8 h-64 w-64 rounded-full bg-accent/12 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-primary/8 blur-3xl" />
 
-        {/* Avatar */}
-        <div className="flex items-center gap-6 mb-8">
-          <div className="relative w-24 h-24 rounded-full overflow-hidden bg-muted flex items-center justify-center group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
-            <ProfileAvatar
-              name={name || "Avatar"}
-              avatarUrl={avatarUrl}
-              imgClassName="img-cover"
-              fallback={<Camera className="text-muted-foreground" size={32} />}
-            />
-            <div className="absolute inset-0 bg-primary/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Camera className="text-primary-foreground" size={20} />
-            </div>
-            {uploadingAvatar && (
-              <div className="absolute inset-0 bg-background/75 backdrop-blur-sm flex items-center justify-center text-[11px] font-sans text-foreground">
-                Upload...
+          <div className="relative grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6 p-6 md:p-8 lg:p-10">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <span className="inline-flex items-center rounded-full border border-white/65 bg-white/60 px-4 py-1.5 text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">
+                  {copy.badge}
+                </span>
+                <div className="space-y-3 max-w-2xl">
+                  <h1 className="editorial-heading text-4xl md:text-5xl lg:text-6xl leading-none">{copy.title}</h1>
+                  <p className="editorial-body text-sm md:text-base leading-relaxed text-foreground/75">
+                    {copy.subtitle}
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
-          <div>
-            <p className="font-sans font-medium">{name || "Il tuo nome"}</p>
-            <p className="text-sm text-muted-foreground">{email}</p>
-          </div>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleAvatarSelected(file);
-              e.target.value = "";
-            }}
-          />
-        </div>
 
-        {/* Fields */}
-        <div className="space-y-6">
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Nome</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-transparent border border-border px-4 py-3 font-sans focus:outline-none focus:border-accent transition-colors" />
-          </div>
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Bio</label>
-            <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} className="w-full bg-transparent border border-border px-4 py-3 font-sans focus:outline-none focus:border-accent transition-colors resize-none" placeholder="Racconta qualcosa di te..." />
-          </div>
+              <div className="rounded-[30px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
+                <div className="flex flex-col gap-5 md:flex-row md:items-center">
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="group relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-[30px] border border-white/70 bg-muted shadow-[0_14px_45px_rgba(15,23,42,0.12)]"
+                  >
+                    <ProfileAvatar
+                      name={name || "Avatar"}
+                      avatarUrl={avatarUrl}
+                      imgClassName="img-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                      fallback={<Camera className="h-full w-full p-8 text-muted-foreground" />}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-primary/42 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Camera className="text-primary-foreground" size={18} />
+                    </div>
+                    {uploadingAvatar && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/78 text-[11px] font-sans uppercase tracking-[0.2em] text-foreground backdrop-blur-sm">
+                        {copy.actions.upload}
+                      </div>
+                    )}
+                  </button>
 
-          {/* Language */}
-          <div className="border-t border-border pt-6">
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
-              <Globe size={14} /> Lingua preferita
-            </label>
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {ALL_LANGUAGES.map((l) => (
-                <button
-                  key={l.code}
-                  onClick={() => handleLanguageChange(l.code)}
-                  className={`px-4 py-2.5 text-sm font-sans border transition-colors ${
-                    preferredLanguage === l.code
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                  }`}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-
-            {!isSiteNative && (
-              <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  Seconda lingua (contenuti del sito)
-                </label>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Il sito è disponibile solo in italiano e inglese. Seleziona la lingua in cui visualizzare i contenuti.
-                </p>
-                <div className="flex gap-2">
-                  {SITE_LANGUAGES.map((code) => {
-                    const label = ALL_LANGUAGES.find((l) => l.code === code)?.label || code;
-                    return (
-                      <button
-                        key={code}
-                        onClick={() => setSecondaryLanguage(code)}
-                        className={`px-5 py-2.5 text-sm font-sans border transition-colors ${
-                          secondaryLanguage === code
-                            ? "border-accent bg-accent/10 text-accent"
-                            : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                        }`}
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">
+                        {copy.previewTitle}
+                      </p>
+                      <p className="editorial-heading text-2xl md:text-3xl leading-none">
+                        {name.trim() || email || copy.title}
+                      </p>
+                      <p className="text-sm font-sans text-muted-foreground">{email}</p>
+                    </div>
+                    <p className="editorial-body text-sm leading-relaxed text-foreground/70 max-w-xl">
+                      {copy.previewText}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full border-white/70 bg-white/70 hover:bg-white/90"
+                        onClick={() => avatarInputRef.current?.click()}
                       >
-                        {label}
-                      </button>
-                    );
-                  })}
+                        <Camera size={14} />
+                        {copy.changePhoto}
+                      </Button>
+                      <Button
+                        asChild
+                        type="button"
+                        variant="ghost"
+                        className="rounded-full text-foreground hover:bg-white/60"
+                      >
+                        <Link to={`/profile/${session.user.id}`}>
+                          {copy.viewPublicProfile}
+                          <ArrowUpRight size={14} />
+                        </Link>
+                      </Button>
+                    </div>
+                    <p className="text-xs font-sans text-muted-foreground">{copy.photoHint}</p>
+                  </div>
                 </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) handleAvatarSelected(file);
+                    event.target.value = "";
+                  }}
+                />
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Socials */}
-          <div className="border-t border-border pt-6">
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-4 flex items-center gap-2">
-              <LinkIcon size={14} /> Social & Link
-            </label>
-            <div className="space-y-3">
-              {[
-                { key: "social_instagram", icon: <Instagram size={16} />, placeholder: "username" },
-                { key: "social_youtube", icon: <Youtube size={16} />, placeholder: "@canale" },
-                { key: "social_tiktok", icon: <TikTokIcon size={16} />, placeholder: "@username" },
-                { key: "social_facebook", icon: <Facebook size={16} />, placeholder: "pagina o profilo" },
-                { key: "social_x", icon: <XIcon size={16} />, placeholder: "@username" },
-                { key: "social_linkedin", icon: <Linkedin size={16} />, placeholder: "username" },
-                { key: "social_website", icon: <Globe size={16} />, placeholder: "https://tuosito.com" },
-                { key: "social_seapeople", icon: <SeaPeopleIcon size={16} />, placeholder: "link al profilo o slug" },
-              ].map((s) => (
-                <div key={s.key} className="flex items-center gap-3">
-                  <span className="text-muted-foreground w-5 flex-shrink-0 flex items-center justify-center">{s.icon}</span>
-                  <input
-                    type="text"
-                    value={socials[s.key as keyof typeof socials]}
-                    onChange={(e) => setSocials((prev) => ({ ...prev, [s.key]: e.target.value }))}
-                    placeholder={s.placeholder}
-                    className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                  />
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-4 h-fit">
+              {stats.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]"
+                  >
+                    <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                      <Icon size={16} className="text-accent" />
+                    </div>
+                    <p className="editorial-heading text-2xl md:text-4xl leading-none mb-2 break-words">
+                      {item.value}
+                    </p>
+                    <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                      {item.label}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </section>
 
-          {/* Newsletter */}
-          <div className="border-t border-border pt-6">
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 block">Newsletter</label>
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div
-                onClick={() => setNewsletterSubscribed(!newsletterSubscribed)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${newsletterSubscribed ? "bg-accent" : "bg-muted"}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-primary-foreground shadow transition-transform ${newsletterSubscribed ? "translate-x-5" : "translate-x-0.5"}`} />
-              </div>
-              <div>
-                <span className="text-sm font-sans">{newsletterSubscribed ? "Iscritto alla newsletter" : "Non iscritto alla newsletter"}</span>
-                <p className="text-xs text-muted-foreground mt-0.5">Ricevi aggiornamenti su nuovi articoli e novità dal progetto.</p>
-              </div>
-            </label>
-          </div>
+        <section className="grid grid-cols-1 xl:grid-cols-[1.08fr_0.92fr] gap-6">
+          <div className="space-y-6">
+            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {copy.sections.identityEyebrow}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">{copy.sections.identityTitle}</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {copy.sections.identityText}
+              </p>
 
-          {/* Story Subscriptions */}
-          {storySubscriptions.length > 0 && (
-            <div className="border-t border-border pt-6">
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3 flex items-center gap-2">
-                <BookOpen size={14} /> Iscrizioni alle storie
-              </label>
-              <div className="space-y-2">
-                {storySubscriptions.map((sub) => (
-                  <div key={sub.id} className="flex items-center justify-between border border-border px-4 py-3">
-                    <Link to={`/stories/${sub.story.slug}`} className="text-sm font-sans hover:text-accent transition-colors">
-                      {lang === "en" ? sub.story.title_en : sub.story.title_it}
-                    </Link>
-                    <button
-                      onClick={async () => {
-                        await supabase.from("story_subscriptions").delete().eq("id", sub.id);
-                        setStorySubscriptions((prev) => prev.filter((s) => s.id !== sub.id));
-                      }}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                      title="Disiscriviti"
-                    >
-                      <X size={14} />
-                    </button>
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                    {copy.fields.name}
+                  </label>
+                  <div className="glass-input rounded-[22px] px-4">
+                    <Input
+                      type="text"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      className="h-14 border-0 bg-transparent px-0 text-base shadow-none focus-visible:ring-0"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                    {copy.fields.email}
+                  </label>
+                  <div className="flex items-center gap-3 rounded-[22px] border border-white/60 bg-white/58 px-4 py-4 text-sm font-sans text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.32)]">
+                    <Mail size={16} className="text-accent" />
+                    <span className="truncate">{email}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                    {copy.fields.bio}
+                  </label>
+                  <div className="glass-input rounded-[24px] px-4 py-1">
+                    <Textarea
+                      value={bio}
+                      onChange={(event) => setBio(event.target.value)}
+                      rows={6}
+                      placeholder={copy.fields.bioPlaceholder}
+                      className="min-h-[168px] border-0 bg-transparent px-0 py-3 text-sm leading-relaxed shadow-none focus-visible:ring-0 resize-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {copy.sections.socialsEyebrow}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">{copy.sections.socialsTitle}</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {copy.sections.socialsText}
+              </p>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {socialFields.map((field) => (
+                  <div
+                    key={field.key}
+                    className="rounded-[24px] border border-white/60 bg-white/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                  >
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                        {field.icon}
+                      </div>
+                      <label className="text-xs font-sans uppercase tracking-[0.22em] text-muted-foreground">
+                        {field.label}
+                      </label>
+                    </div>
+                    <Input
+                      type="text"
+                      value={socials[field.key]}
+                      onChange={(event) =>
+                        setSocials((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                      placeholder={field.placeholder}
+                      className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus-visible:ring-1"
+                    />
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          </div>
 
-          <button onClick={saveProfile} disabled={saving || uploadingAvatar} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
-            <Save size={14} /> {saving ? "Salvataggio..." : "Salva profilo"}
-          </button>
-        </div>
+          <div className="space-y-6">
+            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {copy.sections.preferencesEyebrow}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">{copy.sections.preferencesTitle}</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {copy.sections.preferencesText}
+              </p>
+
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                    {copy.fields.preferredLanguage}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {ALL_LANGUAGES.map((language) => (
+                      <button
+                        key={language.code}
+                        type="button"
+                        onClick={() => handleLanguageChange(language.code)}
+                        className={cn(
+                          "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
+                          preferredLanguage === language.code
+                            ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
+                            : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
+                        )}
+                      >
+                        {language.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {!isSiteNative && (
+                  <div className="space-y-3 rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                    <div className="space-y-2">
+                      <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {copy.fields.secondaryLanguage}
+                      </label>
+                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                        {copy.fields.secondaryHint}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {SITE_LANGUAGES.map((code) => {
+                        const label = ALL_LANGUAGES.find((language) => language.code === code)?.label || code;
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => setSecondaryLanguage(code)}
+                            className={cn(
+                              "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
+                              secondaryLanguage === code
+                                ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
+                                : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {copy.fields.newsletterTitle}
+                      </p>
+                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                        {copy.fields.newsletterHint}
+                      </p>
+                    </div>
+                    <Switch checked={newsletterSubscribed} onCheckedChange={setNewsletterSubscribed} />
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                      <UserRound size={16} className="text-accent" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {copy.fields.preferredLanguage}
+                      </p>
+                      <p className="font-sans text-sm text-foreground mt-1">
+                        {preferredLanguageLabel}
+                        {!isSiteNative && (
+                          <span className="text-muted-foreground"> · {secondaryLanguageLabel}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {copy.sections.subscriptionsEyebrow}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">{copy.sections.subscriptionsTitle}</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {copy.sections.subscriptionsText}
+              </p>
+
+              {storySubscriptions.length > 0 ? (
+                <div className="space-y-3">
+                  {storySubscriptions.map((subscription) => (
+                    <div
+                      key={subscription.id}
+                      className="flex items-center justify-between gap-3 rounded-[24px] border border-white/60 bg-white/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                    >
+                      <Link
+                        to={`/stories/${subscription.story.slug}`}
+                        className="min-w-0 flex-1 hover:text-accent transition-colors"
+                      >
+                        <p className="font-sans text-sm font-medium text-foreground truncate">
+                          {lang === "en" ? subscription.story.title_en : subscription.story.title_it}
+                        </p>
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={removingStoryId === subscription.id}
+                        className="h-10 w-10 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => void handleStoryUnsubscribe(subscription.id)}
+                        title={copy.subscription.remove}
+                      >
+                        <X size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-white/70 bg-white/52 px-5 py-8 text-sm font-sans text-muted-foreground">
+                  {copy.subscription.empty}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2 max-w-2xl">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">
+                {copy.sections.saveEyebrow}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl">{copy.sections.saveTitle}</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed">{copy.sections.saveText}</p>
+            </div>
+
+            <Button
+              type="button"
+              onClick={saveProfile}
+              disabled={saving || uploadingAvatar}
+              className="h-12 rounded-full px-6 text-sm shadow-[0_18px_40px_rgba(15,23,42,0.14)]"
+            >
+              <Save size={15} />
+              {saving ? copy.actions.saving : copy.actions.save}
+            </Button>
+          </div>
+        </section>
       </div>
 
       <AvatarCropDialog
