@@ -160,7 +160,7 @@ const getNextHeroTransition = (
 const Index = () => {
   const { t, lang } = useI18n();
   const { isRead } = useArticleReads();
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -184,6 +184,11 @@ const Index = () => {
     isLoading: isPublicContentLoading,
     isFetching: isPublicContentFetching,
   } = usePublicContentSnapshot();
+  const newsletterSubscriptionQueryKey = [
+    "home-newsletter-subscription",
+    session?.user?.id ?? null,
+    session?.user?.email ?? null,
+  ] as const;
 
   const { data: liveHeroVideoVersion } = useQuery<HeroVideoPoolVersion>({
     queryKey: ["homepage-hero-video-version"],
@@ -644,11 +649,58 @@ const Index = () => {
     return map;
   }, [allWaypoints]);
 
+  const {
+    data: isNewsletterSubscribed = false,
+    isLoading: isNewsletterSubscriptionLoading,
+  } = useQuery<boolean>({
+    queryKey: newsletterSubscriptionQueryKey,
+    enabled: !authLoading && Boolean(session?.user?.id),
+    queryFn: async () => {
+      const userId = session?.user?.id;
+      const normalizedEmail = session?.user?.email?.trim().toLowerCase() ?? "";
+
+      if (!userId) {
+        return false;
+      }
+
+      if (normalizedEmail) {
+        const { data: newsletterState, error: newsletterError } = await supabase.functions.invoke(
+          "my-newsletter-subscription",
+          {
+            body: {},
+          },
+        );
+
+        if (!newsletterError) {
+          return Boolean(newsletterState?.subscribed);
+        }
+
+        console.error("Homepage newsletter subscription load via function failed:", newsletterError);
+      }
+
+      const newsletterQuery = supabase.from("newsletter_subscribers").select("subscribed");
+      const { data: fallbackSubscription, error: fallbackError } = await (normalizedEmail
+        ? newsletterQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
+        : newsletterQuery.eq("profile_id", userId))
+        .maybeSingle();
+
+      if (fallbackError) {
+        console.error("Homepage newsletter subscription fallback load error:", fallbackError);
+        return false;
+      }
+
+      return Boolean(fallbackSubscription?.subscribed);
+    },
+  });
+
   const isHomeMapReady = Boolean(publicContent) || (
     !isPublicContentLoading
     && !isLiveMapArticlesLoading
     && !isLiveVoyagesLoading
     && !isLiveWaypointsLoading
+  );
+  const shouldShowNewsletterSection = !authLoading && (
+    !session?.user || (!isNewsletterSubscriptionLoading && !isNewsletterSubscribed)
   );
 
   const handleNewsletterSubscribe = async (event: FormEvent<HTMLFormElement>) => {
@@ -673,34 +725,97 @@ const Index = () => {
     try {
       if (session?.user?.id && session.user.email) {
         const normalizedEmail = session.user.email.trim().toLowerCase();
-        const subscriptionQuery = supabase.from("newsletter_subscribers").select("id");
-        const { data: existingSub, error: existingSubError } = await subscriptionQuery
-          .or(`profile_id.eq.${session.user.id},email.eq.${normalizedEmail}`)
-          .maybeSingle();
+        let welcomeHandledByBackend = false;
+        let fallbackUsed = false;
+        let wasAlreadySubscribed = false;
 
-        if (existingSubError) {
-          throw existingSubError;
-        }
-
-        const mutation = existingSub?.id
-          ? supabase
-              .from("newsletter_subscribers")
-              .update({
-                profile_id: session.user.id,
-                email: normalizedEmail,
-                subscribed: true,
-              })
-              .eq("id", existingSub.id)
-          : supabase.from("newsletter_subscribers").insert({
-              profile_id: session.user.id,
-              email: normalizedEmail,
+        const { data: ownSubscriptionState, error: ownSubscriptionError } = await supabase.functions.invoke(
+          "my-newsletter-subscription",
+          {
+            body: {
               subscribed: true,
-            });
+              source: "homepage_logged_in",
+            },
+          },
+        );
 
-        const { error: mutationError } = await mutation;
-        if (mutationError) {
-          throw mutationError;
+        if (!ownSubscriptionError) {
+          welcomeHandledByBackend = true;
+          wasAlreadySubscribed = Boolean(ownSubscriptionState?.subscribed);
+        } else {
+          console.error("Authenticated newsletter subscribe via my-newsletter-subscription failed:", ownSubscriptionError);
+
+          const { error: legacySubscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
+            body: {
+              email: normalizedEmail,
+              preferredLanguage: lang,
+              source: "homepage_logged_in",
+              consent: newsletterConsent,
+              website: newsletterWebsite,
+            },
+          });
+
+          if (!legacySubscribeError) {
+            welcomeHandledByBackend = true;
+          } else {
+            console.error("Authenticated newsletter subscribe via newsletter-subscribe failed:", legacySubscribeError);
+
+            const subscriptionQuery = supabase.from("newsletter_subscribers").select("id, subscribed");
+            const { data: existingSub, error: existingSubError } = await subscriptionQuery
+              .or(`profile_id.eq.${session.user.id},email.eq.${normalizedEmail}`)
+              .maybeSingle();
+
+            if (existingSubError) {
+              throw existingSubError;
+            }
+
+            wasAlreadySubscribed = Boolean(existingSub?.subscribed);
+
+            const mutation = existingSub?.id
+              ? supabase
+                  .from("newsletter_subscribers")
+                  .update({
+                    profile_id: session.user.id,
+                    email: normalizedEmail,
+                    subscribed: true,
+                  })
+                  .eq("id", existingSub.id)
+              : supabase.from("newsletter_subscribers").insert({
+                  profile_id: session.user.id,
+                  email: normalizedEmail,
+                  subscribed: true,
+                });
+
+            const { error: mutationError } = await mutation;
+            if (mutationError) {
+              throw mutationError;
+            }
+
+            fallbackUsed = true;
+          }
         }
+
+        setNewsletterLoading(false);
+        setNewsletterEmail("");
+        setNewsletterConsent(false);
+        setNewsletterWebsite("");
+        queryClient.setQueryData(newsletterSubscriptionQueryKey, true);
+
+        if (!wasAlreadySubscribed && fallbackUsed && !welcomeHandledByBackend) {
+          toast.warning(
+            lang === "it"
+              ? "Iscrizione registrata, ma la mail di benvenuto non è stata inviata perché il servizio email non ha risposto."
+              : "Subscription saved, but the welcome email was not sent because the email service did not respond.",
+          );
+          return;
+        }
+
+        toast.success(
+          lang === "it"
+            ? "Preferenze newsletter aggiornate."
+            : "Newsletter preferences updated.",
+        );
+        return;
       } else {
         const { error } = await supabase.functions.invoke("newsletter-subscribe", {
           body: {
@@ -732,6 +847,9 @@ const Index = () => {
     setNewsletterEmail("");
     setNewsletterConsent(false);
     setNewsletterWebsite("");
+    if (session?.user?.id) {
+      queryClient.setQueryData(newsletterSubscriptionQueryKey, true);
+    }
     toast.success(
       session?.user.email
         ? lang === "it"
@@ -1035,68 +1153,70 @@ const Index = () => {
         </div>
       </section>
 
-      <section className="page-section pt-0">
-        <div className="page-section-narrow glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
-          <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
-          <p className="editorial-body text-white/84 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
-          <form onSubmit={handleNewsletterSubscribe} className="max-w-xl mx-auto space-y-4">
-            <input
-              type="text"
-              name="website"
-              value={newsletterWebsite}
-              onChange={(event) => setNewsletterWebsite(event.target.value)}
-              tabIndex={-1}
-              autoComplete="off"
-              className="hidden"
-              aria-hidden="true"
-            />
-            <div className="flex flex-col sm:flex-row gap-3">
-              {session?.user.email ? (
-                <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/88 text-left">
-                  {lang === "it"
-                    ? `Ti iscriveremo con ${session.user.email}`
-                    : `We'll subscribe you with ${session.user.email}`}
-                </div>
-              ) : (
-                <div className="glass-input flex-1 rounded-full px-1.5">
-                  <input
-                    type="email"
-                    value={newsletterEmail}
-                    onChange={(event) => setNewsletterEmail(event.target.value)}
-                    placeholder={t("newsletter.placeholder")}
-                    className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-                  />
-                </div>
-              )}
-              <button
-                type="submit"
-                disabled={newsletterLoading}
-                className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
-              >
-                {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
-              </button>
-            </div>
-            <label className="flex items-start gap-3 text-left text-sm text-white/82">
+      {shouldShowNewsletterSection ? (
+        <section className="page-section pt-0">
+          <div className="page-section-narrow glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
+            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
+            <p className="editorial-body text-white/84 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
+            <form onSubmit={handleNewsletterSubscribe} className="max-w-xl mx-auto space-y-4">
               <input
-                type="checkbox"
-                checked={newsletterConsent}
-                onChange={(event) => setNewsletterConsent(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-white/40 bg-transparent accent-white"
+                type="text"
+                name="website"
+                value={newsletterWebsite}
+                onChange={(event) => setNewsletterWebsite(event.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                className="hidden"
+                aria-hidden="true"
               />
-              <span>
-                {lang === "it"
-                  ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
-                  : "I agree to receive the BITE newsletter and confirm that I have read the "}
-                <Link to="/privacy-policy" className="underline decoration-white/50 underline-offset-4 hover:text-white">
-                  {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
-                </Link>
-                .
-              </span>
-            </label>
-          </form>
-        </div>
-      </section>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {session?.user.email ? (
+                  <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/88 text-left">
+                    {lang === "it"
+                      ? `Ti iscriveremo con ${session.user.email}`
+                      : `We'll subscribe you with ${session.user.email}`}
+                  </div>
+                ) : (
+                  <div className="glass-input flex-1 rounded-full px-1.5">
+                    <input
+                      type="email"
+                      value={newsletterEmail}
+                      onChange={(event) => setNewsletterEmail(event.target.value)}
+                      placeholder={t("newsletter.placeholder")}
+                      className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                    />
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={newsletterLoading}
+                  className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
+                >
+                  {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
+                </button>
+              </div>
+              <label className="flex items-start gap-3 text-left text-sm text-white/82">
+                <input
+                  type="checkbox"
+                  checked={newsletterConsent}
+                  onChange={(event) => setNewsletterConsent(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-white/40 bg-transparent accent-white"
+                />
+                <span>
+                  {lang === "it"
+                    ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
+                    : "I agree to receive the BITE newsletter and confirm that I have read the "}
+                  <Link to="/privacy-policy" className="underline decoration-white/50 underline-offset-4 hover:text-white">
+                    {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
+                  </Link>
+                  .
+                </span>
+              </label>
+            </form>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 };

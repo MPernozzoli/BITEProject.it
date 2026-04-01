@@ -233,6 +233,7 @@ const AdminProfile = () => {
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+  const [loadedNewsletterSubscribed, setLoadedNewsletterSubscribed] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
   const [storySubscriptions, setStorySubscriptions] = useState<
@@ -293,7 +294,9 @@ const AdminProfile = () => {
       );
 
       if (!newsletterError) {
-        setNewsletterSubscribed(Boolean(newsletterState?.subscribed));
+        const nextSubscribed = Boolean(newsletterState?.subscribed);
+        setNewsletterSubscribed(nextSubscribed);
+        setLoadedNewsletterSubscribed(nextSubscribed);
         return;
       }
 
@@ -311,7 +314,9 @@ const AdminProfile = () => {
         return;
       }
 
-      setNewsletterSubscribed(Boolean(fallbackSubscription?.subscribed));
+      const nextSubscribed = Boolean(fallbackSubscription?.subscribed);
+      setNewsletterSubscribed(nextSubscribed);
+      setLoadedNewsletterSubscribed(nextSubscribed);
     },
     [],
   );
@@ -319,6 +324,37 @@ const AdminProfile = () => {
   const syncNewsletterPreference = useCallback(
     async (userId: string, currentEmail: string, subscribed: boolean) => {
       const normalizedEmail = currentEmail.trim().toLowerCase();
+
+      const { error: ownSubscriptionError } = await supabase.functions.invoke("my-newsletter-subscription", {
+        body: {
+          subscribed,
+          source: "profile",
+        },
+      });
+
+      if (!ownSubscriptionError) {
+        return { backendHandled: true };
+      }
+
+      console.error("Newsletter sync via my-newsletter-subscription failed:", ownSubscriptionError);
+
+      if (subscribed) {
+        const { error: legacySubscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
+          body: {
+            email: normalizedEmail,
+            consent: true,
+            source: "profile",
+            preferredLanguage,
+          },
+        });
+
+        if (!legacySubscribeError) {
+          return { backendHandled: true };
+        }
+
+        console.error("Newsletter sync via newsletter-subscribe failed:", legacySubscribeError);
+      }
+
       const subscriptionQuery = supabase.from("newsletter_subscribers").select("id");
       const { data: existingSub, error: existingSubError } = await (normalizedEmail
         ? subscriptionQuery.or(`profile_id.eq.${userId},email.eq.${normalizedEmail}`)
@@ -326,39 +362,7 @@ const AdminProfile = () => {
         .maybeSingle();
 
       if (existingSubError) {
-        console.error("Direct newsletter lookup failed, trying function fallback:", existingSubError);
-
-        const { error } = await supabase.functions.invoke("my-newsletter-subscription", {
-          body: {
-            subscribed,
-            source: "profile",
-          },
-        });
-
-        if (!error) {
-          return;
-        }
-
-        console.error("Newsletter sync via function failed:", error);
-
-        if (subscribed) {
-          const { error: subscribeError } = await supabase.functions.invoke("newsletter-subscribe", {
-            body: {
-              email: normalizedEmail,
-              consent: true,
-              source: "profile",
-              preferredLanguage,
-            },
-          });
-
-          if (subscribeError) {
-            throw subscribeError;
-          }
-
-          return;
-        }
-
-        throw error;
+        throw existingSubError;
       }
 
       if (subscribed) {
@@ -383,7 +387,7 @@ const AdminProfile = () => {
           throw subscribeError;
         }
 
-        return;
+        return { backendHandled: false };
       }
 
       if (existingSub?.id) {
@@ -400,6 +404,8 @@ const AdminProfile = () => {
           throw subscriberError;
         }
       }
+
+      return { backendHandled: false };
     },
     [preferredLanguage],
   );
@@ -572,6 +578,7 @@ const AdminProfile = () => {
     const currentEmail = (session.user.email || email).trim().toLowerCase();
     let profileSaved = false;
     let newsletterSaved = false;
+    let newsletterHandledByBackend = false;
 
     try {
       const { error: directProfileError } = await supabase
@@ -613,14 +620,28 @@ const AdminProfile = () => {
 
       if (!newsletterSaved) {
         try {
-          await syncNewsletterPreference(userId, currentEmail, newsletterSubscribed);
+          const newsletterResult = await syncNewsletterPreference(userId, currentEmail, newsletterSubscribed);
           newsletterSaved = true;
+          newsletterHandledByBackend = newsletterResult.backendHandled;
         } catch (newsletterError) {
           console.error("Newsletter sync error:", newsletterError);
         }
       }
 
+      if (newsletterSaved) {
+        setLoadedNewsletterSubscribed(newsletterSubscribed);
+      }
+
       if (profileSaved && newsletterSaved) {
+        if (!loadedNewsletterSubscribed && newsletterSubscribed && !newsletterHandledByBackend) {
+          toast.warning(
+            lang === "en"
+              ? "Profile saved and subscription recorded, but the welcome email was not sent because the email service did not respond."
+              : "Profilo salvato e iscrizione registrata, ma la mail di benvenuto non è stata inviata perché il servizio email non ha risposto.",
+          );
+          return;
+        }
+
         toast.success(copy.actions.saveSuccess);
         return;
       }
