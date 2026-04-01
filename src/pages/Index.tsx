@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -59,6 +59,7 @@ const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
+const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
 
 const shuffleHeroMedia = (items: HeroMedia[], avoidSrc?: string) => {
   const nextItems = [...items];
@@ -138,6 +139,9 @@ const Index = () => {
   const heroCrossfadeTimeoutRef = useRef<number | null>(null);
   const pendingHeroVideoRef = useRef<HTMLVideoElement | null>(null);
   const pendingHeroPlaybackDurationRef = useRef<number>(HERO_MAX_VIDEO_SEGMENT_SECONDS * 1000);
+  const heroVideoObjectUrlsRef = useRef<Record<string, string>>({});
+  const heroVideoCachePromisesRef = useRef<Map<string, Promise<string>>>(new Map());
+  const [heroVideoLocalUrls, setHeroVideoLocalUrls] = useState<Record<string, string>>({});
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
   const { data: liveHeroVideoPool } = useQuery<HomepageHeroVideoPool>({
@@ -182,6 +186,73 @@ const Index = () => {
   }, [heroVideoPool, isMobile]);
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
+  const heroPriorityMedia = useMemo(() => {
+    const candidates = [
+      heroMedia,
+      pendingHeroTransition?.media ?? null,
+      currentHeroPool[0] ?? null,
+      currentHeroPool[1] ?? null,
+    ].filter(Boolean) as HeroMedia[];
+
+    return Array.from(new Map(candidates.map((media) => [media.src, media])).values());
+  }, [currentHeroPool, heroMedia, pendingHeroTransition]);
+
+  const cacheHeroVideoLocally = useCallback(async (media: HeroMedia) => {
+    const existingObjectUrl = heroVideoObjectUrlsRef.current[media.src];
+    if (existingObjectUrl) return existingObjectUrl;
+
+    const inFlight = heroVideoCachePromisesRef.current.get(media.src);
+    if (inFlight) return inFlight;
+
+    const cacheTask = (async () => {
+      if (typeof window === "undefined" || !("caches" in window)) {
+        return media.src;
+      }
+
+      const cache = await window.caches.open(HERO_VIDEO_CACHE_NAME);
+      let response = await cache.match(media.src);
+
+      if (!response) {
+        const networkResponse = await fetch(media.src, {
+          mode: "cors",
+          credentials: "omit",
+        });
+
+        if (!networkResponse.ok) {
+          return media.src;
+        }
+
+        await cache.put(media.src, networkResponse.clone());
+        response = networkResponse;
+      }
+
+      const blob = await response.blob();
+      if (!blob.size) {
+        return media.src;
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      heroVideoObjectUrlsRef.current[media.src] = objectUrl;
+      setHeroVideoLocalUrls((current) => (
+        current[media.src] === objectUrl
+          ? current
+          : { ...current, [media.src]: objectUrl }
+      ));
+      return objectUrl;
+    })()
+      .catch(() => media.src)
+      .finally(() => {
+        heroVideoCachePromisesRef.current.delete(media.src);
+      });
+
+    heroVideoCachePromisesRef.current.set(media.src, cacheTask);
+    return cacheTask;
+  }, []);
+
+  const getHeroPlaybackSrc = useCallback(
+    (media: HeroMedia) => heroVideoLocalUrls[media.src] ?? media.src,
+    [heroVideoLocalUrls]
+  );
 
   useEffect(() => {
     const nextPlaylist = shuffleHeroMedia(currentHeroPool);
@@ -217,8 +288,37 @@ const Index = () => {
     return () => {
       if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
       if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
+      Object.values(heroVideoObjectUrlsRef.current).forEach((objectUrl) => {
+        URL.revokeObjectURL(objectUrl);
+      });
+      heroVideoObjectUrlsRef.current = {};
+      heroVideoCachePromisesRef.current.clear();
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentHeroPool.length) return;
+
+    let cancelled = false;
+    const prioritizedSources = new Set(heroPriorityMedia.map((media) => media.src));
+
+    heroPriorityMedia.forEach((media) => {
+      void cacheHeroVideoLocally(media);
+    });
+
+    const warmRemainingHeroVideos = async () => {
+      for (const media of currentHeroPool) {
+        if (cancelled || prioritizedSources.has(media.src)) continue;
+        await cacheHeroVideoLocally(media);
+      }
+    };
+
+    void warmRemainingHeroVideos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheHeroVideoLocally, currentHeroPool, heroPriorityMedia]);
 
   const finalizeHeroCrossfade = () => {
     if (!pendingHeroTransition) return;
@@ -299,7 +399,6 @@ const Index = () => {
     if (startTime > 0) {
       const handleSeeked = () => {
         video.pause();
-        setIsPendingHeroReady(true);
         video.removeEventListener("seeked", handleSeeked);
       };
       video.addEventListener("seeked", handleSeeked);
@@ -308,10 +407,16 @@ const Index = () => {
     }
 
     video.pause();
+  };
+
+  const handlePendingHeroCanPlay = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    event.currentTarget.pause();
     setIsPendingHeroReady(true);
   };
 
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
+    const playbackSrc = getHeroPlaybackSrc(media);
+    const shouldEagerPreload = mode === "pending" || playbackSrc !== media.src;
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -324,18 +429,19 @@ const Index = () => {
 
     return (
       <video
-        key={media.src}
+        key={`${mode}:${media.src}`}
         ref={mode === "pending" ? pendingHeroVideoRef : undefined}
         className={baseClassName}
         poster={media.poster}
         autoPlay={mode === "active"}
         muted
         playsInline
-        preload="metadata"
+        preload={shouldEagerPreload ? "auto" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
+        onCanPlayThrough={mode === "pending" ? handlePendingHeroCanPlay : undefined}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
-        <source src={media.src} type={media.mimeType ?? "video/mp4"} />
+        <source src={playbackSrc} type={media.mimeType ?? "video/mp4"} />
       </video>
     );
   };
