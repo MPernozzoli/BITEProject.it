@@ -64,7 +64,7 @@ function getNewsletterDeliveryId(payload: Record<string, unknown>): string | nul
 }
 
 async function updateNewsletterDelivery(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   payload: Record<string, unknown>,
   values: Record<string, unknown>
 ): Promise<void> {
@@ -87,7 +87,7 @@ async function updateNewsletterDelivery(
 
 // Move a message to the dead letter queue and log the reason.
 async function moveToDlq(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   queue: string,
   msg: { msg_id: number; message: Record<string, unknown> },
   reason: string
@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = createClient<any>(supabaseUrl, supabaseServiceKey)
 
   // 1. Check rate-limit cooldown and read queue config
   const { data: state } = await supabase

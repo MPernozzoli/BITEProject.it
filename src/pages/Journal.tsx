@@ -114,7 +114,7 @@ const Journal = () => {
 
       const profileIds = [...new Set((authorRes.data || []).map((a: any) => a.profile_id))];
       const { data: profiles } = profileIds.length
-        ? await supabase.from("profiles").select("id, name, avatar_url").in("id", profileIds)
+        ? await supabase.from("public_profiles").select("id, name, avatar_url").in("id", profileIds)
         : { data: [] };
       const profileMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p]));
 

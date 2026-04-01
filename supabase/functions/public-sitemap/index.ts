@@ -59,7 +59,7 @@ Deno.serve(async () => {
     return new Response('Missing Supabase configuration', { status: 500 })
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
 
   const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
     supabase

@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       ? body.source.trim().slice(0, 64)
       : 'homepage'
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey)
+  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
   const authHeader = req.headers.get('Authorization')
   const accessToken = authHeader?.startsWith('Bearer ')
     ? authHeader.slice('Bearer '.length).trim()
