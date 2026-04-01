@@ -14,6 +14,11 @@ export interface HomepageHeroVideoPool {
   mobile: HeroMedia[];
 }
 
+export interface HeroVideoPoolVersion {
+  desktopSources: string[];
+  mobileSources: string[];
+}
+
 export interface PublicContentArticle extends GeoArticle {
   category: string | null;
   story_id: string | null;
@@ -31,6 +36,7 @@ export interface PublicContentVersion {
 export interface PublicContentSnapshot {
   generatedAt: string;
   version: PublicContentVersion;
+  heroVideoVersion: HeroVideoPoolVersion;
   heroVideoPool: HomepageHeroVideoPool;
   articles: PublicContentArticle[];
   voyages: Voyage[];
@@ -107,6 +113,28 @@ const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
     };
   }
 };
+
+export const buildHeroVideoPoolVersion = (pool: HomepageHeroVideoPool): HeroVideoPoolVersion => ({
+  desktopSources: pool.desktop.map((media) => media.src).sort(),
+  mobileSources: pool.mobile.map((media) => media.src).sort(),
+});
+
+export const isHeroVideoPoolVersionEqual = (
+  left: HeroVideoPoolVersion | null | undefined,
+  right: HeroVideoPoolVersion | null | undefined
+) => (
+  !!left
+  && !!right
+  && left.desktopSources.length === right.desktopSources.length
+  && left.mobileSources.length === right.mobileSources.length
+  && left.desktopSources.every((src, index) => src === right.desktopSources[index])
+  && left.mobileSources.every((src, index) => src === right.mobileSources[index])
+);
+
+export async function fetchHeroVideoPoolVersion(): Promise<HeroVideoPoolVersion> {
+  const heroVideoPool = await fetchHeroVideoPool();
+  return buildHeroVideoPoolVersion(heroVideoPool);
+}
 
 const getLatestTimestamp = (values: Array<string | null | undefined>) =>
   values.reduce<string | null>((latest, value) => {
@@ -309,6 +337,7 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
   return {
     generatedAt: new Date().toISOString(),
     version: snapshotVersion,
+    heroVideoVersion: buildHeroVideoPoolVersion(heroVideoPool),
     heroVideoPool,
     articles: articles.map((article) => ({
       id: article.id,

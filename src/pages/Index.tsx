@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowRight, Wrench, Compass, Wifi, Pen, Eye } from "lucide-react";
 import { format } from "date-fns";
@@ -14,7 +14,13 @@ import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { HeroMedia, HomepageHeroVideoPool } from "@/lib/public-content";
+import {
+  fetchHeroVideoPoolVersion,
+  isHeroVideoPoolVersionEqual,
+  type HeroMedia,
+  type HeroVideoPoolVersion,
+  type HomepageHeroVideoPool,
+} from "@/lib/public-content";
 
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
@@ -156,6 +162,7 @@ const Index = () => {
   const { isRead } = useArticleReads();
   const { session } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterConsent, setNewsletterConsent] = useState(false);
@@ -172,7 +179,21 @@ const Index = () => {
   const heroVideoObjectUrlsRef = useRef<Record<string, string>>({});
   const heroVideoCachePromisesRef = useRef<Map<string, Promise<string>>>(new Map());
   const [heroVideoLocalUrls, setHeroVideoLocalUrls] = useState<Record<string, string>>({});
-  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
+  const {
+    data: publicContent,
+    isLoading: isPublicContentLoading,
+    isFetching: isPublicContentFetching,
+  } = usePublicContentSnapshot();
+
+  const { data: liveHeroVideoVersion } = useQuery<HeroVideoPoolVersion>({
+    queryKey: ["homepage-hero-video-version"],
+    queryFn: fetchHeroVideoPoolVersion,
+    enabled: Boolean(publicContent),
+    staleTime: 0,
+    gcTime: 1000 * 60 * 5,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
   const { data: liveHeroVideoPool } = useQuery<HomepageHeroVideoPool>({
     queryKey: ["homepage-hero-videos"],
@@ -210,6 +231,17 @@ const Index = () => {
     retry: false,
   });
   const heroVideoPool = publicContent?.heroVideoPool ?? liveHeroVideoPool;
+
+  useEffect(() => {
+    if (!publicContent?.heroVideoVersion || !liveHeroVideoVersion) return;
+    if (isPublicContentFetching) return;
+
+    if (isHeroVideoPoolVersionEqual(publicContent.heroVideoVersion, liveHeroVideoVersion)) {
+      return;
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ["public-content-snapshot"] });
+  }, [isPublicContentFetching, liveHeroVideoVersion, publicContent, queryClient]);
 
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
