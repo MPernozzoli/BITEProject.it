@@ -374,6 +374,33 @@ export type Database = {
           },
         ]
       }
+      email_notification_preferences: {
+        Row: {
+          created_at: string
+          digest_enabled: boolean
+          email: string
+          newsletter_enabled: boolean
+          story_notifications_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          digest_enabled?: boolean
+          email: string
+          newsletter_enabled?: boolean
+          story_notifications_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          digest_enabled?: boolean
+          email?: string
+          newsletter_enabled?: boolean
+          story_notifications_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_send_log: {
         Row: {
           created_at: string
@@ -578,6 +605,57 @@ export type Database = {
           },
         ]
       }
+      newsletter_confirmation_tokens: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          last_sent_at: string
+          preferred_language: string | null
+          profile_id: string | null
+          source: string
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          last_sent_at?: string
+          preferred_language?: string | null
+          profile_id?: string | null
+          source?: string
+          token: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          last_sent_at?: string
+          preferred_language?: string | null
+          profile_id?: string | null
+          source?: string
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_confirmation_tokens_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_confirmation_tokens_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       newsletter_subscribers: {
         Row: {
           created_at: string
@@ -615,6 +693,57 @@ export type Database = {
             foreignKeyName: "newsletter_subscribers_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: true
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_unsubscribe_feedback: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          message_context: Json | null
+          profile_id: string | null
+          reason_code: string | null
+          reason_text: string | null
+          source: string
+          unsubscribe_scope: Json
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          message_context?: Json | null
+          profile_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source?: string
+          unsubscribe_scope?: Json
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          message_context?: Json | null
+          profile_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source?: string
+          unsubscribe_scope?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_unsubscribe_feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_unsubscribe_feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "public_profiles"
             referencedColumns: ["id"]
           },
@@ -870,6 +999,36 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason?: string
+        }
+        Relationships: []
+      }
+      system_email_automations: {
+        Row: {
+          config: Json
+          created_at: string
+          enabled: boolean
+          key: string
+          last_run_at: string | null
+          last_sent_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          key: string
+          last_run_at?: string | null
+          last_sent_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          key?: string
+          last_run_at?: string | null
+          last_sent_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
