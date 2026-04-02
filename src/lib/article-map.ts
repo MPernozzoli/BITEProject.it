@@ -381,7 +381,7 @@ const offsetPointFromBearing = (
   return destinationPoint(forwardPoint.latitude, forwardPoint.longitude, (baseBearing + 90) % 360, lateralNm);
 };
 
-export const buildVesselRouteCoordinates = (vessel: ArticleMapVessel) => {
+export const buildVesselRouteCoordinates = (vessel: ArticleMapVessel): [number, number][] => {
   if (typeof vessel.latitude !== "number" || typeof vessel.longitude !== "number") return [];
 
   const startPoint: [number, number] = [vessel.longitude, vessel.latitude];
