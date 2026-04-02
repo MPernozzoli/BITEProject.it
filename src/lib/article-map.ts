@@ -188,13 +188,13 @@ export const normalizeArticleMapScenes = (value: Json | unknown): ArticleMapScen
             longitude: normalizeNumber(entry.longitude),
             color: normalizeString(entry.color) || vessel.color,
             heading: normalizeNumber(entry.heading),
-            route_pattern:
+            route_pattern: (
               entry.route_pattern === "straight" ||
               entry.route_pattern === "tack" ||
               entry.route_pattern === "figure8" ||
               entry.route_pattern === "freeform"
                 ? entry.route_pattern
-                : "straight",
+                : "straight") as ArticleMapRoutePattern,
             route_heading: normalizeNumber(entry.route_heading),
             route_distance_nm: normalizeNumber(entry.route_distance_nm),
             route_points: Array.isArray(entry.route_points)
@@ -381,7 +381,7 @@ const offsetPointFromBearing = (
   return destinationPoint(forwardPoint.latitude, forwardPoint.longitude, (baseBearing + 90) % 360, lateralNm);
 };
 
-export const buildVesselRouteCoordinates = (vessel: ArticleMapVessel) => {
+export const buildVesselRouteCoordinates = (vessel: ArticleMapVessel): [number, number][] => {
   if (typeof vessel.latitude !== "number" || typeof vessel.longitude !== "number") return [];
 
   const startPoint: [number, number] = [vessel.longitude, vessel.latitude];

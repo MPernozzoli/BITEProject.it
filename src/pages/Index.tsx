@@ -383,10 +383,10 @@ const Index = () => {
       }
     };
 
-    const scheduleIdleWarmup = () => {
+    const scheduleIdleWarmup = (): (() => void) | undefined => {
       if (typeof window === "undefined") {
         void warmRemainingHeroVideos();
-        return;
+        return undefined;
       }
 
       if ("requestIdleCallback" in window) {
@@ -401,14 +401,14 @@ const Index = () => {
         };
       }
 
-      const timeoutId = window.setTimeout(() => {
+      const timeoutId = (window as Window).setTimeout(() => {
         if (!cancelled) {
           void warmRemainingHeroVideos();
         }
       }, 1500);
 
       return () => {
-        window.clearTimeout(timeoutId);
+        (window as Window).clearTimeout(timeoutId);
       };
     };
 

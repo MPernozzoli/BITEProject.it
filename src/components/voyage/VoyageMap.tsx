@@ -377,7 +377,7 @@ const VoyageMap = ({
             isFocused,
             isHovered,
             isDimmed,
-            activeArticleFocusMode: activeArticleFocus?.voyageId === voyage.id ? activeArticleFocus.mode : null,
+            activeArticleFocusMode: activeArticleFocus?.voyageId === voyage.id ? (activeArticleFocus.mode === "none" ? null : activeArticleFocus.mode) : null,
           });
 
           map.addLayer({
