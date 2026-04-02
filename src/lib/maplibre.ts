@@ -49,7 +49,7 @@ export const isMapLibreSupported = () =>
   }
 
   try {
-    if (maplibregl.supported({
+    if ((maplibregl as any).supported({
       failIfMajorPerformanceCaveat: false,
     })) {
       return true;

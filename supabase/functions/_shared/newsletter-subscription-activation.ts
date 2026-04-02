@@ -1,4 +1,3 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   hasAnyNewsletterNotificationsEnabled,
   normalizeEmailNotificationPreferences,
@@ -7,7 +6,7 @@ import { normalizeLanguage } from './newsletter-helpers.ts'
 import { normalizeSystemEmailAutomation } from './system-email-automation.ts'
 
 type ActivationOptions = {
-  supabase: ReturnType<typeof createClient>
+  supabase: any
   supabaseUrl: string
   serviceRoleKey: string
   email: string
