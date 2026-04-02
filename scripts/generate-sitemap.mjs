@@ -15,6 +15,7 @@ const STATIC_ROUTES = [
   "/manifesto",
   "/logbook",
   "/voyages",
+  "/links",
   "/collaborations",
   "/contact",
   "/privacy-policy",

@@ -50,6 +50,7 @@ const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const StoryPage = lazy(() => import("./pages/StoryPage"));
 const VoyagesPage = lazy(() => import("./pages/Voyages"));
 const VoyagePage = lazy(() => import("./pages/VoyagePage"));
+const LinksPage = lazy(() => import("./pages/Links"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const NewsletterConfirm = lazy(() => import("./pages/NewsletterConfirm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -83,6 +84,8 @@ const App = () => {
                 <Route path="/logbook" element={<Journal />} />
                 <Route path="/voyages" element={<VoyagesPage />} />
                 <Route path="/voyages/:voyageRef" element={<VoyagePage />} />
+                <Route path="/links" element={<LinksPage />} />
+                <Route path="/linktree" element={<Navigate to="/links" replace />} />
                 <Route path="/route" element={<Navigate to="/logbook" replace />} />
                 <Route path="/collaborations" element={<Collaborations />} />
                 <Route path="/contact" element={<Contact />} />
