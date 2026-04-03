@@ -98,7 +98,7 @@ const bioLinks = [
     href: "mailto:hello@biteproject.com",
     icon: Mail,
   },
-] as const;
+] as const satisfies readonly { label: string; labelEn: string; description: string; descriptionEn: string; href: string; icon: any; featured?: boolean; internal?: boolean }[];
 
 const Links = () => {
   const { lang } = useI18n();
