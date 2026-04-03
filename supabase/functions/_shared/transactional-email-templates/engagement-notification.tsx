@@ -164,7 +164,7 @@ const EngagementNotificationEmail = ({
       footerNote={<EmailBodyText muted>{copy.manageLabel}</EmailBodyText>}
       unsubscribeUrl={unsubscribeUrl}
     >
-      {items.map((item, index) => {
+      {safeItems.map((item, index) => {
         const articleTitle = item.articleTitle?.trim() || copy.articleFallback
         const actorName = item.actorName?.trim() || copy.actorFallback
         const articleUrl = item.articleUrl?.trim() || `${PUBLIC_SITE_URL}/journal`
