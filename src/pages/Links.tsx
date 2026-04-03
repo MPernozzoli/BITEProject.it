@@ -30,7 +30,18 @@ const TikTokIcon = ({ size = 18, className }: { size?: number; className?: strin
   </svg>
 );
 
-const bioLinks = [
+interface BioLink {
+  label: string;
+  labelEn: string;
+  description: string;
+  descriptionEn: string;
+  href: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  featured?: boolean;
+  internal?: boolean;
+}
+
+const bioLinks: BioLink[] = [
   {
     label: "Sito ufficiale",
     labelEn: "Official website",
@@ -98,7 +109,7 @@ const bioLinks = [
     href: "mailto:hello@biteproject.com",
     icon: Mail,
   },
-] as const satisfies readonly { label: string; labelEn: string; description: string; descriptionEn: string; href: string; icon: any; featured?: boolean; internal?: boolean }[];
+];
 
 const Links = () => {
   const { lang } = useI18n();
