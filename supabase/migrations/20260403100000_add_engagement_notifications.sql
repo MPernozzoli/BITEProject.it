@@ -23,8 +23,8 @@ create table if not exists public.engagement_notifications (
   article_id uuid not null references public.logbook_articles(id) on delete cascade,
   comment_id uuid null references public.article_comments(id) on delete cascade,
   source_record_id uuid not null,
-  event_type text not null check (event_type in ('article_liked', 'comment_liked', 'article_commented', 'comment_replied')),
-  notification_category text not null check (notification_category in ('like', 'comment')),
+  event_type text not null check (event_type in ('article_liked', 'comment_liked', 'article_commented', 'comment_replied', 'article_published', 'story_article_published')),
+  notification_category text not null check (notification_category in ('like', 'comment', 'publication')),
   created_at timestamptz not null default now(),
   processed_at timestamptz null,
   emailed_at timestamptz null,
@@ -32,7 +32,7 @@ create table if not exists public.engagement_notifications (
 );
 
 create unique index if not exists engagement_notifications_recipient_source_record_uidx
-  on public.engagement_notifications (recipient_profile_id, source_record_id);
+  on public.engagement_notifications (recipient_profile_id, source_record_id, event_type);
 
 create index if not exists engagement_notifications_pending_idx
   on public.engagement_notifications (processed_at, notification_category, created_at);
@@ -69,7 +69,7 @@ begin
   from public.article_authors
   where article_authors.article_id = new.article_id
     and article_authors.profile_id is distinct from new.profile_id
-  on conflict (recipient_profile_id, source_record_id) do nothing;
+  on conflict (recipient_profile_id, source_record_id, event_type) do nothing;
 
   return new;
 end;
@@ -102,7 +102,7 @@ begin
   from public.article_comments
   where article_comments.id = new.comment_id
     and article_comments.profile_id is distinct from new.profile_id
-  on conflict (recipient_profile_id, source_record_id) do nothing;
+  on conflict (recipient_profile_id, source_record_id, event_type) do nothing;
 
   return new;
 end;
@@ -178,7 +178,7 @@ begin
     comment_context.actor_profile_id,
     comment_context.article_id,
     comment_context.comment_id
-  on conflict (recipient_profile_id, source_record_id) do nothing;
+  on conflict (recipient_profile_id, source_record_id, event_type) do nothing;
 
   return new;
 end;

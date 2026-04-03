@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
       supabase
         .from('email_notification_preferences')
         .select(
-          'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency'
+          'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled'
         )
         .eq('email', email)
         .maybeSingle(),

@@ -111,6 +111,14 @@ Deno.serve(async (req) => {
   const secondaryLanguage = readNullableString(body.secondary_language, 8)
   const subscribed = body.newsletter_subscribed === true
   const now = new Date().toISOString()
+  const articleNotificationsEnabled =
+    typeof body.article_notifications_enabled === 'boolean'
+      ? body.article_notifications_enabled
+      : undefined
+  const storyNotificationsEnabled =
+    typeof body.story_notifications_enabled === 'boolean'
+      ? body.story_notifications_enabled
+      : undefined
   const likeNotificationsFrequency = readNotificationFrequency(
     body.like_notifications_frequency
   )
@@ -158,7 +166,7 @@ Deno.serve(async (req) => {
     supabase
       .from('email_notification_preferences')
       .select(
-        'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency'
+        'article_notifications_enabled, newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled'
       )
       .eq('email', normalizedEmail)
       .maybeSingle(),
@@ -174,6 +182,10 @@ Deno.serve(async (req) => {
   )
   let nextPreferences = normalizeEmailNotificationPreferences({
     ...currentPreferences,
+    article_notifications_enabled:
+      articleNotificationsEnabled ?? currentPreferences.article_notifications_enabled,
+    story_notifications_enabled:
+      storyNotificationsEnabled ?? currentPreferences.story_notifications_enabled,
     like_notifications_frequency:
       likeNotificationsFrequency ?? currentPreferences.like_notifications_frequency,
     comment_notifications_frequency:

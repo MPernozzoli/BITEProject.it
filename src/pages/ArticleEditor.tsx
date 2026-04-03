@@ -823,6 +823,18 @@ const ArticleEditor = () => {
           console.error("Failed to send story notifications:", e);
         }
       }
+
+      if (finalStatus === "published" && articleId) {
+        try {
+          await supabase.functions.invoke("notify-article-publication", {
+            body: {
+              articleId,
+            },
+          });
+        } catch (e) {
+          console.error("Failed to create publication notifications:", e);
+        }
+      }
     }
 
     window.localStorage.removeItem(draftStorageKey);

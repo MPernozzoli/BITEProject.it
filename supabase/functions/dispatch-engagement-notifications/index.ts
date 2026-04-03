@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import webpush from 'npm:web-push@3.6.7'
 import {
   normalizeEmailNotificationPreferences,
   type EngagementNotificationFrequency,
@@ -25,8 +26,11 @@ type PendingNotification = {
     | 'comment_liked'
     | 'article_commented'
     | 'comment_replied'
-  notification_category: 'like' | 'comment'
+    | 'article_published'
+    | 'story_article_published'
+  notification_category: 'like' | 'comment' | 'publication'
   created_at: string
+  push_sent_at: string | null
 }
 
 type RecipientProfile = {
@@ -39,6 +43,7 @@ type RecipientProfile = {
 type ActorProfile = {
   id: string
   name: string | null
+  avatar_url?: string | null
 }
 
 type ArticleRow = {
@@ -52,6 +57,15 @@ type ArticleRow = {
 type CommentRow = {
   id: string
   content: string
+}
+
+type PushSubscriptionRow = {
+  id: string
+  profile_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  enabled: boolean
 }
 
 type TemplateItem = {
@@ -148,6 +162,99 @@ function formatTimestamp(value: string, language: string | null): string {
   ).format(new Date(value))
 }
 
+function buildNotificationUrl(
+  article: ArticleRow | null | undefined,
+  notification: PendingNotification
+): string {
+  const articlePath = article ? `/logbook/${article.slug}` : '/journal'
+  const params = new URLSearchParams({
+    notification: notification.id,
+    focus: notification.comment_id ? 'comment' : 'likes',
+  })
+
+  if (notification.comment_id) {
+    params.set('comment', notification.comment_id)
+  }
+
+  return `${PUBLIC_SITE_URL}${articlePath}?${params.toString()}`
+}
+
+function buildPushMessage(params: {
+  language: string | null
+  item: TemplateItem
+  category: 'like' | 'comment' | 'publication'
+}): { title: string; body: string } {
+  const language = normalizeLanguage(params.language)
+  const actorName =
+    params.item.actorName.trim() || (language === 'en' ? 'Someone' : 'Qualcuno')
+
+  if (params.category === 'like') {
+    return {
+      title:
+        language === 'en'
+          ? `${actorName} liked your content`
+          : `${actorName} ha messo like`,
+      body:
+        language === 'en'
+          ? params.item.articleTitle
+          : params.item.articleTitle,
+    }
+  }
+
+  if (params.category === 'publication') {
+    return {
+      title:
+        params.item.kind === 'story_article_published'
+          ? language === 'en'
+            ? 'New chapter in a story you follow'
+            : 'Nuovo capitolo in una storia che segui'
+          : language === 'en'
+            ? 'New article published'
+            : 'Nuovo articolo pubblicato',
+      body: params.item.articleTitle,
+    }
+  }
+
+  return {
+    title:
+      language === 'en'
+        ? `${actorName} interacted with your comments`
+        : `${actorName} ha interagito con i tuoi commenti`,
+    body: params.item.commentPreview || params.item.articleTitle,
+  }
+}
+
+async function sendPushNotification(params: {
+  subscription: PushSubscriptionRow
+  vapidSubject: string
+  notification: { title: string; body: string; url: string; icon?: string | null }
+}): Promise<void> {
+  await webpush.sendNotification(
+    {
+      endpoint: params.subscription.endpoint,
+      expirationTime: null,
+      keys: {
+        p256dh: params.subscription.p256dh,
+        auth: params.subscription.auth,
+      },
+    },
+    JSON.stringify({
+      title: params.notification.title,
+      body: params.notification.body,
+      url: params.notification.url,
+      icon: params.notification.icon || `${PUBLIC_SITE_URL}/icons/icon-192.png`,
+    }),
+    {
+      TTL: 60 * 5,
+      vapidDetails: {
+        subject: params.vapidSubject,
+        publicKey: Deno.env.get('WEB_PUSH_VAPID_PUBLIC_KEY') ?? '',
+        privateKey: Deno.env.get('WEB_PUSH_VAPID_PRIVATE_KEY') ?? '',
+      },
+    }
+  )
+}
+
 async function queueEmail(params: {
   supabaseUrl: string
   serviceRoleKey: string
@@ -189,6 +296,10 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const vapidPublicKey = Deno.env.get('WEB_PUSH_VAPID_PUBLIC_KEY')
+  const vapidPrivateKey = Deno.env.get('WEB_PUSH_VAPID_PRIVATE_KEY')
+  const vapidSubject =
+    Deno.env.get('WEB_PUSH_VAPID_SUBJECT') ?? 'mailto:hello@biteproject.it'
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)
@@ -210,7 +321,7 @@ Deno.serve(async (req) => {
   const { data: notifications, error: notificationError } = await supabase
     .from('engagement_notifications')
     .select(
-      'id, recipient_profile_id, actor_profile_id, article_id, comment_id, event_type, notification_category, created_at'
+      'id, recipient_profile_id, actor_profile_id, article_id, comment_id, event_type, notification_category, created_at, push_sent_at'
     )
     .is('processed_at', null)
     .order('created_at', { ascending: true })
@@ -248,13 +359,14 @@ Deno.serve(async (req) => {
     { data: actorRows, error: actorError },
     { data: articleRows, error: articleError },
     { data: commentRows, error: commentError },
+    { data: pushSubscriptionRows, error: pushSubscriptionError },
   ] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, email, name, preferred_language')
       .in('id', recipientIds),
     actorIds.length
-      ? supabase.from('public_profiles').select('id, name').in('id', actorIds)
+      ? supabase.from('public_profiles').select('id, name, avatar_url').in('id', actorIds)
       : Promise.resolve({ data: [], error: null }),
     supabase
       .from('logbook_articles')
@@ -263,14 +375,22 @@ Deno.serve(async (req) => {
     commentIds.length
       ? supabase.from('article_comments').select('id, content').in('id', commentIds)
       : Promise.resolve({ data: [], error: null }),
+    recipientIds.length
+      ? supabase
+          .from('push_subscriptions')
+          .select('id, profile_id, endpoint, p256dh, auth, enabled')
+          .in('profile_id', recipientIds)
+          .eq('enabled', true)
+      : Promise.resolve({ data: [], error: null }),
   ])
 
-  if (recipientError || actorError || articleError || commentError) {
+  if (recipientError || actorError || articleError || commentError || pushSubscriptionError) {
     console.error('Failed to load notification metadata', {
       recipientError,
       actorError,
       articleError,
       commentError,
+      pushSubscriptionError,
     })
     return jsonResponse({ error: 'Failed to load notification metadata' }, 500)
   }
@@ -287,6 +407,12 @@ Deno.serve(async (req) => {
   const commentsById = new Map(
     ((commentRows ?? []) as CommentRow[]).map((row) => [row.id, row])
   )
+  const pushSubscriptionsByProfileId = new Map<string, PushSubscriptionRow[]>()
+  for (const row of (pushSubscriptionRows ?? []) as PushSubscriptionRow[]) {
+    const current = pushSubscriptionsByProfileId.get(row.profile_id) ?? []
+    current.push(row)
+    pushSubscriptionsByProfileId.set(row.profile_id, current)
+  }
 
   const recipientEmails = Array.from(
     new Set(
@@ -299,7 +425,7 @@ Deno.serve(async (req) => {
   const { data: preferenceRows, error: preferenceError } = await supabase
     .from('email_notification_preferences')
     .select(
-      'email, newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency'
+      'email, article_notifications_enabled, newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled'
     )
     .in('email', recipientEmails)
 
@@ -328,7 +454,34 @@ Deno.serve(async (req) => {
   const now = Date.now()
   const processedIds = new Set<string>()
   const suppressedIds = new Set<string>()
+  const pushSentIds = new Set<string>()
   let queued = 0
+
+  const buildItems = (
+    notificationsForOutput: PendingNotification[],
+    recipientLanguage: string | null
+  ): TemplateItem[] =>
+    notificationsForOutput.map((notification) => {
+      const article = articlesById.get(notification.article_id)
+      const comment = notification.comment_id
+        ? commentsById.get(notification.comment_id)
+        : null
+      const actor = notification.actor_profile_id
+        ? actorsById.get(notification.actor_profile_id)
+        : null
+
+      return {
+        actorName:
+          actor?.name?.trim() ||
+          (recipientLanguage === 'en' ? 'Someone' : 'Qualcuno'),
+        articleTitle: resolveArticleTitle(article, recipientLanguage),
+        articleUrl: buildNotificationUrl(article, notification),
+        articleImageUrl: article?.cover_image ?? null,
+        createdAtLabel: formatTimestamp(notification.created_at, recipientLanguage),
+        kind: notification.event_type,
+        commentPreview: truncateText(comment?.content, 180),
+      }
+    })
 
   for (const [groupKey, rows] of grouped) {
     const [recipientProfileId, category] = groupKey.split(':') as [
@@ -342,6 +495,82 @@ Deno.serve(async (req) => {
     const preferences =
       preferencesByEmail.get(normalizedEmail) ??
       normalizeEmailNotificationPreferences()
+    const recipientLanguage = normalizeLanguage(recipient.preferred_language)
+
+    if (
+      ((category === 'publication' && preferences.push_publication_enabled) ||
+        (category !== 'publication' && preferences.push_engagement_enabled)) &&
+      vapidPublicKey &&
+      vapidPrivateKey
+    ) {
+      const subscriptions = pushSubscriptionsByProfileId.get(recipientProfileId) ?? []
+      const pushRows = rows.filter((row) => !row.push_sent_at)
+      for (const notification of pushRows) {
+        if (!subscriptions.length) break
+
+        try {
+          const [item] = buildItems([notification], recipientLanguage)
+          const pushMessage = buildPushMessage({
+            language: recipientLanguage,
+            item,
+            category: notification.notification_category,
+          })
+
+          const results = await Promise.allSettled(
+            subscriptions.map((subscription) =>
+              sendPushNotification({
+                subscription,
+                vapidSubject,
+                notification: {
+                  title: pushMessage.title,
+                  body: pushMessage.body,
+                  url: item.articleUrl,
+                  icon: item.articleImageUrl,
+                },
+              })
+            )
+          )
+
+          const invalidEndpoints = results
+            .map((result, index) => ({ result, subscription: subscriptions[index] }))
+            .filter(({ result }) => result.status === 'rejected')
+            .filter(({ result }) => {
+              const reason = (result as PromiseRejectedResult).reason
+              const statusCode =
+                typeof reason?.statusCode === 'number'
+                  ? reason.statusCode
+                  : typeof reason?.status === 'number'
+                    ? reason.status
+                    : null
+              return statusCode === 404 || statusCode === 410
+            })
+            .map(({ subscription }) => subscription.endpoint)
+
+          if (invalidEndpoints.length > 0) {
+            await supabase
+              .from('push_subscriptions')
+              .update({ enabled: false, updated_at: new Date().toISOString() })
+              .in('endpoint', invalidEndpoints)
+          }
+
+          if (results.some((result) => result.status === 'fulfilled')) {
+            pushSentIds.add(notification.id)
+          }
+        } catch (error) {
+          console.error('Failed to send engagement push notification', {
+            notificationId: notification.id,
+            recipientProfileId,
+            error,
+          })
+        }
+      }
+    }
+
+    if (category === 'publication') {
+      rows.forEach((row) => processedIds.add(row.id))
+      continue
+    }
+
     const frequency =
       category === 'like'
         ? preferences.like_notifications_frequency
@@ -365,36 +594,10 @@ Deno.serve(async (req) => {
 
     if (!dueRows.length) continue
 
-    const recipientLanguage = normalizeLanguage(recipient.preferred_language)
-    const buildItems = (notificationsForEmail: PendingNotification[]): TemplateItem[] =>
-      notificationsForEmail.map((notification) => {
-        const article = articlesById.get(notification.article_id)
-        const comment = notification.comment_id
-          ? commentsById.get(notification.comment_id)
-          : null
-        const actor = notification.actor_profile_id
-          ? actorsById.get(notification.actor_profile_id)
-          : null
-
-        return {
-          actorName:
-            actor?.name?.trim() ||
-            (recipientLanguage === 'en' ? 'Someone' : 'Qualcuno'),
-          articleTitle: resolveArticleTitle(article, recipientLanguage),
-          articleUrl: article
-            ? `${PUBLIC_SITE_URL}/logbook/${article.slug}`
-            : `${PUBLIC_SITE_URL}/journal`,
-          articleImageUrl: article?.cover_image ?? null,
-          createdAtLabel: formatTimestamp(notification.created_at, recipientLanguage),
-          kind: notification.event_type,
-          commentPreview: truncateText(comment?.content, 180),
-        }
-      })
-
     try {
       if (frequency === 'instant') {
         for (const notification of dueRows) {
-          const [item] = buildItems([notification])
+          const [item] = buildItems([notification], recipientLanguage)
           await queueEmail({
             supabaseUrl,
             serviceRoleKey,
@@ -412,7 +615,7 @@ Deno.serve(async (req) => {
           queued += 1
         }
       } else {
-        const items = buildItems(dueRows)
+        const items = buildItems(dueRows, recipientLanguage)
         await queueEmail({
           supabaseUrl,
           serviceRoleKey,
@@ -440,6 +643,19 @@ Deno.serve(async (req) => {
   }
 
   const timestamp = new Date().toISOString()
+
+  if (pushSentIds.size > 0) {
+    const { error } = await supabase
+      .from('engagement_notifications')
+      .update({
+        push_sent_at: timestamp,
+      })
+      .in('id', Array.from(pushSentIds))
+
+    if (error) {
+      console.error('Failed to mark engagement notifications as push-sent', error)
+    }
+  }
 
   if (processedIds.size > 0) {
     const { error } = await supabase

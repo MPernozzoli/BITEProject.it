@@ -11,8 +11,14 @@ type NotificationRow = {
   actor_profile_id: string | null;
   article_id: string;
   comment_id: string | null;
-  event_type: "article_liked" | "comment_liked" | "article_commented" | "comment_replied";
-  notification_category: "like" | "comment";
+  event_type:
+    | "article_liked"
+    | "comment_liked"
+    | "article_commented"
+    | "comment_replied"
+    | "article_published"
+    | "story_article_published";
+  notification_category: "like" | "comment" | "publication";
   created_at: string;
   read_at: string | null;
 };
@@ -204,6 +210,14 @@ const ProfileNotificationsMenu = ({
         return lang === "en"
           ? `${actorName} replied to your comment`
           : `${actorName} ha risposto a un tuo commento`;
+      case "article_published":
+        return lang === "en"
+          ? "A new article has been published"
+          : "E stato pubblicato un nuovo articolo";
+      case "story_article_published":
+        return lang === "en"
+          ? "A story you follow has a new chapter"
+          : "Una storia che segui ha un nuovo capitolo";
     }
   };
 
@@ -213,11 +227,13 @@ const ProfileNotificationsMenu = ({
 
     const params = new URLSearchParams({
       notification: notification.id,
-      focus: notification.comment_id ? "comment" : "likes",
     });
 
     if (notification.comment_id) {
+      params.set("focus", "comment");
       params.set("comment", notification.comment_id);
+    } else if (notification.notification_category === "like") {
+      params.set("focus", "likes");
     }
 
     return `/logbook/${articleSlug}?${params.toString()}`;
@@ -278,6 +294,8 @@ const ProfileNotificationsMenu = ({
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-white text-accent shadow-sm">
                       {notification.notification_category === "like" ? (
                         <Heart size={10} className="text-red-500" />
+                      ) : notification.notification_category === "publication" ? (
+                        <Bell size={10} />
                       ) : (
                         <MessageCircle size={10} />
                       )}

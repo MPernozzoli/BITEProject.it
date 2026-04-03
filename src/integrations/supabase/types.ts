@@ -376,32 +376,41 @@ export type Database = {
       }
       email_notification_preferences: {
         Row: {
+          article_notifications_enabled: boolean
           comment_notifications_frequency: string
           created_at: string
           digest_enabled: boolean
           email: string
           like_notifications_frequency: string
           newsletter_enabled: boolean
+          push_engagement_enabled: boolean
+          push_publication_enabled: boolean
           story_notifications_enabled: boolean
           updated_at: string
         }
         Insert: {
+          article_notifications_enabled?: boolean
           comment_notifications_frequency?: string
           created_at?: string
           digest_enabled?: boolean
           email: string
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
+          push_engagement_enabled?: boolean
+          push_publication_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }
         Update: {
+          article_notifications_enabled?: boolean
           comment_notifications_frequency?: string
           created_at?: string
           digest_enabled?: boolean
           email?: string
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
+          push_engagement_enabled?: boolean
+          push_publication_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }
@@ -417,6 +426,7 @@ export type Database = {
           event_type: string
           id: string
           notification_category: string
+          push_sent_at: string | null
           read_at: string | null
           processed_at: string | null
           processing_note: string | null
@@ -432,6 +442,7 @@ export type Database = {
           event_type: string
           id?: string
           notification_category: string
+          push_sent_at?: string | null
           read_at?: string | null
           processed_at?: string | null
           processing_note?: string | null
@@ -447,6 +458,7 @@ export type Database = {
           event_type?: string
           id?: string
           notification_category?: string
+          push_sent_at?: string | null
           read_at?: string | null
           processed_at?: string | null
           processing_note?: string | null
@@ -492,6 +504,63 @@ export type Database = {
           {
             foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
             columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          enabled: boolean
+          endpoint: string
+          expiration_time: string | null
+          id: string
+          last_seen_at: string
+          p256dh: string
+          profile_id: string
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          enabled?: boolean
+          endpoint: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh: string
+          profile_id: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          enabled?: boolean
+          endpoint?: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh?: string
+          profile_id?: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
             referencedColumns: ["id"]

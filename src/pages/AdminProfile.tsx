@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Link, useBlocker, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
   BookOpen,
@@ -40,9 +40,21 @@ import { Textarea } from "@/components/ui/textarea";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { ALL_LANGUAGES, SITE_LANGUAGES, useI18n, type ExtendedLanguage } from "@/lib/i18n";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
+import {
+  detectMobileOs,
+  getExistingPushSubscription,
+  getInstallInstructions,
+  getPushPermission,
+  isLikelyMobileDevice,
+  isRunningAsInstalledApp,
+  subscribeToPushNotifications,
+  supportsWebPush,
+  unsubscribeFromPushNotifications,
+} from "@/lib/pwa";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
 import {
@@ -102,6 +114,8 @@ type ProfileSnapshot = {
   preferredLanguage: ExtendedLanguage;
   secondaryLanguage: string | null;
   newsletterSubscribed: boolean;
+  articleNotificationsEnabled: boolean;
+  storyNotificationsEnabled: boolean;
   socials: Record<SocialFieldKey, string>;
   notificationPreferences: typeof DEFAULT_PROFILE_NOTIFICATION_PREFERENCES;
 };
@@ -166,6 +180,30 @@ const COPY = {
       commentNotificationsTitle: "Notifiche commenti",
       commentNotificationsHint:
         "Scegli la frequenza per nuovi commenti ai tuoi articoli e risposte ai tuoi commenti.",
+      articleUpdatesTitle: "Nuovi articoli",
+      articleUpdatesHint:
+        "Ricevi notifiche nel sito e push per i nuovi articoli standalone pubblicati su BITE.",
+      storyUpdatesTitle: "Storie che segui",
+      storyUpdatesHint:
+        "Ricevi notifiche nel sito e push quando una storia che segui pubblica un nuovo capitolo.",
+      pushTitle: "Notifiche push",
+      pushHint:
+        "Quando usi BITE come web app sulla home del telefono puoi ricevere notifiche push in tempo reale per like e commenti.",
+      pushNotInstalled:
+        "Per attivare le push devi prima salvare BITE sulla schermata Home del telefono.",
+      pushUnsupported:
+        "Questo dispositivo o browser non supporta ancora le notifiche push web in questo contesto.",
+      pushDenied:
+        "Le notifiche push sono bloccate. Riattivale dalle impostazioni del browser o dell'app installata.",
+      pushEnable: "Attiva notifiche push",
+      pushReconnect: "Ricollega notifiche push",
+      pushEnabled: "Push attive",
+      pushDisabled: "Push disattivate",
+      pushSaving: "Aggiornamento...",
+      pushInstructionLabel: "Come installare l'app",
+      pushConfiguredLabel: "Gestione push app",
+      pushMissingKey:
+        "Configurazione push non completata sul progetto. Manca la chiave pubblica VAPID lato client.",
     },
     newsletter: {
       on: "Iscritta",
@@ -259,6 +297,30 @@ const COPY = {
       commentNotificationsTitle: "Comment notifications",
       commentNotificationsHint:
         "Choose the delivery cadence for new comments on your articles and replies to your comments.",
+      articleUpdatesTitle: "New articles",
+      articleUpdatesHint:
+        "Receive in-app notifications and push alerts for new standalone articles published on BITE.",
+      storyUpdatesTitle: "Followed stories",
+      storyUpdatesHint:
+        "Receive in-app notifications and push alerts when a story you follow publishes a new chapter.",
+      pushTitle: "Push notifications",
+      pushHint:
+        "When you use BITE as a web app from your phone home screen, you can receive real-time push notifications for likes and comments.",
+      pushNotInstalled:
+        "To enable push notifications you first need to save BITE to your phone home screen.",
+      pushUnsupported:
+        "This device or browser does not currently support web push in this context.",
+      pushDenied:
+        "Push notifications are blocked. Re-enable them from your browser or installed app settings.",
+      pushEnable: "Enable push notifications",
+      pushReconnect: "Reconnect push notifications",
+      pushEnabled: "Push enabled",
+      pushDisabled: "Push disabled",
+      pushSaving: "Updating...",
+      pushInstructionLabel: "How to install the app",
+      pushConfiguredLabel: "App push controls",
+      pushMissingKey:
+        "Push is not fully configured for this project yet. The public VAPID key is missing on the client.",
     },
     newsletter: {
       on: "Subscribed",
@@ -304,8 +366,11 @@ const COPY = {
 const AdminProfile = () => {
   const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const initialSnapshotRef = useRef<string>("");
+  const pendingNavigationRef = useRef<{ type: "path"; to: string } | { type: "back" } | null>(null);
+  const ignoreNextPopRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [name, setName] = useState("");
@@ -317,9 +382,16 @@ const AdminProfile = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [loadedNewsletterSubscribed, setLoadedNewsletterSubscribed] = useState(false);
+  const [articleNotificationsEnabled, setArticleNotificationsEnabled] = useState(true);
+  const [storyNotificationsEnabled, setStoryNotificationsEnabled] = useState(true);
   const [notificationPreferences, setNotificationPreferences] = useState(
     DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
   );
+  const [pushEngagementEnabled, setPushEngagementEnabled] = useState(true);
+  const [pushPublicationEnabled, setPushPublicationEnabled] = useState(true);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [hasPushSubscription, setHasPushSubscription] = useState(false);
+  const [pushStateLoading, setPushStateLoading] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
   const [storySubscriptions, setStorySubscriptions] = useState<
@@ -339,6 +411,13 @@ const AdminProfile = () => {
     social_seapeople: "",
   });
   const { lang } = useI18n();
+  const isMobile = useIsMobile();
+  const mobileOs = detectMobileOs();
+  const shouldShowMobileAppCard = isMobile || isLikelyMobileDevice();
+  const isInstalledApp = isRunningAsInstalledApp();
+  const canUseWebPush = supportsWebPush();
+  const pushInstallInstructions = getInstallInstructions(mobileOs, lang === "en" ? "en" : "it");
+  const pushPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined;
 
   const copy = COPY[lang === "en" ? "en" : "it"];
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
@@ -355,11 +434,12 @@ const AdminProfile = () => {
     preferredLanguage,
     secondaryLanguage: isSiteNative ? null : secondaryLanguage,
     newsletterSubscribed,
+    articleNotificationsEnabled,
+    storyNotificationsEnabled,
     socials,
     notificationPreferences,
   });
   const isDirty = profileLoaded && currentSnapshot !== initialSnapshotRef.current;
-  const blocker = useBlocker(isDirty && !saving && !saveAndLeavePending);
 
   const socialFields: Array<{
     key: SocialFieldKey;
@@ -518,6 +598,204 @@ const AdminProfile = () => {
     [preferredLanguage],
   );
 
+  const savePushSubscription = useCallback(
+    async (subscription: PushSubscription) => {
+      if (!session?.user) return;
+
+      const payload = subscription.toJSON();
+      const endpoint = payload.endpoint;
+      const p256dh = payload.keys?.p256dh;
+      const auth = payload.keys?.auth;
+
+      if (!endpoint || !p256dh || !auth) {
+        throw new Error("Push subscription keys are incomplete.");
+      }
+
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        {
+          profile_id: session.user.id,
+          endpoint,
+          p256dh,
+          auth,
+          expiration_time:
+            typeof payload.expirationTime === "number"
+              ? new Date(payload.expirationTime).toISOString()
+              : null,
+          user_agent: navigator.userAgent,
+          enabled: true,
+          updated_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+        },
+        { onConflict: "endpoint" },
+      );
+
+      if (error) {
+        throw error;
+      }
+    },
+    [session?.user],
+  );
+
+  const loadPushState = useCallback(async () => {
+    setPushPermission(getPushPermission());
+
+    if (!canUseWebPush) {
+      setHasPushSubscription(false);
+      return false;
+    }
+
+    try {
+      const subscription = await getExistingPushSubscription();
+      const hasSubscription = Boolean(subscription);
+      setHasPushSubscription(hasSubscription);
+
+      if (subscription && session?.user) {
+        try {
+          await savePushSubscription(subscription);
+        } catch (error) {
+          console.error("Push subscription sync error:", error);
+        }
+      }
+
+      return hasSubscription;
+    } catch (error) {
+      console.error("Push subscription load error:", error);
+      setHasPushSubscription(false);
+      return false;
+    }
+  }, [canUseWebPush, savePushSubscription, session?.user]);
+
+  const persistNotificationSettings = useCallback(
+    async (updates: {
+      pushEngagementEnabled?: boolean;
+      pushPublicationEnabled?: boolean;
+      articleNotificationsEnabled?: boolean;
+      storyNotificationsEnabled?: boolean;
+    }) => {
+      if (!session?.user?.email) return;
+
+      const normalizedEmail = session.user.email.trim().toLowerCase();
+      const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
+        .from("email_notification_preferences")
+        .select(
+          "newsletter_enabled, digest_enabled, article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled",
+        )
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+
+      if (currentPreferenceError) {
+        console.error("Push preference baseline load error:", currentPreferenceError);
+      }
+
+      const { error } = await supabase.from("email_notification_preferences").upsert({
+        email: normalizedEmail,
+        newsletter_enabled: currentPreferenceRow?.newsletter_enabled ?? newsletterSubscribed,
+        digest_enabled: currentPreferenceRow?.digest_enabled ?? newsletterSubscribed,
+        article_notifications_enabled:
+          updates.articleNotificationsEnabled
+          ?? currentPreferenceRow?.article_notifications_enabled
+          ?? articleNotificationsEnabled,
+        story_notifications_enabled:
+          updates.storyNotificationsEnabled
+          ?? currentPreferenceRow?.story_notifications_enabled
+          ?? storyNotificationsEnabled,
+        like_notifications_frequency:
+          currentPreferenceRow?.like_notifications_frequency
+          ?? notificationPreferences.like_notifications_frequency,
+        comment_notifications_frequency:
+          currentPreferenceRow?.comment_notifications_frequency
+          ?? notificationPreferences.comment_notifications_frequency,
+        push_engagement_enabled:
+          updates.pushEngagementEnabled
+          ?? currentPreferenceRow?.push_engagement_enabled
+          ?? pushEngagementEnabled,
+        push_publication_enabled:
+          updates.pushPublicationEnabled
+          ?? currentPreferenceRow?.push_publication_enabled
+          ?? pushPublicationEnabled,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        throw error;
+      }
+    },
+    [
+      articleNotificationsEnabled,
+      newsletterSubscribed,
+      notificationPreferences.comment_notifications_frequency,
+      notificationPreferences.like_notifications_frequency,
+      pushEngagementEnabled,
+      pushPublicationEnabled,
+      session?.user?.email,
+      storyNotificationsEnabled,
+    ],
+  );
+
+  const removePushSubscriptionRecord = useCallback(async () => {
+    const subscription = await getExistingPushSubscription();
+    if (!subscription) return;
+
+    const { error } = await supabase
+      .from("push_subscriptions")
+      .delete()
+      .eq("endpoint", subscription.endpoint);
+
+    if (error) {
+      console.error("Push subscription delete error:", error);
+    }
+  }, []);
+
+  const handleEnablePushNotifications = useCallback(async () => {
+    if (!pushPublicKey) {
+      toast.error(copy.fields.pushMissingKey);
+      return;
+    }
+
+    setPushStateLoading(true);
+    try {
+      const subscription = await subscribeToPushNotifications(pushPublicKey);
+      await savePushSubscription(subscription);
+      await persistNotificationSettings({
+        pushEngagementEnabled: true,
+        pushPublicationEnabled: true,
+      });
+      setPushPermission(getPushPermission());
+      setHasPushSubscription(true);
+      setPushEngagementEnabled(true);
+      setPushPublicationEnabled(true);
+      toast.success(copy.fields.pushEnabled);
+    } catch (error) {
+      console.error("Push enable error:", error);
+      setPushPermission(getPushPermission());
+      toast.error(copy.fields.pushDenied);
+    } finally {
+      setPushStateLoading(false);
+    }
+  }, [copy.fields.pushDenied, copy.fields.pushEnabled, copy.fields.pushMissingKey, persistNotificationSettings, pushPublicKey, savePushSubscription]);
+
+  const handleDisablePushNotifications = useCallback(async () => {
+    setPushStateLoading(true);
+    try {
+      await unsubscribeFromPushNotifications();
+      await removePushSubscriptionRecord();
+      await persistNotificationSettings({
+        pushEngagementEnabled: false,
+        pushPublicationEnabled: false,
+      });
+      setHasPushSubscription(false);
+      setPushPermission(getPushPermission());
+      setPushEngagementEnabled(false);
+      setPushPublicationEnabled(false);
+      toast.success(copy.fields.pushDisabled);
+    } catch (error) {
+      console.error("Push disable error:", error);
+      toast.error(copy.actions.saveError);
+    } finally {
+      setPushStateLoading(false);
+    }
+  }, [copy.actions.saveError, copy.fields.pushDisabled, persistNotificationSettings, removePushSubscriptionRecord]);
+
   const loadProfile = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
@@ -583,7 +861,7 @@ const AdminProfile = () => {
 
       const { data: preferenceRow, error: preferenceError } = await supabase
         .from("email_notification_preferences")
-        .select("like_notifications_frequency, comment_notifications_frequency")
+        .select("article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled")
         .eq("email", currentEmail.trim().toLowerCase())
         .maybeSingle();
 
@@ -603,8 +881,14 @@ const AdminProfile = () => {
         : DEFAULT_PROFILE_NOTIFICATION_PREFERENCES;
 
       if (preferenceRow) {
+        setArticleNotificationsEnabled(preferenceRow.article_notifications_enabled ?? true);
+        setStoryNotificationsEnabled(preferenceRow.story_notifications_enabled ?? true);
         setNotificationPreferences(loadedNotificationPreferences);
+        setPushEngagementEnabled(preferenceRow.push_engagement_enabled ?? true);
+        setPushPublicationEnabled(preferenceRow.push_publication_enabled ?? true);
       }
+
+      await loadPushState();
 
       initialSnapshotRef.current = createProfileSnapshot({
         name: loadedName,
@@ -615,6 +899,8 @@ const AdminProfile = () => {
           ? null
           : loadedSecondaryLanguage,
         newsletterSubscribed: loadedNewsletterSubscribed,
+        articleNotificationsEnabled: preferenceRow?.article_notifications_enabled ?? true,
+        storyNotificationsEnabled: preferenceRow?.story_notifications_enabled ?? true,
         socials: loadedSocials,
         notificationPreferences: loadedNotificationPreferences,
       });
@@ -651,7 +937,7 @@ const AdminProfile = () => {
     } finally {
       setProfileLoaded(true);
     }
-  }, [loadNewsletterState, navigate, session]);
+  }, [loadNewsletterState, loadPushState, navigate, session]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -671,10 +957,17 @@ const AdminProfile = () => {
   }, [pendingAvatarUrl]);
 
   useEffect(() => {
-    if (blocker.state === "blocked") {
-      setLeaveDialogOpen(true);
-    }
-  }, [blocker.state]);
+    if (!shouldShowMobileAppCard) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadPushState();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [loadPushState, shouldShowMobileAppCard]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -686,6 +979,53 @@ const AdminProfile = () => {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty, saveAndLeavePending, saving]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!isDirty || saving || saveAndLeavePending) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) return;
+
+      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      if (currentUrl === nextPath) return;
+
+      event.preventDefault();
+      pendingNavigationRef.current = { type: "path", to: nextPath };
+      setLeaveDialogOpen(true);
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [isDirty, location.hash, location.pathname, location.search, saveAndLeavePending, saving]);
+
+  useEffect(() => {
+    const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+
+    const handlePopState = () => {
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      if (!isDirty || saving || saveAndLeavePending) return;
+
+      pendingNavigationRef.current = { type: "back" };
+      setLeaveDialogOpen(true);
+      window.history.pushState(null, "", currentUrl);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isDirty, location.hash, location.pathname, location.search, saveAndLeavePending, saving]);
 
   const resetPendingAvatar = () => {
     setPendingAvatarUrl(null);
@@ -786,6 +1126,8 @@ const AdminProfile = () => {
             newsletter_subscribed: newsletterSubscribed,
             like_notifications_frequency: notificationPreferences.like_notifications_frequency,
             comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
+            article_notifications_enabled: articleNotificationsEnabled,
+            story_notifications_enabled: storyNotificationsEnabled,
             ...socials,
           },
         });
@@ -814,7 +1156,7 @@ const AdminProfile = () => {
       if (!notificationPreferencesSaved) {
         const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
           .from("email_notification_preferences")
-          .select("newsletter_enabled, digest_enabled, story_notifications_enabled")
+          .select("newsletter_enabled, digest_enabled, story_notifications_enabled, push_engagement_enabled, push_publication_enabled")
           .eq("email", currentEmail)
           .maybeSingle();
 
@@ -828,9 +1170,12 @@ const AdminProfile = () => {
             email: currentEmail,
             newsletter_enabled: currentPreferenceRow?.newsletter_enabled ?? newsletterSubscribed,
             digest_enabled: currentPreferenceRow?.digest_enabled ?? newsletterSubscribed,
-            story_notifications_enabled: currentPreferenceRow?.story_notifications_enabled ?? true,
+            article_notifications_enabled: articleNotificationsEnabled,
+            story_notifications_enabled: storyNotificationsEnabled,
             like_notifications_frequency: notificationPreferences.like_notifications_frequency,
             comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
+            push_engagement_enabled: currentPreferenceRow?.push_engagement_enabled ?? pushEngagementEnabled,
+            push_publication_enabled: currentPreferenceRow?.push_publication_enabled ?? pushPublicationEnabled,
             updated_at: new Date().toISOString(),
           });
 
@@ -859,6 +1204,8 @@ const AdminProfile = () => {
             preferredLanguage,
             secondaryLanguage: isSiteNative ? null : secondaryLanguage,
             newsletterSubscribed,
+            articleNotificationsEnabled,
+            storyNotificationsEnabled,
             socials,
             notificationPreferences,
           });
@@ -872,6 +1219,8 @@ const AdminProfile = () => {
           preferredLanguage,
           secondaryLanguage: isSiteNative ? null : secondaryLanguage,
           newsletterSubscribed,
+          articleNotificationsEnabled,
+          storyNotificationsEnabled,
           socials,
           notificationPreferences,
         });
@@ -917,18 +1266,29 @@ const AdminProfile = () => {
     return false;
   };
 
+  const continuePendingNavigation = () => {
+    const pendingNavigation = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    setLeaveDialogOpen(false);
+
+    if (!pendingNavigation) return;
+
+    if (pendingNavigation.type === "path") {
+      navigate(pendingNavigation.to);
+      return;
+    }
+
+    ignoreNextPopRef.current = true;
+    window.history.back();
+  };
+
   const handleStayOnPage = () => {
     setLeaveDialogOpen(false);
-    if (blocker.state === "blocked") {
-      blocker.reset();
-    }
+    pendingNavigationRef.current = null;
   };
 
   const handleLeaveWithoutSaving = () => {
-    setLeaveDialogOpen(false);
-    if (blocker.state === "blocked") {
-      blocker.proceed();
-    }
+    continuePendingNavigation();
   };
 
   const handleSaveAndLeave = async () => {
@@ -936,10 +1296,7 @@ const AdminProfile = () => {
     const didSave = await saveProfile({ showSuccessToast: false });
 
     if (didSave) {
-      setLeaveDialogOpen(false);
-      if (blocker.state === "blocked") {
-        blocker.proceed();
-      }
+      continuePendingNavigation();
       toast.success(copy.actions.saveSuccess);
     }
 
@@ -1309,6 +1666,154 @@ const AdminProfile = () => {
                     </Select>
                   </div>
                 </div>
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {copy.fields.articleUpdatesTitle}
+                      </p>
+                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                        {copy.fields.articleUpdatesHint}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={articleNotificationsEnabled}
+                      onCheckedChange={setArticleNotificationsEnabled}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {copy.fields.storyUpdatesTitle}
+                      </p>
+                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                        {copy.fields.storyUpdatesHint}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={storyNotificationsEnabled}
+                      onCheckedChange={setStoryNotificationsEnabled}
+                    />
+                  </div>
+                </div>
+
+                {shouldShowMobileAppCard && (
+                  <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                    <div className="space-y-3">
+                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                        {isInstalledApp ? copy.fields.pushConfiguredLabel : copy.fields.pushInstructionLabel}
+                      </p>
+                      <p className="text-sm font-sans text-foreground">
+                        {copy.fields.pushTitle}
+                      </p>
+                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                        {copy.fields.pushHint}
+                      </p>
+
+                      {!isInstalledApp ? (
+                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                          <p className="text-sm font-sans text-foreground">{copy.fields.pushNotInstalled}</p>
+                          <p className="mt-2 text-sm font-sans text-muted-foreground leading-relaxed">
+                            {pushInstallInstructions}
+                          </p>
+                        </div>
+                      ) : !canUseWebPush ? (
+                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                            {copy.fields.pushUnsupported}
+                          </p>
+                        </div>
+                      ) : !pushPublicKey ? (
+                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                            {copy.fields.pushMissingKey}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 rounded-[20px] border border-white/70 bg-white/72 p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                              <p className="text-sm font-sans font-medium text-foreground">
+                                {pushEngagementEnabled && hasPushSubscription && pushPermission === "granted"
+                                  ? copy.fields.pushEnabled
+                                  : copy.fields.pushDisabled}
+                              </p>
+                              <p className="text-xs font-sans text-muted-foreground">
+                                Permission: {pushPermission}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={pushEngagementEnabled && hasPushSubscription && pushPermission === "granted"}
+                              disabled={pushStateLoading || pushPermission !== "granted" || !hasPushSubscription}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  void handleEnablePushNotifications();
+                                } else {
+                                  void handleDisablePushNotifications();
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className="flex items-start justify-between gap-4 border-t border-black/6 pt-4">
+                            <div className="space-y-1">
+                              <p className="text-sm font-sans font-medium text-foreground">
+                                {lang === "en" ? "Push for publications" : "Push per nuove pubblicazioni"}
+                              </p>
+                              <p className="text-xs font-sans text-muted-foreground">
+                                {lang === "en"
+                                  ? "Standalone articles and new chapters in followed stories."
+                                  : "Articoli standalone e nuovi capitoli nelle storie seguite."}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={pushPublicationEnabled && hasPushSubscription && pushPermission === "granted"}
+                              disabled={pushStateLoading || pushPermission !== "granted" || !hasPushSubscription}
+                              onCheckedChange={async (checked) => {
+                                setPushStateLoading(true);
+                                try {
+                                  await persistNotificationSettings({ pushPublicationEnabled: checked });
+                                  setPushPublicationEnabled(checked);
+                                } catch (error) {
+                                  console.error("Push publication preference save error:", error);
+                                  toast.error(copy.actions.saveError);
+                                } finally {
+                                  setPushStateLoading(false);
+                                }
+                              }}
+                            />
+                          </div>
+
+                          {pushPermission === "default" || !hasPushSubscription ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                              disabled={pushStateLoading}
+                              onClick={() => void handleEnablePushNotifications()}
+                            >
+                              {pushStateLoading
+                                ? copy.fields.pushSaving
+                                : hasPushSubscription
+                                  ? copy.fields.pushReconnect
+                                  : copy.fields.pushEnable}
+                            </Button>
+                          ) : null}
+
+                          {pushPermission === "denied" ? (
+                            <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                              {copy.fields.pushDenied}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
                   <div className="flex items-center gap-3">

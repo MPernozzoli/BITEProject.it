@@ -159,10 +159,10 @@ const Navbar = () => {
   ];
 
   const navShellClass =
-    "glass-panel border-white/60 shadow-[0_26px_80px_rgba(15,23,42,0.14)]";
-  const navTextClass = "nav-adaptive-ink";
+    "nav-shell-light shadow-[0_28px_80px_rgba(15,23,42,0.12)]";
+  const navTextClass = "text-slate-900";
   const mobileButtonClass =
-    "glass-chip nav-adaptive-ink border-white/60 shadow-sm";
+    "nav-chip-light text-slate-900 shadow-[0_10px_28px_rgba(15,23,42,0.08)]";
   const authCardText =
     lang === "it"
       ? "Accedi per gestire profilo, contenuti e impostazioni."
@@ -257,17 +257,15 @@ const Navbar = () => {
                 "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-all duration-300",
                 navTextClass,
                 isLinkActive(link.to)
-                  ? "glass-chip font-medium"
-                  : "opacity-72 hover:opacity-100",
+                  ? "nav-chip-light font-medium"
+                  : "text-slate-700/80 hover:text-slate-900",
               )}
             >
               {link.label}
             </Link>
           ))}
 
-          <div
-            className="nav-adaptive-divider mx-1 h-5 w-px"
-          />
+          <div className="mx-1 h-5 w-px bg-slate-300/80" />
 
           {isGuest && (
             <button
@@ -276,7 +274,7 @@ const Navbar = () => {
               className={cn(
                 "rounded-full px-3.5 py-2 text-xs font-sans uppercase tracking-[0.24em] transition-colors",
                 mobileButtonClass,
-                "h-9 opacity-80 hover:opacity-100",
+                "h-9 text-slate-700 hover:text-slate-900",
               )}
             >
               {lang.toUpperCase()}
@@ -312,7 +310,7 @@ const Navbar = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-              className="glass-panel mt-2 w-[22rem] rounded-[1.5rem] border-white/55 p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
+                className="nav-menu-light mt-2 w-[22rem] rounded-[1.5rem] p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
               >
                 <ProfileNotificationsMenu
                   sessionUserId={session.user.id}
@@ -357,7 +355,7 @@ const Navbar = () => {
               className={cn(
                 "rounded-full px-3.5 py-2 text-xs font-sans tracking-wide transition-colors",
                 mobileButtonClass,
-                "opacity-80 hover:opacity-100",
+                "text-slate-700 hover:text-slate-900",
               )}
             >
               {lang === "it" ? "Accedi" : "Login"}
