@@ -135,13 +135,14 @@ const EngagementNotificationEmail = ({
   recipientName,
   category = 'comment',
   frequency = 'instant',
-  items = [],
+  items,
   unsubscribeUrl,
 }: EngagementNotificationProps) => {
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
   const greetingName = buildGreetingName(recipientName)
-  const firstItem = items[0]
+  const safeItems = items ?? []
+  const firstItem = safeItems[0]
   const primaryUrl = firstItem?.articleUrl?.trim() || `${PUBLIC_SITE_URL}/journal`
 
   return (
@@ -154,7 +155,7 @@ const EngagementNotificationEmail = ({
       heroCaption={firstItem?.articleTitle || copy.articleFallback}
       intro={
         <EmailBodyText>
-          {copy.intro(greetingName, items.length, category, frequency)}
+          {copy.intro(greetingName, safeItems.length, category, frequency)}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.primaryCta, url: primaryUrl }}
@@ -163,7 +164,7 @@ const EngagementNotificationEmail = ({
       footerNote={<EmailBodyText muted>{copy.manageLabel}</EmailBodyText>}
       unsubscribeUrl={unsubscribeUrl}
     >
-      {items.map((item, index) => {
+      {safeItems.map((item, index) => {
         const articleTitle = item.articleTitle?.trim() || copy.articleFallback
         const actorName = item.actorName?.trim() || copy.actorFallback
         const articleUrl = item.articleUrl?.trim() || `${PUBLIC_SITE_URL}/journal`
