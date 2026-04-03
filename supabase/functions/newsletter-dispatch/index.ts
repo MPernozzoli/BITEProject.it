@@ -366,7 +366,7 @@ async function createDeliveryRecord(
   supabase: ReturnType<typeof createClient>,
   values: Record<string, unknown>
 ): Promise<boolean> {
-  const { error } = await supabase.from('newsletter_deliveries').insert(values)
+  const { error } = await (supabase as any).from('newsletter_deliveries').insert(values)
 
   if (!error) return true
 
