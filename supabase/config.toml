@@ -35,3 +35,5 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.public-llms]
     verify_jwt = false
+  [functions.vapid-public-key]
+    verify_jwt = false
