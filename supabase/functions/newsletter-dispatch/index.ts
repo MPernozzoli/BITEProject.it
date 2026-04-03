@@ -339,7 +339,7 @@ async function ensureUnsubscribeToken(
     return token
   }
 
-  const { error: insertError } = await supabase
+  const { error: insertError } = await (supabase as any)
     .from('email_unsubscribe_tokens')
     .insert({ email: normalizedEmail, token, used_at: null })
 
