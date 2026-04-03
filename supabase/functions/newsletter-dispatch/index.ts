@@ -313,7 +313,7 @@ async function ensureUnsubscribeToken(
   email: string
 ): Promise<string> {
   const normalizedEmail = email.trim().toLowerCase()
-  const { data: existingToken, error: lookupError } = await supabase
+  const { data: existingToken, error: lookupError } = await (supabase as any)
     .from('email_unsubscribe_tokens')
     .select('id, token, used_at')
     .eq('email', normalizedEmail)
