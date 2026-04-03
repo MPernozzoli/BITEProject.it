@@ -153,6 +153,17 @@ const translations: Translations = {
   "contact.subject": { en: "Subject", it: "Oggetto" },
   "contact.message": { en: "Message", it: "Messaggio" },
   "contact.send": { en: "Send Message", it: "Invia messaggio" },
+  "contact.sending": { en: "Sending...", it: "Invio in corso..." },
+  "contact.namePlaceholder": { en: "Your name", it: "Il tuo nome" },
+  "contact.emailPlaceholder": { en: "you@example.com", it: "tuo@email.it" },
+  "contact.subjectPlaceholder": { en: "What should we talk about?", it: "Di cosa vuoi parlarci?" },
+  "contact.messagePlaceholder": { en: "Write your message here.", it: "Scrivi qui il tuo messaggio." },
+  "contact.status.success": { en: "Message sent. We will reply as soon as we can.", it: "Messaggio inviato. Ti risponderemo appena possibile." },
+  "contact.status.error": { en: "We could not send your message right now. Try again in a bit or write directly to hello@biteproject.com.", it: "Non siamo riusciti a inviare il messaggio adesso. Riprova tra poco oppure scrivi direttamente a hello@biteproject.com." },
+  "contact.validation.name": { en: "Please enter your name.", it: "Inserisci il tuo nome." },
+  "contact.validation.email": { en: "Enter a valid email address.", it: "Inserisci un indirizzo email valido." },
+  "contact.validation.subject": { en: "Please add a subject.", it: "Inserisci un oggetto." },
+  "contact.validation.message": { en: "Write a longer message.", it: "Scrivi un messaggio un po' piu lungo." },
   "contact.closing": { en: "We respond from wherever we are — sometimes a marina, sometimes an anchorage, sometimes offshore. Give us a few days.", it: "Rispondiamo da dovunque siamo — a volte una marina, a volte un'ancoraggio, a volte in navigazione. Dacci qualche giorno." },
 };
 

@@ -1,5 +1,8 @@
+import { type ChangeEvent, type FormEvent, useMemo, useState } from "react";
 import { Instagram, Youtube } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const TikTokIcon = ({ size = 18, className }: { size?: number; className?: string }) => (
   <svg
@@ -39,8 +42,130 @@ const SeaPeopleIcon = ({ size = 18, className }: { size?: number; className?: st
   </svg>
 );
 
+type ContactFormValues = {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  company: string;
+};
+
+type ContactFormErrors = Partial<Record<keyof Omit<ContactFormValues, "company">, string>>;
+
+const EMPTY_FORM: ContactFormValues = {
+  name: "",
+  email: "",
+  subject: "",
+  message: "",
+  company: "",
+};
+
 const Contact = () => {
   const { t, lang } = useI18n();
+  const { toast } = useToast();
+  const [formValues, setFormValues] = useState<ContactFormValues>(EMPTY_FORM);
+  const [errors, setErrors] = useState<ContactFormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
+
+  const fieldLabels = useMemo(
+    () => ({
+      name: t("contact.name"),
+      email: t("contact.email"),
+      subject: t("contact.subject"),
+      message: t("contact.message"),
+    }),
+    [t],
+  );
+
+  const validate = (values: ContactFormValues): ContactFormErrors => {
+    const nextErrors: ContactFormErrors = {};
+
+    if (!values.name.trim()) {
+      nextErrors.name = t("contact.validation.name");
+    }
+
+    const normalizedEmail = values.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      nextErrors.email = t("contact.validation.email");
+    }
+
+    if (!values.subject.trim()) {
+      nextErrors.subject = t("contact.validation.subject");
+    }
+
+    if (values.message.trim().length < 10) {
+      nextErrors.message = t("contact.validation.message");
+    }
+
+    return nextErrors;
+  };
+
+  const handleChange =
+    (field: keyof ContactFormValues) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const nextValue = event.target.value;
+      setFormValues((current) => ({ ...current, [field]: nextValue }));
+      setSubmitState("idle");
+
+      if (field === "company") {
+        return;
+      }
+
+      setErrors((current) => {
+        if (!current[field]) return current;
+        const nextErrors = { ...current };
+        delete nextErrors[field];
+        return nextErrors;
+      });
+    };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const nextErrors = validate(formValues);
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      setSubmitState("idle");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitState("idle");
+
+    try {
+      const { error } = await supabase.functions.invoke("contact-form-submit", {
+        body: {
+          ...formValues,
+          language: lang,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setFormValues(EMPTY_FORM);
+      setErrors({});
+      setSubmitState("success");
+      toast({
+        title: t("contact.status.success"),
+      });
+    } catch (error) {
+      console.error("Failed to submit contact form", error);
+      setSubmitState("error");
+      toast({
+        title: t("contact.status.error"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderError = (field: keyof ContactFormErrors) =>
+    errors[field] ? <p className="mt-2 text-sm text-destructive">{errors[field]}</p> : null;
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
@@ -61,57 +186,111 @@ const Contact = () => {
       <section className="px-6 md:px-12 pb-0">
         <div className="page-section-wide">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-            <form onSubmit={(e) => e.preventDefault()} className="glass-panel rounded-[34px] p-6 md:p-8 space-y-6">
+            <form onSubmit={handleSubmit} className="glass-panel rounded-[34px] p-6 md:p-8 space-y-6">
+              <div className="hidden" aria-hidden="true">
+                <label htmlFor="contact-company">Company</label>
+                <input
+                  id="contact-company"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formValues.company}
+                  onChange={handleChange("company")}
+                />
+              </div>
               <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  {t("contact.name")}
+                <label
+                  htmlFor="contact-name"
+                  className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block"
+                >
+                  {fieldLabels.name}
                 </label>
                 <div className="glass-input rounded-[22px] px-1.5">
                   <input
+                    id="contact-name"
                     type="text"
+                    autoComplete="name"
+                    value={formValues.name}
+                    onChange={handleChange("name")}
+                    placeholder={t("contact.namePlaceholder")}
                     className="w-full bg-transparent px-4 py-3 text-foreground font-sans focus:outline-none"
                   />
                 </div>
+                {renderError("name")}
               </div>
               <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  {t("contact.email")}
+                <label
+                  htmlFor="contact-email"
+                  className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block"
+                >
+                  {fieldLabels.email}
                 </label>
                 <div className="glass-input rounded-[22px] px-1.5">
                   <input
+                    id="contact-email"
                     type="email"
+                    autoComplete="email"
+                    value={formValues.email}
+                    onChange={handleChange("email")}
+                    placeholder={t("contact.emailPlaceholder")}
                     className="w-full bg-transparent px-4 py-3 text-foreground font-sans focus:outline-none"
                   />
                 </div>
+                {renderError("email")}
               </div>
               <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  {t("contact.subject")}
+                <label
+                  htmlFor="contact-subject"
+                  className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block"
+                >
+                  {fieldLabels.subject}
                 </label>
                 <div className="glass-input rounded-[22px] px-1.5">
                   <input
+                    id="contact-subject"
                     type="text"
+                    value={formValues.subject}
+                    onChange={handleChange("subject")}
+                    placeholder={t("contact.subjectPlaceholder")}
                     className="w-full bg-transparent px-4 py-3 text-foreground font-sans focus:outline-none"
                   />
                 </div>
+                {renderError("subject")}
               </div>
               <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  {t("contact.message")}
+                <label
+                  htmlFor="contact-message"
+                  className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block"
+                >
+                  {fieldLabels.message}
                 </label>
                 <div className="glass-input rounded-[26px] px-1.5 py-1.5">
                   <textarea
+                    id="contact-message"
                     rows={5}
+                    value={formValues.message}
+                    onChange={handleChange("message")}
+                    placeholder={t("contact.messagePlaceholder")}
                     className="w-full bg-transparent px-4 py-3 text-foreground font-sans focus:outline-none resize-none"
                   />
                 </div>
+                {renderError("message")}
               </div>
-              <button
-                type="submit"
-                className="glass-button px-8 py-3.5 text-sm font-sans font-medium tracking-wide mt-4"
-              >
-                {t("contact.send")}
-              </button>
+              <div className="space-y-3">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="glass-button px-8 py-3.5 text-sm font-sans font-medium tracking-wide disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isSubmitting ? t("contact.sending") : t("contact.send")}
+                </button>
+                {submitState === "success" ? (
+                  <p className="text-sm text-accent">{t("contact.status.success")}</p>
+                ) : null}
+                {submitState === "error" ? (
+                  <p className="text-sm text-destructive">{t("contact.status.error")}</p>
+                ) : null}
+              </div>
             </form>
 
             <div className="glass-panel rounded-[34px] p-6 md:p-8 space-y-8">

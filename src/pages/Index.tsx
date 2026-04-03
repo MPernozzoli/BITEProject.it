@@ -996,9 +996,9 @@ const Index = () => {
       </section>
 
       <section className="page-section pt-0">
-        <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-white md:px-10 md:py-12">
+        <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="flex items-center justify-center mb-12">
-            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76">
+            <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
               {t("topics.label")}
             </p>
           </div>
@@ -1009,12 +1009,12 @@ const Index = () => {
               { key: "remote", icon: Wifi },
               { key: "storytelling", icon: Pen },
             ].map(({ key, icon: Icon }) => (
-              <div key={key} className="glass-chip-dark rounded-[28px] p-6">
-                <div className="glass-chip-dark inline-flex h-12 w-12 items-center justify-center mb-5 text-white/92">
+              <div key={key} className="glass-chip-light rounded-[28px] p-6">
+                <div className="glass-chip-light inline-flex h-12 w-12 items-center justify-center mb-5 text-slate-800">
                   <Icon size={20} />
                 </div>
-                <h3 className="editorial-heading text-xl mb-3 text-white">{t(`topics.${key}`)}</h3>
-                <p className="text-sm text-white/84 leading-relaxed">{t(`topics.${key}.text`)}</p>
+                <h3 className="editorial-heading text-xl mb-3 text-slate-950">{t(`topics.${key}`)}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{t(`topics.${key}.text`)}</p>
               </div>
             ))}
           </div>
@@ -1136,12 +1136,12 @@ const Index = () => {
       </section>
 
       <section className="page-section pt-0">
-        <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-white md:px-10 md:py-12">
+        <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="max-w-3xl">
-            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("collab.label")}</p>
-            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-white">{t("collab.title")}</h2>
-            <p className="editorial-body text-white/84 leading-relaxed text-lg mb-10">{t("collab.text")}</p>
-            <Link to="/collaborations" className="glass-button inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide">
+            <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("collab.label")}</p>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-slate-950">{t("collab.title")}</h2>
+            <p className="editorial-body text-muted-foreground leading-relaxed text-lg mb-10">{t("collab.text")}</p>
+            <Link to="/collaborations" className="glass-button-secondary inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide">
               {t("collab.cta")} <ArrowRight size={16} />
             </Link>
           </div>

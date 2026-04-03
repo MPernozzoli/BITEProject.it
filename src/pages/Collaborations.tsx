@@ -53,9 +53,9 @@ const Collaborations = () => {
 
       {/* Values */}
       <section className="page-section pt-0">
-        <div className="page-section-narrow glass-panel-dark rounded-[34px] px-6 py-10 text-white md:px-10 md:py-12">
-          <h2 className="editorial-heading text-3xl md:text-4xl mb-6">{t("collab.values.title")}</h2>
-          <p className="editorial-body text-white/84 text-lg leading-relaxed">
+        <div className="page-section-narrow glass-panel-light rounded-[34px] px-6 py-10 md:px-10 md:py-12">
+          <h2 className="editorial-heading text-3xl md:text-4xl mb-6 text-slate-950">{t("collab.values.title")}</h2>
+          <p className="editorial-body text-muted-foreground text-lg leading-relaxed">
             {t("collab.values.text")}
           </p>
         </div>
@@ -76,16 +76,16 @@ const Collaborations = () => {
       </section>
 
       <section className="page-section pt-0">
-        <div className="page-section-narrow glass-panel-dark rounded-[34px] px-6 py-10 text-center text-white md:px-10 md:py-12">
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 whitespace-pre-line">
+        <div className="page-section-narrow glass-panel-light rounded-[34px] px-6 py-10 text-center md:px-10 md:py-12">
+          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 whitespace-pre-line text-slate-950">
             {t("collab.title")}
           </h2>
-          <p className="editorial-body text-white/84 text-lg mb-10 max-w-lg mx-auto">
+          <p className="editorial-body text-muted-foreground text-lg mb-10 max-w-lg mx-auto">
             {t("collab.text")}
           </p>
           <Link
             to="/contact"
-            className="glass-button inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+            className="glass-button-secondary inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
           >
             {t("collab.cta")} <ArrowRight size={16} />
           </Link>
