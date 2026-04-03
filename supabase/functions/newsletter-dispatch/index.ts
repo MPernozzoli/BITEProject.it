@@ -251,7 +251,7 @@ async function processWeeklyDigestAutomation(params: {
   const queued = typeof result.queued === 'number' ? result.queued : 0
 
   if (queued > 0) {
-    await supabase
+    await (supabase as any)
       .from('system_email_automations')
       .upsert({
         key: automation.key,
