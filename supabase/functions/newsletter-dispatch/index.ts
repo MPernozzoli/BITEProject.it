@@ -330,7 +330,7 @@ async function ensureUnsubscribeToken(
   const token = crypto.randomUUID().replaceAll('-', '')
 
   if (existingToken) {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await (supabase as any)
       .from('email_unsubscribe_tokens')
       .update({ token, used_at: null })
       .eq('id', existingToken.id)
