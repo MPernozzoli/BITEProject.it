@@ -203,7 +203,7 @@ async function processWeeklyDigestAutomation(params: {
     : null
   const lastSentDateKey = lastSentParts ? getLocalDateKey(lastSentParts) : null
 
-  await supabase
+  await (supabase as any)
     .from('system_email_automations')
     .upsert({
       key: automation.key,
