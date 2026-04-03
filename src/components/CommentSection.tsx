@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Heart, Reply, Send } from "lucide-react";
 import ProfileCard from "./ProfileCard";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 interface Comment {
   id: string;
@@ -31,12 +32,25 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
   const [replyText, setReplyText] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [submittingReplyTo, setSubmittingReplyTo] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     checkSession();
     fetchComments();
   }, [articleId]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -93,20 +107,61 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
   };
 
   const submitComment = async (parentId: string | null, text: string) => {
-    if (!userId || !text.trim()) return;
-    await supabase.from("article_comments").insert({
+    const content = text.trim();
+    if (!content) return;
+
+    const isReply = Boolean(parentId);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const currentUserId = session?.user?.id || userId;
+
+    if (!currentUserId) {
+      navigate("/login", { state: { from: window.location.pathname } });
+      return;
+    }
+
+    if (isReply) {
+      setSubmittingReplyTo(parentId);
+    } else {
+      setIsSubmittingComment(true);
+    }
+
+    const { error } = await supabase.from("article_comments").insert({
       article_id: articleId,
-      profile_id: userId,
+      profile_id: currentUserId,
       parent_id: parentId,
-      content: text.trim(),
+      content,
     });
+
+    if (error) {
+      toast({
+        title: "Commento non inviato",
+        description: "C'è stato un problema durante il salvataggio. Riprova tra un attimo.",
+        variant: "destructive",
+      });
+      if (isReply) {
+        setSubmittingReplyTo(null);
+      } else {
+        setIsSubmittingComment(false);
+      }
+      return;
+    }
+
     void supabase.functions.invoke("dispatch-engagement-notifications", {
       body: { limit: 100 },
     });
+
     setNewComment("");
     setReplyTo(null);
     setReplyText("");
-    fetchComments();
+    await fetchComments();
+
+    if (isReply) {
+      setSubmittingReplyTo(null);
+    } else {
+      setIsSubmittingComment(false);
+    }
   };
 
   const toggleCommentLike = async (commentId: string, isLiked: boolean) => {
@@ -196,12 +251,19 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
                     onChange={(e) => setReplyText(e.target.value)}
                     placeholder="Scrivi una risposta..."
                     className="w-full bg-transparent px-3 py-2.5 text-sm font-sans focus:outline-none"
-                    onKeyDown={(e) => e.key === "Enter" && submitComment(comment.id, replyText)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      void submitComment(comment.id, replyText);
+                    }}
                   />
                 </div>
                 <button
-                  onClick={() => submitComment(comment.id, replyText)}
-                  className="glass-button inline-flex h-10 w-10 items-center justify-center"
+                  onClick={() => void submitComment(comment.id, replyText)}
+                  disabled={!replyText.trim() || submittingReplyTo === comment.id}
+                  className={`inline-flex h-10 w-10 items-center justify-center ${
+                    replyText.trim() ? "glass-button-dark" : "glass-button"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
                   <Send size={14} />
                 </button>
@@ -232,9 +294,11 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
             />
           </div>
           <button
-            onClick={() => submitComment(null, newComment)}
-            disabled={!newComment.trim()}
-            className="glass-button self-end px-4 py-2.5 text-sm font-sans font-medium disabled:opacity-50"
+            onClick={() => void submitComment(null, newComment)}
+            disabled={!newComment.trim() || isSubmittingComment}
+            className={`self-end px-4 py-2.5 text-sm font-sans font-medium ${
+              newComment.trim() ? "glass-button-dark" : "glass-button"
+            } disabled:cursor-not-allowed disabled:opacity-50`}
           >
             <Send size={14} />
           </button>

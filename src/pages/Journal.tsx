@@ -52,6 +52,7 @@ const Journal = () => {
   const [expandedArticle, setExpandedArticle] = useState<{ slug: string; originRect: ExpandedArticleOrigin } | null>(null);
   const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [mapFallbackActive, setMapFallbackActive] = useState(false);
   const [focusedVoyageId, setFocusedVoyageId] = useState<string | null>(null);
   const [voyageFilterOpen, setVoyageFilterOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -238,8 +239,7 @@ const Journal = () => {
 
     return {
       seaNM: Math.round(seaNM),
-      landNM: Math.round(landNM),
-      totalNM: Math.round(seaNM + landNM),
+      landKM: Math.round(landNM * 1.852),
       voyageCount,
       activeVoyage,
     };
@@ -489,6 +489,11 @@ const Journal = () => {
     viewMode === "map" &&
     (articleReaderActive || showPreviewPanel || Boolean(panelProfileId) || (isMobile && mobileSidebarVisible));
 
+  const handleMapUnavailable = useCallback(() => {
+    setMapFallbackActive(true);
+    setViewMode("list");
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col">
       {viewMode === "map" ? (
@@ -505,6 +510,7 @@ const Journal = () => {
             lang={lang}
             disableInteractions={isMapInteractionLocked}
             initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
+            onMapUnavailable={handleMapUnavailable}
             fallbackHeightClassName="h-full min-h-screen"
           />
 
@@ -541,17 +547,17 @@ const Journal = () => {
           </div>
 
           {/* Floating stats bar — top center */}
-          {stats.totalNM > 0 && (
+          {(stats.seaNM > 0 || stats.landKM > 0) && (
             <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
               {stats.seaNM > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-sky-800/85">
                   <Ship size={10} /> {stats.seaNM.toLocaleString()} NM
                 </span>
               ) : null}
-              {stats.seaNM > 0 && stats.landNM > 0 ? <span className="w-px h-3 bg-border" /> : null}
-              {stats.landNM > 0 ? (
+              {stats.seaNM > 0 && stats.landKM > 0 ? <span className="w-px h-3 bg-border" /> : null}
+              {stats.landKM > 0 ? (
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-orange-800/85">
-                  <Mountain size={10} /> {stats.landNM.toLocaleString()} NM
+                  <Mountain size={10} /> {stats.landKM.toLocaleString()} KM
                 </span>
               ) : null}
               <span className="w-px h-3 bg-border" />
@@ -735,7 +741,15 @@ const Journal = () => {
         /* List-only view — classic grid */
         <>
           <div className="pt-24 md:pt-28 px-4 md:px-6 pb-4">
-            <div className="glass-panel max-w-7xl mx-auto rounded-[30px] px-4 py-4 md:px-6 md:py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="glass-panel max-w-7xl mx-auto rounded-[30px] px-4 py-4 md:px-6 md:py-5 flex flex-col gap-4">
+              {mapFallbackActive ? (
+                <div className="rounded-[24px] border border-white/60 bg-background/70 px-4 py-3 text-sm font-sans text-muted-foreground">
+                  {lang === "it"
+                    ? "La mappa non è disponibile in questo browser. Ti ho portato alla vista lista per continuare la navigazione."
+                    : "The map is unavailable in this browser. You were moved to the list view so you can keep browsing."}
+                </div>
+              ) : null}
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="glass-input relative rounded-full max-w-md flex-1 px-1.5">
                 <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -748,7 +762,10 @@ const Journal = () => {
               </div>
               <div className="flex items-center gap-2 md:ml-4">
                 <button
-                  onClick={() => setViewMode("map")}
+                  onClick={() => {
+                    setMapFallbackActive(false);
+                    setViewMode("map");
+                  }}
                   className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Map size={14} />
@@ -761,6 +778,7 @@ const Journal = () => {
                     <Plus size={12} /> {lang === "it" ? "Nuovo" : "New"}
                   </Link>
                 )}
+              </div>
               </div>
             </div>
           </div>

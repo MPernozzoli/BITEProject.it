@@ -10,7 +10,7 @@ import {
   getPublicVoyageWaypoints,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
-import { bindMapToContainerResize, createCartoRasterStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
+import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
 interface VoyageMapProps {
@@ -24,6 +24,7 @@ interface VoyageMapProps {
   lang: "en" | "it";
   initialFitReady?: boolean;
   disableInteractions?: boolean;
+  onMapUnavailable?: () => void;
 }
 
 const escapePopupHtml = (value: string) =>
@@ -160,6 +161,7 @@ const VoyageMap = ({
   lang,
   initialFitReady = true,
   disableInteractions = false,
+  onMapUnavailable,
 }: VoyageMapProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -180,6 +182,12 @@ const VoyageMap = ({
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredRouteVoyageId, setHoveredRouteVoyageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mapUnavailable) {
+      onMapUnavailable?.();
+    }
+  }, [mapUnavailable, onMapUnavailable]);
 
   const clearInteractiveLayerHandlers = useCallback((map: maplibregl.Map) => {
     Object.entries(lineLayerHandlersRef.current).forEach(([layerId, handlers]) => {
@@ -206,11 +214,6 @@ const VoyageMap = ({
     if (!containerRef.current || mapRef.current || mapUnavailable) return;
 
     try {
-      if (!isMapLibreSupported()) {
-        setMapUnavailable(true);
-        return;
-      }
-
       setMapLoaded(false);
 
       const map = new maplibregl.Map({
@@ -893,11 +896,22 @@ const VoyageMap = ({
   if (mapUnavailable) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--muted))_0%,transparent_60%)] px-6 text-center">
-        <p className="max-w-md text-sm font-sans text-muted-foreground">
-          {lang === "it"
-            ? "La mappa non è disponibile su questo dispositivo. Passa alla vista lista per continuare."
-            : "The map is unavailable on this device. Switch to list view to keep browsing."}
-        </p>
+        <div className="max-w-md space-y-3">
+          <p className="text-sm font-sans text-muted-foreground">
+            {lang === "it"
+              ? "La mappa non è disponibile su questo dispositivo o browser. Passa alla vista lista per continuare."
+              : "The map is unavailable on this device or browser. Switch to list view to keep browsing."}
+          </p>
+          {onMapUnavailable ? (
+            <button
+              type="button"
+              onClick={onMapUnavailable}
+              className="inline-flex items-center justify-center rounded-full border border-white/60 bg-background/80 px-4 py-2 text-xs font-sans text-foreground shadow-lg transition-colors hover:bg-background"
+            >
+              {lang === "it" ? "Apri vista lista" : "Open list view"}
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }
