@@ -155,7 +155,7 @@ const EngagementNotificationEmail = ({
       heroCaption={firstItem?.articleTitle || copy.articleFallback}
       intro={
         <EmailBodyText>
-          {copy.intro(greetingName, items.length, category, frequency)}
+          {copy.intro(greetingName, safeItems.length, category, frequency)}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.primaryCta, url: primaryUrl }}
