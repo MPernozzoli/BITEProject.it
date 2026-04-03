@@ -332,7 +332,7 @@ const Contact = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="glass-button px-8 py-3.5 text-sm font-sans font-medium tracking-wide disabled:cursor-not-allowed disabled:opacity-70"
+                  className="glass-button px-8 py-3.5 text-sm font-sans font-medium tracking-wide shadow-[0_16px_36px_rgba(32,55,88,0.2)] saturate-[1.35] brightness-110 hover:saturate-[1.5] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 disabled:saturate-100 disabled:brightness-100"
                 >
                   {isSubmitting ? t("contact.sending") : t("contact.send")}
                 </button>
