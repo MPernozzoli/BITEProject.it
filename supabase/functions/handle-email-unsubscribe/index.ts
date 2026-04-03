@@ -60,15 +60,15 @@ function parsePreferencesFromBody(value: unknown): Partial<EmailNotificationPref
           : undefined,
     like_notifications_frequency:
       typeof input.like_notifications_frequency === 'string'
-        ? input.like_notifications_frequency
+        ? input.like_notifications_frequency as EngagementNotificationFrequency
         : typeof input.likeNotificationsFrequency === 'string'
-          ? input.likeNotificationsFrequency
+          ? input.likeNotificationsFrequency as EngagementNotificationFrequency
           : undefined,
     comment_notifications_frequency:
       typeof input.comment_notifications_frequency === 'string'
-        ? input.comment_notifications_frequency
+        ? input.comment_notifications_frequency as EngagementNotificationFrequency
         : typeof input.commentNotificationsFrequency === 'string'
-          ? input.commentNotificationsFrequency
+          ? input.commentNotificationsFrequency as EngagementNotificationFrequency
           : undefined,
   }
 }
