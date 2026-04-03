@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
+  ENGAGEMENT_NOTIFICATION_FREQUENCIES,
+  normalizeEngagementNotificationFrequency,
+  type EngagementNotificationFrequency,
+} from "@/lib/email-notification-preferences";
 import { useI18n } from "@/lib/i18n";
 
 type Status = "loading" | "ready" | "invalid" | "success" | "error";
@@ -9,7 +22,14 @@ type EmailPreferences = {
   newsletter_enabled: boolean;
   digest_enabled: boolean;
   story_notifications_enabled: boolean;
+  like_notifications_frequency: EngagementNotificationFrequency;
+  comment_notifications_frequency: EngagementNotificationFrequency;
 };
+
+type TogglePreferenceKey =
+  | "newsletter_enabled"
+  | "digest_enabled"
+  | "story_notifications_enabled";
 
 type ReasonCode =
   | "too_many_emails"
@@ -23,6 +43,7 @@ const defaultPreferences: EmailPreferences = {
   newsletter_enabled: true,
   digest_enabled: true,
   story_notifications_enabled: true,
+  ...DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
 };
 
 const Unsubscribe = () => {
@@ -52,7 +73,9 @@ const Unsubscribe = () => {
     () =>
       preferences.newsletter_enabled ||
       preferences.digest_enabled ||
-      preferences.story_notifications_enabled,
+      preferences.story_notifications_enabled ||
+      preferences.like_notifications_frequency !== "none" ||
+      preferences.comment_notifications_frequency !== "none",
     [preferences]
   );
 
@@ -61,6 +84,8 @@ const Unsubscribe = () => {
       preferences.newsletter_enabled !== initialPreferences.newsletter_enabled ||
       preferences.digest_enabled !== initialPreferences.digest_enabled ||
       preferences.story_notifications_enabled !== initialPreferences.story_notifications_enabled ||
+      preferences.like_notifications_frequency !== initialPreferences.like_notifications_frequency ||
+      preferences.comment_notifications_frequency !== initialPreferences.comment_notifications_frequency ||
       reasonCode.length > 0 ||
       reasonText.trim().length > 0,
     [initialPreferences, preferences, reasonCode, reasonText]
@@ -90,6 +115,12 @@ const Unsubscribe = () => {
         newsletter_enabled: Boolean(data.preferences?.newsletter_enabled),
         digest_enabled: Boolean(data.preferences?.digest_enabled),
         story_notifications_enabled: Boolean(data.preferences?.story_notifications_enabled),
+        like_notifications_frequency: normalizeEngagementNotificationFrequency(
+          data.preferences?.like_notifications_frequency,
+        ),
+        comment_notifications_frequency: normalizeEngagementNotificationFrequency(
+          data.preferences?.comment_notifications_frequency,
+        ),
       };
 
       setEmail(typeof data.email === "string" ? data.email : "");
@@ -104,7 +135,7 @@ const Unsubscribe = () => {
     }
   };
 
-  const handleToggle = (key: keyof EmailPreferences) => {
+  const handleToggle = (key: TogglePreferenceKey) => {
     setPreferences((current) => ({
       ...current,
       [key]: !current[key],
@@ -173,6 +204,25 @@ const Unsubscribe = () => {
           : "New articles inside the stories you follow.",
     },
   ];
+  const frequencyOptions = ENGAGEMENT_NOTIFICATION_FREQUENCIES.map((value) => ({
+    value,
+    label:
+      lang === "it"
+        ? {
+            instant: "Una mail per ognuno",
+            daily: "Recap giornaliero",
+            weekly: "Recap settimanale",
+            monthly: "Recap mensile",
+            none: "Nessuna notifica",
+          }[value]
+        : {
+            instant: "One email each",
+            daily: "Daily digest",
+            weekly: "Weekly digest",
+            monthly: "Monthly digest",
+            none: "No notifications",
+          }[value],
+  }));
 
   const reasonOptions: Array<{ value: ReasonCode; label: string }> = [
     {
@@ -286,6 +336,74 @@ const Unsubscribe = () => {
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                  <p className="text-sm font-medium">
+                    {lang === "it" ? "Notifiche like" : "Like notifications"}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {lang === "it"
+                      ? "Decidi se ricevere una mail per ogni like o un recap periodico."
+                      : "Choose whether to receive one email per like or a periodic summary."}
+                  </p>
+                  <div className="mt-4">
+                    <Select
+                      value={preferences.like_notifications_frequency}
+                      onValueChange={(value) =>
+                        setPreferences((current) => ({
+                          ...current,
+                          like_notifications_frequency: normalizeEngagementNotificationFrequency(value),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-2xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {frequencyOptions.map((option) => (
+                          <SelectItem key={`like-${option.value}`} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                  <p className="text-sm font-medium">
+                    {lang === "it" ? "Notifiche commenti" : "Comment notifications"}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {lang === "it"
+                      ? "Gestisci la frequenza per nuovi commenti e risposte ai tuoi commenti."
+                      : "Choose how often you want new comments and replies to your comments."}
+                  </p>
+                  <div className="mt-4">
+                    <Select
+                      value={preferences.comment_notifications_frequency}
+                      onValueChange={(value) =>
+                        setPreferences((current) => ({
+                          ...current,
+                          comment_notifications_frequency: normalizeEngagementNotificationFrequency(value),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-2xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {frequencyOptions.map((option) => (
+                          <SelectItem key={`comment-${option.value}`} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-[26px] border border-black/6 bg-white px-5 py-5">

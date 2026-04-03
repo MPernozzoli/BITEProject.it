@@ -58,6 +58,18 @@ function parsePreferencesFromBody(value: unknown): Partial<EmailNotificationPref
         : typeof input.storyNotificationsEnabled === 'boolean'
           ? input.storyNotificationsEnabled
           : undefined,
+    like_notifications_frequency:
+      typeof input.like_notifications_frequency === 'string'
+        ? input.like_notifications_frequency
+        : typeof input.likeNotificationsFrequency === 'string'
+          ? input.likeNotificationsFrequency
+          : undefined,
+    comment_notifications_frequency:
+      typeof input.comment_notifications_frequency === 'string'
+        ? input.comment_notifications_frequency
+        : typeof input.commentNotificationsFrequency === 'string'
+          ? input.commentNotificationsFrequency
+          : undefined,
   }
 }
 
@@ -133,7 +145,9 @@ Deno.serve(async (req) => {
     await Promise.all([
       supabase
         .from('email_notification_preferences')
-        .select('newsletter_enabled, digest_enabled, story_notifications_enabled')
+        .select(
+          'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency'
+        )
         .eq('email', email)
         .maybeSingle(),
       supabase

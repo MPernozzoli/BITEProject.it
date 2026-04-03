@@ -20,9 +20,11 @@ interface Comment {
 
 interface CommentSectionProps {
   articleId: string;
+  focusCommentId?: string | null;
+  onFocusHandled?: () => void;
 }
 
-const CommentSection = ({ articleId }: CommentSectionProps) => {
+const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: CommentSectionProps) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -98,6 +100,9 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
       parent_id: parentId,
       content: text.trim(),
     });
+    void supabase.functions.invoke("dispatch-engagement-notifications", {
+      body: { limit: 100 },
+    });
     setNewComment("");
     setReplyTo(null);
     setReplyText("");
@@ -113,6 +118,9 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
       await supabase.from("comment_likes").delete().eq("comment_id", commentId).eq("profile_id", userId);
     } else {
       await supabase.from("comment_likes").insert({ comment_id: commentId, profile_id: userId });
+      void supabase.functions.invoke("dispatch-engagement-notifications", {
+        body: { limit: 100 },
+      });
     }
     fetchComments();
   };
@@ -123,8 +131,24 @@ const CommentSection = ({ articleId }: CommentSectionProps) => {
     }
   };
 
+  useEffect(() => {
+    if (!focusCommentId || loading) return;
+
+    const element = document.getElementById(`comment-${focusCommentId}`);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("comment-notification-flash");
+    const timeoutId = window.setTimeout(() => {
+      element.classList.remove("comment-notification-flash");
+      onFocusHandled?.();
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [comments, focusCommentId, loading, onFocusHandled]);
+
   const renderComment = (comment: Comment, isReply = false) => (
-    <div key={comment.id} className={`${isReply ? "ml-8 mt-3" : ""}`}>
+    <div id={`comment-${comment.id}`} key={comment.id} className={`${isReply ? "ml-8 mt-3" : ""} scroll-mt-28`}>
       <div className={`glass-panel-soft rounded-[24px] p-4 ${isReply ? "" : ""}`}>
         <div className="flex items-start gap-3">
           <Link to={`/profile/${comment.profile_id}`} className="flex-shrink-0 mt-0.5 hover:opacity-80 transition-opacity">

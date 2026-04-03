@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useBlocker, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
   BookOpen,
@@ -16,8 +16,25 @@ import {
   X,
   Youtube,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import ProfileAvatar from "@/components/ProfileAvatar";
@@ -28,6 +45,11 @@ import { ALL_LANGUAGES, SITE_LANGUAGES, useI18n, type ExtendedLanguage } from "@
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
+  ENGAGEMENT_NOTIFICATION_FREQUENCIES,
+  normalizeEngagementNotificationFrequency,
+} from "@/lib/email-notification-preferences";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -72,6 +94,23 @@ type StorySubscriptionRow = {
     slug: string;
   } | null;
 };
+
+type ProfileSnapshot = {
+  name: string;
+  bio: string;
+  avatarUrl: string;
+  preferredLanguage: ExtendedLanguage;
+  secondaryLanguage: string | null;
+  newsletterSubscribed: boolean;
+  socials: Record<SocialFieldKey, string>;
+  notificationPreferences: typeof DEFAULT_PROFILE_NOTIFICATION_PREFERENCES;
+};
+
+const createProfileSnapshot = (snapshot: ProfileSnapshot) =>
+  JSON.stringify({
+    ...snapshot,
+    socials: Object.fromEntries(Object.entries(snapshot.socials)),
+  });
 
 const COPY = {
   it: {
@@ -121,10 +160,23 @@ const COPY = {
       newsletterTitle: "Aggiornamenti editoriali via email",
       newsletterHint:
         "Attiva per ricevere nuovi articoli, digest e comunicazioni del progetto nella tua casella.",
+      likeNotificationsTitle: "Notifiche like",
+      likeNotificationsHint:
+        "Scegli se ricevere una mail per ogni like o un riepilogo periodico dei like ricevuti su articoli e commenti.",
+      commentNotificationsTitle: "Notifiche commenti",
+      commentNotificationsHint:
+        "Scegli la frequenza per nuovi commenti ai tuoi articoli e risposte ai tuoi commenti.",
     },
     newsletter: {
       on: "Iscritta",
       off: "Non iscritta",
+    },
+    notificationFrequency: {
+      instant: "Una mail per ognuno",
+      daily: "Recap giornaliero",
+      weekly: "Recap settimanale",
+      monthly: "Recap mensile",
+      none: "Nessuna notifica",
     },
     subscription: {
       empty: "Non stai seguendo nessuna storia al momento.",
@@ -135,12 +187,20 @@ const COPY = {
     actions: {
       save: "Salva modifiche",
       saving: "Salvataggio...",
+      saveAndExit: "Salva ed esci",
+      leaveWithoutSaving: "Esci senza salvare",
+      stayHere: "Resta qui",
       upload: "Upload...",
       avatarReady: "Foto profilo pronta. Salva il profilo per pubblicarla.",
       avatarError: "Impossibile caricare la foto profilo.",
       invalidImage: "Seleziona un file immagine valido.",
       saveSuccess: "Profilo aggiornato.",
       saveError: "Impossibile salvare il profilo.",
+      dirtyBadge: "Modifiche non salvate",
+    },
+    prompt: {
+      title: "Hai modifiche non salvate",
+      text: "Se lasci questa pagina adesso perdi le modifiche al profilo. Puoi uscire senza salvare oppure salvare prima di continuare.",
     },
     misc: {
       noSecondaryLanguage: "Nessuna",
@@ -193,10 +253,23 @@ const COPY = {
       newsletterTitle: "Editorial updates by email",
       newsletterHint:
         "Enable this to receive new articles, digests, and project updates in your inbox.",
+      likeNotificationsTitle: "Like notifications",
+      likeNotificationsHint:
+        "Choose whether to receive one email per like or a periodic summary for likes on your articles and comments.",
+      commentNotificationsTitle: "Comment notifications",
+      commentNotificationsHint:
+        "Choose the delivery cadence for new comments on your articles and replies to your comments.",
     },
     newsletter: {
       on: "Subscribed",
       off: "Off",
+    },
+    notificationFrequency: {
+      instant: "One email each",
+      daily: "Daily digest",
+      weekly: "Weekly digest",
+      monthly: "Monthly digest",
+      none: "No notifications",
     },
     subscription: {
       empty: "You are not following any stories right now.",
@@ -207,12 +280,20 @@ const COPY = {
     actions: {
       save: "Save changes",
       saving: "Saving...",
+      saveAndExit: "Save and leave",
+      leaveWithoutSaving: "Leave without saving",
+      stayHere: "Stay here",
       upload: "Upload...",
       avatarReady: "Profile photo ready. Save the profile to publish it.",
       avatarError: "Unable to upload the profile photo.",
       invalidImage: "Select a valid image file.",
       saveSuccess: "Profile updated.",
       saveError: "Unable to save the profile.",
+      dirtyBadge: "Unsaved changes",
+    },
+    prompt: {
+      title: "You have unsaved changes",
+      text: "If you leave this page now you will lose your profile edits. You can leave without saving or save before continuing.",
     },
     misc: {
       noSecondaryLanguage: "None",
@@ -224,6 +305,7 @@ const AdminProfile = () => {
   const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const initialSnapshotRef = useRef<string>("");
   const [saving, setSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [name, setName] = useState("");
@@ -235,12 +317,17 @@ const AdminProfile = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [loadedNewsletterSubscribed, setLoadedNewsletterSubscribed] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] = useState(
+    DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
+  );
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
   const [storySubscriptions, setStorySubscriptions] = useState<
     Array<{ id: string; story_id: string; story: { title_it: string; title_en: string; slug: string } }>
   >([]);
   const [removingStoryId, setRemovingStoryId] = useState<string | null>(null);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
   const [socials, setSocials] = useState<Record<SocialFieldKey, string>>({
     social_instagram: "",
     social_youtube: "",
@@ -261,6 +348,18 @@ const AdminProfile = () => {
   const secondaryLanguageLabel = secondaryLanguage
     ? ALL_LANGUAGES.find((language) => language.code === secondaryLanguage)?.label ?? secondaryLanguage
     : copy.misc.noSecondaryLanguage;
+  const currentSnapshot = createProfileSnapshot({
+    name,
+    bio,
+    avatarUrl,
+    preferredLanguage,
+    secondaryLanguage: isSiteNative ? null : secondaryLanguage,
+    newsletterSubscribed,
+    socials,
+    notificationPreferences,
+  });
+  const isDirty = profileLoaded && currentSnapshot !== initialSnapshotRef.current;
+  const blocker = useBlocker(isDirty && !saving && !saveAndLeavePending);
 
   const socialFields: Array<{
     key: SocialFieldKey;
@@ -284,6 +383,10 @@ const AdminProfile = () => {
     { label: copy.stats.socialLinks, value: String(activeSocialCount).padStart(2, "0"), icon: LinkIcon },
     { label: copy.stats.newsletter, value: newsletterSubscribed ? copy.newsletter.on : copy.newsletter.off, icon: Mail },
   ];
+  const notificationFrequencyOptions = ENGAGEMENT_NOTIFICATION_FREQUENCIES.map((value) => ({
+    value,
+    label: copy.notificationFrequency[value],
+  }));
 
   const loadNewsletterState = useCallback(
     async (userId: string, currentEmail: string) => {
@@ -299,7 +402,7 @@ const AdminProfile = () => {
         const nextSubscribed = Boolean(newsletterState?.subscribed);
         setNewsletterSubscribed(nextSubscribed);
         setLoadedNewsletterSubscribed(nextSubscribed);
-        return;
+        return nextSubscribed;
       }
 
       console.error("Newsletter subscription load via function failed:", newsletterError);
@@ -313,12 +416,13 @@ const AdminProfile = () => {
 
       if (fallbackError) {
         console.error("Newsletter subscription fallback load error:", fallbackError);
-        return;
+        return false;
       }
 
       const nextSubscribed = Boolean(fallbackSubscription?.subscribed);
       setNewsletterSubscribed(nextSubscribed);
       setLoadedNewsletterSubscribed(nextSubscribed);
+      return nextSubscribed;
     },
     [],
   );
@@ -459,7 +563,61 @@ const AdminProfile = () => {
         });
       }
 
-      await loadNewsletterState(userId, currentEmail);
+      const loadedName = data?.name || "";
+      const loadedBio = data?.bio || "";
+      const loadedAvatarUrl = data?.avatar_url || "";
+      const loadedPreferredLanguage = (data?.preferred_language as ExtendedLanguage | null) || "it";
+      const loadedSecondaryLanguage = data?.secondary_language || null;
+      const loadedSocials: Record<SocialFieldKey, string> = {
+        social_instagram: data?.social_instagram || "",
+        social_youtube: data?.social_youtube || "",
+        social_tiktok: data?.social_tiktok || "",
+        social_facebook: data?.social_facebook || "",
+        social_x: data?.social_x || "",
+        social_linkedin: data?.social_linkedin || "",
+        social_website: data?.social_website || "",
+        social_seapeople: data?.social_seapeople || "",
+      };
+
+      const loadedNewsletterSubscribed = await loadNewsletterState(userId, currentEmail);
+
+      const { data: preferenceRow, error: preferenceError } = await supabase
+        .from("email_notification_preferences")
+        .select("like_notifications_frequency, comment_notifications_frequency")
+        .eq("email", currentEmail.trim().toLowerCase())
+        .maybeSingle();
+
+      if (preferenceError) {
+        console.error("Notification preference load error:", preferenceError);
+      }
+
+      const loadedNotificationPreferences = preferenceRow
+        ? {
+          like_notifications_frequency: normalizeEngagementNotificationFrequency(
+            preferenceRow.like_notifications_frequency,
+          ),
+          comment_notifications_frequency: normalizeEngagementNotificationFrequency(
+            preferenceRow.comment_notifications_frequency,
+          ),
+        }
+        : DEFAULT_PROFILE_NOTIFICATION_PREFERENCES;
+
+      if (preferenceRow) {
+        setNotificationPreferences(loadedNotificationPreferences);
+      }
+
+      initialSnapshotRef.current = createProfileSnapshot({
+        name: loadedName,
+        bio: loadedBio,
+        avatarUrl: loadedAvatarUrl,
+        preferredLanguage: loadedPreferredLanguage,
+        secondaryLanguage: SITE_LANGUAGES.includes(loadedPreferredLanguage as "it" | "en")
+          ? null
+          : loadedSecondaryLanguage,
+        newsletterSubscribed: loadedNewsletterSubscribed,
+        socials: loadedSocials,
+        notificationPreferences: loadedNotificationPreferences,
+      });
 
       const { data: storySubs, error: storySubsError } = await supabase
         .from("story_subscriptions")
@@ -511,6 +669,23 @@ const AdminProfile = () => {
       }
     };
   }, [pendingAvatarUrl]);
+
+  useEffect(() => {
+    if (blocker.state === "blocked") {
+      setLeaveDialogOpen(true);
+    }
+  }, [blocker.state]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty || saving || saveAndLeavePending) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, saveAndLeavePending, saving]);
 
   const resetPendingAvatar = () => {
     setPendingAvatarUrl(null);
@@ -575,13 +750,14 @@ const AdminProfile = () => {
     }
   };
 
-  const saveProfile = async () => {
-    if (!session) return;
+  const saveProfile = async (options?: { showSuccessToast?: boolean }) => {
+    if (!session) return false;
     setSaving(true);
     const userId = session.user.id;
     const currentEmail = (session.user.email || email).trim().toLowerCase();
     let profileSaved = false;
     let newsletterSaved = false;
+    let notificationPreferencesSaved = false;
     let newsletterHandledByBackend = false;
 
     try {
@@ -608,6 +784,8 @@ const AdminProfile = () => {
             preferred_language: preferredLanguage,
             secondary_language: isSiteNative ? null : secondaryLanguage,
             newsletter_subscribed: newsletterSubscribed,
+            like_notifications_frequency: notificationPreferences.like_notifications_frequency,
+            comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
             ...socials,
           },
         });
@@ -617,6 +795,7 @@ const AdminProfile = () => {
         } else {
           profileSaved = true;
           newsletterSaved = true;
+          notificationPreferencesSaved = true;
         }
       } else {
         profileSaved = true;
@@ -632,31 +811,83 @@ const AdminProfile = () => {
         }
       }
 
+      if (!notificationPreferencesSaved) {
+        const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
+          .from("email_notification_preferences")
+          .select("newsletter_enabled, digest_enabled, story_notifications_enabled")
+          .eq("email", currentEmail)
+          .maybeSingle();
+
+        if (currentPreferenceError) {
+          console.error("Notification preference baseline load error:", currentPreferenceError);
+        }
+
+        const { error: preferenceError } = await supabase
+          .from("email_notification_preferences")
+          .upsert({
+            email: currentEmail,
+            newsletter_enabled: currentPreferenceRow?.newsletter_enabled ?? newsletterSubscribed,
+            digest_enabled: currentPreferenceRow?.digest_enabled ?? newsletterSubscribed,
+            story_notifications_enabled: currentPreferenceRow?.story_notifications_enabled ?? true,
+            like_notifications_frequency: notificationPreferences.like_notifications_frequency,
+            comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (preferenceError) {
+          console.error("Notification preference save error:", preferenceError);
+        } else {
+          notificationPreferencesSaved = true;
+        }
+      }
+
       if (newsletterSaved) {
         setLoadedNewsletterSubscribed(newsletterSubscribed);
       }
 
-      if (profileSaved && newsletterSaved) {
+      if (profileSaved && newsletterSaved && notificationPreferencesSaved) {
         if (!loadedNewsletterSubscribed && newsletterSubscribed && !newsletterHandledByBackend) {
           toast.warning(
             lang === "en"
               ? "Profile saved and subscription recorded, but the welcome email was not sent because the email service did not respond."
               : "Profilo salvato e iscrizione registrata, ma la mail di benvenuto non è stata inviata perché il servizio email non ha risposto.",
           );
-          return;
+          initialSnapshotRef.current = createProfileSnapshot({
+            name,
+            bio,
+            avatarUrl,
+            preferredLanguage,
+            secondaryLanguage: isSiteNative ? null : secondaryLanguage,
+            newsletterSubscribed,
+            socials,
+            notificationPreferences,
+          });
+          return true;
         }
 
-        toast.success(copy.actions.saveSuccess);
-        return;
+        initialSnapshotRef.current = createProfileSnapshot({
+          name,
+          bio,
+          avatarUrl,
+          preferredLanguage,
+          secondaryLanguage: isSiteNative ? null : secondaryLanguage,
+          newsletterSubscribed,
+          socials,
+          notificationPreferences,
+        });
+        if (options?.showSuccessToast !== false) {
+          toast.success(copy.actions.saveSuccess);
+        }
+        return true;
       }
 
-      if (!profileSaved && newsletterSaved) {
+      if (!profileSaved && newsletterSaved && notificationPreferencesSaved) {
         toast.error(
           lang === "en"
             ? "Newsletter updated, but the profile could not be saved."
             : "Newsletter aggiornata, ma il profilo non è stato salvato.",
         );
-        return;
+        return false;
       }
 
       if (profileSaved && !newsletterSaved) {
@@ -665,7 +896,16 @@ const AdminProfile = () => {
             ? "Profile saved, but the newsletter subscription could not be updated."
             : "Profilo salvato, ma l'iscrizione newsletter non è stata aggiornata.",
         );
-        return;
+        return false;
+      }
+
+      if (profileSaved && newsletterSaved && !notificationPreferencesSaved) {
+        toast.error(
+          lang === "en"
+            ? "Profile saved, but engagement notification preferences could not be updated."
+            : "Profilo salvato, ma le preferenze notifiche di like e commenti non sono state aggiornate.",
+        );
+        return false;
       }
     } catch (error) {
       console.error("Profile save error:", error);
@@ -674,6 +914,36 @@ const AdminProfile = () => {
     }
 
     toast.error(copy.actions.saveError);
+    return false;
+  };
+
+  const handleStayOnPage = () => {
+    setLeaveDialogOpen(false);
+    if (blocker.state === "blocked") {
+      blocker.reset();
+    }
+  };
+
+  const handleLeaveWithoutSaving = () => {
+    setLeaveDialogOpen(false);
+    if (blocker.state === "blocked") {
+      blocker.proceed();
+    }
+  };
+
+  const handleSaveAndLeave = async () => {
+    setSaveAndLeavePending(true);
+    const didSave = await saveProfile({ showSuccessToast: false });
+
+    if (didSave) {
+      setLeaveDialogOpen(false);
+      if (blocker.state === "blocked") {
+        blocker.proceed();
+      }
+      toast.success(copy.actions.saveSuccess);
+    }
+
+    setSaveAndLeavePending(false);
   };
 
   if (authLoading || (!profileLoaded && session)) {
@@ -979,6 +1249,68 @@ const AdminProfile = () => {
                 </div>
 
                 <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="space-y-3">
+                    <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {copy.fields.likeNotificationsTitle}
+                    </p>
+                    <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                      {copy.fields.likeNotificationsHint}
+                    </p>
+                    <Select
+                      value={notificationPreferences.like_notifications_frequency}
+                      onValueChange={(value) =>
+                        setNotificationPreferences((current) => ({
+                          ...current,
+                          like_notifications_frequency: normalizeEngagementNotificationFrequency(value),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {notificationFrequencyOptions.map((option) => (
+                          <SelectItem key={`like-${option.value}`} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="space-y-3">
+                    <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {copy.fields.commentNotificationsTitle}
+                    </p>
+                    <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                      {copy.fields.commentNotificationsHint}
+                    </p>
+                    <Select
+                      value={notificationPreferences.comment_notifications_frequency}
+                      onValueChange={(value) =>
+                        setNotificationPreferences((current) => ({
+                          ...current,
+                          comment_notifications_frequency: normalizeEngagementNotificationFrequency(value),
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {notificationFrequencyOptions.map((option) => (
+                          <SelectItem key={`comment-${option.value}`} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
                   <div className="flex items-center gap-3">
                     <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
                       <UserRound size={16} className="text-accent" />
@@ -1046,28 +1378,31 @@ const AdminProfile = () => {
           </div>
         </section>
 
-        <section className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2 max-w-2xl">
-              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">
-                {copy.sections.saveEyebrow}
-              </p>
-              <h2 className="editorial-heading text-2xl md:text-3xl">{copy.sections.saveTitle}</h2>
-              <p className="text-sm font-sans text-muted-foreground leading-relaxed">{copy.sections.saveText}</p>
-            </div>
+      </div>
 
+      {isDirty && (
+        <div className="fixed inset-x-4 bottom-4 z-40 md:inset-x-auto md:right-6 md:bottom-6">
+          <div className="ml-auto flex items-center justify-between gap-4 rounded-full border border-white/70 bg-[linear-gradient(145deg,rgba(20,33,54,0.94),rgba(39,62,96,0.9))] px-4 py-3 text-white shadow-[0_24px_56px_rgba(15,23,42,0.28)] backdrop-blur-xl md:min-w-[360px]">
+            <div className="min-w-0">
+              <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/65">
+                {copy.actions.dirtyBadge}
+              </p>
+              <p className="text-sm font-sans text-white/90">
+                {saving ? copy.actions.saving : copy.actions.save}
+              </p>
+            </div>
             <Button
               type="button"
-              onClick={saveProfile}
-              disabled={saving || uploadingAvatar}
-              className="h-12 rounded-full px-6 text-sm shadow-[0_18px_40px_rgba(15,23,42,0.14)]"
+              onClick={() => void saveProfile()}
+              disabled={saving || uploadingAvatar || saveAndLeavePending}
+              className="h-11 rounded-full border border-white/20 bg-white text-primary hover:bg-white/92"
             >
               <Save size={15} />
               {saving ? copy.actions.saving : copy.actions.save}
             </Button>
           </div>
-        </section>
-      </div>
+        </div>
+      )}
 
       <AvatarCropDialog
         open={avatarCropOpen}
@@ -1080,6 +1415,45 @@ const AdminProfile = () => {
         onCancel={resetPendingAvatar}
         onConfirm={handleAvatarUpload}
       />
+
+      <AlertDialog open={leaveDialogOpen}>
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-white/20 bg-[linear-gradient(160deg,rgba(255,255,255,0.94),rgba(247,245,239,0.92))] shadow-[0_28px_90px_rgba(15,23,42,0.18)]">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">
+              {copy.prompt.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="font-sans text-sm leading-relaxed text-foreground/72">
+              {copy.prompt.text}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:justify-end">
+            <AlertDialogCancel
+              onClick={handleStayOnPage}
+              className="mt-0 rounded-full border-white/60 bg-white/70 hover:bg-white"
+            >
+              {copy.actions.stayHere}
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleLeaveWithoutSaving}
+              className="rounded-full border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              {copy.actions.leaveWithoutSaving}
+            </Button>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleSaveAndLeave();
+              }}
+              className="rounded-full"
+              disabled={saving || saveAndLeavePending || uploadingAvatar}
+            >
+              {saveAndLeavePending ? copy.actions.saving : copy.actions.saveAndExit}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

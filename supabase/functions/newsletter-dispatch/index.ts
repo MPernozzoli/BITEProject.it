@@ -904,5 +904,28 @@ Deno.serve(async (req) => {
     console.error('Failed to process weekly digest automation', error)
   }
 
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/dispatch-engagement-notifications`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ limit: 250 }),
+      }
+    )
+
+    if (!response.ok) {
+      console.error(
+        'Failed to process engagement notification dispatch',
+        await response.text()
+      )
+    }
+  } catch (error) {
+    console.error('Failed to invoke engagement notification dispatch', error)
+  }
+
   return jsonResponse({ success: true, ...summary })
 })

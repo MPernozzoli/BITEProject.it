@@ -376,30 +376,127 @@ export type Database = {
       }
       email_notification_preferences: {
         Row: {
+          comment_notifications_frequency: string
           created_at: string
           digest_enabled: boolean
           email: string
+          like_notifications_frequency: string
           newsletter_enabled: boolean
           story_notifications_enabled: boolean
           updated_at: string
         }
         Insert: {
+          comment_notifications_frequency?: string
           created_at?: string
           digest_enabled?: boolean
           email: string
+          like_notifications_frequency?: string
           newsletter_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }
         Update: {
+          comment_notifications_frequency?: string
           created_at?: string
           digest_enabled?: boolean
           email?: string
+          like_notifications_frequency?: string
           newsletter_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }
         Relationships: []
+      }
+      engagement_notifications: {
+        Row: {
+          actor_profile_id: string | null
+          article_id: string
+          comment_id: string | null
+          created_at: string
+          emailed_at: string | null
+          event_type: string
+          id: string
+          notification_category: string
+          read_at: string | null
+          processed_at: string | null
+          processing_note: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Insert: {
+          actor_profile_id?: string | null
+          article_id: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type: string
+          id?: string
+          notification_category: string
+          read_at?: string | null
+          processed_at?: string | null
+          processing_note?: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Update: {
+          actor_profile_id?: string | null
+          article_id?: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type?: string
+          id?: string
+          notification_category?: string
+          read_at?: string | null
+          processed_at?: string | null
+          processing_note?: string | null
+          recipient_profile_id?: string
+          source_record_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_send_log: {
         Row: {

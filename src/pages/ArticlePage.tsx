@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -54,11 +54,14 @@ type StoryChapter = {
 
 const ArticlePage = () => {
   const { slug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { lang } = useI18n();
   const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
   const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+  const focusedCommentId = searchParams.get("comment");
+  const focusTarget = searchParams.get("focus");
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -165,6 +168,34 @@ const ArticlePage = () => {
       next: idx < storyChapters.length - 1 ? storyChapters[idx + 1] : null,
     };
   }, [article?.id, storyChapters]);
+
+  useEffect(() => {
+    if (focusTarget !== "likes") return;
+
+    const element = document.getElementById("article-engagement-panel");
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("comment-notification-flash");
+
+    const timeoutId = window.setTimeout(() => {
+      element.classList.remove("comment-notification-flash");
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("focus");
+      nextParams.delete("notification");
+      setSearchParams(nextParams, { replace: true });
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [focusTarget, searchParams, setSearchParams]);
+
+  const handleCommentFocusHandled = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("comment");
+    nextParams.delete("focus");
+    nextParams.delete("notification");
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const coverFocal = useMemo(() => {
     if (!article) return clampCoverFocal(50, 50, 1);
@@ -716,12 +747,19 @@ const ArticlePage = () => {
                 </p>
               )}
 
-              <div className="glass-panel-soft rounded-[24px] flex items-center gap-6 mt-12 p-4 md:p-5">
+              <div
+                id="article-engagement-panel"
+                className="glass-panel-soft rounded-[24px] flex items-center gap-6 mt-12 p-4 md:p-5 scroll-mt-28"
+              >
                 <LikeButton articleId={article.id} />
                 <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
               </div>
 
-              <CommentSection articleId={article.id} />
+              <CommentSection
+                articleId={article.id}
+                focusCommentId={focusedCommentId}
+                onFocusHandled={handleCommentFocusHandled}
+              />
 
               {tags.length > 0 && (
                 <footer className="mt-14">

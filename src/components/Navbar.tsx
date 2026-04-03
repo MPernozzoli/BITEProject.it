@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ArrowRight, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import ProfileNotificationsMenu from "@/components/ProfileNotificationsMenu";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -25,13 +26,15 @@ const PAGE_SUBTITLES: Record<string, string> = {
 const Navbar = () => {
   const { t, lang, setLang } = useI18n();
   const { session, isAdmin, loading: authLoading } = useAuth();
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profile, setProfile] = useState<{
     name: string;
     avatar_url: string | null;
   } | null>(null);
   const [logoHovered, setLogoHovered] = useState(false);
+  const [desktopProfileMenuOpen, setDesktopProfileMenuOpen] = useState(false);
+  const [mobileProfileMenuOpen, setMobileProfileMenuOpen] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -43,13 +46,9 @@ const Navbar = () => {
     null;
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
     setMobileOpen(false);
+    setDesktopProfileMenuOpen(false);
+    setMobileProfileMenuOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -65,6 +64,7 @@ const Navbar = () => {
     const userId = session?.user?.id;
     if (!userId) {
       setProfile(null);
+      setUnreadNotificationCount(0);
       return;
     }
     void loadProfile(userId);
@@ -158,22 +158,11 @@ const Navbar = () => {
     },
   ];
 
-  const navShellClass = mobileOpen
-    ? "glass-panel-dark border-white/16 shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
-    : scrolled
-      ? "glass-panel border-white/55 shadow-[0_26px_80px_rgba(15,23,42,0.14)]"
-      : "glass-panel-dark border-white/14 shadow-[0_28px_80px_rgba(0,0,0,0.28)]";
-
-  const navTextClass = mobileOpen
-    ? "text-white"
-    : scrolled
-      ? "text-foreground"
-      : "text-white";
-  const mobileButtonClass = mobileOpen
-    ? "glass-chip-dark border-white/16 text-white shadow-[0_18px_40px_-24px_rgba(0,0,0,0.9)]"
-    : scrolled
-      ? "glass-chip border-white/60 text-foreground shadow-sm"
-      : "glass-chip-dark border-white/18 text-white";
+  const navShellClass =
+    "glass-panel border-white/60 shadow-[0_26px_80px_rgba(15,23,42,0.14)]";
+  const navTextClass = "nav-adaptive-ink";
+  const mobileButtonClass =
+    "glass-chip nav-adaptive-ink border-white/60 shadow-sm";
   const authCardText =
     lang === "it"
       ? "Accedi per gestire profilo, contenuti e impostazioni."
@@ -265,14 +254,11 @@ const Navbar = () => {
               key={link.to}
               to={link.to}
               className={cn(
-                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-all duration-300 hover:text-accent",
-                scrolled
-                  ? isLinkActive(link.to)
-                    ? "glass-chip text-foreground font-medium"
-                    : "text-muted-foreground"
-                  : isLinkActive(link.to)
-                    ? "glass-chip-dark text-white font-medium"
-                    : "text-white/75",
+                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-all duration-300",
+                navTextClass,
+                isLinkActive(link.to)
+                  ? "glass-chip font-medium"
+                  : "opacity-72 hover:opacity-100",
               )}
             >
               {link.label}
@@ -280,7 +266,7 @@ const Navbar = () => {
           ))}
 
           <div
-            className={`w-px h-5 mx-1 ${scrolled ? "bg-border" : "bg-white/30"}`}
+            className="nav-adaptive-divider mx-1 h-5 w-px"
           />
 
           {isGuest && (
@@ -289,9 +275,8 @@ const Navbar = () => {
               aria-label={languageToggleAriaLabel}
               className={cn(
                 "rounded-full px-3.5 py-2 text-xs font-sans uppercase tracking-[0.24em] transition-colors",
-                scrolled
-                  ? "glass-chip text-muted-foreground hover:text-foreground"
-                  : "glass-chip-dark text-white/80 hover:text-white",
+                mobileButtonClass,
+                "h-9 opacity-80 hover:opacity-100",
               )}
             >
               {lang.toUpperCase()}
@@ -305,13 +290,13 @@ const Navbar = () => {
               aria-hidden
             />
           ) : session ? (
-            <DropdownMenu>
+            <DropdownMenu open={desktopProfileMenuOpen} onOpenChange={setDesktopProfileMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-sans font-medium tracking-wide transition-opacity focus:outline-none shrink-0",
-                    scrolled ? "glass-chip" : "glass-chip-dark text-white",
+                    "relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-xs font-sans font-medium tracking-wide transition-opacity focus:outline-none shrink-0",
+                    mobileButtonClass,
                   )}
                 >
                   <ProfileAvatar
@@ -320,12 +305,23 @@ const Navbar = () => {
                     imgClassName="w-8 h-8 rounded-full object-cover"
                     fallback={initials}
                   />
+                  {unreadNotificationCount > 0 ? (
+                    <span className="absolute right-0 top-0 h-3 w-3 rounded-full border border-white bg-destructive shadow-[0_0_0_2px_rgba(255,255,255,0.65)]" />
+                  ) : null}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="glass-panel mt-2 w-52 rounded-[1.5rem] border-white/55 p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
+              className="glass-panel mt-2 w-[22rem] rounded-[1.5rem] border-white/55 p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
               >
+                <ProfileNotificationsMenu
+                  sessionUserId={session.user.id}
+                  lang={lang === "en" ? "en" : "it"}
+                  open={desktopProfileMenuOpen}
+                  onNavigate={() => setDesktopProfileMenuOpen(false)}
+                  onUnreadChange={setUnreadNotificationCount}
+                />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link to="/profile" className="flex items-center gap-2">
                     <User size={14} />
@@ -360,9 +356,8 @@ const Navbar = () => {
               to="/login"
               className={cn(
                 "rounded-full px-3.5 py-2 text-xs font-sans tracking-wide transition-colors",
-                scrolled
-                  ? "glass-chip text-muted-foreground hover:text-foreground"
-                  : "glass-chip-dark text-white/80 hover:text-white",
+                mobileButtonClass,
+                "opacity-80 hover:opacity-100",
               )}
             >
               {lang === "it" ? "Accedi" : "Login"}
@@ -387,20 +382,67 @@ const Navbar = () => {
           )}
 
           {!authLoading && session && (
-            <Link
-              to="/profile"
-              className={cn(
-                "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[10px] font-sans font-medium transition-all duration-300",
-                mobileButtonClass,
-              )}
-            >
-              <ProfileAvatar
-                name={displayName}
-                avatarUrl={displayAvatarUrl}
-                imgClassName="h-9 w-9 rounded-full object-cover"
-                fallback={initials}
-              />
-            </Link>
+            <DropdownMenu open={mobileProfileMenuOpen} onOpenChange={setMobileProfileMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[10px] font-sans font-medium transition-all duration-300",
+                    mobileButtonClass,
+                  )}
+                >
+                  <ProfileAvatar
+                    name={displayName}
+                    avatarUrl={displayAvatarUrl}
+                    imgClassName="h-9 w-9 rounded-full object-cover"
+                    fallback={initials}
+                  />
+                  {unreadNotificationCount > 0 ? (
+                    <span className="absolute right-0 top-0 h-3 w-3 rounded-full border border-white bg-destructive shadow-[0_0_0_2px_rgba(255,255,255,0.65)]" />
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="glass-panel mt-2 w-[22rem] rounded-[1.5rem] border-white/55 p-1.5 shadow-[0_24px_70px_rgba(15,23,42,0.16)]"
+              >
+                <ProfileNotificationsMenu
+                  sessionUserId={session.user.id}
+                  lang={lang === "en" ? "en" : "it"}
+                  open={mobileProfileMenuOpen}
+                  onNavigate={() => setMobileProfileMenuOpen(false)}
+                  onUnreadChange={setUnreadNotificationCount}
+                />
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="flex items-center gap-2">
+                    <User size={14} />
+                    <span>{lang === "it" ? "Profilo" : "Profile"}</span>
+                  </Link>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin" className="flex items-center gap-2">
+                      <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
+                        ⚙
+                      </span>
+                      <span>Dashboard</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={toggleLanguage}>
+                  <span>{languageToggleMenuLabel}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
+                  <LogOut size={14} />
+                  <span>{lang === "it" ? "Esci" : "Logout"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <button

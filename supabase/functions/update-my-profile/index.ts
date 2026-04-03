@@ -42,6 +42,28 @@ function isMissingRelationError(error: { code?: string; message?: string } | nul
   )
 }
 
+function readNotificationFrequency(value: unknown):
+  | 'instant'
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'none'
+  | undefined {
+  if (typeof value !== 'string') return undefined
+
+  const normalized = value.trim().toLowerCase()
+  switch (normalized) {
+    case 'instant':
+    case 'daily':
+    case 'weekly':
+    case 'monthly':
+    case 'none':
+      return normalized
+    default:
+      return undefined
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -89,6 +111,12 @@ Deno.serve(async (req) => {
   const secondaryLanguage = readNullableString(body.secondary_language, 8)
   const subscribed = body.newsletter_subscribed === true
   const now = new Date().toISOString()
+  const likeNotificationsFrequency = readNotificationFrequency(
+    body.like_notifications_frequency
+  )
+  const commentNotificationsFrequency = readNotificationFrequency(
+    body.comment_notifications_frequency
+  )
 
   const profilePayload = {
     id: user.id,
@@ -129,7 +157,9 @@ Deno.serve(async (req) => {
   const [{ data: preferenceRow, error: preferenceLookupError }, { data: existingSubscriber }] = await Promise.all([
     supabase
       .from('email_notification_preferences')
-      .select('newsletter_enabled, digest_enabled, story_notifications_enabled')
+      .select(
+        'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency'
+      )
       .eq('email', normalizedEmail)
       .maybeSingle(),
     supabase
@@ -139,7 +169,25 @@ Deno.serve(async (req) => {
       .maybeSingle(),
   ])
 
+  const currentPreferences = normalizeEmailNotificationPreferences(
+    isMissingRelationError(preferenceLookupError) ? null : preferenceRow
+  )
+  let nextPreferences = normalizeEmailNotificationPreferences({
+    ...currentPreferences,
+    like_notifications_frequency:
+      likeNotificationsFrequency ?? currentPreferences.like_notifications_frequency,
+    comment_notifications_frequency:
+      commentNotificationsFrequency ??
+      currentPreferences.comment_notifications_frequency,
+  })
+
   if (subscribed) {
+    nextPreferences = normalizeEmailNotificationPreferences({
+      ...nextPreferences,
+      newsletter_enabled: true,
+      digest_enabled: true,
+    })
+
     try {
       await activateNewsletterSubscription({
         supabase,
@@ -158,11 +206,8 @@ Deno.serve(async (req) => {
     }
   } else {
     const preferencesTableAvailable = !isMissingRelationError(preferenceLookupError)
-    const currentPreferences = normalizeEmailNotificationPreferences(
-      preferencesTableAvailable ? preferenceRow : null
-    )
-    const nextPreferences = normalizeEmailNotificationPreferences({
-      ...currentPreferences,
+    nextPreferences = normalizeEmailNotificationPreferences({
+      ...nextPreferences,
       newsletter_enabled: false,
       digest_enabled: false,
     })
@@ -245,6 +290,21 @@ Deno.serve(async (req) => {
       if (eventError) {
         console.error('Failed to record unsubscribe during profile save', eventError)
       }
+    }
+  }
+
+  if (!isMissingRelationError(preferenceLookupError)) {
+    const { error: preferenceSaveError } = await supabase
+      .from('email_notification_preferences')
+      .upsert({
+        email: normalizedEmail,
+        ...nextPreferences,
+        updated_at: now,
+      })
+
+    if (preferenceSaveError) {
+      console.error('Failed to save engagement notification preferences', preferenceSaveError)
+      return jsonResponse({ error: 'Failed to save email settings' }, 500)
     }
   }
 

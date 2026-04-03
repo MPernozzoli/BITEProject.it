@@ -13,10 +13,12 @@ import { template as newsletterSubscriptionConfirmation } from './newsletter-sub
 import { template as newsletterWelcome } from './newsletter-welcome.tsx'
 import { template as newsletterDigest } from './newsletter-digest.tsx'
 import { template as newChapterNotification } from './new-chapter-notification.tsx'
+import { template as engagementNotification } from './engagement-notification.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'newsletter-subscription-confirmation': newsletterSubscriptionConfirmation,
   'newsletter-welcome': newsletterWelcome,
   'newsletter-digest': newsletterDigest,
   'new-chapter-notification': newChapterNotification,
+  'engagement-notification': engagementNotification,
 }
