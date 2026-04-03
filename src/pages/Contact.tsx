@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { Instagram, Youtube } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,6 +67,58 @@ const Contact = () => {
   const [errors, setErrors] = useState<ContactFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const preloadContactFields = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user || cancelled) {
+        return;
+      }
+
+      let profileName: string | null = null;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (typeof profile?.name === "string" && profile.name.trim()) {
+        profileName = profile.name.trim();
+      }
+
+      const fallbackName =
+        typeof session.user.user_metadata?.name === "string" && session.user.user_metadata.name.trim()
+          ? session.user.user_metadata.name.trim()
+          : typeof session.user.user_metadata?.full_name === "string" && session.user.user_metadata.full_name.trim()
+            ? session.user.user_metadata.full_name.trim()
+            : "";
+
+      const nextName = profileName || fallbackName;
+      const nextEmail = session.user.email?.trim() || "";
+
+      if (cancelled || (!nextName && !nextEmail)) {
+        return;
+      }
+
+      setFormValues((current) => ({
+        ...current,
+        name: current.name.trim() ? current.name : nextName,
+        email: current.email.trim() ? current.email : nextEmail,
+      }));
+    };
+
+    void preloadContactFields();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fieldLabels = useMemo(
     () => ({

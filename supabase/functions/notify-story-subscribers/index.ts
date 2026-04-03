@@ -185,9 +185,44 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to load story subscriptions' }, 500)
   }
 
-  const profileIds = [...new Set((subscriptions ?? []).map((row) => row.profile_id))]
-  if (!profileIds.length) {
+  const { data: authorRows, error: authorError } = await supabase
+    .from('article_authors')
+    .select('profile_id')
+    .eq('article_id', articleId)
+
+  if (authorError) {
+    console.error('Failed to load article authors for story notification', authorError)
+    return jsonResponse({ error: 'Failed to load article authors' }, 500)
+  }
+
+  const subscribedProfileIds = [...new Set((subscriptions ?? []).map((row) => row.profile_id))]
+  if (!subscribedProfileIds.length) {
     return jsonResponse({ success: true, queued: 0, skipped: 0 })
+  }
+
+  const authorIds = new Set((authorRows ?? []).map((row) => row.profile_id))
+  const candidateProfileIds = subscribedProfileIds.filter((profileId) => !authorIds.has(profileId))
+
+  if (!candidateProfileIds.length) {
+    return jsonResponse({ success: true, queued: 0, failed: 0, skipped: 'authors_only' })
+  }
+
+  const { data: readRows, error: readError } = await supabase
+    .from('article_reads')
+    .select('profile_id')
+    .eq('article_id', articleId)
+    .in('profile_id', candidateProfileIds)
+
+  if (readError) {
+    console.error('Failed to load article reads for story notification', readError)
+    return jsonResponse({ error: 'Failed to load article reads' }, 500)
+  }
+
+  const readProfileIds = new Set((readRows ?? []).map((row) => row.profile_id))
+  const profileIds = candidateProfileIds.filter((profileId) => !readProfileIds.has(profileId))
+
+  if (!profileIds.length) {
+    return jsonResponse({ success: true, queued: 0, failed: 0, skipped: 'already_read' })
   }
 
   const { data: profiles, error: profileError } = await supabase
