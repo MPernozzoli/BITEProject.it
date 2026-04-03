@@ -353,7 +353,7 @@ async function markEventProcessed(
   eventId: string,
   processingNote: string
 ): Promise<void> {
-  await supabase
+  await (supabase as any)
     .from('newsletter_events')
     .update({
       processed_at: new Date().toISOString(),
