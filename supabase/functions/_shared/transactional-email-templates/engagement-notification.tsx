@@ -141,7 +141,8 @@ const EngagementNotificationEmail = ({
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
   const greetingName = buildGreetingName(recipientName)
-  const firstItem = items[0]
+  const safeItems = items ?? []
+  const firstItem = safeItems[0]
   const primaryUrl = firstItem?.articleUrl?.trim() || `${PUBLIC_SITE_URL}/journal`
 
   return (
