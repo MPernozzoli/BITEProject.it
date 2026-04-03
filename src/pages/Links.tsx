@@ -36,7 +36,7 @@ interface BioLink {
   description: string;
   descriptionEn: string;
   href: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<any>;
   featured?: boolean;
   internal?: boolean;
 }
