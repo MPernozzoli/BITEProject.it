@@ -135,7 +135,7 @@ const EngagementNotificationEmail = ({
   recipientName,
   category = 'comment',
   frequency = 'instant',
-  items = [],
+  items,
   unsubscribeUrl,
 }: EngagementNotificationProps) => {
   const lang = resolveEmailLanguage(language)
