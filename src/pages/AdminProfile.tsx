@@ -417,7 +417,21 @@ const AdminProfile = () => {
   const isInstalledApp = isRunningAsInstalledApp();
   const canUseWebPush = supportsWebPush();
   const pushInstallInstructions = getInstallInstructions(mobileOs, lang === "en" ? "en" : "it");
-  const pushPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined;
+  const [pushPublicKey, setPushPublicKey] = useState<string | undefined>(
+    (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined) || undefined
+  );
+
+  useEffect(() => {
+    if (pushPublicKey) return;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    if (!supabaseUrl) return;
+    fetch(`${supabaseUrl}/functions/v1/vapid-public-key`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.publicKey) setPushPublicKey(data.publicKey);
+      })
+      .catch(() => {});
+  }, [pushPublicKey]);
 
   const copy = COPY[lang === "en" ? "en" : "it"];
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
