@@ -416,157 +416,6 @@ export type Database = {
         }
         Relationships: []
       }
-      engagement_notifications: {
-        Row: {
-          actor_profile_id: string | null
-          article_id: string
-          comment_id: string | null
-          created_at: string
-          emailed_at: string | null
-          event_type: string
-          id: string
-          notification_category: string
-          push_sent_at: string | null
-          read_at: string | null
-          processed_at: string | null
-          processing_note: string | null
-          recipient_profile_id: string
-          source_record_id: string
-        }
-        Insert: {
-          actor_profile_id?: string | null
-          article_id: string
-          comment_id?: string | null
-          created_at?: string
-          emailed_at?: string | null
-          event_type: string
-          id?: string
-          notification_category: string
-          push_sent_at?: string | null
-          read_at?: string | null
-          processed_at?: string | null
-          processing_note?: string | null
-          recipient_profile_id: string
-          source_record_id: string
-        }
-        Update: {
-          actor_profile_id?: string | null
-          article_id?: string
-          comment_id?: string | null
-          created_at?: string
-          emailed_at?: string | null
-          event_type?: string
-          id?: string
-          notification_category?: string
-          push_sent_at?: string | null
-          read_at?: string | null
-          processed_at?: string | null
-          processing_note?: string | null
-          recipient_profile_id?: string
-          source_record_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
-            columns: ["actor_profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
-            columns: ["actor_profile_id"]
-            isOneToOne: false
-            referencedRelation: "public_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "engagement_notifications_article_id_fkey"
-            columns: ["article_id"]
-            isOneToOne: false
-            referencedRelation: "logbook_articles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "engagement_notifications_comment_id_fkey"
-            columns: ["comment_id"]
-            isOneToOne: false
-            referencedRelation: "article_comments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
-            columns: ["recipient_profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
-            columns: ["recipient_profile_id"]
-            isOneToOne: false
-            referencedRelation: "public_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      push_subscriptions: {
-        Row: {
-          auth: string
-          created_at: string
-          enabled: boolean
-          endpoint: string
-          expiration_time: string | null
-          id: string
-          last_seen_at: string
-          p256dh: string
-          profile_id: string
-          updated_at: string
-          user_agent: string | null
-        }
-        Insert: {
-          auth: string
-          created_at?: string
-          enabled?: boolean
-          endpoint: string
-          expiration_time?: string | null
-          id?: string
-          last_seen_at?: string
-          p256dh: string
-          profile_id: string
-          updated_at?: string
-          user_agent?: string | null
-        }
-        Update: {
-          auth?: string
-          created_at?: string
-          enabled?: boolean
-          endpoint?: string
-          expiration_time?: string | null
-          id?: string
-          last_seen_at?: string
-          p256dh?: string
-          profile_id?: string
-          updated_at?: string
-          user_agent?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "push_subscriptions_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "push_subscriptions_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "public_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       email_send_log: {
         Row: {
           created_at: string
@@ -653,6 +502,100 @@ export type Database = {
           used_at?: string | null
         }
         Relationships: []
+      }
+      engagement_notifications: {
+        Row: {
+          actor_profile_id: string | null
+          article_id: string
+          comment_id: string | null
+          created_at: string
+          emailed_at: string | null
+          event_type: string
+          id: string
+          notification_category: string
+          processed_at: string | null
+          processing_note: string | null
+          push_sent_at: string | null
+          read_at: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Insert: {
+          actor_profile_id?: string | null
+          article_id: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type: string
+          id?: string
+          notification_category: string
+          processed_at?: string | null
+          processing_note?: string | null
+          push_sent_at?: string | null
+          read_at?: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Update: {
+          actor_profile_id?: string | null
+          article_id?: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type?: string
+          id?: string
+          notification_category?: string
+          processed_at?: string | null
+          processing_note?: string | null
+          push_sent_at?: string | null
+          read_at?: string | null
+          recipient_profile_id?: string
+          source_record_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       logbook_articles: {
         Row: {
@@ -1013,6 +956,63 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          enabled: boolean
+          endpoint: string
+          expiration_time: string | null
+          id: string
+          last_seen_at: string
+          p256dh: string
+          profile_id: string
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          enabled?: boolean
+          endpoint: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh: string
+          profile_id: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          enabled?: boolean
+          endpoint?: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh?: string
+          profile_id?: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       route_legs: {
         Row: {
