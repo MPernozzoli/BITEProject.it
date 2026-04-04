@@ -284,6 +284,8 @@ interface AdminVoyageManagerProps {
 }
 
 const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
+const ADMIN_ROUTE_DRAFT_STORAGE_KEY = "bite_admin_route_draft";
+const ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY = "bite_admin_route_form_draft";
 const createLocalWaypointId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isLocalWaypointId = (waypointId: string) => waypointId.startsWith("local-");
 const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
@@ -305,16 +307,50 @@ const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
   }))
 );
 
+const loadStoredRouteDraft = () => {
+  if (typeof window === "undefined") return null as null | { selectedVoyageId: string; waypoints: VoyageWaypoint[] };
+  try {
+    const raw = window.sessionStorage.getItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { selectedVoyageId?: string; waypoints?: WaypointRecord[] };
+    if (!parsed.selectedVoyageId || !Array.isArray(parsed.waypoints)) return null;
+    return {
+      selectedVoyageId: parsed.selectedVoyageId,
+      waypoints: parsed.waypoints.map((waypoint) => normalizeWaypoint(waypoint)),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const loadStoredVoyageFormDraft = () => {
+  if (typeof window === "undefined") return null as null | { editingVoyageId: string | null; voyageForm: VoyageFormState };
+  try {
+    const raw = window.sessionStorage.getItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { editingVoyageId?: string | null; voyageForm?: VoyageFormState };
+    if (!parsed.voyageForm) return null;
+    return {
+      editingVoyageId: parsed.editingVoyageId ?? null,
+      voyageForm: parsed.voyageForm,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) => {
+  const initialStoredRouteDraft = loadStoredRouteDraft();
+  const initialStoredVoyageFormDraft = loadStoredVoyageFormDraft();
   const { lang } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [waypoints, setWaypoints] = useState<Record<string, VoyageWaypoint[]>>({});
-  const [selectedVoyageId, setSelectedVoyageId] = useState<string | null>(null);
-  const [showVoyageForm, setShowVoyageForm] = useState(false);
+  const [selectedVoyageId, setSelectedVoyageId] = useState<string | null>(initialStoredRouteDraft?.selectedVoyageId || null);
+  const [showVoyageForm, setShowVoyageForm] = useState(Boolean(initialStoredVoyageFormDraft));
   const [editingVoyage, setEditingVoyage] = useState<Voyage | null>(null);
-  const [voyageForm, setVoyageForm] = useState<VoyageFormState>(emptyVoyageForm);
+  const [voyageForm, setVoyageForm] = useState<VoyageFormState>(initialStoredVoyageFormDraft?.voyageForm || emptyVoyageForm);
   const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
   const [listSort, setListSort] = useState<VoyageListSort>(defaultVoyageListSort);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
@@ -329,6 +365,8 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const voyagesRef = useRef<Voyage[]>([]);
   const waypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
   const persistedWaypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
+  const storedRouteDraftRef = useRef(initialStoredRouteDraft);
+  const storedVoyageFormDraftRef = useRef(initialStoredVoyageFormDraft);
   const selectedVoyageRef = useRef<string | null>(null);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
@@ -396,12 +434,27 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       return [];
     }
 
-    return commitPersistedWaypoints(voyageId, (data || []).map((waypoint) => normalizeWaypoint(waypoint)));
-  }, [commitPersistedWaypoints]);
+    const persistedWaypoints = commitPersistedWaypoints(voyageId, (data || []).map((waypoint) => normalizeWaypoint(waypoint)));
+    const storedDraft = storedRouteDraftRef.current;
+    if (storedDraft?.selectedVoyageId === voyageId) {
+      return commitWaypoints(voyageId, storedDraft.waypoints);
+    }
+
+    return persistedWaypoints;
+  }, [commitPersistedWaypoints, commitWaypoints]);
 
   useEffect(() => {
     void fetchVoyages();
   }, [fetchVoyages]);
+
+  useEffect(() => {
+    const storedFormDraft = storedVoyageFormDraftRef.current;
+    if (!storedFormDraft) return;
+    if (!showVoyageForm) return;
+    if (!storedFormDraft.editingVoyageId) return;
+    const matchingVoyage = voyages.find((voyage) => voyage.id === storedFormDraft.editingVoyageId) || null;
+    setEditingVoyage(matchingVoyage);
+  }, [showVoyageForm, voyages]);
 
   const removeSegmentPreviewMarker = useCallback(() => {
     segmentPreviewMarkerRef.current?.remove();
@@ -1414,6 +1467,15 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     fitMapToWaypoints(loadedWaypoints);
   }, [cancelWaypointRelocation, fetchWaypoints, fitMapToWaypoints]);
 
+  useEffect(() => {
+    if (!selectedVoyageId) return;
+    if (waypointsRef.current[selectedVoyageId]?.length) return;
+    void (async () => {
+      const loadedWaypoints = await fetchWaypoints(selectedVoyageId);
+      fitMapToWaypoints(loadedWaypoints);
+    })();
+  }, [fetchWaypoints, fitMapToWaypoints, selectedVoyageId]);
+
   const openVoyageForm = useCallback((voyage?: Voyage) => {
     if (voyage) {
       const nextForm: VoyageFormState = {
@@ -1625,6 +1687,43 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     });
   }, [filteredVoyages, listSort.direction, listSort.field]);
   const hasActiveFilters = Object.values(listFilters).some(Boolean);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (selectedVoyageId && isRouteDraftDirty) {
+      const payload = {
+        selectedVoyageId,
+        waypoints: selectedWaypoints,
+      };
+      window.sessionStorage.setItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      storedRouteDraftRef.current = {
+        selectedVoyageId,
+        waypoints: selectedWaypoints,
+      };
+      return;
+    }
+
+    window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+    storedRouteDraftRef.current = null;
+  }, [isRouteDraftDirty, selectedVoyageId, selectedWaypoints]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (showVoyageForm) {
+      const payload = {
+        editingVoyageId: editingVoyage?.id ?? null,
+        voyageForm,
+      };
+      window.sessionStorage.setItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      storedVoyageFormDraftRef.current = payload;
+      return;
+    }
+
+    window.sessionStorage.removeItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+    storedVoyageFormDraftRef.current = null;
+  }, [editingVoyage?.id, showVoyageForm, voyageForm]);
 
   useEffect(() => {
     if (selectedVoyage?.type === "land") return;
