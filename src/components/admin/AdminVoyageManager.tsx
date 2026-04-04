@@ -286,6 +286,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const [voyageForm, setVoyageForm] = useState<VoyageFormState>(emptyVoyageForm);
   const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
+  const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -1597,7 +1598,6 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     [listFilters, voyages]
   );
   const hasActiveFilters = Object.values(listFilters).some(Boolean);
-  const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
   useEffect(() => {
     if (selectedVoyage?.type === "land") return;
