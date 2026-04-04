@@ -25,6 +25,16 @@ export function totalWaypointDistance(waypoints: { lat: number; lng: number }[])
   return total;
 }
 
+export function totalCoordinateDistanceKm(coordinates: [number, number][]): number {
+  let total = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const [previousLng, previousLat] = coordinates[index - 1];
+    const [currentLng, currentLat] = coordinates[index];
+    total += haversineNM(previousLat, previousLng, currentLat, currentLng) * 1.852;
+  }
+  return total;
+}
+
 // OSRM routing for land routes
 export async function fetchOSRMRoute(
   waypoints: { lat: number; lng: number }[]

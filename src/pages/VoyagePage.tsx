@@ -17,6 +17,7 @@ import {
   getPublicVoyageWaypoints,
   getVoyageIdFromRouteParam,
   normalizeWaypointMedia,
+  totalCoordinateDistanceKm,
   totalWaypointDistance,
   type GeoArticle,
   type Voyage,
@@ -109,7 +110,15 @@ const VoyagePage = () => {
   const arrivalEntry = publicWaypointEntries[publicWaypointEntries.length - 1];
   const departure = departureEntry?.waypoint;
   const arrival = arrivalEntry?.waypoint;
-  const totalNm = useMemo(() => Math.round(totalWaypointDistance(waypoints)), [waypoints]);
+  const routeDistance = useMemo(() => {
+    if (!voyage || waypoints.length < 2) return null;
+    if (voyage.type === "land") {
+      const coordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+      const distanceKm = Array.isArray(coordinates) && coordinates.length >= 2 ? totalCoordinateDistanceKm(coordinates) : 0;
+      return distanceKm > 0 ? { value: Math.round(distanceKm), unit: "KM" as const } : null;
+    }
+    return { value: Math.round(totalWaypointDistance(waypoints)), unit: "NM" as const };
+  }, [voyage, waypoints]);
   const canonicalPath = voyage ? buildVoyagePath(voyage) : voyageId ? `/voyages/${voyageId}` : "/voyages";
   const departureLabel = departureEntry
     ? getLocalizedWaypointName(departureEntry.waypoint, lang, departureEntry.originalIndex)
@@ -212,7 +221,7 @@ const VoyagePage = () => {
               </div>
               <div className="glass-panel-soft rounded-[24px] p-4">
                 <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">{lang === "it" ? "Distanza" : "Distance"}</p>
-                <p className="text-sm">{totalNm > 0 ? `${totalNm} NM` : "-"}</p>
+                <p className="text-sm">{routeDistance ? `${routeDistance.value} ${routeDistance.unit}` : "-"}</p>
               </div>
             </div>
           </div>

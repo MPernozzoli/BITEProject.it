@@ -34,7 +34,8 @@ interface ArticleMapAsideProps {
     zoom: number;
   } | null;
   primaryRouteCoordinates?: [number, number][] | null;
-  nauticalMiles?: number | null;
+  distanceValue?: number | null;
+  distanceUnit?: "NM" | "KM" | null;
 }
 
 const ArticleMapAside = ({
@@ -45,7 +46,8 @@ const ArticleMapAside = ({
   activeSceneId = null,
   camera = null,
   primaryRouteCoordinates = null,
-  nauticalMiles = null,
+  distanceValue = null,
+  distanceUnit = null,
 }: ArticleMapAsideProps) => {
   const { lang } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -460,7 +462,7 @@ const ArticleMapAside = ({
               />
             ) : null}
           </div>
-          {(activeScene?.description || activeScene?.windLabel || (nauticalMiles ?? 0) > 0) && (
+          {(activeScene?.description || activeScene?.windLabel || (distanceValue ?? 0) > 0) && (
             <div className="border-t glass-divider px-4 py-3 space-y-2">
               {activeScene?.description && (
                 <p className="text-xs font-sans leading-relaxed text-muted-foreground">{activeScene.description}</p>
@@ -472,10 +474,10 @@ const ArticleMapAside = ({
                     {activeScene.windLabel}
                   </span>
                 )}
-                {(nauticalMiles ?? 0) > 0 && (
+                {(distanceValue ?? 0) > 0 && distanceUnit && (
                   <span className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
                     <Ship size={12} className="text-accent" />
-                    {Math.round(nauticalMiles ?? 0).toLocaleString()} NM
+                    {Math.round(distanceValue ?? 0).toLocaleString()} {distanceUnit}
                   </span>
                 )}
               </div>

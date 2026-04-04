@@ -24,6 +24,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   totalWaypointDistance,
+  totalCoordinateDistanceKm,
   reverseGeocodePlace,
   buildWaypointDefaultName,
   buildWaypointDefaultLocalizedNames,
@@ -281,6 +282,8 @@ const getVoyageRouteColor = (voyageType: Voyage["type"]) =>
 
 interface AdminVoyageManagerProps {
   onRegisterLeaveGuard?: (guard: (() => Promise<boolean>) | null) => void;
+  selectedVoyageId?: string | null;
+  onSelectedVoyageIdChange?: (voyageId: string | null) => void;
 }
 
 const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
@@ -339,7 +342,11 @@ const loadStoredVoyageFormDraft = () => {
   }
 };
 
-const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) => {
+const AdminVoyageManager = ({
+  onRegisterLeaveGuard,
+  selectedVoyageId: controlledSelectedVoyageId,
+  onSelectedVoyageIdChange,
+}: AdminVoyageManagerProps) => {
   const initialStoredRouteDraft = loadStoredRouteDraft();
   const initialStoredVoyageFormDraft = loadStoredVoyageFormDraft();
   const { lang } = useI18n();
@@ -391,6 +398,11 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
   const [isRegeneratingGeometry, setIsRegeneratingGeometry] = useState(false);
 
+  const setCurrentSelectedVoyageId = useCallback((nextVoyageId: string | null) => {
+    setSelectedVoyageId(nextVoyageId);
+    onSelectedVoyageIdChange?.(nextVoyageId);
+  }, [onSelectedVoyageIdChange]);
+
   const commitVoyages = useCallback((nextVoyages: Voyage[]) => {
     voyagesRef.current = nextVoyages;
     setVoyages(nextVoyages);
@@ -413,6 +425,12 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   useEffect(() => {
     selectedVoyageRef.current = selectedVoyageId;
   }, [selectedVoyageId]);
+
+  useEffect(() => {
+    if (controlledSelectedVoyageId === undefined) return;
+    if (controlledSelectedVoyageId === selectedVoyageId) return;
+    setSelectedVoyageId(controlledSelectedVoyageId);
+  }, [controlledSelectedVoyageId, selectedVoyageId]);
 
   const fetchVoyages = useCallback(async () => {
     const { data, error } = await supabase.from("voyages").select("*").order("sort_order", { ascending: true });
@@ -1463,10 +1481,10 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
   const selectVoyage = useCallback(async (voyageId: string) => {
     cancelWaypointRelocation();
-    setSelectedVoyageId(voyageId);
+    setCurrentSelectedVoyageId(voyageId);
     const loadedWaypoints = waypointsRef.current[voyageId] || await fetchWaypoints(voyageId);
     fitMapToWaypoints(loadedWaypoints);
-  }, [cancelWaypointRelocation, fetchWaypoints, fitMapToWaypoints]);
+  }, [cancelWaypointRelocation, fetchWaypoints, fitMapToWaypoints, setCurrentSelectedVoyageId]);
 
   useEffect(() => {
     if (!selectedVoyageId) return;
@@ -1567,14 +1585,14 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
       const normalizedVoyage = normalizeVoyage(newVoyage);
       commitVoyages([...voyagesRef.current, normalizedVoyage]);
-      setSelectedVoyageId(normalizedVoyage.id);
+      setCurrentSelectedVoyageId(normalizedVoyage.id);
       toast.success("Voyage created");
     }
 
     initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
     return true;
-  }, [commitVoyages, editingVoyage, syncVoyageGeometry, voyageForm]);
+  }, [commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncVoyageGeometry, voyageForm]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -1605,11 +1623,11 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     delete geometryRequestRef.current[voyageId];
 
     if (selectedVoyageRef.current === voyageId) {
-      setSelectedVoyageId(null);
+      setCurrentSelectedVoyageId(null);
     }
 
     toast.success("Voyage deleted");
-  }, [commitVoyages]);
+  }, [commitVoyages, setCurrentSelectedVoyageId]);
 
   const reorderWaypoint = useCallback(async (voyageId: string, fromIndex: number, toIndex: number) => {
     const currentWaypoints = waypointsRef.current[voyageId] || [];
@@ -1645,7 +1663,17 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
   );
-  const distance = selectedWaypoints.length >= 2 ? totalWaypointDistance(selectedWaypoints) : 0;
+  const distance = useMemo(() => {
+    if (!selectedVoyage || selectedWaypoints.length < 2) return null;
+    if (selectedVoyage.type === "land") {
+      const routeGeometry =
+        geometryOverrideRef.current[selectedVoyage.id] ||
+        getCachedGeometryCoordinates(selectedVoyage);
+      const distanceKm = routeGeometry.length >= 2 ? totalCoordinateDistanceKm(routeGeometry) : 0;
+      return distanceKm > 0 ? { value: distanceKm, unit: "KM" as const } : null;
+    }
+    return { value: totalWaypointDistance(selectedWaypoints), unit: "NM" as const };
+  }, [selectedVoyage, selectedWaypoints, waypoints]);
   const voyageDates = selectedVoyage ? formatVoyageDateRange(selectedVoyage) : null;
   const filteredVoyages = useMemo(
     () =>
@@ -2216,8 +2244,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px] xl:items-start">
-        <div className="border border-border">
+      <div className="border border-border">
           <div className="relative" style={{ height: "420px" }}>
             <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
           </div>
@@ -2327,8 +2354,8 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
                 <div>
                   <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
                   <p className="text-xs text-muted-foreground font-sans">
-                    {selectedWaypoints.length >= 2
-                      ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
+                    {selectedWaypoints.length >= 2 && distance
+                      ? `${Math.round(distance.value)} ${distance.unit} traced${voyageDates ? ` · ${voyageDates}` : ""}`
                       : voyageDates || (selectedVoyage?.type === "land"
                         ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
                         : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
@@ -2525,101 +2552,6 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
               )}
             </div>
           )}
-        </div>
-        <aside className="border border-border bg-background/40 xl:sticky xl:top-24">
-          <div className="border-b border-border px-4 py-3">
-            <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Snapshot</p>
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <div>
-                <h4 className="text-sm font-sans font-medium">Elenco rotte</h4>
-                <p className="text-xs text-muted-foreground font-sans">
-                  {visibleVoyages.length} {visibleVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => openVoyageForm()}
-                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent"
-              >
-                <Plus size={12} />
-                Nuova
-              </button>
-            </div>
-          </div>
-
-          <div className="max-h-[520px] overflow-y-auto">
-            {visibleVoyages.map((voyage) => {
-              const dateRange = formatVoyageDateRange(voyage);
-              const displayName = getLocalizedVoyageName(voyage, lang);
-              return (
-                <div
-                  key={voyage.id}
-                  className={`flex items-center justify-between py-3 px-3 border-b border-border group cursor-pointer transition-colors ${
-                    selectedVoyageId === voyage.id ? "bg-accent/10" : "hover:bg-muted/30"
-                  }`}
-                  onClick={() => void guardedSelectVoyage(voyage.id)}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {voyage.type === "water" ? (
-                      <Ship size={14} className="text-blue-500 shrink-0" />
-                    ) : (
-                      <Mountain size={14} className="text-amber-600 shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <h4 className="text-sm font-sans font-medium truncate">{displayName}</h4>
-                      <div className="flex items-center gap-2 text-[10px] font-sans uppercase tracking-wider text-muted-foreground">
-                        <span>{voyage.status}</span>
-                        <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                        <span className="inline-flex items-center gap-1">
-                          {voyage.is_published ? (
-                            <Eye size={10} className="text-accent shrink-0" />
-                          ) : (
-                            <EyeOff size={10} className="shrink-0" />
-                          )}
-                          {voyage.is_published ? "published" : "draft"}
-                        </span>
-                        {dateRange && (
-                          <>
-                            <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                            <span className="inline-flex items-center gap-1 normal-case tracking-normal">
-                              <Clock3 size={10} /> {dateRange}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openVoyageForm(voyage);
-                      }}
-                      className="p-1.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <Edit size={12} />
-                    </button>
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void deleteVoyage(voyage.id, displayName);
-                      }}
-                      className="p-1.5 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {visibleVoyages.length === 0 && voyages.length > 0 && (
-              <div className="py-8 px-4 text-center text-sm text-muted-foreground border-b border-border">
-                Nessuna rotta corrisponde ai filtri correnti.
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
       {voyages.length === 0 && !showVoyageForm && (

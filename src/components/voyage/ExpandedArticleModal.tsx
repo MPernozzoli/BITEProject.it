@@ -28,7 +28,7 @@ import {
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
 } from "@/lib/article-map";
-import { buildPublicVoyageGeometry, totalWaypointDistance } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export type ExpandedArticleOrigin = {
@@ -281,21 +281,35 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
     return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
   }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
-  const articleNauticalMiles = useMemo(() => {
+  const articleRouteDistance = useMemo(() => {
     if (!article?.voyage_id || linkedVoyageWaypoints.length < 2) return null;
 
     let relevantWaypoints = linkedVoyageWaypoints;
+    let relevantGeometry = primaryRouteCoordinates;
     if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
       const rawStart = article.voyage_segment_start ?? article.voyage_segment_end ?? 0;
       const rawEnd = article.voyage_segment_end ?? article.voyage_segment_start ?? rawStart;
       const safeStart = Math.max(0, Math.min(Math.min(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
       const safeEnd = Math.max(0, Math.min(Math.max(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
       relevantWaypoints = linkedVoyageWaypoints.slice(safeStart, safeEnd + 1);
+      relevantGeometry = linkedVoyage
+        ? buildVoyageSegmentGeometry(
+            linkedVoyageWaypoints,
+            linkedVoyage.type,
+            safeStart,
+            safeEnd,
+            (linkedVoyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates
+          )
+        : null;
     }
 
     if (relevantWaypoints.length < 2) return null;
-    return totalWaypointDistance(relevantWaypoints);
-  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyageWaypoints]);
+    if (linkedVoyage?.type === "land") {
+      const distanceKm = relevantGeometry && relevantGeometry.length >= 2 ? totalCoordinateDistanceKm(relevantGeometry) : 0;
+      return distanceKm > 0 ? { value: distanceKm, unit: "KM" as const } : null;
+    }
+    return { value: totalWaypointDistance(relevantWaypoints), unit: "NM" as const };
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints, primaryRouteCoordinates]);
   const fallbackSceneCoordinates = useMemo(() => {
     if (hasGeo && article) {
       return {
@@ -687,7 +701,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                             zoom: hasGeo ? 7 : 6,
                           } : null)}
                           primaryRouteCoordinates={primaryRouteCoordinates}
-                          nauticalMiles={articleNauticalMiles}
+                          distanceValue={articleRouteDistance?.value ?? null}
+                          distanceUnit={articleRouteDistance?.unit ?? null}
                         />
                       </aside>
                     )}

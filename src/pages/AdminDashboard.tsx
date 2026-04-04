@@ -55,6 +55,17 @@ interface Story {
   cover_image: string | null;
 }
 
+interface VoyageSummary {
+  id: string;
+  name: string;
+  name_en: string | null;
+  name_it: string | null;
+  type: "water" | "land";
+  status: string;
+  is_published: boolean;
+  sort_order: number;
+}
+
 const statusIcon = (status: string) => {
   switch (status) {
     case "draft":
@@ -85,6 +96,7 @@ const AdminDashboard = () => {
   const { session, loading: authLoading } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
+  const [voyages, setVoyages] = useState<VoyageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
     if (typeof window === "undefined") return "articles";
@@ -98,17 +110,19 @@ const AdminDashboard = () => {
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
   const [routeLeaveGuard, setRouteLeaveGuard] = useState<null | (() => Promise<boolean>)>(null);
+  const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
 
     setLoading(true);
-    const [articlesRes, storiesRes] = await Promise.all([
+    const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
+      supabase.from("voyages").select("id,name,name_en,name_it,type,status,is_published,sort_order").order("sort_order", { ascending: true }),
     ]);
-    const err = articlesRes.error || storiesRes.error;
+    const err = articlesRes.error || storiesRes.error || voyagesRes.error;
     if (err && isAuthFailureError(err)) {
       await supabase.auth.signOut();
       navigate("/login", { state: { from: "/admin" } });
@@ -117,6 +131,7 @@ const AdminDashboard = () => {
     }
     if (articlesRes.data) setArticles(articlesRes.data as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
+    if (voyagesRes.data) setVoyages(voyagesRes.data as VoyageSummary[]);
     setLoading(false);
   }, [navigate, session?.user]);
 
@@ -128,6 +143,13 @@ const AdminDashboard = () => {
   useEffect(() => {
     setSidebarCollapsed(activeSection === "newsletter");
   }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "route") return;
+    if (!selectedRouteVoyageId && voyages[0]?.id) {
+      setSelectedRouteVoyageId(voyages[0].id);
+    }
+  }, [activeSection, selectedRouteVoyageId, voyages]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -211,6 +233,7 @@ const AdminDashboard = () => {
   const draftCount = articles.filter((article) => article.status === "draft").length;
   const latestArticle = articles[0] || null;
   const latestStory = stories[0] || null;
+  const routeSidebarVoyages = voyages;
   const sectionTabs = [
     { id: "articles" as const, label: "Articoli", icon: FileText },
     { id: "stories" as const, label: "Stories", icon: BookOpen },
@@ -352,6 +375,42 @@ const AdminDashboard = () => {
                       {latestStory ? latestStory.title_en || latestStory.title_it : "Nessuna story"}
                     </p>
                   </div>
+                  {activeSection === "route" && (
+                    <div className="pt-4 border-t glass-divider">
+                      <p className="text-xs font-sans text-muted-foreground mb-2">Rotte in mappa</p>
+                      <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                        {routeSidebarVoyages.length === 0 ? (
+                          <p className="text-xs font-sans text-muted-foreground">Nessuna rotta disponibile.</p>
+                        ) : (
+                          routeSidebarVoyages.map((voyage) => {
+                            const displayName = voyage.name_it || voyage.name_en || voyage.name || "Untitled voyage";
+                            return (
+                              <button
+                                key={voyage.id}
+                                type="button"
+                                onClick={() => {
+                                  void (async () => {
+                                    if (!(await runRouteLeaveGuard())) return;
+                                    setSelectedRouteVoyageId(voyage.id);
+                                  })();
+                                }}
+                                className={`w-full rounded-[18px] border px-3 py-2 text-left transition-colors ${
+                                  selectedRouteVoyageId === voyage.id
+                                    ? "border-accent bg-accent/10"
+                                    : "border-border/70 bg-background/40 hover:border-accent/50"
+                                }`}
+                              >
+                                <span className="block text-sm font-sans text-foreground truncate">{displayName}</span>
+                                <span className="mt-1 block text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                                  {voyage.type} · {voyage.status}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -632,7 +691,11 @@ const AdminDashboard = () => {
                   <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
                 </div>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
-                  <AdminVoyageManager onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)} />
+                  <AdminVoyageManager
+                    onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)}
+                    selectedVoyageId={selectedRouteVoyageId}
+                    onSelectedVoyageIdChange={setSelectedRouteVoyageId}
+                  />
                 </Suspense>
               </div>
             )}

@@ -14,7 +14,7 @@ import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getArticleVoyageFocus, getLocalizedVoyageName, totalWaypointDistance } from "@/lib/voyage-utils";
+import { getArticleVoyageFocus, getLocalizedVoyageName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -227,11 +227,13 @@ const Journal = () => {
     voyages.forEach((v) => {
       const wps = waypointsMap[v.id] || [];
       if (wps.length >= 2) {
-        const waypointDistance = totalWaypointDistance(wps);
         if (v.type === "water") {
-          seaNM += waypointDistance;
+          seaNM += totalWaypointDistance(wps);
         } else {
-          landNM += waypointDistance;
+          const coordinates = (v.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+          if (Array.isArray(coordinates) && coordinates.length >= 2) {
+            landNM += totalCoordinateDistanceKm(coordinates) / 1.852;
+          }
         }
       }
     });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildPublicVoyageGeometry, buildVoyageGeometry, buildVoyageSegmentGeometry, type VoyageWaypoint } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageGeometry, buildVoyageSegmentGeometry, totalCoordinateDistanceKm, type VoyageWaypoint } from "@/lib/voyage-utils";
 
 const createJsonResponse = (payload: unknown) =>
   Promise.resolve({
@@ -124,5 +124,22 @@ describe("buildVoyageSegmentGeometry", () => {
 
     expect(buildVoyageSegmentGeometry(waypoints, "land", 0, 1)).toEqual([]);
     expect(buildPublicVoyageGeometry(waypoints, "land")).toEqual([]);
+  });
+});
+
+describe("totalCoordinateDistanceKm", () => {
+  it("measures distance along the full polyline instead of the direct chord", () => {
+    const directDistance = totalCoordinateDistanceKm([
+      [9.0, 44.0],
+      [9.2, 44.2],
+    ]);
+    const polylineDistance = totalCoordinateDistanceKm([
+      [9.0, 44.0],
+      [9.08, 44.05],
+      [9.14, 44.12],
+      [9.2, 44.2],
+    ]);
+
+    expect(polylineDistance).toBeGreaterThan(directDistance);
   });
 });

@@ -10,6 +10,7 @@ import {
   getLocalizedVoyageName,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  totalCoordinateDistanceKm,
   totalWaypointDistance,
   type GeoArticle,
   type Voyage,
@@ -158,7 +159,16 @@ const VoyagesPage = () => {
             const arrival = publicWaypoints[publicWaypoints.length - 1];
             const departureIndex = departure ? voyageWaypoints.findIndex((item) => item.id === departure.id) : -1;
             const arrivalIndex = arrival ? voyageWaypoints.findIndex((item) => item.id === arrival.id) : -1;
-            const distance = Math.round(totalWaypointDistance(voyageWaypoints));
+            const routeDistance = voyage.type === "land"
+              ? (() => {
+                  const coordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+                  const distanceKm = Array.isArray(coordinates) && coordinates.length >= 2 ? totalCoordinateDistanceKm(coordinates) : 0;
+                  return distanceKm > 0 ? { value: Math.round(distanceKm), unit: "KM" as const } : null;
+                })()
+              : (() => {
+                  const distanceNm = Math.round(totalWaypointDistance(voyageWaypoints));
+                  return distanceNm > 0 ? { value: distanceNm, unit: "NM" as const } : null;
+                })();
             const dateRange = formatVoyageDateRange(voyage, locale);
             const voyageName = getLocalizedVoyageName(voyage, lang);
             const voyageDescription = getLocalizedVoyageDescription(voyage, lang);
@@ -186,7 +196,7 @@ const VoyagesPage = () => {
                   </div>
                   <div className="flex-shrink-0 text-sm text-muted-foreground md:text-right">
                     {dateRange && <p>{dateRange}</p>}
-                    {distance > 0 && <p>{distance} NM</p>}
+                    {routeDistance && <p>{routeDistance.value} {routeDistance.unit}</p>}
                     <p>{publicWaypoints.length} {lang === "it" ? "waypoint pubblici" : "public waypoints"}</p>
                   </div>
                 </div>
