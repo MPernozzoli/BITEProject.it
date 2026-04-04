@@ -18,10 +18,8 @@ import { getArticleVoyageFocus, getLocalizedVoyageName, totalWaypointDistance } 
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
-const getVoyageTypePillClassName = (voyageType: Voyage["type"]) =>
-  voyageType === "water"
-    ? "border-sky-200/55 bg-sky-50/70 text-sky-800"
-    : "border-orange-200/55 bg-orange-50/70 text-orange-800";
+const getVoyageTypeIconClassName = (voyageType: Voyage["type"]) =>
+  voyageType === "water" ? "text-sky-700" : "text-orange-700";
 
 const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
   if (status === "planned") {
@@ -55,6 +53,7 @@ const Journal = () => {
   const [mapFallbackActive, setMapFallbackActive] = useState(false);
   const [focusedVoyageId, setFocusedVoyageId] = useState<string | null>(null);
   const [voyageFilterOpen, setVoyageFilterOpen] = useState(false);
+  const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | Voyage["type"]>("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
@@ -464,6 +463,11 @@ const Journal = () => {
     return focusedVoyageId;
   }, [focusedVoyageId, hoveredArticle, selectedArticle]);
 
+  const filteredVoyages = useMemo(() => {
+    if (voyageTypeFilter === "all") return voyages;
+    return voyages.filter((voyage) => voyage.type === voyageTypeFilter);
+  }, [voyageTypeFilter, voyages]);
+
   const articleReaderActive = Boolean(expandedArticle);
   const showPreviewPanel = Boolean(panelArticle) && (!articleReaderActive || expandedArticlePhase === "closing");
   const sidePanelVisible = showPreviewPanel || Boolean(panelProfileId);
@@ -580,6 +584,43 @@ const Journal = () => {
                       {lang === "it" ? "Focus viaggio" : "Voyage focus"}
                     </p>
                   </div>
+                  <div className="mb-2 flex items-center gap-1 px-2">
+                    <button
+                      type="button"
+                      onClick={() => setVoyageTypeFilter("all")}
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                        voyageTypeFilter === "all"
+                          ? "bg-foreground text-background"
+                          : "bg-white/60 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {lang === "it" ? "tutti" : "all"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVoyageTypeFilter("water")}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                        voyageTypeFilter === "water"
+                          ? "bg-sky-100 text-sky-800"
+                          : "bg-sky-50/70 text-sky-700 hover:bg-sky-100"
+                      }`}
+                    >
+                      <Ship size={10} />
+                      {lang === "it" ? "mare" : "water"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVoyageTypeFilter("land")}
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                        voyageTypeFilter === "land"
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-orange-50/70 text-orange-700 hover:bg-orange-100"
+                      }`}
+                    >
+                      <Mountain size={10} />
+                      {lang === "it" ? "terra" : "land"}
+                    </button>
+                  </div>
                   <div className="space-y-1">
                     <button
                       type="button"
@@ -591,7 +632,7 @@ const Journal = () => {
                       <span>{lang === "it" ? "Tutti i viaggi" : "All voyages"}</span>
                       {!focusedVoyageId ? <Check size={12} className="text-accent" /> : null}
                     </button>
-                    {voyages.map((voyage) => {
+                    {filteredVoyages.map((voyage) => {
                       const isSelected = focusedVoyageId === voyage.id;
                       const isWaterVoyage = voyage.type === "water";
                       const localizedStatus = lang === "it"
@@ -615,12 +656,11 @@ const Journal = () => {
                           }`}
                         >
                           <span className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="truncate">{getLocalizedVoyageName(voyage, lang)}</span>
-                            <span
-                              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${getVoyageTypePillClassName(voyage.type)}`}
-                            >
-                              {isWaterVoyage ? <Ship size={10} /> : <Mountain size={10} />}
-                              {lang === "it" ? (isWaterVoyage ? "mare" : "terra") : (isWaterVoyage ? "water" : "land")}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className={`shrink-0 ${getVoyageTypeIconClassName(voyage.type)}`}>
+                                {isWaterVoyage ? <Ship size={12} /> : <Mountain size={12} />}
+                              </span>
+                              <span className="truncate">{getLocalizedVoyageName(voyage, lang)}</span>
                             </span>
                             <span
                               className={`inline-flex shrink-0 items-center rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.16em] ${getVoyageStatusPillClassName(voyage.status)}`}
@@ -632,6 +672,11 @@ const Journal = () => {
                         </button>
                       );
                     })}
+                    {filteredVoyages.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-xs font-sans text-muted-foreground">
+                        {lang === "it" ? "Nessun viaggio in questo filtro" : "No voyages in this filter"}
+                      </div>
+                    ) : null}
                   </div>
                 </PopoverContent>
               </Popover>

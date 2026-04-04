@@ -2216,387 +2216,410 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
         </p>
       </div>
 
-      <div className="space-y-0">
-        {visibleVoyages.map((voyage) => {
-          const dateRange = formatVoyageDateRange(voyage);
-          const displayName = getLocalizedVoyageName(voyage, lang);
-          return (
-            <div
-              key={voyage.id}
-              className={`flex items-center justify-between py-3 px-3 border-b border-border group cursor-pointer transition-colors ${
-                selectedVoyageId === voyage.id ? "bg-accent/10" : "hover:bg-muted/30"
-              }`}
-              onClick={() => void guardedSelectVoyage(voyage.id)}
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {voyage.type === "water" ? (
-                  <Ship size={14} className="text-blue-500 shrink-0" />
-                ) : (
-                  <Mountain size={14} className="text-amber-600 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <h4 className="text-sm font-sans font-medium truncate">{displayName}</h4>
-                  <div className="flex items-center gap-2 text-[10px] font-sans uppercase tracking-wider text-muted-foreground">
-                    <span>{voyage.status}</span>
-                    <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                    <span className="inline-flex items-center gap-1">
-                      {voyage.is_published ? (
-                        <Eye size={10} className="text-accent shrink-0" />
-                      ) : (
-                        <EyeOff size={10} className="shrink-0" />
-                      )}
-                      {voyage.is_published ? "published" : "draft"}
-                    </span>
-                    {dateRange && (
-                      <>
-                        <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                        <span className="inline-flex items-center gap-1 normal-case tracking-normal">
-                          <Clock3 size={10} /> {dateRange}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openVoyageForm(voyage);
-                  }}
-                  className="p-1.5 text-muted-foreground hover:text-foreground"
-                >
-                  <Edit size={12} />
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void deleteVoyage(voyage.id, displayName);
-                  }}
-                  className="p-1.5 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {visibleVoyages.length === 0 && voyages.length > 0 && (
-          <div className="py-8 px-4 text-center text-sm text-muted-foreground border-b border-border">
-            Nessuna rotta corrisponde ai filtri correnti.
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px] xl:items-start">
+        <div className="border border-border">
+          <div className="relative" style={{ height: "420px" }}>
+            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
           </div>
-        )}
-      </div>
 
-      <div className="border border-border">
-        <div className="relative" style={{ height: "420px" }}>
-          <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
-        </div>
+          {!selectedVoyageId && (
+            <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
+              Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito un waypoint: start e arrivo restano pubblici di default, gli intermedi diventano tecnici.
+            </p>
+          )}
 
-        {!selectedVoyageId && (
-          <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
-            Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito un waypoint: start e arrivo restano pubblici di default, gli intermedi diventano tecnici.
-          </p>
-        )}
-
-        {selectedVoyageId && (
-          <div className="p-4 border-t border-border space-y-4">
-            {selectedVoyage?.type === "land" && (
-              <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-sans font-medium">Cerca indirizzi e POI</h4>
-                    <p className="text-xs text-muted-foreground font-sans">
-                      Cerca un luogo, centrati sulla mappa e aggiungilo direttamente come waypoint.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={landSearchQuery}
-                    onChange={(event) => setLandSearchQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      void runLandSearch();
-                    }}
-                    placeholder="Indirizzo, città, POI, stazione..."
-                    className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void runLandSearch()}
-                    disabled={landSearchLoading}
-                    className="inline-flex items-center justify-center gap-2 border border-border px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground disabled:opacity-60"
-                    title="Cerca sulla mappa"
-                  >
-                    {landSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                  </button>
-                </div>
-
-                {landSearchResults.length > 0 && (
-                  <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                    {landSearchResults.map((result, index) => (
-                      <div
-                        key={`${result.lat}-${result.lng}-${index}`}
-                        className="flex items-start gap-2 rounded-[18px] border border-border/60 bg-background/60 px-3 py-2"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => focusSearchResult(result)}
-                          className="flex-1 min-w-0 text-left"
-                        >
-                          <span className="block text-sm font-sans text-foreground truncate">{result.name.split(",")[0]}</span>
-                          <span className="block text-[11px] text-muted-foreground font-sans break-words">{result.name}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void addSearchResultWaypoint(result)}
-                          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-sans text-foreground hover:border-accent hover:text-accent"
-                        >
-                          Aggiungi
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="rounded-[18px] border border-border/60 bg-background/60 px-3 py-3">
-                  <div className="flex items-start justify-between gap-3">
+          {selectedVoyageId && (
+            <div className="p-4 border-t border-border space-y-4">
+              {selectedVoyage?.type === "land" && (
+                <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-sans text-foreground">
-                        {selectedVoyageHasCachedGeometry ? "Geometria stradale salvata" : "Geometria stradale mancante"}
+                      <h4 className="text-sm font-sans font-medium">Cerca indirizzi e POI</h4>
+                      <p className="text-xs text-muted-foreground font-sans">
+                        Cerca un luogo, centrati sulla mappa e aggiungilo direttamente come waypoint.
                       </p>
-                      <p className="mt-1 text-[11px] font-sans text-muted-foreground">
-                        {selectedVoyageHasCachedGeometry
-                          ? "Rigenera se hai bisogno di riallineare il percorso stradale salvato ai waypoint correnti."
-                          : "Genera e salva la polyline stradale persistita da riusare nel logbook senza ricalcoli."}
-                      </p>
-                      {isRouteDraftDirty ? (
-                        <p className="mt-2 text-[11px] font-sans text-amber-700">
-                          Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
-                        </p>
-                      ) : null}
                     </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={landSearchQuery}
+                      onChange={(event) => setLandSearchQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void runLandSearch();
+                      }}
+                      placeholder="Indirizzo, città, POI, stazione..."
+                      className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
                     <button
                       type="button"
-                      onClick={() => void regenerateSelectedVoyageGeometry()}
-                      disabled={isRegeneratingGeometry || isSavingRouteDraft || isRouteDraftDirty || persistedSelectedWaypoints.length < 2}
-                      className="inline-flex shrink-0 items-center justify-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
+                      onClick={() => void runLandSearch()}
+                      disabled={landSearchLoading}
+                      className="inline-flex items-center justify-center gap-2 border border-border px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground disabled:opacity-60"
+                      title="Cerca sulla mappa"
                     >
-                      {isRegeneratingGeometry ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
-                      {selectedVoyageHasCachedGeometry ? "Rigenera geometria" : "Genera geometria"}
+                      {landSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
 
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
-                <p className="text-xs text-muted-foreground font-sans">
-                  {selectedWaypoints.length >= 2
-                    ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                    : voyageDates || (selectedVoyage?.type === "land"
-                      ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
-                      : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
-                </p>
-                {isRouteDraftDirty && (
-                  <p className="mt-1 text-[11px] font-sans text-amber-700">
-                    Modifiche locali non ancora salvate.
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {isRouteDraftDirty && (
-                  <button
-                    type="button"
-                    onClick={discardSelectedRouteChanges}
-                    className="border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground"
-                  >
-                    Discard
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void saveSelectedRouteDraft()}
-                  disabled={!isRouteDraftDirty || isSavingRouteDraft}
-                  className="bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50"
-                >
-                  {isSavingRouteDraft ? "Saving..." : "Save route"}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-0 max-h-[260px] overflow-y-auto">
-              {selectedWaypoints.map((waypoint, index) => {
-                const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
-                const displayName = getLocalizedWaypointName(waypoint, lang, index);
-                const visibilityLabel = waypoint.visibility_mode === "manual"
-                  ? effectiveType === "narrative"
-                    ? "Manual narrative waypoint"
-                    : "Manual technical waypoint"
-                  : effectiveType === "narrative"
-                    ? "Auto public end waypoint"
-                    : "Auto technical waypoint";
-                const eventLabel = [waypoint.event_date, waypoint.event_time?.slice(0, 5)].filter(Boolean).join(" · ");
-
-                return (
-                  <div
-                    key={waypoint.id}
-                    onDragOver={(event) => {
-                      if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                      event.preventDefault();
-                      if (dragOverWaypointId !== waypoint.id) {
-                        setDragOverWaypointId(waypoint.id);
-                      }
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                      const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
-                      const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
-                      setDraggedWaypointId(null);
-                      setDragOverWaypointId(null);
-                      void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
-                    }}
-                    onDragLeave={(event) => {
-                      if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
-                        setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
-                      }
-                    }}
-                    className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
-                      dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
-                    } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData("text/plain", waypoint.id);
-                        setDraggedWaypointId(waypoint.id);
-                        setDragOverWaypointId(waypoint.id);
-                      }}
-                      onDragEnd={() => {
-                        setDraggedWaypointId(null);
-                        setDragOverWaypointId(null);
-                      }}
-                      className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
-                      title="Drag to reorder waypoint"
-                    >
-                      <GripVertical size={12} />
-                    </button>
-                    <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
-                      className="p-0.5 text-muted-foreground hover:text-foreground"
-                      title={`${visibilityLabel}. Click to toggle quickly.`}
-                    >
-                      {effectiveType === "technical" ? (
-                        <EyeOff size={10} className="text-muted-foreground shrink-0" />
-                      ) : (
-                        <Eye size={10} className="text-accent shrink-0" />
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      {editingWaypointNameId === waypoint.id ? (
-                        <input
-                          type="text"
-                          value={editingWaypointNameValue}
-                          onChange={(event) => setEditingWaypointNameValue(event.target.value)}
-                          onBlur={() => void submitWaypointNameEdit(waypoint, index)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void submitWaypointNameEdit(waypoint, index);
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelWaypointNameEdit();
-                            }
-                          }}
-                          autoFocus
-                          disabled={savingWaypointNameId === waypoint.id}
-                          className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
-                          className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
-                          title="Double click to rename"
+                  {landSearchResults.length > 0 && (
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                      {landSearchResults.map((result, index) => (
+                        <div
+                          key={`${result.lat}-${result.lng}-${index}`}
+                          className="flex items-start gap-2 rounded-[18px] border border-border/60 bg-background/60 px-3 py-2"
                         >
-                          {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
-                        </button>
-                      )}
+                          <button
+                            type="button"
+                            onClick={() => focusSearchResult(result)}
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <span className="block text-sm font-sans text-foreground truncate">{result.name.split(",")[0]}</span>
+                            <span className="block text-[11px] text-muted-foreground font-sans break-words">{result.name}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void addSearchResultWaypoint(result)}
+                            className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-sans text-foreground hover:border-accent hover:text-accent"
+                          >
+                            Aggiungi
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="rounded-[18px] border border-border/60 bg-background/60 px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-sans text-foreground">
+                          {selectedVoyageHasCachedGeometry ? "Geometria stradale salvata" : "Geometria stradale mancante"}
+                        </p>
+                        <p className="mt-1 text-[11px] font-sans text-muted-foreground">
+                          {selectedVoyageHasCachedGeometry
+                            ? "Rigenera se hai bisogno di riallineare il percorso stradale salvato ai waypoint correnti."
+                            : "Genera e salva la polyline stradale persistita da riusare nel logbook senza ricalcoli."}
+                        </p>
+                        {isRouteDraftDirty ? (
+                          <p className="mt-2 text-[11px] font-sans text-amber-700">
+                            Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
+                          </p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => openWaypointPopup(waypoint.id)}
-                        className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
+                        onClick={() => void regenerateSelectedVoyageGeometry()}
+                        disabled={isRegeneratingGeometry || isSavingRouteDraft || isRouteDraftDirty || persistedSelectedWaypoints.length < 2}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
                       >
-                        {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
-                        {eventLabel ? ` · ${eventLabel}` : ""}
+                        {isRegeneratingGeometry ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
+                        {selectedVoyageHasCachedGeometry ? "Rigenera geometria" : "Genera geometria"}
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
+                  <p className="text-xs text-muted-foreground font-sans">
+                    {selectedWaypoints.length >= 2
+                      ? `${Math.round(distance)} NM traced${voyageDates ? ` · ${voyageDates}` : ""}`
+                      : voyageDates || (selectedVoyage?.type === "land"
+                        ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
+                        : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
+                  </p>
+                  {isRouteDraftDirty && (
+                    <p className="mt-1 text-[11px] font-sans text-amber-700">
+                      Modifiche locali non ancora salvate.
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isRouteDraftDirty && (
                     <button
-                      onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
-                      className="p-1 text-muted-foreground hover:text-destructive"
-                      title="Delete waypoint"
+                      type="button"
+                      onClick={discardSelectedRouteChanges}
+                      className="border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground"
+                    >
+                      Discard
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void saveSelectedRouteDraft()}
+                    disabled={!isRouteDraftDirty || isSavingRouteDraft}
+                    className="bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50"
+                  >
+                    {isSavingRouteDraft ? "Saving..." : "Save route"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-0 max-h-[260px] overflow-y-auto">
+                {selectedWaypoints.map((waypoint, index) => {
+                  const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
+                  const displayName = getLocalizedWaypointName(waypoint, lang, index);
+                  const visibilityLabel = waypoint.visibility_mode === "manual"
+                    ? effectiveType === "narrative"
+                      ? "Manual narrative waypoint"
+                      : "Manual technical waypoint"
+                    : effectiveType === "narrative"
+                      ? "Auto public end waypoint"
+                      : "Auto technical waypoint";
+                  const eventLabel = [waypoint.event_date, waypoint.event_time?.slice(0, 5)].filter(Boolean).join(" · ");
+
+                  return (
+                    <div
+                      key={waypoint.id}
+                      onDragOver={(event) => {
+                        if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                        event.preventDefault();
+                        if (dragOverWaypointId !== waypoint.id) {
+                          setDragOverWaypointId(waypoint.id);
+                        }
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                        const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
+                        const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
+                        setDraggedWaypointId(null);
+                        setDragOverWaypointId(null);
+                        void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
+                      }}
+                      onDragLeave={(event) => {
+                        if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
+                          setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
+                        }
+                      }}
+                      className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
+                        dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
+                      } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", waypoint.id);
+                          setDraggedWaypointId(waypoint.id);
+                          setDragOverWaypointId(waypoint.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedWaypointId(null);
+                          setDragOverWaypointId(null);
+                        }}
+                        className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
+                        title="Drag to reorder waypoint"
+                      >
+                        <GripVertical size={12} />
+                      </button>
+                      <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
+                        className="p-0.5 text-muted-foreground hover:text-foreground"
+                        title={`${visibilityLabel}. Click to toggle quickly.`}
+                      >
+                        {effectiveType === "technical" ? (
+                          <EyeOff size={10} className="text-muted-foreground shrink-0" />
+                        ) : (
+                          <Eye size={10} className="text-accent shrink-0" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        {editingWaypointNameId === waypoint.id ? (
+                          <input
+                            type="text"
+                            value={editingWaypointNameValue}
+                            onChange={(event) => setEditingWaypointNameValue(event.target.value)}
+                            onBlur={() => void submitWaypointNameEdit(waypoint, index)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void submitWaypointNameEdit(waypoint, index);
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                cancelWaypointNameEdit();
+                              }
+                            }}
+                            autoFocus
+                            disabled={savingWaypointNameId === waypoint.id}
+                            className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
+                            className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
+                            title="Double click to rename"
+                          >
+                            {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openWaypointPopup(waypoint.id)}
+                          className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
+                        >
+                          {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                          {eventLabel ? ` · ${eventLabel}` : ""}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                        title="Delete waypoint"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => openWaypointPopup(waypoint.id)}
+                          className="p-1 text-muted-foreground hover:text-foreground"
+                          title="Edit waypoint"
+                        >
+                          <Edit size={12} />
+                        </button>
+                        <button
+                          onClick={() => moveWaypoint(waypoint, "up")}
+                          disabled={index === 0}
+                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                        >
+                          <ChevronUp size={12} />
+                        </button>
+                        <button
+                          onClick={() => moveWaypoint(waypoint, "down")}
+                          disabled={index === selectedWaypoints.length - 1}
+                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                        >
+                          <ChevronDown size={12} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            focusWaypointOnMap(waypoint.id);
+                          }}
+                          className="p-1 text-muted-foreground hover:text-foreground"
+                          title="Center waypoint on map"
+                        >
+                          <LocateFixed size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedWaypoints.length === 0 && (
+                <p className="text-center text-xs text-muted-foreground py-6">
+                  The next click on the map will create the first waypoint.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+        <aside className="border border-border bg-background/40 xl:sticky xl:top-24">
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Snapshot</p>
+            <div className="mt-2 flex items-end justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-sans font-medium">Elenco rotte</h4>
+                <p className="text-xs text-muted-foreground font-sans">
+                  {visibleVoyages.length} {visibleVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openVoyageForm()}
+                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent"
+              >
+                <Plus size={12} />
+                Nuova
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-[520px] overflow-y-auto">
+            {visibleVoyages.map((voyage) => {
+              const dateRange = formatVoyageDateRange(voyage);
+              const displayName = getLocalizedVoyageName(voyage, lang);
+              return (
+                <div
+                  key={voyage.id}
+                  className={`flex items-center justify-between py-3 px-3 border-b border-border group cursor-pointer transition-colors ${
+                    selectedVoyageId === voyage.id ? "bg-accent/10" : "hover:bg-muted/30"
+                  }`}
+                  onClick={() => void guardedSelectVoyage(voyage.id)}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {voyage.type === "water" ? (
+                      <Ship size={14} className="text-blue-500 shrink-0" />
+                    ) : (
+                      <Mountain size={14} className="text-amber-600 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-sans font-medium truncate">{displayName}</h4>
+                      <div className="flex items-center gap-2 text-[10px] font-sans uppercase tracking-wider text-muted-foreground">
+                        <span>{voyage.status}</span>
+                        <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                        <span className="inline-flex items-center gap-1">
+                          {voyage.is_published ? (
+                            <Eye size={10} className="text-accent shrink-0" />
+                          ) : (
+                            <EyeOff size={10} className="shrink-0" />
+                          )}
+                          {voyage.is_published ? "published" : "draft"}
+                        </span>
+                        {dateRange && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                            <span className="inline-flex items-center gap-1 normal-case tracking-normal">
+                              <Clock3 size={10} /> {dateRange}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openVoyageForm(voyage);
+                      }}
+                      className="p-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <Edit size={12} />
+                    </button>
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void deleteVoyage(voyage.id, displayName);
+                      }}
+                      className="p-1.5 text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 size={12} />
                     </button>
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openWaypointPopup(waypoint.id)}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        title="Edit waypoint"
-                      >
-                        <Edit size={12} />
-                      </button>
-                      <button
-                        onClick={() => moveWaypoint(waypoint, "up")}
-                        disabled={index === 0}
-                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                      >
-                        <ChevronUp size={12} />
-                      </button>
-                      <button
-                        onClick={() => moveWaypoint(waypoint, "down")}
-                        disabled={index === selectedWaypoints.length - 1}
-                        className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                      >
-                        <ChevronDown size={12} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          focusWaypointOnMap(waypoint.id);
-                        }}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                        title="Center waypoint on map"
-                      >
-                        <LocateFixed size={12} />
-                      </button>
-                    </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
 
-            {selectedWaypoints.length === 0 && (
-              <p className="text-center text-xs text-muted-foreground py-6">
-                The next click on the map will create the first waypoint.
-              </p>
+            {visibleVoyages.length === 0 && voyages.length > 0 && (
+              <div className="py-8 px-4 text-center text-sm text-muted-foreground border-b border-border">
+                Nessuna rotta corrisponde ai filtri correnti.
+              </div>
             )}
           </div>
-        )}
+        </aside>
       </div>
 
       {voyages.length === 0 && !showVoyageForm && (
