@@ -2325,6 +2325,11 @@ const AdminVoyageManager = ({
                         <p className="text-sm font-sans text-foreground">
                           {selectedVoyageHasCachedGeometry ? "Geometria stradale salvata" : "Geometria stradale mancante"}
                         </p>
+                        {distance?.unit === "KM" ? (
+                          <p className="mt-1 text-xs font-sans text-foreground/80">
+                            {Math.round(distance.value).toLocaleString()} KM calcolati sul percorso stradale
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-[11px] font-sans text-muted-foreground">
                           {selectedVoyageHasCachedGeometry
                             ? "Rigenera se hai bisogno di riallineare il percorso stradale salvato ai waypoint correnti."

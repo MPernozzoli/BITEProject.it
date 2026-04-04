@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, Check } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -446,6 +446,31 @@ const Journal = () => {
     }
   }, [isMobile]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousHtmlOverscroll = html.style.overscrollBehavior;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+
+    if (viewMode === "map") {
+      html.style.overflow = "hidden";
+      html.style.overscrollBehavior = "none";
+      body.style.overflow = "hidden";
+      body.style.overscrollBehavior = "none";
+    }
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      html.style.overscrollBehavior = previousHtmlOverscroll;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, [viewMode]);
+
   // Highlighted voyage based on selected article
   const selectedArticle = useMemo(
     () => articles.find((article) => article.id === selectedArticleId) || null,
@@ -501,9 +526,9 @@ const Journal = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className={viewMode === "map" ? "h-screen overflow-hidden" : "min-h-screen flex flex-col"}>
       {viewMode === "map" ? (
-        <div className="relative flex-1 min-h-screen" style={{ height: "100vh" }}>
+        <div className="relative h-screen overflow-hidden overscroll-none">
           {/* Full-screen map */}
           <LazyVoyageMap
             voyages={voyages}
@@ -533,7 +558,11 @@ const Journal = () => {
               className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
               title={isMobile ? (mobileSidebarMode === "expanded" ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
             >
-              {(isMobile ? mobileSidebarMode === "expanded" : sidebarOpen) ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              {isMobile ? (
+                mobileSidebarMode === "expanded" ? <ChevronDown size={16} /> : <ChevronUp size={16} />
+              ) : (
+                sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />
+              )}
             </button>
             <button
               onClick={() => setViewMode("list")}
