@@ -23,11 +23,14 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
+import { isAuthFailureError } from "@/lib/supabase-auth";
+import { useAuth } from "@/hooks/useAuth";
 
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
+const ADMIN_DASHBOARD_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
+type AdminSection = "articles" | "stories" | "route" | "newsletter" | "badges";
 
 interface Article {
   id: string;
@@ -79,18 +82,28 @@ const statusLabel = (status: string) => {
 };
 
 const AdminDashboard = () => {
+  const { session, loading: authLoading } = useAuth();
   const [articles, setArticles] = useState<Article[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [activeSection, setActiveSection] = useState<"articles" | "stories" | "route" | "newsletter" | "badges">("articles");
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    if (typeof window === "undefined") return "articles";
+    const storedValue = window.sessionStorage.getItem(ADMIN_DASHBOARD_SECTION_STORAGE_KEY);
+    return storedValue === "articles" || storedValue === "stories" || storedValue === "route" || storedValue === "newsletter" || storedValue === "badges"
+      ? storedValue
+      : "articles";
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
+  const [routeLeaveGuard, setRouteLeaveGuard] = useState<null | (() => Promise<boolean>)>(null);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
+    if (!session?.user) return;
+
+    setLoading(true);
     const [articlesRes, storiesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
@@ -105,51 +118,32 @@ const AdminDashboard = () => {
     if (articlesRes.data) setArticles(articlesRes.data as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     setLoading(false);
-  }, [navigate]);
-
-  const checkAuth = useCallback(async () => {
-    try {
-      const { session } = await validateSessionOrSignOut();
-      if (!session) {
-        navigate("/login", { state: { from: "/admin" } });
-        return;
-      }
-
-      const { data: isAdmin, error } = await supabase.rpc("has_role", {
-        _user_id: session.user.id,
-        _role: "admin",
-      });
-      if (error) {
-        if (isAuthFailureError(error)) {
-          await supabase.auth.signOut();
-          navigate("/login", { state: { from: "/admin" }, replace: true });
-          return;
-        }
-        throw error;
-      }
-
-      if (!isAdmin) {
-        toast.error("Accesso non autorizzato");
-        navigate("/", { replace: true });
-        return;
-      }
-
-      setAuthChecked(true);
-      await fetchData();
-    } catch (error) {
-      console.error("Admin auth check failed", error);
-      await supabase.auth.signOut();
-      navigate("/login", { state: { from: "/admin" }, replace: true });
-    }
-  }, [fetchData, navigate]);
+  }, [navigate, session?.user]);
 
   useEffect(() => {
-    void checkAuth();
-  }, [checkAuth]);
+    if (authLoading || !session?.user) return;
+    void fetchData();
+  }, [authLoading, fetchData, session?.user]);
 
   useEffect(() => {
     setSidebarCollapsed(activeSection === "newsletter");
   }, [activeSection]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(ADMIN_DASHBOARD_SECTION_STORAGE_KEY, activeSection);
+  }, [activeSection]);
+
+  const runRouteLeaveGuard = useCallback(async () => {
+    if (!routeLeaveGuard) return true;
+    return routeLeaveGuard();
+  }, [routeLeaveGuard]);
+
+  const handleSectionChange = useCallback(async (nextSection: AdminSection) => {
+    if (nextSection === activeSection) return;
+    if (!(await runRouteLeaveGuard())) return;
+    setActiveSection(nextSection);
+  }, [activeSection, runRouteLeaveGuard]);
 
   const deleteArticle = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
@@ -158,6 +152,7 @@ const AdminDashboard = () => {
   };
 
   const handleLogout = async () => {
+    if (!(await runRouteLeaveGuard())) return;
     await supabase.auth.signOut();
     navigate("/login");
   };
@@ -203,7 +198,7 @@ const AdminDashboard = () => {
     toast.success("Story deleted");
   };
 
-  if (!authChecked) {
+  if (authLoading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-24">
         <p className="text-sm font-sans text-muted-foreground animate-pulse">Verifica accesso...</p>
@@ -243,6 +238,13 @@ const AdminDashboard = () => {
             <div className="flex items-center gap-3 self-start">
               <Link
                 to="/profile"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/profile");
+                  })();
+                }}
                 className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
                 title="Profilo"
               >
@@ -304,7 +306,7 @@ const AdminDashboard = () => {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveSection(tab.id)}
+                    onClick={() => void handleSectionChange(tab.id)}
                     className={`w-full rounded-[22px] py-3 text-left transition-all ${
                       active
                         ? "bg-white/82 border border-stone-200/90 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
@@ -365,6 +367,13 @@ const AdminDashboard = () => {
                   </div>
                   <Link
                     to="/admin/article/new"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void (async () => {
+                        if (!(await runRouteLeaveGuard())) return;
+                        navigate("/admin/article/new");
+                      })();
+                    }}
                     className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent transition-colors"
                   >
                     <Plus size={16} />
@@ -427,6 +436,13 @@ const AdminDashboard = () => {
                             )}
                             <Link
                               to={`/admin/article/${article.id}`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                void (async () => {
+                                  if (!(await runRouteLeaveGuard())) return;
+                                  navigate(`/admin/article/${article.id}`);
+                                })();
+                              }}
                               className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                               title="Edit"
                             >
@@ -616,7 +632,7 @@ const AdminDashboard = () => {
                   <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
                 </div>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
-                  <AdminVoyageManager />
+                  <AdminVoyageManager onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)} />
                 </Suspense>
               </div>
             )}

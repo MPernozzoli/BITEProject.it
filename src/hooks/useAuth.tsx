@@ -89,11 +89,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     window.addEventListener("beforeunload", clearEphemeralSession);
-    window.addEventListener("pagehide", clearEphemeralSession);
 
     return () => {
       window.removeEventListener("beforeunload", clearEphemeralSession);
-      window.removeEventListener("pagehide", clearEphemeralSession);
     };
   }, []);
 

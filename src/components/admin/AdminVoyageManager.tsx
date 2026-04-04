@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
   Edit,
@@ -51,6 +52,15 @@ interface VoyageFormState {
   end_time: string;
 }
 
+interface VoyageListFilters {
+  type: "all" | Voyage["type"];
+  publicationStatus: "all" | "published" | "draft";
+  createdFrom: string;
+  createdTo: string;
+  departureFrom: string;
+  departureTo: string;
+}
+
 const emptyVoyageForm: VoyageFormState = {
   name_it: "",
   name_en: "",
@@ -65,10 +75,21 @@ const emptyVoyageForm: VoyageFormState = {
   end_time: "",
 };
 
+const emptyVoyageListFilters: VoyageListFilters = {
+  type: "all",
+  publicationStatus: "all",
+  createdFrom: "",
+  createdTo: "",
+  departureFrom: "",
+  departureTo: "",
+};
+
 const popupLabelStyle = "display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);margin-bottom:6px;font-family:var(--font-sans);";
 const popupInputStyle = "width:100%;padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:12px;font-family:var(--font-sans);outline:none;";
 const popupTextareaStyle = `${popupInputStyle}min-height:68px;resize:vertical;`;
 const popupMetaStyle = "margin:0;font-size:12px;color:hsl(220,15%,30%);";
+const popupSectionStyle = "display:grid;gap:10px;padding:12px;border:1px solid hsl(var(--border));background:hsla(var(--background),0.94);";
+const popupSectionTitleStyle = "margin:0;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:hsl(220,10%,45%);font-family:var(--font-sans);";
 const popupLanguageOptions = [
   { code: "it", label: "Italiano" },
   { code: "en", label: "English" },
@@ -215,6 +236,19 @@ const getNearestSegmentIndex = (
   return nearestSegmentIndex;
 };
 
+const getDateOnlyValue = (value?: string | null) => {
+  if (!value) return null;
+  return value.slice(0, 10);
+};
+
+const isDateWithinRange = (value: string | null, from: string, to: string) => {
+  if (!from && !to) return true;
+  if (!value) return false;
+  if (from && value < from) return false;
+  if (to && value > to) return false;
+  return true;
+};
+
 const getVoyageYearTier = (voyage: Pick<Voyage, "start_date">) => {
   if (!voyage.start_date) return 0;
   const startDate = new Date(voyage.start_date);
@@ -234,25 +268,38 @@ const getVoyageLineWidthScale = (voyage: Pick<Voyage, "start_date">) => {
 const getVoyageRouteColor = (voyageType: Voyage["type"]) =>
   voyageType === "water" ? "hsl(206, 72%, 47%)" : "hsl(30, 78%, 50%)";
 
-const AdminVoyageManager = () => {
+interface AdminVoyageManagerProps {
+  onRegisterLeaveGuard?: (guard: (() => Promise<boolean>) | null) => void;
+}
+
+const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
+
+const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) => {
   const { lang } = useI18n();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [voyages, setVoyages] = useState<Voyage[]>([]);
   const [waypoints, setWaypoints] = useState<Record<string, VoyageWaypoint[]>>({});
   const [selectedVoyageId, setSelectedVoyageId] = useState<string | null>(null);
   const [showVoyageForm, setShowVoyageForm] = useState(false);
   const [editingVoyage, setEditingVoyage] = useState<Voyage | null>(null);
   const [voyageForm, setVoyageForm] = useState<VoyageFormState>(emptyVoyageForm);
+  const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
+  const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const markersByWaypointRef = useRef<Record<string, maplibregl.Marker>>({});
+  const openedWaypointPopupIdRef = useRef<string | null>(null);
+  const pendingPopupOpenWaypointIdRef = useRef<string | null>(null);
   const voyagesRef = useRef<Voyage[]>([]);
   const waypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
   const selectedVoyageRef = useRef<string | null>(null);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
   const segmentInsertRef = useRef<{ voyageId: string; insertIndex: number } | null>(null);
+  const waypointRelocationRef = useRef<{ voyageId: string; waypointId: string } | null>(null);
   const segmentPreviewMarkerRef = useRef<maplibregl.Marker | null>(null);
   const routeLineMouseDownRef = useRef<((event: maplibregl.MapLayerMouseEvent) => void) | null>(null);
   const routeLineMouseEnterRef = useRef<(() => void) | null>(null);
@@ -264,6 +311,9 @@ const AdminVoyageManager = () => {
   const [landSearchQuery, setLandSearchQuery] = useState("");
   const [landSearchResults, setLandSearchResults] = useState<GeocodedPlace[]>([]);
   const [landSearchLoading, setLandSearchLoading] = useState(false);
+  const [editingWaypointNameId, setEditingWaypointNameId] = useState<string | null>(null);
+  const [editingWaypointNameValue, setEditingWaypointNameValue] = useState("");
+  const [savingWaypointNameId, setSavingWaypointNameId] = useState<string | null>(null);
 
   const commitVoyages = useCallback((nextVoyages: Voyage[]) => {
     voyagesRef.current = nextVoyages;
@@ -318,6 +368,13 @@ const AdminVoyageManager = () => {
   const clearSearchResultMarker = useCallback(() => {
     searchResultMarkerRef.current?.remove();
     searchResultMarkerRef.current = null;
+  }, []);
+
+  const cancelWaypointRelocation = useCallback(() => {
+    waypointRelocationRef.current = null;
+    const map = mapRef.current;
+    if (!map || segmentInsertRef.current) return;
+    map.getCanvas().style.cursor = selectedVoyageRef.current ? "crosshair" : "";
   }, []);
 
   const focusSearchResult = useCallback((result: GeocodedPlace) => {
@@ -688,9 +745,69 @@ const AdminVoyageManager = () => {
       return;
     }
 
+     if (openedWaypointPopupIdRef.current && openedWaypointPopupIdRef.current !== waypointId) {
+      const openedMarker = markersByWaypointRef.current[openedWaypointPopupIdRef.current];
+      openedMarker?.getPopup()?.remove();
+    }
+
     marker.togglePopup();
     void focusWaypointOnMap(waypointId);
   }, [focusWaypointOnMap]);
+
+  const startWaypointRelocation = useCallback((voyageId: string, waypointId: string) => {
+    waypointRelocationRef.current = { voyageId, waypointId };
+    pendingPopupOpenWaypointIdRef.current = null;
+    const marker = markersByWaypointRef.current[waypointId];
+    marker?.getPopup()?.remove();
+    const map = mapRef.current;
+    if (map) {
+      map.getCanvas().style.cursor = "crosshair";
+    }
+    toast.message("Click the map to update the waypoint position");
+  }, []);
+
+  const beginWaypointNameEdit = useCallback((waypoint: VoyageWaypoint, index: number) => {
+    setEditingWaypointNameId(waypoint.id);
+    setEditingWaypointNameValue(getLocalizedWaypointName(waypoint, lang, index));
+  }, [lang]);
+
+  const cancelWaypointNameEdit = useCallback(() => {
+    setEditingWaypointNameId(null);
+    setEditingWaypointNameValue("");
+    setSavingWaypointNameId(null);
+  }, []);
+
+  const submitWaypointNameEdit = useCallback(async (waypoint: VoyageWaypoint, index: number) => {
+    const fallbackNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
+    const trimmedValue = editingWaypointNameValue.trim();
+    const nextLocalizedName = trimmedValue || fallbackNames[lang];
+    const nextNameIt = lang === "it" ? nextLocalizedName : (waypoint.name_it?.trim() || fallbackNames.it);
+    const nextNameEn = lang === "en" ? nextLocalizedName : (waypoint.name_en?.trim() || fallbackNames.en);
+    const legacyName = (lang === "it" ? nextNameIt : nextNameEn) || nextNameIt || nextNameEn || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
+
+    setSavingWaypointNameId(waypoint.id);
+    const success = await updateWaypoint(
+      waypoint.voyage_id,
+      waypoint.id,
+      {
+        name: legacyName,
+        name_it: nextNameIt,
+        name_en: nextNameEn,
+      }
+    );
+
+    if (success) {
+      setEditingWaypointNameId(null);
+      setEditingWaypointNameValue("");
+    }
+    setSavingWaypointNameId(null);
+  }, [editingWaypointNameValue, lang, updateWaypoint]);
+
+  useEffect(() => {
+    setEditingWaypointNameId(null);
+    setEditingWaypointNameValue("");
+    setSavingWaypointNameId(null);
+  }, [selectedVoyageId]);
 
   const toggleWaypointVisibility = useCallback(async (waypoint: VoyageWaypoint, index: number, total: number) => {
     const effectiveType = getWaypointEffectiveType(waypoint, index, total);
@@ -717,7 +834,11 @@ const AdminVoyageManager = () => {
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
         : effectiveType === "narrative" ? (index === 0 ? "Auto start" : "Auto end") : "Auto hidden";
       const wrapper = document.createElement("form");
-      wrapper.style.cssText = "width:280px;max-height:360px;overflow-y:auto;overflow-x:hidden;padding:2px 2px 4px;box-sizing:border-box;font-family:var(--font-sans);";
+      wrapper.style.cssText = "width:min(360px,calc(100vw - 40px));max-height:min(72vh,620px);overflow-y:auto;overflow-x:hidden;padding:2px 2px 6px;box-sizing:border-box;font-family:var(--font-sans);display:grid;gap:12px;";
+      ["mousedown", "mouseup", "click", "dblclick", "pointerdown", "touchstart"].forEach((eventName) => {
+        wrapper.addEventListener(eventName, (event) => event.stopPropagation());
+      });
+      wrapper.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
 
       const heading = isStart ? "Start" : isEnd ? "Arrival" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
@@ -744,7 +865,7 @@ const AdminVoyageManager = () => {
         : `<p style="margin:0;font-size:11px;color:hsl(220,10%,45%);">No media attached yet.</p>`;
 
       wrapper.innerHTML = `
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
           <div>
             <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:hsl(220,10%,45%);">${heading}</p>
             <p style="${popupMetaStyle}">${coords}</p>
@@ -753,43 +874,58 @@ const AdminVoyageManager = () => {
             ${statusLabel}
           </span>
         </div>
-        ${popupLanguageOptions.map(({ code, label }) => `
-          <label style="${popupLabelStyle}">Name · ${label}</label>
-          <input
-            name="name_${code}"
-            type="text"
-            value="${escapeHtml((code === "it" ? waypoint.name_it : waypoint.name_en) || defaultNames[code])}"
-            style="${popupInputStyle}margin-bottom:10px;"
-          />
-        `).join("")}
-        <div style="display:grid;grid-template-columns:1fr 112px;gap:10px;margin-bottom:12px;">
-          <div>
-            <label style="${popupLabelStyle}">Date</label>
-            <input name="event_date" type="date" value="${escapeHtml(waypoint.event_date || "")}" style="${popupInputStyle}" />
+        <section style="${popupSectionStyle}">
+          <p style="${popupSectionTitleStyle}">Identity</p>
+          ${popupLanguageOptions.map(({ code, label }) => `
+            <div>
+              <label style="${popupLabelStyle}">Name · ${label}</label>
+              <input
+                name="name_${code}"
+                type="text"
+                value="${escapeHtml((code === "it" ? waypoint.name_it : waypoint.name_en) || defaultNames[code])}"
+                style="${popupInputStyle}"
+              />
+            </div>
+          `).join("")}
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
+            <div>
+              <label style="${popupLabelStyle}">Date</label>
+              <input name="event_date" type="date" value="${escapeHtml(waypoint.event_date || "")}" style="${popupInputStyle}" />
+            </div>
+            <div>
+              <label style="${popupLabelStyle}">Time</label>
+              <input name="event_time" type="time" value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}" style="${popupInputStyle}" />
+            </div>
           </div>
           <div>
-            <label style="${popupLabelStyle}">Time</label>
-            <input name="event_time" type="time" value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}" style="${popupInputStyle}" />
+            <label style="${popupLabelStyle}">Visibility</label>
+            <select name="visibility_mode" style="${popupInputStyle}">
+              <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (start and end are public)</option>
+              <option value="technical"${selectedVisibilityValue === "technical" ? " selected" : ""}>Technical / hidden</option>
+              <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
+            </select>
           </div>
-        </div>
-        <label style="${popupLabelStyle}">Visibility</label>
-        <select name="visibility_mode" style="${popupInputStyle}margin-bottom:12px;">
-          <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (start and end are public)</option>
-          <option value="technical"${selectedVisibilityValue === "technical" ? " selected" : ""}>Technical / hidden</option>
-          <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
-        </select>
-        ${popupLanguageOptions.map(({ code, label }) => `
-          <label style="${popupLabelStyle}">Description · ${label}</label>
-          <textarea
-            name="description_${code}"
-            rows="3"
-            style="${popupTextareaStyle}margin-bottom:10px;"
-          >${escapeHtml((code === "it" ? waypoint.description_it : waypoint.description_en) || "")}</textarea>
-        `).join("")}
-        <label style="${popupLabelStyle}">Media</label>
-        <div style="display:grid;gap:10px;margin-bottom:10px;">${mediaMarkup}</div>
-        <input name="media_upload" type="file" multiple style="${popupInputStyle}margin-bottom:12px;padding:6px 10px;" />
-        <div style="display:flex;gap:8px;">
+        </section>
+        <section style="${popupSectionStyle}">
+          <p style="${popupSectionTitleStyle}">Descriptions</p>
+          ${popupLanguageOptions.map(({ code, label }) => `
+            <div>
+              <label style="${popupLabelStyle}">Description · ${label}</label>
+              <textarea
+                name="description_${code}"
+                rows="4"
+                style="${popupTextareaStyle}"
+              >${escapeHtml((code === "it" ? waypoint.description_it : waypoint.description_en) || "")}</textarea>
+            </div>
+          `).join("")}
+        </section>
+        <section style="${popupSectionStyle}">
+          <p style="${popupSectionTitleStyle}">Media</p>
+          <div style="display:grid;gap:10px;">${mediaMarkup}</div>
+          <input name="media_upload" type="file" multiple style="${popupInputStyle}padding:6px 10px;" />
+        </section>
+        <div style="position:sticky;bottom:-6px;display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;background:linear-gradient(to top,hsl(var(--background)) 70%,transparent);">
+          <button type="button" data-action="relocate" style="flex:1 1 100%;padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Move on map</button>
           <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
           <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
         </div>
@@ -804,6 +940,7 @@ const AdminVoyageManager = () => {
       const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
       const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
+      const relocateButton = wrapper.querySelector('[data-action="relocate"]') as HTMLButtonElement | null;
       const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
 
       const refreshPopup = () => {
@@ -849,6 +986,10 @@ const AdminVoyageManager = () => {
         void deleteWaypoint(waypoint.voyage_id, waypoint.id);
       });
 
+      relocateButton?.addEventListener("click", () => {
+        startWaypointRelocation(waypoint.voyage_id, waypoint.id);
+      });
+
       mediaDeleteButtons.forEach((button) => {
         button.addEventListener("click", () => {
           const mediaIndex = Number((button as HTMLButtonElement).dataset.mediaIndex);
@@ -890,7 +1031,7 @@ const AdminVoyageManager = () => {
 
       return wrapper;
     },
-    [deleteWaypoint, deleteWaypointMediaAsset, lang, updateWaypoint, uploadWaypointMediaAsset]
+    [deleteWaypoint, deleteWaypointMediaAsset, lang, startWaypointRelocation, updateWaypoint, uploadWaypointMediaAsset]
   );
 
   const createWaypointMarkerEl = useCallback((waypoint: VoyageWaypoint, index: number, total: number) => {
@@ -921,9 +1062,7 @@ const AdminVoyageManager = () => {
   }, [lang]);
 
   const drawRouteOnMap = useCallback((map: maplibregl.Map) => {
-    const openedPopupWaypointId = Object.entries(markersByWaypointRef.current).find(([, marker]) =>
-      marker.getPopup()?.isOpen()
-    )?.[0] || null;
+    const openedPopupWaypointId = pendingPopupOpenWaypointIdRef.current || openedWaypointPopupIdRef.current;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     markersByWaypointRef.current = {};
@@ -1017,8 +1156,20 @@ const AdminVoyageManager = () => {
 
     selectedWaypoints.forEach((waypoint, index) => {
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
-      const popup = new maplibregl.Popup({ offset: 14, closeButton: true, closeOnClick: false, closeOnMove: false, maxWidth: "240px" });
+      const popup = new maplibregl.Popup({ offset: 14, closeButton: true, closeOnClick: false, closeOnMove: false, maxWidth: "380px" });
       popup.setDOMContent(createWaypointPopupContent(waypoint, index, selectedWaypoints.length, popup));
+      popup.on("open", () => {
+        if (openedWaypointPopupIdRef.current && openedWaypointPopupIdRef.current !== waypoint.id) {
+          const openedMarker = markersByWaypointRef.current[openedWaypointPopupIdRef.current];
+          openedMarker?.getPopup()?.remove();
+        }
+        openedWaypointPopupIdRef.current = waypoint.id;
+      });
+      popup.on("close", () => {
+        if (openedWaypointPopupIdRef.current === waypoint.id) {
+          openedWaypointPopupIdRef.current = null;
+        }
+      });
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
         .setLngLat([waypoint.lng, waypoint.lat])
@@ -1043,6 +1194,9 @@ const AdminVoyageManager = () => {
           const nextPopup = marker.getPopup();
           if (nextPopup && !nextPopup.isOpen()) {
             marker.togglePopup();
+            if (pendingPopupOpenWaypointIdRef.current === waypoint.id) {
+              pendingPopupOpenWaypointIdRef.current = null;
+            }
           }
         });
       }
@@ -1114,6 +1268,30 @@ const AdminVoyageManager = () => {
       const target = event.originalEvent.target as HTMLElement | null;
       if (target?.closest(".voyage-admin-marker") || target?.closest(".maplibregl-popup")) return;
 
+      const activeRelocation = waypointRelocationRef.current;
+      if (activeRelocation) {
+        waypointRelocationRef.current = null;
+        pendingPopupOpenWaypointIdRef.current = activeRelocation.waypointId;
+
+        void (async () => {
+          const success = await updateWaypoint(
+            activeRelocation.voyageId,
+            activeRelocation.waypointId,
+            { lat: event.lngLat.lat, lng: event.lngLat.lng },
+            { successMessage: "Waypoint moved", syncGeometry: true }
+          );
+
+          if (!success) {
+            pendingPopupOpenWaypointIdRef.current = null;
+          }
+          const map = mapRef.current;
+          if (map && !segmentInsertRef.current) {
+            map.getCanvas().style.cursor = selectedVoyageRef.current ? "crosshair" : "";
+          }
+        })();
+        return;
+      }
+
       const openedPopupMarker = Object.values(markersByWaypointRef.current).find((marker) =>
         marker.getPopup()?.isOpen()
       );
@@ -1171,15 +1349,15 @@ const AdminVoyageManager = () => {
   }, [selectedVoyageId]);
 
   const selectVoyage = useCallback(async (voyageId: string) => {
+    cancelWaypointRelocation();
     setSelectedVoyageId(voyageId);
     const loadedWaypoints = waypointsRef.current[voyageId] || await fetchWaypoints(voyageId);
     fitMapToWaypoints(loadedWaypoints);
-  }, [fetchWaypoints, fitMapToWaypoints]);
+  }, [cancelWaypointRelocation, fetchWaypoints, fitMapToWaypoints]);
 
   const openVoyageForm = useCallback((voyage?: Voyage) => {
     if (voyage) {
-      setEditingVoyage(voyage);
-      setVoyageForm({
+      const nextForm: VoyageFormState = {
         name_it: voyage.name_it || voyage.name || "",
         name_en: voyage.name_en || voyage.name || "",
         description_it: voyage.description_it || voyage.description || "",
@@ -1191,9 +1369,13 @@ const AdminVoyageManager = () => {
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
         end_date: voyage.end_date || "",
         end_time: voyage.end_time ? voyage.end_time.slice(0, 5) : "",
-      });
+      };
+      setEditingVoyage(voyage);
+      initialVoyageFormSnapshotRef.current = serializeVoyageForm(nextForm);
+      setVoyageForm(nextForm);
     } else {
       setEditingVoyage(null);
+      initialVoyageFormSnapshotRef.current = serializeVoyageForm(emptyVoyageForm);
       setVoyageForm(emptyVoyageForm);
     }
     setShowVoyageForm(true);
@@ -1240,7 +1422,7 @@ const AdminVoyageManager = () => {
       }
       if (error) {
         toast.error(getErrorMessage(error, "Unable to update voyage"));
-        return;
+        return false;
       }
 
       const nextVoyages = voyagesRef.current.map((voyage) =>
@@ -1258,7 +1440,7 @@ const AdminVoyageManager = () => {
       }
       if (error || !newVoyage) {
         toast.error(getErrorMessage(error, "Unable to create voyage"));
-        return;
+        return false;
       }
 
       const normalizedVoyage = normalizeVoyage(newVoyage);
@@ -1267,8 +1449,75 @@ const AdminVoyageManager = () => {
       toast.success("Voyage created");
     }
 
+    initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
+    return true;
   }, [commitVoyages, editingVoyage, syncVoyageGeometry, voyageForm]);
+
+  const closeVoyageForm = useCallback(() => {
+    if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
+      return;
+    }
+
+    setShowVoyageForm(false);
+  }, [isVoyageFormDirty]);
+
+  const handleSaveBeforeLeave = useCallback(async () => {
+    if (!isVoyageFormDirty) return true;
+
+    const shouldSave = window.confirm(
+      "Hai modifiche non salvate nella rotta. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
+    );
+    if (!shouldSave) return false;
+
+    return saveVoyage();
+  }, [isVoyageFormDirty, saveVoyage]);
+
+  useEffect(() => {
+    onRegisterLeaveGuard?.(handleSaveBeforeLeave);
+    return () => onRegisterLeaveGuard?.(null);
+  }, [handleSaveBeforeLeave, onRegisterLeaveGuard]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isVoyageFormDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isVoyageFormDirty]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!isVoyageFormDirty) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) return;
+
+      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      if (currentUrl === nextPath) return;
+
+      event.preventDefault();
+      void (async () => {
+        if (!(await handleSaveBeforeLeave())) return;
+        navigate(nextPath);
+      })();
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [handleSaveBeforeLeave, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
 
   const deleteVoyage = useCallback(async (voyageId: string, name: string) => {
     if (!confirm(`Delete voyage "${name}" and all its waypoints?`)) return;
@@ -1329,6 +1578,26 @@ const AdminVoyageManager = () => {
   const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
   const distance = selectedWaypoints.length >= 2 ? totalWaypointDistance(selectedWaypoints) : 0;
   const voyageDates = selectedVoyage ? formatVoyageDateRange(selectedVoyage) : null;
+  const filteredVoyages = useMemo(
+    () =>
+      voyages.filter((voyage) => {
+        if (listFilters.type !== "all" && voyage.type !== listFilters.type) return false;
+
+        if (listFilters.publicationStatus === "published" && !voyage.is_published) return false;
+        if (listFilters.publicationStatus === "draft" && voyage.is_published) return false;
+
+        const createdDate = getDateOnlyValue(voyage.created_at);
+        if (!isDateWithinRange(createdDate, listFilters.createdFrom, listFilters.createdTo)) return false;
+
+        const departureDate = getDateOnlyValue(voyage.start_date);
+        if (!isDateWithinRange(departureDate, listFilters.departureFrom, listFilters.departureTo)) return false;
+
+        return true;
+      }),
+    [listFilters, voyages]
+  );
+  const hasActiveFilters = Object.values(listFilters).some(Boolean);
+  const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
   useEffect(() => {
     if (selectedVoyage?.type === "land") return;
@@ -1337,6 +1606,12 @@ const AdminVoyageManager = () => {
     setLandSearchLoading(false);
     clearSearchResultMarker();
   }, [clearSearchResultMarker, selectedVoyage?.type]);
+
+  useEffect(() => {
+    if (!selectedVoyageId) {
+      cancelWaypointRelocation();
+    }
+  }, [cancelWaypointRelocation, selectedVoyageId]);
 
   return (
     <div className="space-y-6">
@@ -1354,7 +1629,7 @@ const AdminVoyageManager = () => {
         <div className="border border-border p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-sans font-medium">{editingVoyage ? "Edit Voyage" : "New Voyage"}</h4>
-            <button onClick={() => setShowVoyageForm(false)} className="text-muted-foreground hover:text-foreground">
+            <button onClick={closeVoyageForm} className="text-muted-foreground hover:text-foreground">
               <X size={16} />
             </button>
           </div>
@@ -1494,8 +1769,101 @@ const AdminVoyageManager = () => {
         </div>
       )}
 
+      <div className="rounded-[24px] border border-border/70 bg-muted/10 p-4 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-sans font-medium">Filtri rotte</h4>
+            <p className="text-xs text-muted-foreground font-sans">
+              Filtra per tipologia, data di creazione, data di partenza e stato pubblicazione.
+            </p>
+          </div>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => setListFilters(emptyVoyageListFilters)}
+              className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div>
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Tipologia</label>
+            <select
+              value={listFilters.type}
+              onChange={(event) => setListFilters((current) => ({ ...current, type: event.target.value as VoyageListFilters["type"] }))}
+              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+            >
+              <option value="all">Tutte</option>
+              <option value="water">Acqua</option>
+              <option value="land">Terra</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Stato</label>
+            <select
+              value={listFilters.publicationStatus}
+              onChange={(event) =>
+                setListFilters((current) => ({
+                  ...current,
+                  publicationStatus: event.target.value as VoyageListFilters["publicationStatus"],
+                }))
+              }
+              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+            >
+              <option value="all">Tutte</option>
+              <option value="published">Pubblicate</option>
+              <option value="draft">Bozze</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">Creazione</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={listFilters.createdFrom}
+                onChange={(event) => setListFilters((current) => ({ ...current, createdFrom: event.target.value }))}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+              />
+              <input
+                type="date"
+                value={listFilters.createdTo}
+                onChange={(event) => setListFilters((current) => ({ ...current, createdTo: event.target.value }))}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">Partenza viaggio</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={listFilters.departureFrom}
+                onChange={(event) => setListFilters((current) => ({ ...current, departureFrom: event.target.value }))}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+              />
+              <input
+                type="date"
+                value={listFilters.departureTo}
+                onChange={(event) => setListFilters((current) => ({ ...current, departureTo: event.target.value }))}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground font-sans">
+          {filteredVoyages.length} {filteredVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
+        </p>
+      </div>
+
       <div className="space-y-0">
-        {voyages.map((voyage) => {
+        {filteredVoyages.map((voyage) => {
           const dateRange = formatVoyageDateRange(voyage);
           const displayName = getLocalizedVoyageName(voyage, lang);
           return (
@@ -1559,6 +1927,12 @@ const AdminVoyageManager = () => {
             </div>
           );
         })}
+
+        {filteredVoyages.length === 0 && voyages.length > 0 && (
+          <div className="py-8 px-4 text-center text-sm text-muted-foreground border-b border-border">
+            Nessuna rotta corrisponde ai filtri correnti.
+          </div>
+        )}
       </div>
 
       <div className="border border-border">
@@ -1684,19 +2058,46 @@ const AdminVoyageManager = () => {
                         <Eye size={10} className="text-accent shrink-0" />
                       )}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => openWaypointPopup(waypoint.id)}
-                      className="flex-1 min-w-0 text-left hover:text-foreground transition-colors"
-                    >
-                      <span className="font-sans truncate block">
-                        {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground font-sans">
+                    <div className="flex-1 min-w-0">
+                      {editingWaypointNameId === waypoint.id ? (
+                        <input
+                          type="text"
+                          value={editingWaypointNameValue}
+                          onChange={(event) => setEditingWaypointNameValue(event.target.value)}
+                          onBlur={() => void submitWaypointNameEdit(waypoint, index)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void submitWaypointNameEdit(waypoint, index);
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              cancelWaypointNameEdit();
+                            }
+                          }}
+                          autoFocus
+                          disabled={savingWaypointNameId === waypoint.id}
+                          className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
+                          className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
+                          title="Double click to rename"
+                        >
+                          {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openWaypointPopup(waypoint.id)}
+                        className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
+                      >
                         {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
                         {eventLabel ? ` · ${eventLabel}` : ""}
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                     <button
                       onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
                       className="p-1 text-muted-foreground hover:text-destructive"
