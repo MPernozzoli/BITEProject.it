@@ -17,6 +17,7 @@ import {
   Clock3,
   Loader2,
   Search,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
@@ -61,6 +62,11 @@ interface VoyageListFilters {
   departureTo: string;
 }
 
+interface VoyageListSort {
+  field: "created_at" | "start_date" | "type" | "publicationStatus";
+  direction: "asc" | "desc";
+}
+
 const emptyVoyageForm: VoyageFormState = {
   name_it: "",
   name_en: "",
@@ -82,6 +88,11 @@ const emptyVoyageListFilters: VoyageListFilters = {
   createdTo: "",
   departureFrom: "",
   departureTo: "",
+};
+
+const defaultVoyageListSort: VoyageListSort = {
+  field: "created_at",
+  direction: "desc",
 };
 
 const popupLabelStyle = "display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);margin-bottom:6px;font-family:var(--font-sans);";
@@ -273,6 +284,26 @@ interface AdminVoyageManagerProps {
 }
 
 const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
+const createLocalWaypointId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const isLocalWaypointId = (waypointId: string) => waypointId.startsWith("local-");
+const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
+  sortWaypoints(waypoints).map((waypoint) => ({
+    id: waypoint.id,
+    lat: waypoint.lat,
+    lng: waypoint.lng,
+    sort_order: waypoint.sort_order,
+    name: waypoint.name,
+    name_it: waypoint.name_it,
+    name_en: waypoint.name_en,
+    description_it: waypoint.description_it,
+    description_en: waypoint.description_en,
+    event_date: waypoint.event_date,
+    event_time: waypoint.event_time,
+    waypoint_type: waypoint.waypoint_type,
+    visibility_mode: waypoint.visibility_mode,
+    media: waypoint.media,
+  }))
+);
 
 const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) => {
   const { lang } = useI18n();
@@ -285,6 +316,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const [editingVoyage, setEditingVoyage] = useState<Voyage | null>(null);
   const [voyageForm, setVoyageForm] = useState<VoyageFormState>(emptyVoyageForm);
   const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
+  const [listSort, setListSort] = useState<VoyageListSort>(defaultVoyageListSort);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
   const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
@@ -296,6 +328,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const pendingPopupOpenWaypointIdRef = useRef<string | null>(null);
   const voyagesRef = useRef<Voyage[]>([]);
   const waypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
+  const persistedWaypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
   const selectedVoyageRef = useRef<string | null>(null);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
@@ -315,6 +348,9 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const [editingWaypointNameId, setEditingWaypointNameId] = useState<string | null>(null);
   const [editingWaypointNameValue, setEditingWaypointNameValue] = useState("");
   const [savingWaypointNameId, setSavingWaypointNameId] = useState<string | null>(null);
+  const [draggedWaypointId, setDraggedWaypointId] = useState<string | null>(null);
+  const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
+  const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
 
   const commitVoyages = useCallback((nextVoyages: Voyage[]) => {
     voyagesRef.current = nextVoyages;
@@ -328,6 +364,12 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     setWaypoints(nextMap);
     return sorted;
   }, []);
+
+  const commitPersistedWaypoints = useCallback((voyageId: string, nextWaypoints: VoyageWaypoint[]) => {
+    const sorted = sortWaypoints(nextWaypoints);
+    persistedWaypointsRef.current = { ...persistedWaypointsRef.current, [voyageId]: sorted };
+    return commitWaypoints(voyageId, sorted);
+  }, [commitWaypoints]);
 
   useEffect(() => {
     selectedVoyageRef.current = selectedVoyageId;
@@ -354,8 +396,8 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       return [];
     }
 
-    return commitWaypoints(voyageId, (data || []).map((waypoint) => normalizeWaypoint(waypoint)));
-  }, [commitWaypoints]);
+    return commitPersistedWaypoints(voyageId, (data || []).map((waypoint) => normalizeWaypoint(waypoint)));
+  }, [commitPersistedWaypoints]);
 
   useEffect(() => {
     void fetchVoyages();
@@ -436,7 +478,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     segmentPreviewMarkerRef.current.setLngLat([lng, lat]);
   }, []);
 
-  const syncVoyageGeometry = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
+  const refreshVoyageGeometryPreview = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
     const voyage = voyagesRef.current.find((item) => item.id === voyageId);
     if (!voyage) return;
 
@@ -448,6 +490,12 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     if (geometryRequestRef.current[voyageId] !== requestId) return;
 
     geometryOverrideRef.current[voyageId] = coordinates;
+  }, []);
+
+  const syncVoyageGeometry = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
+    await refreshVoyageGeometryPreview(voyageId, candidateWaypoints);
+
+    const coordinates = geometryOverrideRef.current[voyageId];
     const cachedGeometry = coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
     const payload: TablesUpdate<"voyages"> = { cached_geometry: cachedGeometry };
     const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
@@ -464,7 +512,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
           : item
       )
     );
-  }, [commitVoyages]);
+  }, [commitVoyages, refreshVoyageGeometryPreview]);
 
   const uploadWaypointMediaAsset = useCallback(async (waypointId: string, file: File) => {
     const ext = file.name.split(".").pop() || "bin";
@@ -498,6 +546,74 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     }
   }, []);
 
+  const persistWaypointPatch = useCallback(async (waypointId: string, changes: Partial<VoyageWaypoint>) => {
+    const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
+    let appliedChanges = changes;
+    let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
+
+    if (error && isMissingWaypointMetadataColumnError(error)) {
+      const legacyPayload = stripUnsupportedWaypointMetadata(payload as Record<string, unknown>) as TablesUpdate<"voyage_waypoints">;
+      if (!Object.keys(legacyPayload).length) {
+        toast.error("Apply the latest waypoint migration to save localized content, dates, and media.");
+        return { success: false, appliedChanges: null as Partial<VoyageWaypoint> | null };
+      }
+
+      const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
+      error = fallbackResult.error;
+      appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
+    }
+
+    if (error) {
+      toast.error(getErrorMessage(error, "Unable to update waypoint"));
+      return { success: false, appliedChanges: null as Partial<VoyageWaypoint> | null };
+    }
+
+    return { success: true, appliedChanges };
+  }, []);
+
+  const persistWaypointInsert = useCallback(async (voyageId: string, waypoint: VoyageWaypoint, sortOrder: number) => {
+    const name_it = waypoint.name_it?.trim() || null;
+    const name_en = waypoint.name_en?.trim() || null;
+    const legacyName = waypoint.name?.trim() || name_en || name_it || buildWaypointDefaultName(sortOrder, waypoint.lat, waypoint.lng);
+    const baseData: TablesInsert<"voyage_waypoints"> = {
+      voyage_id: voyageId,
+      lat: waypoint.lat,
+      lng: waypoint.lng,
+      name: legacyName,
+      name_it,
+      name_en,
+      sort_order: sortOrder,
+      waypoint_type: waypoint.waypoint_type,
+      visibility_mode: waypoint.visibility_mode,
+      description_it: waypoint.description_it,
+      description_en: waypoint.description_en,
+      event_date: waypoint.event_date,
+      event_time: waypoint.event_time,
+      media: waypoint.media,
+    };
+    const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
+      voyage_id: voyageId,
+      lat: waypoint.lat,
+      lng: waypoint.lng,
+      name: legacyName,
+      sort_order: sortOrder,
+    };
+    const runInsert = (payload: TablesInsert<"voyage_waypoints">) =>
+      supabase.from("voyage_waypoints").insert(payload).select().single();
+
+    let { data, error } = await runInsert(baseData);
+    if (error && isMissingWaypointMetadataColumnError(error)) {
+      ({ data, error } = await runInsert(legacyBaseData));
+    }
+
+    if (error || !data) {
+      toast.error(getErrorMessage(error, "Unable to insert waypoint"));
+      return null;
+    }
+
+    return normalizeWaypoint(data);
+  }, []);
+
   const updateWaypoint = useCallback(
     async (
       voyageId: string,
@@ -505,37 +621,16 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       changes: Partial<VoyageWaypoint>,
       options?: { successMessage?: string | null; syncGeometry?: boolean }
     ) => {
-      const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
-      let appliedChanges = changes;
-      let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
-
-      if (error && isMissingWaypointMetadataColumnError(error)) {
-        const legacyPayload = stripUnsupportedWaypointMetadata(payload as Record<string, unknown>) as TablesUpdate<"voyage_waypoints">;
-        if (!Object.keys(legacyPayload).length) {
-          toast.error("Apply the latest waypoint migration to save localized content, dates, and media.");
-          return false;
-        }
-
-        const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
-        error = fallbackResult.error;
-        appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
-      }
-
-      if (error) {
-        toast.error(getErrorMessage(error, "Unable to update waypoint"));
-        return false;
-      }
-
       const nextWaypoints = commitWaypoints(
         voyageId,
         (waypointsRef.current[voyageId] || []).map((waypoint) =>
-          waypoint.id === waypointId ? normalizeWaypoint({ ...waypoint, ...appliedChanges }) : waypoint
+          waypoint.id === waypointId ? normalizeWaypoint({ ...waypoint, ...changes }) : waypoint
         )
       );
 
       if (options?.syncGeometry) {
         geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
-        void syncVoyageGeometry(voyageId, nextWaypoints);
+        void refreshVoyageGeometryPreview(voyageId, nextWaypoints);
       }
 
       if (options?.successMessage) {
@@ -544,7 +639,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
       return true;
     },
-    [commitWaypoints, syncVoyageGeometry]
+    [commitWaypoints, refreshVoyageGeometryPreview]
   );
 
   const insertWaypointAtIndex = useCallback(
@@ -553,28 +648,9 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       const boundedIndex = Math.max(0, Math.min(insertIndex, currentWaypoints.length));
       const provisionalNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng);
       const provisionalName = provisionalNames[lang];
-      const shiftedWaypoints = currentWaypoints.map((waypoint, index) =>
-        index >= boundedIndex ? normalizeWaypoint({ ...waypoint, sort_order: index + 1 }) : waypoint
-      );
-
-      const shiftedUpdates = shiftedWaypoints.filter(
-        (waypoint, index) => waypoint.sort_order !== currentWaypoints[index].sort_order
-      );
-
-      if (shiftedUpdates.length) {
-        const results = await Promise.all(
-          shiftedUpdates.map((waypoint) =>
-            supabase.from("voyage_waypoints").update({ sort_order: waypoint.sort_order }).eq("id", waypoint.id)
-          )
-        );
-        const failedResult = results.find((result) => result.error);
-        if (failedResult?.error) {
-          toast.error(getErrorMessage(failedResult.error, "Unable to insert waypoint"));
-          return false;
-        }
-      }
-
-      const baseData: TablesInsert<"voyage_waypoints"> = {
+      const nextWaypoints = [...currentWaypoints];
+      const createdWaypoint = normalizeWaypoint({
+        id: createLocalWaypointId(),
         voyage_id: voyageId,
         lat,
         lng,
@@ -582,39 +658,24 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
         name_it: provisionalNames.it,
         name_en: provisionalNames.en,
         sort_order: boundedIndex,
-      };
-      const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
-        voyage_id: voyageId,
-        lat,
-        lng,
-        name: provisionalName,
-        sort_order: boundedIndex,
-      };
-      const metadata: Pick<TablesInsert<"voyage_waypoints">, "waypoint_type" | "visibility_mode"> = {
+        created_at: new Date().toISOString(),
         waypoint_type: "technical",
         visibility_mode: "auto",
-      };
-      const runInsert = (payload: TablesInsert<"voyage_waypoints">) =>
-        supabase.from("voyage_waypoints").insert(payload).select().single();
-
-      let { data, error } = await runInsert({ ...baseData, ...metadata });
-      if (error && isMissingWaypointMetadataColumnError(error)) {
-        ({ data, error } = await runInsert(legacyBaseData));
-      }
-
-      if (error || !data) {
-        toast.error(getErrorMessage(error, "Unable to insert waypoint"));
-        return false;
-      }
-
-      const createdWaypoint = normalizeWaypoint(data);
-      const nextWaypoints = commitWaypoints(voyageId, [
-        ...shiftedWaypoints.slice(0, boundedIndex),
-        createdWaypoint,
-        ...shiftedWaypoints.slice(boundedIndex),
-      ]);
-      geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
-      void syncVoyageGeometry(voyageId, nextWaypoints);
+        description_it: null,
+        description_en: null,
+        event_date: null,
+        event_time: null,
+        media: [],
+        date_start: null,
+        date_end: null,
+      });
+      nextWaypoints.splice(boundedIndex, 0, createdWaypoint);
+      const committedWaypoints = commitWaypoints(
+        voyageId,
+        nextWaypoints.map((waypoint, index) => normalizeWaypoint({ ...waypoint, sort_order: index }))
+      );
+      geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(committedWaypoints);
+      void refreshVoyageGeometryPreview(voyageId, committedWaypoints);
 
       const suggestedPlace = await reverseGeocodePlace(lat, lng);
       if (!suggestedPlace) return true;
@@ -635,28 +696,21 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       });
       return true;
     },
-    [commitWaypoints, lang, syncVoyageGeometry, updateWaypoint]
+    [commitWaypoints, lang, refreshVoyageGeometryPreview, updateWaypoint]
   );
 
   const deleteWaypoint = useCallback(
     async (voyageId: string, waypointId: string) => {
       if (!confirm("Delete this waypoint?")) return;
 
-      const { error } = await supabase.from("voyage_waypoints").delete().eq("id", waypointId);
-      if (error) {
-        toast.error(getErrorMessage(error, "Unable to delete waypoint"));
-        return;
-      }
-
       const nextWaypoints = commitWaypoints(
         voyageId,
         (waypointsRef.current[voyageId] || []).filter((waypoint) => waypoint.id !== waypointId)
       );
       geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
-      void syncVoyageGeometry(voyageId, nextWaypoints);
-      toast.success("Waypoint deleted");
+      void refreshVoyageGeometryPreview(voyageId, nextWaypoints);
     },
-    [commitWaypoints, syncVoyageGeometry]
+    [commitWaypoints, refreshVoyageGeometryPreview]
   );
 
   const runLandSearch = useCallback(async () => {
@@ -835,11 +889,15 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
         : effectiveType === "narrative" ? (index === 0 ? "Auto start" : "Auto end") : "Auto hidden";
       const wrapper = document.createElement("form");
-      wrapper.style.cssText = "width:min(360px,calc(100vw - 40px));max-height:min(72vh,620px);overflow-y:auto;overflow-x:hidden;padding:2px 2px 6px;box-sizing:border-box;font-family:var(--font-sans);display:grid;gap:12px;";
+      wrapper.style.cssText = "width:min(360px,calc(100vw - 40px));max-height:min(72vh,620px);overflow-y:auto;overflow-x:hidden;padding:2px 2px 6px;box-sizing:border-box;font-family:var(--font-sans);display:grid;gap:12px;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;";
       ["mousedown", "mouseup", "click", "dblclick", "pointerdown", "touchstart"].forEach((eventName) => {
         wrapper.addEventListener(eventName, (event) => event.stopPropagation());
       });
-      wrapper.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+      wrapper.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        wrapper.scrollTop += event.deltaY;
+      }, { passive: false });
 
       const heading = isStart ? "Start" : isEnd ? "Arrival" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
@@ -1464,15 +1522,27 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   }, [isVoyageFormDirty]);
 
   const handleSaveBeforeLeave = useCallback(async () => {
-    if (!isVoyageFormDirty) return true;
+    if (!isVoyageFormDirty && !isRouteDraftDirty) return true;
 
-    const shouldSave = window.confirm(
-      "Hai modifiche non salvate nella rotta. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
-    );
-    if (!shouldSave) return false;
+    if (isVoyageFormDirty) {
+      const shouldSaveVoyage = window.confirm(
+        "Hai modifiche non salvate nella scheda della rotta. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
+      );
+      if (!shouldSaveVoyage) return false;
+      const savedVoyage = await saveVoyage();
+      if (!savedVoyage) return false;
+    }
 
-    return saveVoyage();
-  }, [isVoyageFormDirty, saveVoyage]);
+    if (isRouteDraftDirty) {
+      const shouldSaveRoute = window.confirm(
+        "Hai modifiche locali non salvate ai waypoint. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
+      );
+      if (!shouldSaveRoute) return false;
+      return saveSelectedRouteDraft();
+    }
+
+    return true;
+  }, [isRouteDraftDirty, isVoyageFormDirty, saveSelectedRouteDraft, saveVoyage]);
 
   useEffect(() => {
     onRegisterLeaveGuard?.(handleSaveBeforeLeave);
@@ -1481,18 +1551,18 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isVoyageFormDirty) return;
+      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
       event.preventDefault();
       event.returnValue = "";
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isVoyageFormDirty]);
+  }, [isRouteDraftDirty, isVoyageFormDirty]);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
-      if (!isVoyageFormDirty) return;
+      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
@@ -1518,7 +1588,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [handleSaveBeforeLeave, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
+  }, [handleSaveBeforeLeave, isRouteDraftDirty, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
 
   const deleteVoyage = useCallback(async (voyageId: string, name: string) => {
     if (!confirm(`Delete voyage "${name}" and all its waypoints?`)) return;
@@ -1532,6 +1602,8 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     const { [voyageId]: _removedWaypoints, ...remainingWaypoints } = waypointsRef.current;
     waypointsRef.current = remainingWaypoints;
     setWaypoints(remainingWaypoints);
+    const { [voyageId]: _removedPersistedWaypoints, ...remainingPersistedWaypoints } = persistedWaypointsRef.current;
+    persistedWaypointsRef.current = remainingPersistedWaypoints;
 
     const nextVoyages = voyagesRef.current.filter((voyage) => voyage.id !== voyageId);
     commitVoyages(nextVoyages);
@@ -1545,38 +1617,39 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     toast.success("Voyage deleted");
   }, [commitVoyages]);
 
+  const reorderWaypoint = useCallback(async (voyageId: string, fromIndex: number, toIndex: number) => {
+    const currentWaypoints = waypointsRef.current[voyageId] || [];
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= currentWaypoints.length || toIndex >= currentWaypoints.length) {
+      return false;
+    }
+
+    const nextWaypoints = [...currentWaypoints];
+    const [movedWaypoint] = nextWaypoints.splice(fromIndex, 1);
+    nextWaypoints.splice(toIndex, 0, movedWaypoint);
+
+    const committedWaypoints = commitWaypoints(
+      voyageId,
+      nextWaypoints.map((waypoint, index) => normalizeWaypoint({ ...waypoint, sort_order: index }))
+    );
+
+    geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(committedWaypoints);
+    void refreshVoyageGeometryPreview(voyageId, committedWaypoints);
+    return true;
+  }, [commitWaypoints, refreshVoyageGeometryPreview]);
+
   const moveWaypoint = useCallback(async (waypoint: VoyageWaypoint, direction: "up" | "down") => {
     const currentWaypoints = waypointsRef.current[waypoint.voyage_id] || [];
     const index = currentWaypoints.findIndex((item) => item.id === waypoint.id);
-    const swapIndex = direction === "up" ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= currentWaypoints.length) return;
-
-    const other = currentWaypoints[swapIndex];
-    const [first, second] = await Promise.all([
-      supabase.from("voyage_waypoints").update({ sort_order: other.sort_order }).eq("id", waypoint.id),
-      supabase.from("voyage_waypoints").update({ sort_order: waypoint.sort_order }).eq("id", other.id),
-    ]);
-
-    if (first.error || second.error) {
-      toast.error(getErrorMessage(first.error || second.error, "Unable to reorder waypoint"));
-      return;
-    }
-
-    const nextWaypoints = commitWaypoints(
-      waypoint.voyage_id,
-      currentWaypoints.map((item) => {
-        if (item.id === waypoint.id) return normalizeWaypoint({ ...item, sort_order: other.sort_order });
-        if (item.id === other.id) return normalizeWaypoint({ ...item, sort_order: waypoint.sort_order });
-        return item;
-      })
-    );
-
-    geometryOverrideRef.current[waypoint.voyage_id] = getStraightVoyageGeometry(nextWaypoints);
-    void syncVoyageGeometry(waypoint.voyage_id, nextWaypoints);
-  }, [commitWaypoints, syncVoyageGeometry]);
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    await reorderWaypoint(waypoint.voyage_id, index, targetIndex);
+  }, [reorderWaypoint]);
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
   const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
+  const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
+  const isRouteDraftDirty = Boolean(
+    selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
+  );
   const distance = selectedWaypoints.length >= 2 ? totalWaypointDistance(selectedWaypoints) : 0;
   const voyageDates = selectedVoyage ? formatVoyageDateRange(selectedVoyage) : null;
   const filteredVoyages = useMemo(
@@ -1597,6 +1670,29 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       }),
     [listFilters, voyages]
   );
+  const visibleVoyages = useMemo(() => {
+    const directionMultiplier = listSort.direction === "asc" ? 1 : -1;
+
+    return [...filteredVoyages].sort((left, right) => {
+      let comparison = 0;
+
+      if (listSort.field === "created_at") {
+        comparison = (left.created_at || "").localeCompare(right.created_at || "");
+      } else if (listSort.field === "start_date") {
+        comparison = (left.start_date || "").localeCompare(right.start_date || "");
+      } else if (listSort.field === "type") {
+        comparison = left.type.localeCompare(right.type);
+      } else if (listSort.field === "publicationStatus") {
+        comparison = Number(left.is_published) - Number(right.is_published);
+      }
+
+      if (comparison === 0) {
+        comparison = (left.sort_order ?? 0) - (right.sort_order ?? 0);
+      }
+
+      return comparison * directionMultiplier;
+    });
+  }, [filteredVoyages, listSort.direction, listSort.field]);
   const hasActiveFilters = Object.values(listFilters).some(Boolean);
 
   useEffect(() => {
@@ -1612,6 +1708,110 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
       cancelWaypointRelocation();
     }
   }, [cancelWaypointRelocation, selectedVoyageId]);
+
+  useEffect(() => {
+    setDraggedWaypointId(null);
+    setDragOverWaypointId(null);
+  }, [selectedVoyageId]);
+
+  const discardSelectedRouteChanges = useCallback(() => {
+    if (!selectedVoyageId) return;
+    const persistedWaypoints = persistedWaypointsRef.current[selectedVoyageId] || [];
+    commitWaypoints(selectedVoyageId, persistedWaypoints);
+    delete geometryOverrideRef.current[selectedVoyageId];
+    cancelWaypointRelocation();
+    setDraggedWaypointId(null);
+    setDragOverWaypointId(null);
+  }, [cancelWaypointRelocation, commitWaypoints, selectedVoyageId]);
+
+  const saveSelectedRouteDraft = useCallback(async () => {
+    if (!selectedVoyageId || !selectedVoyage) return true;
+    if (!isRouteDraftDirty) return true;
+
+    setIsSavingRouteDraft(true);
+    const draftWaypoints = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
+    const persistedWaypoints = sortWaypoints(persistedWaypointsRef.current[selectedVoyageId] || []);
+    const draftExistingIds = new Set(draftWaypoints.filter((waypoint) => !isLocalWaypointId(waypoint.id)).map((waypoint) => waypoint.id));
+
+    for (const removedWaypoint of persistedWaypoints) {
+      if (!draftExistingIds.has(removedWaypoint.id)) {
+        const { error } = await supabase.from("voyage_waypoints").delete().eq("id", removedWaypoint.id);
+        if (error) {
+          setIsSavingRouteDraft(false);
+          toast.error(getErrorMessage(error, "Unable to delete waypoint"));
+          return false;
+        }
+      }
+    }
+
+    for (const [index, waypoint] of draftWaypoints.entries()) {
+      const sort_order = index;
+      if (isLocalWaypointId(waypoint.id)) {
+        const insertedWaypoint = await persistWaypointInsert(selectedVoyageId, waypoint, sort_order);
+        if (!insertedWaypoint) {
+          setIsSavingRouteDraft(false);
+          return false;
+        }
+        continue;
+      }
+
+      const persistedWaypoint = persistedWaypoints.find((item) => item.id === waypoint.id);
+      if (!persistedWaypoint) continue;
+      const changes: Partial<VoyageWaypoint> = {};
+      ([
+        "lat",
+        "lng",
+        "name",
+        "name_it",
+        "name_en",
+        "description_it",
+        "description_en",
+        "event_date",
+        "event_time",
+        "waypoint_type",
+        "visibility_mode",
+        "sort_order",
+        "media",
+      ] as const).forEach((key) => {
+        const nextValue = key === "sort_order" ? sort_order : waypoint[key];
+        const previousValue = key === "sort_order" ? persistedWaypoint.sort_order : persistedWaypoint[key];
+        if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
+          (changes as Record<string, unknown>)[key] = nextValue;
+        }
+      });
+      if (!Object.keys(changes).length) continue;
+
+      const result = await persistWaypointPatch(waypoint.id, changes);
+      if (!result.success) {
+        setIsSavingRouteDraft(false);
+        return false;
+      }
+    }
+
+    await fetchWaypoints(selectedVoyageId);
+    await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+    setIsSavingRouteDraft(false);
+    toast.success("Route saved");
+    return true;
+  }, [fetchWaypoints, isRouteDraftDirty, persistWaypointInsert, persistWaypointPatch, selectedVoyage, selectedVoyageId, syncVoyageGeometry]);
+
+  const guardedSelectVoyage = useCallback(async (voyageId: string) => {
+    if (selectedVoyageRef.current && selectedVoyageRef.current !== voyageId && isRouteDraftDirty) {
+      const shouldSave = window.confirm(
+        "Hai modifiche locali non salvate alla rotta corrente. Premi OK per salvarle prima di cambiare rotta."
+      );
+      if (shouldSave) {
+        const saved = await saveSelectedRouteDraft();
+        if (!saved) return;
+      } else {
+        const shouldDiscard = window.confirm("Vuoi scartare le modifiche locali e cambiare rotta?");
+        if (!shouldDiscard) return;
+        discardSelectedRouteChanges();
+      }
+    }
+
+    await selectVoyage(voyageId);
+  }, [discardSelectedRouteChanges, isRouteDraftDirty, saveSelectedRouteDraft, selectVoyage]);
 
   return (
     <div className="space-y-6">
@@ -1857,13 +2057,45 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Ordina per</label>
+            <select
+              value={listSort.field}
+              onChange={(event) =>
+                setListSort((current) => ({ ...current, field: event.target.value as VoyageListSort["field"] }))
+              }
+              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+            >
+              <option value="created_at">Data creazione</option>
+              <option value="start_date">Data partenza</option>
+              <option value="type">Tipologia</option>
+              <option value="publicationStatus">Stato</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Direzione</label>
+            <select
+              value={listSort.direction}
+              onChange={(event) =>
+                setListSort((current) => ({ ...current, direction: event.target.value as VoyageListSort["direction"] }))
+              }
+              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+            >
+              <option value="desc">Decrescente</option>
+              <option value="asc">Crescente</option>
+            </select>
+          </div>
+        </div>
+
         <p className="text-xs text-muted-foreground font-sans">
-          {filteredVoyages.length} {filteredVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
+          {visibleVoyages.length} {visibleVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
         </p>
       </div>
 
       <div className="space-y-0">
-        {filteredVoyages.map((voyage) => {
+        {visibleVoyages.map((voyage) => {
           const dateRange = formatVoyageDateRange(voyage);
           const displayName = getLocalizedVoyageName(voyage, lang);
           return (
@@ -1872,7 +2104,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
               className={`flex items-center justify-between py-3 px-3 border-b border-border group cursor-pointer transition-colors ${
                 selectedVoyageId === voyage.id ? "bg-accent/10" : "hover:bg-muted/30"
               }`}
-              onClick={() => void selectVoyage(voyage.id)}
+              onClick={() => void guardedSelectVoyage(voyage.id)}
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {voyage.type === "water" ? (
@@ -1928,7 +2160,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
           );
         })}
 
-        {filteredVoyages.length === 0 && voyages.length > 0 && (
+        {visibleVoyages.length === 0 && voyages.length > 0 && (
           <div className="py-8 px-4 text-center text-sm text-muted-foreground border-b border-border">
             Nessuna rotta corrisponde ai filtri correnti.
           </div>
@@ -2022,6 +2254,30 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
                       ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
                       : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                 </p>
+                {isRouteDraftDirty && (
+                  <p className="mt-1 text-[11px] font-sans text-amber-700">
+                    Modifiche locali non ancora salvate.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isRouteDraftDirty && (
+                  <button
+                    type="button"
+                    onClick={discardSelectedRouteChanges}
+                    className="border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground"
+                  >
+                    Discard
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void saveSelectedRouteDraft()}
+                  disabled={!isRouteDraftDirty || isSavingRouteDraft}
+                  className="bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50"
+                >
+                  {isSavingRouteDraft ? "Saving..." : "Save route"}
+                </button>
               </div>
             </div>
 
@@ -2041,8 +2297,49 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
                 return (
                   <div
                     key={waypoint.id}
-                    className="flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs"
+                    onDragOver={(event) => {
+                      if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                      event.preventDefault();
+                      if (dragOverWaypointId !== waypoint.id) {
+                        setDragOverWaypointId(waypoint.id);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                      const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
+                      const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
+                      setDraggedWaypointId(null);
+                      setDragOverWaypointId(null);
+                      void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
+                    }}
+                    onDragLeave={(event) => {
+                      if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
+                        setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
+                      }
+                    }}
+                    className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
+                      dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
+                    } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
                   >
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", waypoint.id);
+                        setDraggedWaypointId(waypoint.id);
+                        setDragOverWaypointId(waypoint.id);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedWaypointId(null);
+                        setDragOverWaypointId(null);
+                      }}
+                      className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
+                      title="Drag to reorder waypoint"
+                    >
+                      <GripVertical size={12} />
+                    </button>
                     <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
                       {String(index + 1).padStart(2, "0")}
                     </span>
