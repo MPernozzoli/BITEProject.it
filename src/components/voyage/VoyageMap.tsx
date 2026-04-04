@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   buildPublicVoyageGeometry,
+  buildVoyageSegmentGeometry,
   getArticleVoyageFocus,
   getArticleWaypointRange,
   getAssociatedArticleForWaypoint,
@@ -140,14 +141,10 @@ const getArticleSegmentGeometry = (
   waypoints: VoyageWaypoint[],
   type: Voyage["type"],
   startIndex: number,
-  endIndex: number
+  endIndex: number,
+  cachedGeometry?: [number, number][] | null
 ) => {
-  if (!waypoints.length) return [];
-
-  const safeStart = clampWaypointIndex(startIndex, waypoints.length - 1);
-  const safeEnd = clampWaypointIndex(endIndex, waypoints.length - 1);
-  const segmentWaypoints = waypoints.slice(Math.min(safeStart, safeEnd), Math.max(safeStart, safeEnd) + 1);
-  return buildPublicVoyageGeometry(segmentWaypoints, type, []);
+  return buildVoyageSegmentGeometry(waypoints, type, startIndex, endIndex, cachedGeometry);
 };
 
 const VoyageMap = ({
@@ -478,7 +475,8 @@ const VoyageMap = ({
               wps,
               voyage.type,
               activeArticleFocus.startIndex,
-              activeArticleFocus.endIndex
+              activeArticleFocus.endIndex,
+              getCachedGeometryCoordinates(voyage)
             );
 
             if (focusSegmentCoordinates.length >= 2) {

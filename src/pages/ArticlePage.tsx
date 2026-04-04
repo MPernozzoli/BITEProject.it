@@ -36,6 +36,7 @@ import {
 } from "@/lib/article-map";
 import {
   buildPublicVoyageGeometry,
+  buildVoyageSegmentGeometry,
   formatWaypointMoment,
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
@@ -282,9 +283,14 @@ const ArticlePage = () => {
     if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
       const start = Math.max(0, Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, linkedVoyageWaypoints.length - 1));
       const end = Math.max(0, Math.min(article.voyage_segment_end ?? article.voyage_segment_start ?? start, linkedVoyageWaypoints.length - 1));
-      const segmentWaypoints = linkedVoyageWaypoints.slice(Math.min(start, end), Math.max(start, end) + 1);
-      if (segmentWaypoints.length < 2) return null;
-      return buildPublicVoyageGeometry(segmentWaypoints, linkedVoyage.type, []);
+      const segmentGeometry = buildVoyageSegmentGeometry(
+        linkedVoyageWaypoints,
+        linkedVoyage.type,
+        start,
+        end,
+        cachedGeometry
+      );
+      return segmentGeometry.length >= 2 ? segmentGeometry : null;
     }
 
     return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);

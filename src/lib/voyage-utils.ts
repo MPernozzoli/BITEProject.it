@@ -420,6 +420,8 @@ const getCoordinateDistance = ([ax, ay]: [number, number], [bx, by]: [number, nu
 const areCoordinatesNearlyEqual = (first: [number, number], second: [number, number], epsilon = 1e-6) =>
   Math.abs(first[0] - second[0]) <= epsilon && Math.abs(first[1] - second[1]) <= epsilon;
 
+const clampWaypointIndex = (value: number, max: number) => Math.max(0, Math.min(value, max));
+
 const appendRouteCoordinates = (
   accumulator: [number, number][],
   coordinates: [number, number][]
@@ -442,6 +444,10 @@ export function buildPublicVoyageGeometry(
   voyageId?: string | null,
   cachedGeometry?: [number, number][] | null
 ): [number, number][] {
+  if (type === "land") {
+    return cachedGeometry && cachedGeometry.length >= 2 ? cachedGeometry : [];
+  }
+
   const baseGeometry = cachedGeometry && cachedGeometry.length >= 2
     ? cachedGeometry
     : getStraightVoyageGeometry(waypoints);
@@ -481,6 +487,63 @@ export function buildPublicVoyageGeometry(
 
   smoothed.push([waypoints[waypoints.length - 1].lng, waypoints[waypoints.length - 1].lat]);
   return smoothed;
+}
+
+const getNearestGeometryCoordinateIndex = (
+  geometry: [number, number][],
+  target: [number, number]
+) => {
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  geometry.forEach((coordinate, index) => {
+    const distance = getCoordinateDistance(coordinate, target);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  return nearestIndex;
+};
+
+export function buildVoyageSegmentGeometry(
+  waypoints: VoyageWaypoint[],
+  type: VoyageType,
+  startIndex: number,
+  endIndex: number,
+  cachedGeometry?: [number, number][] | null
+): [number, number][] {
+  if (!waypoints.length) return [];
+
+  const safeStart = clampWaypointIndex(startIndex, waypoints.length - 1);
+  const safeEnd = clampWaypointIndex(endIndex, waypoints.length - 1);
+  const segmentStart = Math.min(safeStart, safeEnd);
+  const segmentEnd = Math.max(safeStart, safeEnd);
+  const segmentWaypoints = waypoints.slice(segmentStart, segmentEnd + 1);
+  if (segmentWaypoints.length < 2) return [];
+
+  if (type === "land") {
+    if (!cachedGeometry || cachedGeometry.length < 2) return [];
+
+    const startCoordinate: [number, number] = [waypoints[safeStart].lng, waypoints[safeStart].lat];
+    const endCoordinate: [number, number] = [waypoints[safeEnd].lng, waypoints[safeEnd].lat];
+    const cachedStartIndex = getNearestGeometryCoordinateIndex(cachedGeometry, startCoordinate);
+    const cachedEndIndex = getNearestGeometryCoordinateIndex(cachedGeometry, endCoordinate);
+
+    if (cachedStartIndex === cachedEndIndex) return [];
+
+    const slicedGeometry = cachedGeometry.slice(
+      Math.min(cachedStartIndex, cachedEndIndex),
+      Math.max(cachedStartIndex, cachedEndIndex) + 1
+    );
+
+    return slicedGeometry.length >= 2
+      ? (safeStart <= safeEnd ? slicedGeometry : [...slicedGeometry].reverse())
+      : [];
+  }
+
+  return buildPublicVoyageGeometry(segmentWaypoints, type, []);
 }
 
 export async function buildVoyageGeometry(

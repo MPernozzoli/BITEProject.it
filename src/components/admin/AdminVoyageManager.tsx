@@ -389,6 +389,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const [draggedWaypointId, setDraggedWaypointId] = useState<string | null>(null);
   const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
+  const [isRegeneratingGeometry, setIsRegeneratingGeometry] = useState(false);
 
   const commitVoyages = useCallback((nextVoyages: Voyage[]) => {
     voyagesRef.current = nextVoyages;
@@ -1640,6 +1641,7 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
   const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
   const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
+  const selectedVoyageHasCachedGeometry = getCachedGeometryCoordinates(selectedVoyage).length >= 2;
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
   );
@@ -1824,6 +1826,27 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     toast.success("Route saved");
     return true;
   }, [fetchWaypoints, isRouteDraftDirty, persistWaypointInsert, persistWaypointPatch, selectedVoyage, selectedVoyageId, syncVoyageGeometry]);
+
+  const regenerateSelectedVoyageGeometry = useCallback(async () => {
+    if (!selectedVoyageId || !selectedVoyage) return;
+    if (selectedVoyage.type !== "land") return;
+    if (isRouteDraftDirty) {
+      toast.error("Salva prima i waypoint della rotta, poi rigenera la geometria stradale.");
+      return;
+    }
+    if (persistedSelectedWaypoints.length < 2) {
+      toast.error("Servono almeno due waypoint salvati per generare la geometria stradale.");
+      return;
+    }
+
+    setIsRegeneratingGeometry(true);
+    try {
+      await syncVoyageGeometry(selectedVoyageId, persistedSelectedWaypoints);
+      toast.success("Geometria stradale rigenerata e salvata");
+    } finally {
+      setIsRegeneratingGeometry(false);
+    }
+  }, [isRouteDraftDirty, persistedSelectedWaypoints, selectedVoyage, selectedVoyageId, syncVoyageGeometry]);
 
   const guardedSelectVoyage = useCallback(async (voyageId: string) => {
     if (selectedVoyageRef.current && selectedVoyageRef.current !== voyageId && isRouteDraftDirty) {
@@ -2340,6 +2363,35 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
                     ))}
                   </div>
                 )}
+
+                <div className="rounded-[18px] border border-border/60 bg-background/60 px-3 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-sans text-foreground">
+                        {selectedVoyageHasCachedGeometry ? "Geometria stradale salvata" : "Geometria stradale mancante"}
+                      </p>
+                      <p className="mt-1 text-[11px] font-sans text-muted-foreground">
+                        {selectedVoyageHasCachedGeometry
+                          ? "Rigenera se hai bisogno di riallineare il percorso stradale salvato ai waypoint correnti."
+                          : "Genera e salva la polyline stradale persistita da riusare nel logbook senza ricalcoli."}
+                      </p>
+                      {isRouteDraftDirty ? (
+                        <p className="mt-2 text-[11px] font-sans text-amber-700">
+                          Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void regenerateSelectedVoyageGeometry()}
+                      disabled={isRegeneratingGeometry || isSavingRouteDraft || isRouteDraftDirty || persistedSelectedWaypoints.length < 2}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
+                    >
+                      {isRegeneratingGeometry ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
+                      {selectedVoyageHasCachedGeometry ? "Rigenera geometria" : "Genera geometria"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

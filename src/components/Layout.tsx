@@ -6,6 +6,7 @@ import SeoManager from "./SeoManager";
 
 const Layout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
+  const hideNavbar = pathname === "/links";
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -19,7 +20,7 @@ const Layout = ({ children }: { children: ReactNode }) => {
         <span className="site-shell__orb site-shell__orb--two" />
         <span className="site-shell__orb site-shell__orb--three" />
       </div>
-      <Navbar />
+      {hideNavbar ? null : <Navbar />}
       <main className="flex-1 relative">{children}</main>
       <Footer />
     </div>

@@ -7,7 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { buildPublicVoyageGeometry, geocodePlace } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
@@ -939,7 +939,7 @@ const ArticleEditor = () => {
 
       if (!selectedVoyageId || !voyageWaypoints.length) return;
 
-      const routeCoordinates = voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number]);
+      const routeCoordinates = selectedVoyageRouteCoordinates;
       const hasSpecificSelection =
         (associationMode === "point" && voyageSegStart != null) ||
         (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null);
@@ -1055,31 +1055,26 @@ const ArticleEditor = () => {
       if (
         associationMode === "segment" &&
         voyageSegStart != null &&
-        voyageSegEnd != null
+        voyageSegEnd != null &&
+        selectedVoyageHighlightCoordinates.length >= 2
       ) {
-        const segmentWaypoints = voyageWaypoints.slice(
-          Math.min(voyageSegStart, voyageSegEnd),
-          Math.max(voyageSegStart, voyageSegEnd) + 1
-        );
-        if (segmentWaypoints.length >= 2) {
-          map.addSource("editor-route-highlight", {
-            type: "geojson",
-            data: {
-              type: "Feature",
-              geometry: {
-                type: "LineString",
-                coordinates: segmentWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat]),
-              },
-              properties: {},
+        map.addSource("editor-route-highlight", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: selectedVoyageHighlightCoordinates,
             },
-          });
-          map.addLayer({
-            id: "editor-route-highlight",
-            type: "line",
-            source: "editor-route-highlight",
-            paint: { "line-color": "hsl(180,68%,34%)", "line-width": 5, "line-opacity": 0.9 },
-          });
-        }
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route-highlight",
+          type: "line",
+          source: "editor-route-highlight",
+          paint: { "line-color": "hsl(180,68%,34%)", "line-width": 5, "line-opacity": 0.9 },
+        });
       }
 
       if (selectedFeatures.length) {
@@ -1123,7 +1118,7 @@ const ArticleEditor = () => {
 
     if (map.isStyleLoaded()) draw();
     else map.on("load", draw);
-  }, [associationMode, handleVoyageWaypointMapSelect, selectedVoyageId, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+  }, [associationMode, handleVoyageWaypointMapSelect, selectedVoyageHighlightCoordinates, selectedVoyageId, selectedVoyageRouteCoordinates, voyageSegEnd, voyageSegStart, voyageWaypoints]);
 
   useEffect(() => {
     const map = geoMapInstanceRef.current;
@@ -1131,7 +1126,7 @@ const ArticleEditor = () => {
     if (fittedVoyageIdRef.current === selectedVoyageId) return;
 
     const fit = () => {
-      const coordinates = voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number]);
+      const coordinates = selectedVoyageRouteCoordinates;
       if (!coordinates.length) return;
 
       if (coordinates.length === 1) {
@@ -1149,7 +1144,7 @@ const ArticleEditor = () => {
 
     if (map.isStyleLoaded()) fit();
     else map.once("load", fit);
-  }, [selectedVoyageId, voyageWaypoints]);
+  }, [selectedVoyageId, selectedVoyageRouteCoordinates]);
 
   useEffect(() => {
     if (
@@ -1209,22 +1204,65 @@ const ArticleEditor = () => {
     [articleMapScenes]
   );
   const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+  const selectedVoyageCachedGeometry = useMemo(() => {
+    const geometrySource = selectedVoyage?.cached_geometry as { coordinates?: [number, number][] } | null;
+    return Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
+  }, [selectedVoyage]);
+  const selectedVoyageRouteCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
+    return buildPublicVoyageGeometry(
+      voyageWaypoints,
+      selectedVoyage.type,
+      [],
+      selectedVoyage.id,
+      selectedVoyageCachedGeometry
+    );
+  }, [selectedVoyage, selectedVoyageCachedGeometry, voyageWaypoints]);
+  const selectedVoyageHighlightCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
+
+    if (associationMode === "full") {
+      return selectedVoyageRouteCoordinates;
+    }
+
+    if (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null) {
+      return buildVoyageSegmentGeometry(
+        voyageWaypoints,
+        selectedVoyage.type,
+        voyageSegStart,
+        voyageSegEnd,
+        selectedVoyageCachedGeometry
+      );
+    }
+
+    return [];
+  }, [
+    associationMode,
+    selectedVoyage,
+    selectedVoyageCachedGeometry,
+    selectedVoyageRouteCoordinates,
+    voyageSegEnd,
+    voyageSegStart,
+    voyageWaypoints,
+  ]);
   const primaryRouteCoordinates = useMemo(() => {
     if (!selectedVoyage || voyageWaypoints.length < 2) return null;
-
-    const geometrySource = selectedVoyage.cached_geometry as { coordinates?: [number, number][] } | null;
-    const cachedGeometry = Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
 
     if (voyageSegStart != null || voyageSegEnd != null) {
       const start = Math.max(0, Math.min(voyageSegStart ?? voyageSegEnd ?? 0, voyageWaypoints.length - 1));
       const end = Math.max(0, Math.min(voyageSegEnd ?? voyageSegStart ?? start, voyageWaypoints.length - 1));
-      const segmentWaypoints = voyageWaypoints.slice(Math.min(start, end), Math.max(start, end) + 1);
-      if (segmentWaypoints.length < 2) return null;
-      return buildPublicVoyageGeometry(segmentWaypoints, selectedVoyage.type, []);
+      const segmentGeometry = buildVoyageSegmentGeometry(
+        voyageWaypoints,
+        selectedVoyage.type,
+        start,
+        end,
+        selectedVoyageCachedGeometry
+      );
+      return segmentGeometry.length >= 2 ? segmentGeometry : null;
     }
 
-    return buildPublicVoyageGeometry(voyageWaypoints, selectedVoyage.type, [], selectedVoyage.id, cachedGeometry);
-  }, [selectedVoyage, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+    return selectedVoyageRouteCoordinates.length >= 2 ? selectedVoyageRouteCoordinates : null;
+  }, [selectedVoyage, selectedVoyageCachedGeometry, selectedVoyageRouteCoordinates, voyageSegEnd, voyageSegStart, voyageWaypoints]);
 
   const handleSceneAnchorLink = useCallback((language: ArticleLanguage, sceneId: string, payload: { anchorId: string; anchorPreview: string }) => {
     setArticleMapScenes((currentScenes) =>

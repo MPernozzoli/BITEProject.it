@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildVoyageGeometry } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageGeometry, buildVoyageSegmentGeometry, type VoyageWaypoint } from "@/lib/voyage-utils";
 
 const createJsonResponse = (payload: unknown) =>
   Promise.resolve({
@@ -88,5 +88,41 @@ describe("buildVoyageGeometry", () => {
       [9.9, 44.1],
       [10.1, 44.2],
     ]);
+  });
+});
+
+describe("buildVoyageSegmentGeometry", () => {
+  it("uses cached land geometry for article segments instead of straight waypoint chords", () => {
+    const waypoints = [
+      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 44.1, lng: 9.1, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "technical", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-3", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+    ] satisfies VoyageWaypoint[];
+
+    const geometry = buildVoyageSegmentGeometry(waypoints, "land", 0, 2, [
+      [9.0, 44.0],
+      [9.03, 44.05],
+      [9.07, 44.11],
+      [9.14, 44.16],
+      [9.2, 44.2],
+    ]);
+
+    expect(geometry).toEqual([
+      [9.0, 44.0],
+      [9.03, 44.05],
+      [9.07, 44.11],
+      [9.14, 44.16],
+      [9.2, 44.2],
+    ]);
+  });
+
+  it("does not synthesize straight land segments when cached geometry is missing", () => {
+    const waypoints = [
+      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+    ] satisfies VoyageWaypoint[];
+
+    expect(buildVoyageSegmentGeometry(waypoints, "land", 0, 1)).toEqual([]);
+    expect(buildPublicVoyageGeometry(waypoints, "land")).toEqual([]);
   });
 });
