@@ -1521,75 +1521,6 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
     setShowVoyageForm(false);
   }, [isVoyageFormDirty]);
 
-  const handleSaveBeforeLeave = useCallback(async () => {
-    if (!isVoyageFormDirty && !isRouteDraftDirty) return true;
-
-    if (isVoyageFormDirty) {
-      const shouldSaveVoyage = window.confirm(
-        "Hai modifiche non salvate nella scheda della rotta. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
-      );
-      if (!shouldSaveVoyage) return false;
-      const savedVoyage = await saveVoyage();
-      if (!savedVoyage) return false;
-    }
-
-    if (isRouteDraftDirty) {
-      const shouldSaveRoute = window.confirm(
-        "Hai modifiche locali non salvate ai waypoint. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
-      );
-      if (!shouldSaveRoute) return false;
-      return saveSelectedRouteDraft();
-    }
-
-    return true;
-  }, [isRouteDraftDirty, isVoyageFormDirty, saveSelectedRouteDraft, saveVoyage]);
-
-  useEffect(() => {
-    onRegisterLeaveGuard?.(handleSaveBeforeLeave);
-    return () => onRegisterLeaveGuard?.(null);
-  }, [handleSaveBeforeLeave, onRegisterLeaveGuard]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isRouteDraftDirty, isVoyageFormDirty]);
-
-  useEffect(() => {
-    const handleDocumentClick = (event: MouseEvent) => {
-      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
-      if (event.defaultPrevented || event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
-      const target = event.target as HTMLElement | null;
-      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
-      if (!anchor) return;
-      if (anchor.target && anchor.target !== "_self") return;
-      if (anchor.hasAttribute("download")) return;
-
-      const nextUrl = new URL(anchor.href, window.location.href);
-      if (nextUrl.origin !== window.location.origin) return;
-
-      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
-      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
-      if (currentUrl === nextPath) return;
-
-      event.preventDefault();
-      void (async () => {
-        if (!(await handleSaveBeforeLeave())) return;
-        navigate(nextPath);
-      })();
-    };
-
-    document.addEventListener("click", handleDocumentClick, true);
-    return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [handleSaveBeforeLeave, isRouteDraftDirty, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
-
   const deleteVoyage = useCallback(async (voyageId: string, name: string) => {
     if (!confirm(`Delete voyage "${name}" and all its waypoints?`)) return;
 
@@ -1812,6 +1743,75 @@ const AdminVoyageManager = ({ onRegisterLeaveGuard }: AdminVoyageManagerProps) =
 
     await selectVoyage(voyageId);
   }, [discardSelectedRouteChanges, isRouteDraftDirty, saveSelectedRouteDraft, selectVoyage]);
+
+  const handleSaveBeforeLeave = useCallback(async () => {
+    if (!isVoyageFormDirty && !isRouteDraftDirty) return true;
+
+    if (isVoyageFormDirty) {
+      const shouldSaveVoyage = window.confirm(
+        "Hai modifiche non salvate nella scheda della rotta. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
+      );
+      if (!shouldSaveVoyage) return false;
+      const savedVoyage = await saveVoyage();
+      if (!savedVoyage) return false;
+    }
+
+    if (isRouteDraftDirty) {
+      const shouldSaveRoute = window.confirm(
+        "Hai modifiche locali non salvate ai waypoint. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
+      );
+      if (!shouldSaveRoute) return false;
+      return saveSelectedRouteDraft();
+    }
+
+    return true;
+  }, [isRouteDraftDirty, isVoyageFormDirty, saveSelectedRouteDraft, saveVoyage]);
+
+  useEffect(() => {
+    onRegisterLeaveGuard?.(handleSaveBeforeLeave);
+    return () => onRegisterLeaveGuard?.(null);
+  }, [handleSaveBeforeLeave, onRegisterLeaveGuard]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isRouteDraftDirty, isVoyageFormDirty]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) return;
+
+      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      if (currentUrl === nextPath) return;
+
+      event.preventDefault();
+      void (async () => {
+        if (!(await handleSaveBeforeLeave())) return;
+        navigate(nextPath);
+      })();
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [handleSaveBeforeLeave, isRouteDraftDirty, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
 
   return (
     <div className="space-y-6">
