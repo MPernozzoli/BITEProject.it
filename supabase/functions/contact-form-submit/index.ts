@@ -13,7 +13,7 @@ const corsHeaders = {
 }
 
 const CONTACT_RECIPIENT_EMAIL =
-  Deno.env.get('CONTACT_RECIPIENT_EMAIL')?.trim() || 'hello@biteproject.com'
+  Deno.env.get('CONTACT_RECIPIENT_EMAIL')?.trim() || 'hello@biteproject.it'
 
 type EmailJob = {
   messageId: string
@@ -364,21 +364,22 @@ Deno.serve(async (req) => {
       }
     )
 
-    const dispatcherResponse = await fetch(
-      `${supabaseUrl}/functions/v1/process-email-queue`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json',
-        },
+    try {
+      const dispatcherResponse = await fetch(
+        `${supabaseUrl}/functions/v1/process-email-queue`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+      if (!dispatcherResponse.ok) {
+        console.warn('Inline dispatch failed (emails will be sent by cron)', await dispatcherResponse.text())
       }
-    )
-
-    if (!dispatcherResponse.ok) {
-      const details = await dispatcherResponse.text()
-      console.error('Failed to process queued contact emails', details)
-      return jsonResponse({ error: 'Failed to dispatch queued emails' }, 500)
+    } catch (dispatchErr) {
+      console.warn('Inline dispatch error (emails will be sent by cron)', dispatchErr)
     }
   } catch (error) {
     console.error('Contact form email pipeline failed', error)
