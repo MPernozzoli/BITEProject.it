@@ -661,7 +661,7 @@ const AdminVoyageManager = ({
       description_en: waypoint.description_en,
       event_date: waypoint.event_date,
       event_time: waypoint.event_time,
-      media: waypoint.media,
+      media: waypoint.media as unknown as Json,
     };
     const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
       voyage_id: voyageId,
