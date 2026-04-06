@@ -274,6 +274,20 @@ ${inner}
 <p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">If you need to add anything, reply to this email or write to <a href="mailto:${CONTACT_RECIPIENT_EMAIL}" style="color:#3f7c7a;text-decoration:underline;">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
 <hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
 <p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Message sent from the contact form on <a href="${PUBLIC_SITE_URL}" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}</a>.</p>`)
+  const ownerText = [
+    'Nuovo messaggio dal form contatti di BITE.',
+    '',
+    `Nome: ${name}`,
+    `Email: ${email}`,
+    `Lingua: ${language}`,
+    `Oggetto: ${subject}`,
+    '',
+    message,
+    '',
+    `Rispondi a: ${email}`,
+    `Origine: ${PUBLIC_SITE_URL}/contact`,
+  ].join('\n')
+
   const confirmationText =
     language === 'it'
       ? [
