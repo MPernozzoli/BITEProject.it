@@ -13,7 +13,7 @@ const corsHeaders = {
 }
 
 const CONTACT_RECIPIENT_EMAIL =
-  Deno.env.get('CONTACT_RECIPIENT_EMAIL')?.trim() || 'hello@biteproject.com'
+  Deno.env.get('CONTACT_RECIPIENT_EMAIL')?.trim() || 'hello@biteproject.it'
 
 type EmailJob = {
   messageId: string
