@@ -285,7 +285,7 @@ ${inner}
     message,
     '',
     `Rispondi a: ${email}`,
-    `Origine: ${PUBLIC_SITE_URL}/contact`,
+    `Origine: ${PUBLIC_SITE_URL}/contatti`,
   ].join('\n')
 
   const confirmationText =
