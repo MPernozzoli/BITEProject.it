@@ -92,12 +92,29 @@ export function EditorialEmailShell({
 
   return (
     <Html lang={lang} dir="ltr">
-      <Head />
+      <Head>
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+        />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </Head>
       <Preview>{preview}</Preview>
       <Body style={main}>
         <Container style={container}>
           <Section style={frame}>
+            {/* Brand mark */}
             <Text style={brand}>{SITE_NAME}</Text>
+
+            {/* Hero image */}
             <Section style={heroFrame}>
               <Img
                 src={resolvedHeroImage}
@@ -107,11 +124,17 @@ export function EditorialEmailShell({
               />
             </Section>
             {heroCaption ? <Text style={heroCaptionStyle}>{heroCaption}</Text> : null}
+
+            {/* Eyebrow + Title */}
             {eyebrow ? <Text style={eyebrowStyle}>{eyebrow}</Text> : null}
             <Heading as="h1" style={titleStyle}>
               {title}
             </Heading>
+
+            {/* Intro */}
             {intro ? <Section style={introBlock}>{intro}</Section> : null}
+
+            {/* CTA buttons */}
             {primaryCta || secondaryCta ? (
               <Section style={ctaRow}>
                 {primaryCta ? (
@@ -126,7 +149,11 @@ export function EditorialEmailShell({
                 ) : null}
               </Section>
             ) : null}
+
+            {/* Body */}
             {children}
+
+            {/* Footer */}
             <Section style={footerCard}>
               <Text style={footerText}>
                 {footerReason?.trim() || copy.footerReason}
@@ -137,7 +164,7 @@ export function EditorialEmailShell({
                 </Link>
                 {unsubscribeUrl ? (
                   <>
-                    <span style={footerDivider}> • </span>
+                    <span style={footerDivider}> · </span>
                     <Link href={unsubscribeUrl} style={footerLink}>
                       {copy.unsubscribe}
                     </Link>
@@ -219,13 +246,35 @@ export function EmailArticleCard({
   )
 }
 
+/* ─── Design tokens ─── */
+
+const FONT_SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif"
+const FONT_SANS = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+
+const COLOR_NAVY = '#152338'
+const COLOR_BODY = '#3d4654'
+const COLOR_MUTED = '#6e7987'
+const COLOR_TEAL = '#3f7c7a'
+const COLOR_TEAL_DARK = '#2d5356'
+const COLOR_CREAM = '#fffdf9'
+const COLOR_WARM_BG = '#f4efe7'
+const COLOR_BORDER = '#e6ddd1'
+const COLOR_CARD_BG = '#ffffff'
+const COLOR_FOOTER_BG = '#f6f3ed'
+const COLOR_FOOTER_BORDER = '#e3dbd0'
+const COLOR_SECONDARY_BG = '#eef4f4'
+const COLOR_SECONDARY_BORDER = '#cddbdc'
+const COLOR_INLINE_BG = '#f3efe8'
+const COLOR_INLINE_BORDER = '#ddd2c4'
+const COLOR_ARTICLE_IMAGE_BG = '#ebf2f2'
+
 const main = {
-  backgroundColor: '#f4efe7',
+  backgroundColor: COLOR_WARM_BG,
   backgroundImage:
     'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(244,239,231,0.94) 45%, rgba(237,244,244,0.92) 100%)',
-  fontFamily: "'DM Sans', Arial, sans-serif",
+  fontFamily: FONT_SANS,
   margin: '0',
-  padding: '28px 0',
+  padding: '32px 0',
 }
 
 const container = {
@@ -235,112 +284,118 @@ const container = {
 }
 
 const frame = {
-  backgroundColor: '#fffdf9',
-  border: '1px solid #e6ddd1',
-  borderRadius: '30px',
-  boxShadow: '0 26px 80px rgba(21, 35, 56, 0.10)',
-  overflow: 'hidden',
-  padding: '24px',
+  backgroundColor: COLOR_CREAM,
+  border: `1px solid ${COLOR_BORDER}`,
+  borderRadius: '28px',
+  boxShadow: '0 24px 64px rgba(21, 35, 56, 0.08)',
+  overflow: 'hidden' as const,
+  padding: '28px 26px',
 }
 
 const brand = {
-  color: '#152338',
-  fontSize: '14px',
+  color: COLOR_NAVY,
+  fontFamily: FONT_SERIF,
+  fontSize: '16px',
   fontWeight: '700' as const,
-  letterSpacing: '0.34em',
-  margin: '0 0 18px',
+  letterSpacing: '0.32em',
+  margin: '0 0 22px',
   textTransform: 'uppercase' as const,
 }
 
 const heroFrame = {
-  backgroundColor: '#dde8ea',
-  borderRadius: '22px',
-  overflow: 'hidden',
-  marginBottom: '16px',
+  backgroundColor: COLOR_ARTICLE_IMAGE_BG,
+  borderRadius: '20px',
+  overflow: 'hidden' as const,
+  marginBottom: '18px',
 }
 
 const heroImage = {
-  display: 'block',
+  display: 'block' as const,
   height: 'auto',
   width: '100%',
 }
 
 const heroCaptionStyle = {
-  color: '#6e7987',
+  color: COLOR_MUTED,
+  fontFamily: FONT_SANS,
   fontSize: '12px',
   lineHeight: '1.5',
-  margin: '0 0 12px',
+  margin: '0 0 14px',
 }
 
 const eyebrowStyle = {
-  color: '#3f7c7a',
-  fontSize: '12px',
+  color: COLOR_TEAL,
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
   fontWeight: '700' as const,
-  letterSpacing: '0.22em',
+  letterSpacing: '0.24em',
   margin: '0 0 10px',
   textTransform: 'uppercase' as const,
 }
 
 const titleStyle = {
-  color: '#152338',
-  fontFamily: "'Playfair Display', Georgia, serif",
-  fontSize: '38px',
+  color: COLOR_NAVY,
+  fontFamily: FONT_SERIF,
+  fontSize: '36px',
   fontWeight: '600' as const,
-  letterSpacing: '-0.03em',
-  lineHeight: '1.08',
-  margin: '0 0 16px',
+  letterSpacing: '-0.025em',
+  lineHeight: '1.12',
+  margin: '0 0 18px',
 }
 
 const introBlock = {
-  marginBottom: '10px',
+  marginBottom: '12px',
 }
 
 const bodyText = {
-  color: '#4c5563',
+  color: COLOR_BODY,
+  fontFamily: FONT_SANS,
   fontSize: '15px',
-  lineHeight: '1.8',
+  lineHeight: '1.75',
   margin: '0 0 16px',
 }
 
 const bodyMutedText = {
   ...bodyText,
-  color: '#6e7987',
+  color: COLOR_MUTED,
 }
 
 const ctaRow = {
-  margin: '8px 0 20px',
+  margin: '6px 0 24px',
 }
 
 const primaryButton = {
-  backgroundColor: '#152338',
+  backgroundColor: COLOR_NAVY,
   borderRadius: '999px',
   color: '#fffaf3',
+  fontFamily: FONT_SANS,
   fontSize: '13px',
   fontWeight: '700' as const,
-  letterSpacing: '0.08em',
+  letterSpacing: '0.06em',
   marginRight: '10px',
-  padding: '14px 22px',
+  padding: '14px 24px',
   textDecoration: 'none',
   textTransform: 'uppercase' as const,
 }
 
 const secondaryButton = {
-  backgroundColor: '#eef4f4',
-  border: '1px solid #cddbdc',
+  backgroundColor: COLOR_SECONDARY_BG,
+  border: `1px solid ${COLOR_SECONDARY_BORDER}`,
   borderRadius: '999px',
-  color: '#2d5356',
+  color: COLOR_TEAL_DARK,
+  fontFamily: FONT_SANS,
   fontSize: '13px',
   fontWeight: '700' as const,
-  letterSpacing: '0.08em',
-  padding: '14px 22px',
+  letterSpacing: '0.06em',
+  padding: '14px 24px',
   textDecoration: 'none',
   textTransform: 'uppercase' as const,
 }
 
 const card = {
-  backgroundColor: '#ffffff',
-  border: '1px solid #e7e0d7',
-  borderRadius: '22px',
+  backgroundColor: COLOR_CARD_BG,
+  border: `1px solid ${COLOR_BORDER}`,
+  borderRadius: '20px',
   margin: '0 0 18px',
   padding: '22px 20px',
 }
@@ -351,93 +406,98 @@ const articleCard = {
 }
 
 const articleImageWrap = {
-  backgroundColor: '#ebf2f2',
-  borderRadius: '16px',
+  backgroundColor: COLOR_ARTICLE_IMAGE_BG,
+  borderRadius: '14px',
   marginBottom: '14px',
-  overflow: 'hidden',
+  overflow: 'hidden' as const,
 }
 
 const articleImage = {
-  display: 'block',
+  display: 'block' as const,
   height: 'auto',
   width: '100%',
 }
 
 const storyLabel = {
-  color: '#3f7c7a',
+  color: COLOR_TEAL,
+  fontFamily: FONT_SANS,
   fontSize: '11px',
   fontWeight: '700' as const,
-  letterSpacing: '0.16em',
+  letterSpacing: '0.18em',
   margin: '0 0 8px',
   textTransform: 'uppercase' as const,
 }
 
 const storyLabelLink = {
-  color: '#3f7c7a',
+  color: COLOR_TEAL,
   textDecoration: 'none',
 }
 
 const articleTitle = {
-  color: '#152338',
-  fontFamily: "'Playfair Display', Georgia, serif",
-  fontSize: '27px',
+  color: COLOR_NAVY,
+  fontFamily: FONT_SERIF,
+  fontSize: '26px',
   fontWeight: '600' as const,
   letterSpacing: '-0.02em',
-  lineHeight: '1.18',
+  lineHeight: '1.2',
   margin: '0 0 10px',
 }
 
 const articleTitleLink = {
-  color: '#152338',
+  color: COLOR_NAVY,
   textDecoration: 'none',
 }
 
 const articleMeta = {
-  color: '#6e7987',
+  color: COLOR_MUTED,
+  fontFamily: FONT_SANS,
   fontSize: '12px',
-  letterSpacing: '0.05em',
+  letterSpacing: '0.04em',
   lineHeight: '1.5',
   margin: '0 0 16px',
   textTransform: 'uppercase' as const,
 }
 
 const inlineButton = {
-  backgroundColor: '#f3efe8',
-  border: '1px solid #ddd2c4',
+  backgroundColor: COLOR_INLINE_BG,
+  border: `1px solid ${COLOR_INLINE_BORDER}`,
   borderRadius: '999px',
-  color: '#152338',
+  color: COLOR_NAVY,
+  fontFamily: FONT_SANS,
   fontSize: '12px',
   fontWeight: '700' as const,
-  letterSpacing: '0.08em',
-  padding: '11px 16px',
+  letterSpacing: '0.06em',
+  padding: '11px 18px',
   textDecoration: 'none',
   textTransform: 'uppercase' as const,
 }
 
 const footerCard = {
-  backgroundColor: '#f6f3ed',
-  border: '1px solid #e3dbd0',
-  borderRadius: '20px',
-  marginTop: '24px',
-  padding: '18px 18px 14px',
+  backgroundColor: COLOR_FOOTER_BG,
+  border: `1px solid ${COLOR_FOOTER_BORDER}`,
+  borderRadius: '18px',
+  marginTop: '28px',
+  padding: '18px 20px 14px',
 }
 
 const footerText = {
-  color: '#6e7987',
+  color: COLOR_MUTED,
+  fontFamily: FONT_SANS,
   fontSize: '12px',
   lineHeight: '1.7',
   margin: '0 0 8px',
 }
 
 const footerLinks = {
-  color: '#152338',
+  color: COLOR_NAVY,
+  fontFamily: FONT_SANS,
   fontSize: '12px',
   lineHeight: '1.6',
   margin: '0',
 }
 
 const footerLink = {
-  color: '#152338',
+  color: COLOR_NAVY,
   textDecoration: 'underline',
 }
 

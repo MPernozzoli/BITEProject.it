@@ -219,68 +219,61 @@ Deno.serve(async (req) => {
   const ownerMessageId = crypto.randomUUID()
   const confirmationMessageId = crypto.randomUUID()
   const escapedMessage = escapeHtml(message).replaceAll('\n', '<br />')
+  const FS = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+  const FH = "'Playfair Display', Georgia, 'Times New Roman', serif"
+
+  const shell = (inner: string) => `
+<div style="background-color:#f4efe7;background-image:linear-gradient(180deg,rgba(255,255,255,.82) 0%,rgba(244,239,231,.94) 45%,rgba(237,244,244,.92) 100%);margin:0;padding:32px 0;">
+<div style="margin:0 auto;max-width:580px;padding:0 12px;">
+<div style="background:#fffdf9;border:1px solid #e6ddd1;border-radius:28px;box-shadow:0 24px 64px rgba(21,35,56,.08);padding:36px 32px;font-family:${FS};">
+<p style="color:#152338;font-family:${FH};font-size:16px;font-weight:700;letter-spacing:.32em;margin:0 0 24px;text-transform:uppercase;">BITE</p>
+${inner}
+</div></div></div>`.trim()
+
   const ownerSubject = `[Contact] ${subject}`
-  const ownerHtml = `
-    <div style="font-family: Georgia, serif; color: #1f2937; line-height: 1.6;">
-      <p style="margin: 0 0 16px;">Nuovo messaggio dal form contatti di ${escapeHtml(SITE_NAME)}.</p>
-      <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px;">
-        <tr><td style="padding: 8px 0; font-weight: 600; width: 120px;">Nome</td><td style="padding: 8px 0;">${escapeHtml(name)}</td></tr>
-        <tr><td style="padding: 8px 0; font-weight: 600;">Email</td><td style="padding: 8px 0;"><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></td></tr>
-        <tr><td style="padding: 8px 0; font-weight: 600;">Lingua</td><td style="padding: 8px 0;">${escapeHtml(language)}</td></tr>
-        <tr><td style="padding: 8px 0; font-weight: 600;">Oggetto</td><td style="padding: 8px 0;">${escapeHtml(subject)}</td></tr>
-      </table>
-      <div style="padding: 16px 18px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
-        ${escapedMessage}
-      </div>
-      <p style="margin: 20px 0 0; font-size: 13px; color: #6b7280;">
-        Rispondi manualmente a <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>.
-        Inviato da <a href="${PUBLIC_SITE_URL}/contact">${PUBLIC_SITE_URL}/contact</a>.
-      </p>
-    </div>
-  `.trim()
-  const ownerText = [
-    `Nuovo messaggio dal form contatti di ${SITE_NAME}.`,
-    '',
-    `Nome: ${name}`,
-    `Email: ${email}`,
-    `Lingua: ${language}`,
-    `Oggetto: ${subject}`,
-    '',
-    message,
-    '',
-    `Pagina: ${PUBLIC_SITE_URL}/contact`,
-  ].join('\n')
+  const ownerHtml = shell(`
+<p style="color:#3f7c7a;font-size:11px;font-weight:700;letter-spacing:.24em;margin:0 0 10px;text-transform:uppercase;">Form Contatti</p>
+<h1 style="color:#152338;font-family:${FH};font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15;margin:0 0 20px;">Nuovo messaggio</h1>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">Nuovo messaggio dal form contatti di ${escapeHtml(SITE_NAME)}.</p>
+<table style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px;color:#3d4654;">
+<tr><td style="padding:10px 0;font-weight:600;width:110px;vertical-align:top;color:#152338;">Nome</td><td style="padding:10px 0;">${escapeHtml(name)}</td></tr>
+<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Email</td><td style="padding:10px 0;"><a href="mailto:${escapeHtml(email)}" style="color:#3f7c7a;text-decoration:underline;">${escapeHtml(email)}</a></td></tr>
+<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Lingua</td><td style="padding:10px 0;">${escapeHtml(language)}</td></tr>
+<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Oggetto</td><td style="padding:10px 0;">${escapeHtml(subject)}</td></tr>
+</table>
+<div style="padding:18px 20px;border:1px solid #e6ddd1;border-radius:20px;background:#fff;margin:0 0 20px;font-size:15px;color:#3d4654;line-height:1.75;">${escapedMessage}</div>
+<hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
+<p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Rispondi a <a href="mailto:${escapeHtml(email)}" style="color:#152338;text-decoration:underline;">${escapeHtml(email)}</a>. Inviato da <a href="${PUBLIC_SITE_URL}/contact" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}/contact</a>.</p>`)
 
   const confirmationSubject =
     language === 'it'
       ? 'Abbiamo ricevuto il tuo messaggio'
       : 'We received your message'
-  const confirmationHtml =
-    language === 'it'
-      ? `
-        <div style="font-family: Georgia, serif; color: #1f2937; line-height: 1.6;">
-          <p style="margin: 0 0 16px;">Ciao ${escapeHtml(name)},</p>
-          <p style="margin: 0 0 16px;">abbiamo ricevuto il tuo messaggio e ti risponderemo appena possibile.</p>
-          <div style="padding: 16px 18px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; margin: 0 0 16px;">
-            <p style="margin: 0 0 8px;"><strong>Oggetto:</strong> ${escapeHtml(subject)}</p>
-            <p style="margin: 0;">${escapedMessage}</p>
-          </div>
-          <p style="margin: 0 0 16px;">Se devi aggiungere qualcosa, puoi rispondere a questa email oppure scriverci a <a href="mailto:${CONTACT_RECIPIENT_EMAIL}">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
-          <p style="margin: 0; color: #6b7280; font-size: 13px;">Messaggio inviato dal form contatti di <a href="${PUBLIC_SITE_URL}">${PUBLIC_SITE_URL}</a>.</p>
-        </div>
-      `.trim()
-      : `
-        <div style="font-family: Georgia, serif; color: #1f2937; line-height: 1.6;">
-          <p style="margin: 0 0 16px;">Hi ${escapeHtml(name)},</p>
-          <p style="margin: 0 0 16px;">We received your message and will reply as soon as we can.</p>
-          <div style="padding: 16px 18px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; margin: 0 0 16px;">
-            <p style="margin: 0 0 8px;"><strong>Subject:</strong> ${escapeHtml(subject)}</p>
-            <p style="margin: 0;">${escapedMessage}</p>
-          </div>
-          <p style="margin: 0 0 16px;">If you need to add anything, reply to this email or write to <a href="mailto:${CONTACT_RECIPIENT_EMAIL}">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
-          <p style="margin: 0; color: #6b7280; font-size: 13px;">Message sent from the contact form on <a href="${PUBLIC_SITE_URL}">${PUBLIC_SITE_URL}</a>.</p>
-        </div>
-      `.trim()
+  const confirmationHtml = language === 'it'
+    ? shell(`
+<p style="color:#3f7c7a;font-size:11px;font-weight:700;letter-spacing:.24em;margin:0 0 10px;text-transform:uppercase;">Contatto</p>
+<h1 style="color:#152338;font-family:${FH};font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15;margin:0 0 20px;">Messaggio ricevuto</h1>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 16px;">Ciao ${escapeHtml(name)},</p>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">abbiamo ricevuto il tuo messaggio e ti risponderemo appena possibile.</p>
+<div style="padding:18px 20px;border:1px solid #e6ddd1;border-radius:20px;background:#fff;margin:0 0 20px;font-size:15px;color:#3d4654;line-height:1.75;">
+<p style="margin:0 0 8px;"><strong style="color:#152338;">Oggetto:</strong> ${escapeHtml(subject)}</p>
+<p style="margin:0;">${escapedMessage}</p>
+</div>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">Se devi aggiungere qualcosa, puoi rispondere a questa email oppure scriverci a <a href="mailto:${CONTACT_RECIPIENT_EMAIL}" style="color:#3f7c7a;text-decoration:underline;">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
+<hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
+<p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Messaggio inviato dal form contatti di <a href="${PUBLIC_SITE_URL}" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}</a>.</p>`)
+    : shell(`
+<p style="color:#3f7c7a;font-size:11px;font-weight:700;letter-spacing:.24em;margin:0 0 10px;text-transform:uppercase;">Contact</p>
+<h1 style="color:#152338;font-family:${FH};font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15;margin:0 0 20px;">Message received</h1>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 16px;">Hi ${escapeHtml(name)},</p>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">We received your message and will reply as soon as we can.</p>
+<div style="padding:18px 20px;border:1px solid #e6ddd1;border-radius:20px;background:#fff;margin:0 0 20px;font-size:15px;color:#3d4654;line-height:1.75;">
+<p style="margin:0 0 8px;"><strong style="color:#152338;">Subject:</strong> ${escapeHtml(subject)}</p>
+<p style="margin:0;">${escapedMessage}</p>
+</div>
+<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">If you need to add anything, reply to this email or write to <a href="mailto:${CONTACT_RECIPIENT_EMAIL}" style="color:#3f7c7a;text-decoration:underline;">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
+<hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
+<p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Message sent from the contact form on <a href="${PUBLIC_SITE_URL}" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}</a>.</p>`)
   const confirmationText =
     language === 'it'
       ? [
