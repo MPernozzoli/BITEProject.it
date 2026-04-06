@@ -1203,48 +1203,6 @@ const ArticleEditor = () => {
     () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_it || scene.title_en || `Scena ${index + 1}` })),
     [articleMapScenes]
   );
-  const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
-  const selectedVoyageCachedGeometry = useMemo(() => {
-    const geometrySource = selectedVoyage?.cached_geometry as { coordinates?: [number, number][] } | null;
-    return Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
-  }, [selectedVoyage]);
-  const selectedVoyageRouteCoordinates = useMemo(() => {
-    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
-    return buildPublicVoyageGeometry(
-      voyageWaypoints,
-      selectedVoyage.type,
-      [],
-      selectedVoyage.id,
-      selectedVoyageCachedGeometry
-    );
-  }, [selectedVoyage, selectedVoyageCachedGeometry, voyageWaypoints]);
-  const selectedVoyageHighlightCoordinates = useMemo(() => {
-    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
-
-    if (associationMode === "full") {
-      return selectedVoyageRouteCoordinates;
-    }
-
-    if (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null) {
-      return buildVoyageSegmentGeometry(
-        voyageWaypoints,
-        selectedVoyage.type,
-        voyageSegStart,
-        voyageSegEnd,
-        selectedVoyageCachedGeometry
-      );
-    }
-
-    return [];
-  }, [
-    associationMode,
-    selectedVoyage,
-    selectedVoyageCachedGeometry,
-    selectedVoyageRouteCoordinates,
-    voyageSegEnd,
-    voyageSegStart,
-    voyageWaypoints,
-  ]);
   const primaryRouteCoordinates = useMemo(() => {
     if (!selectedVoyage || voyageWaypoints.length < 2) return null;
 
