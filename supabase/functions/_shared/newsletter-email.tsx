@@ -37,6 +37,9 @@ const FOOTER_COPY: Record<string, { why: string; unsubscribe: string }> = {
   },
 }
 
+const FONT_SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif"
+const FONT_SANS = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+
 interface NewsletterEmailProps {
   lang: string
   preheader?: string
@@ -56,79 +59,108 @@ export const NewsletterEmail = ({
 
   return (
     <Html lang={lang} dir="ltr">
-      <Head />
+      <Head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+      </Head>
       <Preview>{preheader || 'Latest notes from BITE'}</Preview>
       <Body style={main}>
-        <Container style={container}>
-          <Text style={brand}>BITE</Text>
-          <Hr style={hr} />
-          <Section
-            style={content}
-            dangerouslySetInnerHTML={{ __html: bodyHtml }}
-          />
-          <Hr style={hr} />
-          <Text style={footer}>{footerCopy.why}</Text>
-          <Text style={footer}>
-            <a href={unsubscribeUrl} style={link}>
-              {footerCopy.unsubscribe}
-            </a>
-          </Text>
-          {trackingPixelUrl ? (
-            <img
-              src={trackingPixelUrl}
-              width="1"
-              height="1"
-              alt=""
-              style={{ display: 'block', opacity: 0 }}
+        <Container style={outerContainer}>
+          <Section style={frame}>
+            <Text style={brand}>BITE</Text>
+            <Hr style={hr} />
+            <Section
+              style={content}
+              dangerouslySetInnerHTML={{ __html: bodyHtml }}
             />
-          ) : null}
+            <Hr style={hr} />
+            <Section style={footerCard}>
+              <Text style={footer}>{footerCopy.why}</Text>
+              <Text style={footer}>
+                <a href={unsubscribeUrl} style={link}>
+                  {footerCopy.unsubscribe}
+                </a>
+              </Text>
+            </Section>
+          </Section>
         </Container>
+        {trackingPixelUrl ? (
+          <img
+            src={trackingPixelUrl}
+            width="1"
+            height="1"
+            alt=""
+            style={{ display: 'block', opacity: 0 }}
+          />
+        ) : null}
       </Body>
     </Html>
   )
 }
 
 const main = {
-  backgroundColor: '#f5f2ed',
-  fontFamily: "'DM Sans', Arial, sans-serif",
+  backgroundColor: '#f4efe7',
+  backgroundImage:
+    'linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(244,239,231,0.94) 45%, rgba(237,244,244,0.92) 100%)',
+  fontFamily: FONT_SANS,
   margin: '0',
-  padding: '24px 0',
+  padding: '32px 0',
 }
 
-const container = {
-  backgroundColor: '#ffffff',
-  maxWidth: '620px',
+const outerContainer = {
   margin: '0 auto',
-  padding: '40px 32px',
+  maxWidth: '680px',
+  padding: '0 12px',
+}
+
+const frame = {
+  backgroundColor: '#fffdf9',
+  border: '1px solid #e6ddd1',
+  borderRadius: '28px',
+  boxShadow: '0 24px 64px rgba(21, 35, 56, 0.08)',
+  overflow: 'hidden' as const,
+  padding: '36px 32px',
 }
 
 const brand = {
-  fontSize: '18px',
+  color: '#152338',
+  fontFamily: FONT_SERIF,
+  fontSize: '16px',
   fontWeight: '700' as const,
-  letterSpacing: '0.4em',
-  color: '#1a2236',
+  letterSpacing: '0.32em',
   margin: '0 0 12px',
+  textTransform: 'uppercase' as const,
 }
 
 const hr = {
-  borderColor: '#e5ddd2',
+  borderColor: '#e6ddd1',
   margin: '20px 0',
 }
 
 const content = {
-  color: '#2b2f36',
+  color: '#3d4654',
+  fontFamily: FONT_SANS,
   fontSize: '15px',
   lineHeight: '1.75',
 }
 
+const footerCard = {
+  backgroundColor: '#f6f3ed',
+  border: '1px solid #e3dbd0',
+  borderRadius: '18px',
+  padding: '18px 20px 14px',
+}
+
 const footer = {
-  color: '#6b7280',
+  color: '#6e7987',
+  fontFamily: FONT_SANS,
   fontSize: '12px',
-  lineHeight: '1.6',
+  lineHeight: '1.7',
   margin: '0 0 8px',
 }
 
 const link = {
-  color: '#1a2236',
+  color: '#152338',
   textDecoration: 'underline',
 }
