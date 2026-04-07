@@ -14,6 +14,16 @@ export function getSupabaseAuthStorageKey(): string {
   }
 }
 
+/**
+ * Rinvia il lavoro dopo il tick corrente: in `onAuthStateChange` evita deadlock/chiamate annidate
+ * verso Supabase (raccomandazione SDK).
+ */
+export function deferSupabaseAuthWork(fn: () => void | Promise<void>): void {
+  queueMicrotask(() => {
+    void fn();
+  });
+}
+
 /** True se l'errore PostgREST indica JWT / sessione non valida. */
 export function isAuthFailureError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;

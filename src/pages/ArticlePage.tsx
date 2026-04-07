@@ -20,7 +20,7 @@ import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
-import { useMarkAsRead } from "@/hooks/useArticleReads";
+import { useRegisterArticleRead } from "@/hooks/useArticleReads";
 import { useEffect, useMemo, useRef } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -46,7 +46,7 @@ type StoryChapter = {
 const ArticlePage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
-  const markAsRead = useMarkAsRead();
+  const markAsRead = useRegisterArticleRead(slug);
   const queryClient = useQueryClient();
   const viewIncrementedFor = useRef<string | null>(null);
 
