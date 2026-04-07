@@ -24,18 +24,6 @@ export function isAuthFailureError(error: unknown): boolean {
 }
 
 /**
- * Supabase sconsiglia chiamate async/client dentro onAuthStateChange:
- * le rimandiamo al tick successivo per evitare deadlock del client auth.
- */
-export function deferSupabaseAuthWork(work: () => void | Promise<void>) {
-  window.setTimeout(() => {
-    void Promise.resolve(work()).catch((error) => {
-      console.error("Deferred auth work failed", error);
-    });
-  }, 0);
-}
-
-/**
  * Valida il JWT col server. Se non è valido esegue signOut (espulsione).
  * @returns sessione aggiornata o null
  */

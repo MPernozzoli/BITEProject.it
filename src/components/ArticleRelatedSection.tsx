@@ -82,7 +82,7 @@ const ArticleRelatedSection = ({
 
   if (isLoading && !items.length) {
     return (
-      <section className="mt-16 pt-12 border-t glass-divider">
+      <section className="mt-16 pt-12 border-t border-border">
         <div className="h-6 w-48 bg-muted animate-pulse rounded mb-8" />
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -99,8 +99,8 @@ const ArticleRelatedSection = ({
   if (!items.length) return null;
 
   return (
-    <section className="mt-16 pt-12 border-t glass-divider">
-      <h2 className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.25em] uppercase text-muted-foreground mb-8">
+    <section className="mt-16 pt-12 border-t border-border">
+      <h2 className="text-xs font-sans tracking-[0.25em] uppercase text-muted-foreground mb-8">
         {lang === "it" ? "Articoli correlati" : "Related articles"}
       </h2>
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
@@ -115,30 +115,26 @@ const ArticleRelatedSection = ({
           const covStyle = item.cover_image ? coverImageStyle(item.cover_image, focal) : undefined;
           return (
             <Link key={item.id} to={`/logbook/${item.slug}`} className="group block">
-              <article className="glass-panel-soft rounded-[28px] p-3 transition-transform duration-300 group-hover:-translate-y-1">
-                <div className="glass-frame rounded-[24px] p-1.5 mb-4">
-                  <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
-                    {item.cover_image && covStyle ? (
-                      <img
-                        src={item.cover_image}
-                        alt=""
-                        className="absolute inset-0 max-w-none transition-opacity group-hover:opacity-90"
-                        style={covStyle}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground/25 font-serif text-lg">
-                        BITE
-                      </div>
-                    )}
+              <div className="aspect-[16/10] overflow-hidden bg-muted mb-3 relative border border-border/60">
+                {item.cover_image && covStyle ? (
+                  <img
+                    src={item.cover_image}
+                    alt=""
+                    className="absolute inset-0 max-w-none transition-opacity group-hover:opacity-90"
+                    style={covStyle}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground/25 font-serif text-lg">
+                    BITE
                   </div>
-                </div>
-                <h3 className="editorial-heading text-base leading-snug group-hover:text-accent transition-colors line-clamp-2 mb-1">
-                  {t}
-                </h3>
-                {ex && (
-                  <p className="text-xs font-sans text-muted-foreground line-clamp-2 leading-relaxed">{ex}</p>
                 )}
-              </article>
+              </div>
+              <h3 className="editorial-heading text-base leading-snug group-hover:text-accent transition-colors line-clamp-2 mb-1">
+                {t}
+              </h3>
+              {ex && (
+                <p className="text-xs font-sans text-muted-foreground line-clamp-2 leading-relaxed">{ex}</p>
+              )}
             </Link>
           );
         })}
