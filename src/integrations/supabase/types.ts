@@ -48,6 +48,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "article_authors_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       article_comments: {
@@ -100,6 +107,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "article_comments_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       article_likes: {
@@ -136,6 +150,59 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "article_likes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_read_events: {
+        Row: {
+          article_id: string
+          counted_at: string
+          id: string
+          profile_id: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          counted_at?: string
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          counted_at?: string
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_read_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_read_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_read_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       article_reads: {
@@ -170,6 +237,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -241,6 +315,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comment_likes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       comment_mentions: {
@@ -284,7 +365,56 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comment_mentions_mentioned_profile_id_fkey"
+            columns: ["mentioned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      email_notification_preferences: {
+        Row: {
+          article_notifications_enabled: boolean
+          comment_notifications_frequency: string
+          created_at: string
+          digest_enabled: boolean
+          email: string
+          like_notifications_frequency: string
+          newsletter_enabled: boolean
+          push_engagement_enabled: boolean
+          push_publication_enabled: boolean
+          story_notifications_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          article_notifications_enabled?: boolean
+          comment_notifications_frequency?: string
+          created_at?: string
+          digest_enabled?: boolean
+          email: string
+          like_notifications_frequency?: string
+          newsletter_enabled?: boolean
+          push_engagement_enabled?: boolean
+          push_publication_enabled?: boolean
+          story_notifications_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          article_notifications_enabled?: boolean
+          comment_notifications_frequency?: string
+          created_at?: string
+          digest_enabled?: boolean
+          email?: string
+          like_notifications_frequency?: string
+          newsletter_enabled?: boolean
+          push_engagement_enabled?: boolean
+          push_publication_enabled?: boolean
+          story_notifications_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       email_send_log: {
         Row: {
@@ -373,8 +503,103 @@ export type Database = {
         }
         Relationships: []
       }
+      engagement_notifications: {
+        Row: {
+          actor_profile_id: string | null
+          article_id: string
+          comment_id: string | null
+          created_at: string
+          emailed_at: string | null
+          event_type: string
+          id: string
+          notification_category: string
+          processed_at: string | null
+          processing_note: string | null
+          push_sent_at: string | null
+          read_at: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Insert: {
+          actor_profile_id?: string | null
+          article_id: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type: string
+          id?: string
+          notification_category: string
+          processed_at?: string | null
+          processing_note?: string | null
+          push_sent_at?: string | null
+          read_at?: string | null
+          recipient_profile_id: string
+          source_record_id: string
+        }
+        Update: {
+          actor_profile_id?: string | null
+          article_id?: string
+          comment_id?: string | null
+          created_at?: string
+          emailed_at?: string | null
+          event_type?: string
+          id?: string
+          notification_category?: string
+          processed_at?: string | null
+          processing_note?: string | null
+          push_sent_at?: string | null
+          read_at?: string | null
+          recipient_profile_id?: string
+          source_record_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "engagement_notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logbook_articles: {
         Row: {
+          article_map_scenes: Json | null
           category: string
           content_en: Json | null
           content_it: Json | null
@@ -386,6 +611,10 @@ export type Database = {
           excerpt_en: string | null
           excerpt_it: string | null
           id: string
+          instagram_story_image_en: string | null
+          instagram_story_image_it: string | null
+          instagram_story_use_cover_en: boolean
+          instagram_story_use_cover_it: boolean
           latitude: number | null
           location_name: string | null
           longitude: number | null
@@ -403,6 +632,7 @@ export type Database = {
           voyage_segment_start: number | null
         }
         Insert: {
+          article_map_scenes?: Json | null
           category?: string
           content_en?: Json | null
           content_it?: Json | null
@@ -414,6 +644,10 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          instagram_story_image_en?: string | null
+          instagram_story_image_it?: string | null
+          instagram_story_use_cover_en?: boolean
+          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null
@@ -431,6 +665,7 @@ export type Database = {
           voyage_segment_start?: number | null
         }
         Update: {
+          article_map_scenes?: Json | null
           category?: string
           content_en?: Json | null
           content_it?: Json | null
@@ -442,6 +677,10 @@ export type Database = {
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
+          instagram_story_image_en?: string | null
+          instagram_story_image_it?: string | null
+          instagram_story_use_cover_en?: boolean
+          instagram_story_use_cover_it?: boolean
           latitude?: number | null
           location_name?: string | null
           longitude?: number | null
@@ -471,6 +710,57 @@ export type Database = {
             columns: ["voyage_id"]
             isOneToOne: false
             referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_confirmation_tokens: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          last_sent_at: string
+          preferred_language: string | null
+          profile_id: string | null
+          source: string
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          last_sent_at?: string
+          preferred_language?: string | null
+          profile_id?: string | null
+          source?: string
+          token: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          last_sent_at?: string
+          preferred_language?: string | null
+          profile_id?: string | null
+          source?: string
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_confirmation_tokens_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_confirmation_tokens_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -508,6 +798,64 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "newsletter_subscribers_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_unsubscribe_feedback: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          message_context: Json | null
+          profile_id: string | null
+          reason_code: string | null
+          reason_text: string | null
+          source: string
+          unsubscribe_scope: Json
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          message_context?: Json | null
+          profile_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source?: string
+          unsubscribe_scope?: Json
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          message_context?: Json | null
+          profile_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source?: string
+          unsubscribe_scope?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_unsubscribe_feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_unsubscribe_feedback_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profile_badges: {
@@ -540,6 +888,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "profile_badges_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -555,6 +910,7 @@ export type Database = {
           social_facebook: string | null
           social_instagram: string | null
           social_linkedin: string | null
+          social_seapeople: string | null
           social_tiktok: string | null
           social_website: string | null
           social_x: string | null
@@ -573,6 +929,7 @@ export type Database = {
           social_facebook?: string | null
           social_instagram?: string | null
           social_linkedin?: string | null
+          social_seapeople?: string | null
           social_tiktok?: string | null
           social_website?: string | null
           social_x?: string | null
@@ -591,6 +948,7 @@ export type Database = {
           social_facebook?: string | null
           social_instagram?: string | null
           social_linkedin?: string | null
+          social_seapeople?: string | null
           social_tiktok?: string | null
           social_website?: string | null
           social_x?: string | null
@@ -598,6 +956,63 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          enabled: boolean
+          endpoint: string
+          expiration_time: string | null
+          id: string
+          last_seen_at: string
+          p256dh: string
+          profile_id: string
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          enabled?: boolean
+          endpoint: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh: string
+          profile_id: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          enabled?: boolean
+          endpoint?: string
+          expiration_time?: string | null
+          id?: string
+          last_seen_at?: string
+          p256dh?: string
+          profile_id?: string
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       route_legs: {
         Row: {
@@ -714,6 +1129,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "story_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "story_subscriptions_story_id_fkey"
             columns: ["story_id"]
             isOneToOne: false
@@ -743,6 +1165,36 @@ export type Database = {
           id?: string
           metadata?: Json | null
           reason?: string
+        }
+        Relationships: []
+      }
+      system_email_automations: {
+        Row: {
+          config: Json
+          created_at: string
+          enabled: boolean
+          key: string
+          last_run_at: string | null
+          last_sent_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          key: string
+          last_run_at?: string | null
+          last_sent_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          key?: string
+          last_run_at?: string | null
+          last_sent_at?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -787,11 +1239,19 @@ export type Database = {
           created_at: string
           date_end: string | null
           date_start: string | null
+          description_en: string | null
+          description_it: string | null
+          event_date: string | null
+          event_time: string | null
           id: string
           lat: number
           lng: number
+          media: Json
           name: string | null
+          name_en: string | null
+          name_it: string | null
           sort_order: number
+          visibility_mode: string
           voyage_id: string
           waypoint_type: string
         }
@@ -799,11 +1259,19 @@ export type Database = {
           created_at?: string
           date_end?: string | null
           date_start?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          event_date?: string | null
+          event_time?: string | null
           id?: string
           lat?: number
           lng?: number
+          media?: Json
           name?: string | null
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          visibility_mode?: string
           voyage_id: string
           waypoint_type?: string
         }
@@ -811,11 +1279,19 @@ export type Database = {
           created_at?: string
           date_end?: string | null
           date_start?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          event_date?: string | null
+          event_time?: string | null
           id?: string
           lat?: number
           lng?: number
+          media?: Json
           name?: string | null
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          visibility_mode?: string
           voyage_id?: string
           waypoint_type?: string
         }
@@ -834,9 +1310,18 @@ export type Database = {
           cached_geometry: Json | null
           created_at: string
           description: string | null
+          description_en: string | null
+          description_it: string | null
+          end_date: string | null
+          end_time: string | null
           id: string
+          is_published: boolean
           name: string
+          name_en: string | null
+          name_it: string | null
           sort_order: number
+          start_date: string | null
+          start_time: string | null
           status: Database["public"]["Enums"]["voyage_status"]
           type: Database["public"]["Enums"]["voyage_type"]
           updated_at: string
@@ -845,9 +1330,18 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          end_date?: string | null
+          end_time?: string | null
           id?: string
+          is_published?: boolean
           name?: string
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          start_date?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
@@ -856,9 +1350,18 @@ export type Database = {
           cached_geometry?: Json | null
           created_at?: string
           description?: string | null
+          description_en?: string | null
+          description_it?: string | null
+          end_date?: string | null
+          end_time?: string | null
           id?: string
+          is_published?: boolean
           name?: string
+          name_en?: string | null
+          name_it?: string | null
           sort_order?: number
+          start_date?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
@@ -867,7 +1370,60 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          id: string | null
+          name: string | null
+          preferred_language: string | null
+          secondary_language: string | null
+          social_facebook: string | null
+          social_instagram: string | null
+          social_linkedin: string | null
+          social_seapeople: string | null
+          social_tiktok: string | null
+          social_website: string | null
+          social_x: string | null
+          social_youtube: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          id?: string | null
+          name?: string | null
+          preferred_language?: string | null
+          secondary_language?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_seapeople?: string | null
+          social_tiktok?: string | null
+          social_website?: string | null
+          social_x?: string | null
+          social_youtube?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string | null
+          id?: string | null
+          name?: string | null
+          preferred_language?: string | null
+          secondary_language?: string | null
+          social_facebook?: string | null
+          social_instagram?: string | null
+          social_linkedin?: string | null
+          social_seapeople?: string | null
+          social_tiktok?: string | null
+          social_website?: string | null
+          social_x?: string | null
+          social_youtube?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       delete_email: {
@@ -886,7 +1442,7 @@ export type Database = {
         Returns: boolean
       }
       increment_article_view_count: {
-        Args: { _article_id: string }
+        Args: { _article_id: string; _visitor_key?: string }
         Returns: number
       }
       move_to_dlq: {
