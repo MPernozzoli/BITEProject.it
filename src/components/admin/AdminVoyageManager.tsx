@@ -4,7 +4,7 @@ import { Plus, Edit, Trash2, X, ChevronUp, ChevronDown, Ship, Mountain, MapPin, 
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { haversineNM, totalWaypointDistance, fetchOSRMRoute } from "@/lib/voyage-utils";
+import { haversineNM, totalWaypointDistance, fetchOSRMRoute, getVoyageMapLineStringCoordinates } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 interface WaypointForm {
@@ -140,6 +140,10 @@ const AdminVoyageManager = () => {
 
     const voyage = voyages.find((v) => v.id === selectedVoyageId);
     const isWater = voyage?.type === "water";
+    const lineCoordinates = getVoyageMapLineStringCoordinates(
+      voyage ?? { type: "water", cached_geometry: null },
+      wps
+    );
 
     // Draw line
     const lineId = `admin-route-line`;
@@ -147,7 +151,7 @@ const AdminVoyageManager = () => {
       type: "geojson",
       data: {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: wps.map((w) => [w.lng, w.lat]) },
+        geometry: { type: "LineString", coordinates: lineCoordinates },
         properties: {},
       },
     });

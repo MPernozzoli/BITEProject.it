@@ -2,6 +2,7 @@ import { useEffect, useRef, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import Supercluster from "supercluster";
+import { getVoyageMapLineStringCoordinates } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 
 type PositionedArticle = GeoArticle & { displayLat: number; displayLng: number };
@@ -37,6 +38,34 @@ function buildPositionedArticles(
     .filter(Boolean) as PositionedArticle[];
 }
 
+/** Rimuove layer/sorgenti rotte e waypoint senza doppie removeLayer (che possono far fallire draw). */
+function clearVoyageLayersFromMap(map: maplibregl.Map) {
+  const style = map.getStyle();
+  if (!style?.layers) return;
+
+  const voyageLayerIds = style.layers
+    .map((l) => l.id)
+    .filter((id) => id.startsWith("voyage-line-") || id.startsWith("voyage-wp-"));
+
+  const offLayer = map as unknown as { off: (type: string, layerId: string) => void };
+
+  for (const id of voyageLayerIds) {
+    if (id.startsWith("voyage-wp-")) {
+      offLayer.off("click", id);
+      offLayer.off("mouseenter", id);
+      offLayer.off("mouseleave", id);
+    }
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+
+  const sourceIds = Object.keys(map.getStyle()?.sources ?? {}).filter(
+    (sid) => sid.startsWith("voyage-line-") || sid.startsWith("voyage-wp-")
+  );
+  for (const sid of sourceIds) {
+    if (map.getSource(sid)) map.removeSource(sid);
+  }
+}
+
 interface VoyageMapProps {
   voyages: Voyage[];
   waypointsMap: Record<string, VoyageWaypoint[]>;
@@ -63,6 +92,7 @@ const VoyageMap = ({
   const onArticleClickRef = useRef(onArticleClick);
   const clusterIndexRef = useRef<Supercluster | null>(null);
   const articlesByIdRef = useRef<Map<string, PositionedArticle>>(new Map());
+  const runArticleMarkersSyncRef = useRef<() => void>(() => {});
 
   const positionedArticles = useMemo(
     () => buildPositionedArticles(articles, waypointsMap),
@@ -114,26 +144,11 @@ const VoyageMap = ({
     const map = mapRef.current;
     if (!map) return;
 
-    const draw = () => {
-      // Remove old sources/layers
-      voyages.forEach((v) => {
-        const lineId = `voyage-line-${v.id}`;
-        const wpId = `voyage-wp-${v.id}`;
-        if (map.getLayer(lineId)) map.removeLayer(lineId);
-        if (map.getSource(lineId)) map.removeSource(lineId);
-        if (map.getLayer(wpId)) map.removeLayer(wpId);
-        if (map.getSource(wpId)) map.removeSource(wpId);
-      });
+    let cancelled = false;
 
-      // Clean stale layers from previous renders
-      const style = map.getStyle();
-      if (style) {
-        style.layers.forEach((l) => {
-          if (l.id.startsWith("voyage-line-") || l.id.startsWith("voyage-wp-")) {
-            map.removeLayer(l.id);
-          }
-        });
-      }
+    const draw = () => {
+      if (cancelled || !map.getStyle()) return;
+      clearVoyageLayersFromMap(map);
 
       voyages.forEach((voyage) => {
         const wps = waypointsMap[voyage.id] || [];
@@ -149,29 +164,32 @@ const VoyageMap = ({
           : isCompleted ? "hsl(30, 30%, 25%)" : isActive ? "hsl(30, 50%, 40%)" : "hsl(30, 20%, 60%)";
 
         const lineId = `voyage-line-${voyage.id}`;
-        map.addSource(lineId, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: wps.map((w) => [w.lng, w.lat]),
+        const lineCoordinates = getVoyageMapLineStringCoordinates(voyage, wps);
+        if (lineCoordinates.length >= 2) {
+          map.addSource(lineId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: lineCoordinates,
+              },
+              properties: {},
             },
-            properties: {},
-          },
-        });
+          });
 
-        map.addLayer({
-          id: lineId,
-          type: "line",
-          source: lineId,
-          paint: {
-            "line-color": lineColor,
-            "line-width": isHighlighted ? 5 : isActive ? 4 : 3,
-            "line-opacity": voyage.status === "planned" ? 0.5 : isHighlighted ? 1 : 0.7,
-            ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
-          },
-        });
+          map.addLayer({
+            id: lineId,
+            type: "line",
+            source: lineId,
+            paint: {
+              "line-color": lineColor,
+              "line-width": isHighlighted ? 5 : isActive ? 4 : 3,
+              "line-opacity": voyage.status === "planned" ? 0.5 : isHighlighted ? 1 : 0.7,
+              ...(voyage.status === "planned" ? { "line-dasharray": [3, 2] } : {}),
+            },
+          });
+        }
 
         // Waypoint circles
         const wpId = `voyage-wp-${voyage.id}`;
@@ -220,8 +238,13 @@ const VoyageMap = ({
     if (map.isStyleLoaded()) {
       draw();
     } else {
-      map.on("load", draw);
+      map.once("load", draw);
     }
+
+    return () => {
+      cancelled = true;
+      map.off("load", draw);
+    };
   }, [voyages, waypointsMap, highlightedVoyageId]);
 
   // Articoli: cluster (pallino + conteggio) quando vicini; zoom al click; singoli con marker copertina
@@ -399,18 +422,21 @@ const VoyageMap = ({
       syncMarkers();
     };
 
+    runArticleMarkersSyncRef.current = syncMarkers;
+    const onMapIdleMove = () => runArticleMarkersSyncRef.current();
+
     if (map.isStyleLoaded()) {
       onReady();
     } else {
       map.once("load", onReady);
     }
 
-    map.on("moveend", syncMarkers);
-    map.on("zoomend", syncMarkers);
+    map.on("moveend", onMapIdleMove);
+    map.on("zoomend", onMapIdleMove);
 
     return () => {
-      map.off("moveend", syncMarkers);
-      map.off("zoomend", syncMarkers);
+      map.off("moveend", onMapIdleMove);
+      map.off("zoomend", onMapIdleMove);
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       clusterIndexRef.current = null;
