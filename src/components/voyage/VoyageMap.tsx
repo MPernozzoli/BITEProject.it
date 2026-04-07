@@ -230,8 +230,8 @@ const VoyageMap = ({
     if (!map) return;
 
     const index = new Supercluster({
-      radius: 72,
-      maxZoom: 17,
+      radius: 48,
+      maxZoom: 14,
       minPoints: 2,
     });
 
@@ -369,8 +369,17 @@ const VoyageMap = ({
           el.addEventListener("click", (e) => {
             e.stopPropagation();
             const expansion = sc.getClusterExpansionZoom(props.cluster_id!);
-            const nextZoom = Math.min(Math.max(expansion, z + 0.35), 18);
-            map.easeTo({ center: [lng, lat], zoom: nextZoom, duration: 550 });
+            const currentZoom = map.getZoom();
+            const targetZoom = Math.min(Math.max(expansion, currentZoom + 0.15), 18);
+            const zoomDelta = Math.abs(targetZoom - currentZoom);
+            const easeOutSoft = (t: number) => 1 - (1 - t) ** 3;
+
+            map.easeTo({
+              center: [lng, lat],
+              zoom: targetZoom,
+              duration: Math.min(2200, 780 + zoomDelta * 380),
+              easing: easeOutSoft,
+            });
           });
           markersRef.current.push(
             new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map)
