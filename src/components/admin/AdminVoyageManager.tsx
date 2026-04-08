@@ -768,6 +768,11 @@ const AdminVoyageManager = ({
       geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(committedWaypoints);
       void refreshVoyageGeometryPreview(voyageId, committedWaypoints);
 
+      setWaypointEditorPanelId(createdWaypoint.id);
+      window.setTimeout(() => {
+        void focusWaypointOnMapRef.current(createdWaypoint.id);
+      }, 0);
+
       const suggestedPlace = await reverseGeocodePlace(lat, lng);
       if (!suggestedPlace) return true;
 
@@ -787,7 +792,7 @@ const AdminVoyageManager = ({
       });
       return true;
     },
-    [commitWaypoints, lang, refreshVoyageGeometryPreview, updateWaypoint]
+    [commitWaypoints, lang, refreshVoyageGeometryPreview, setWaypointEditorPanelId, updateWaypoint]
   );
 
   const deleteWaypoint = useCallback(
