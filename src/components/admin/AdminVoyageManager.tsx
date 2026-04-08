@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type SetStateAction } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -111,6 +111,11 @@ const popupLanguageOptions = [
   { code: "it", label: "Italiano" },
   { code: "en", label: "English" },
 ] as const;
+
+type WaypointEditorPanelHandle = {
+  setDOMContent: (node: Node) => void;
+  remove: () => void;
+};
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
@@ -378,8 +383,9 @@ const AdminVoyageManager = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const markersByWaypointRef = useRef<Record<string, maplibregl.Marker>>({});
-  const openedWaypointPopupIdRef = useRef<string | null>(null);
-  const pendingPopupOpenWaypointIdRef = useRef<string | null>(null);
+  const waypointPanelMountRef = useRef<HTMLDivElement | null>(null);
+  const setWaypointEditorPanelIdRef = useRef<(value: SetStateAction<string | null>) => void>(() => {});
+  const focusWaypointOnMapRef = useRef<(waypointId: string) => boolean>(() => false);
   const voyagesRef = useRef<Voyage[]>([]);
   const waypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
   const persistedWaypointsRef = useRef<Record<string, VoyageWaypoint[]>>({});
@@ -408,6 +414,8 @@ const AdminVoyageManager = ({
   const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
   const [isRegeneratingGeometry, setIsRegeneratingGeometry] = useState(false);
+  const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
+  const waypointEditorPanelIdRef = useRef<string | null>(null);
 
   const setCurrentSelectedVoyageId = useCallback((nextVoyageId: string | null) => {
     setSelectedVoyageId(nextVoyageId);
@@ -871,32 +879,26 @@ const AdminVoyageManager = ({
     return true;
   }, []);
 
+  useEffect(() => {
+    waypointEditorPanelIdRef.current = waypointEditorPanelId;
+  }, [waypointEditorPanelId]);
+
+  useEffect(() => {
+    setWaypointEditorPanelIdRef.current = setWaypointEditorPanelId;
+    focusWaypointOnMapRef.current = focusWaypointOnMap;
+  }, [focusWaypointOnMap]);
+
   const openWaypointPopup = useCallback((waypointId: string) => {
-    const marker = markersByWaypointRef.current[waypointId];
-    if (!marker) return;
-
-    const popup = marker.getPopup();
-    if (!popup) return;
-
-    if (popup.isOpen()) {
-      popup.remove();
-      return;
-    }
-
-     if (openedWaypointPopupIdRef.current && openedWaypointPopupIdRef.current !== waypointId) {
-      const openedMarker = markersByWaypointRef.current[openedWaypointPopupIdRef.current];
-      openedMarker?.getPopup()?.remove();
-    }
-
-    marker.togglePopup();
-    void focusWaypointOnMap(waypointId);
+    setWaypointEditorPanelId((prev) => {
+      if (prev === waypointId) return null;
+      queueMicrotask(() => void focusWaypointOnMap(waypointId));
+      return waypointId;
+    });
   }, [focusWaypointOnMap]);
 
   const startWaypointRelocation = useCallback((voyageId: string, waypointId: string) => {
     waypointRelocationRef.current = { voyageId, waypointId };
-    pendingPopupOpenWaypointIdRef.current = null;
-    const marker = markersByWaypointRef.current[waypointId];
-    marker?.getPopup()?.remove();
+    setWaypointEditorPanelId(null);
     const map = mapRef.current;
     if (map) {
       map.getCanvas().style.cursor = "crosshair";
@@ -962,7 +964,7 @@ const AdminVoyageManager = ({
   }, [updateWaypoint]);
 
   const createWaypointPopupContent = useCallback(
-    (waypoint: VoyageWaypoint, index: number, total: number, popup: maplibregl.Popup) => {
+    (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
       const isStart = index === 0;
       const isEnd = total > 1 && index === total - 1;
       const effectiveType = getWaypointEffectiveType(waypoint, index, total);
@@ -1127,7 +1129,7 @@ const AdminVoyageManager = ({
       const refreshPopup = () => {
         const nextWaypoint = (waypointsRef.current[waypoint.voyage_id] || []).find((item) => item.id === waypoint.id);
         if (!nextWaypoint) return;
-        popup.setDOMContent(createWaypointPopupContent(nextWaypoint, index, total, popup));
+        panel.setDOMContent(createWaypointPopupContent(nextWaypoint, index, total, panel));
       };
 
       wrapper.addEventListener("submit", (event) => {
@@ -1163,7 +1165,7 @@ const AdminVoyageManager = ({
       });
 
       deleteButton?.addEventListener("click", () => {
-        popup.remove();
+        panel.remove();
         void deleteWaypoint(waypoint.voyage_id, waypoint.id);
       });
 
@@ -1215,6 +1217,46 @@ const AdminVoyageManager = ({
     [deleteWaypoint, deleteWaypointMediaAsset, lang, startWaypointRelocation, updateWaypoint, uploadWaypointMediaAsset]
   );
 
+  useEffect(() => {
+    setWaypointEditorPanelId(null);
+  }, [selectedVoyageId]);
+
+  useEffect(() => {
+    const mount = waypointPanelMountRef.current;
+    if (!mount) return;
+
+    if (!waypointEditorPanelId || !selectedVoyageId) {
+      mount.replaceChildren();
+      return;
+    }
+
+    const wps = waypoints[selectedVoyageId] || [];
+    const index = wps.findIndex((w) => w.id === waypointEditorPanelId);
+    if (index < 0) {
+      setWaypointEditorPanelId(null);
+      return;
+    }
+
+    const waypoint = wps[index];
+    const total = wps.length;
+    const handle: WaypointEditorPanelHandle = {
+      setDOMContent: (node) => {
+        mount.replaceChildren(node);
+      },
+      remove: () => {
+        setWaypointEditorPanelId(null);
+      },
+    };
+    mount.replaceChildren(createWaypointPopupContent(waypoint, index, total, handle));
+  }, [waypointEditorPanelId, selectedVoyageId, waypoints, createWaypointPopupContent]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = requestAnimationFrame(() => map.resize());
+    return () => cancelAnimationFrame(id);
+  }, [waypointEditorPanelId]);
+
   const createWaypointMarkerEl = useCallback((waypoint: VoyageWaypoint, index: number, total: number) => {
     const el = document.createElement("button");
     const isNarrative = getWaypointEffectiveType(waypoint, index, total) === "narrative";
@@ -1243,7 +1285,6 @@ const AdminVoyageManager = ({
   }, [lang]);
 
   const drawRouteOnMap = useCallback((map: maplibregl.Map) => {
-    const openedPopupWaypointId = pendingPopupOpenWaypointIdRef.current || openedWaypointPopupIdRef.current;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     markersByWaypointRef.current = {};
@@ -1337,24 +1378,17 @@ const AdminVoyageManager = ({
 
     selectedWaypoints.forEach((waypoint, index) => {
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
-      const popup = new maplibregl.Popup({ offset: 14, closeButton: true, closeOnClick: false, closeOnMove: false, maxWidth: "380px" });
-      popup.setDOMContent(createWaypointPopupContent(waypoint, index, selectedWaypoints.length, popup));
-      popup.on("open", () => {
-        if (openedWaypointPopupIdRef.current && openedWaypointPopupIdRef.current !== waypoint.id) {
-          const openedMarker = markersByWaypointRef.current[openedWaypointPopupIdRef.current];
-          openedMarker?.getPopup()?.remove();
-        }
-        openedWaypointPopupIdRef.current = waypoint.id;
-      });
-      popup.on("close", () => {
-        if (openedWaypointPopupIdRef.current === waypoint.id) {
-          openedWaypointPopupIdRef.current = null;
-        }
+      markerEl.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setWaypointEditorPanelIdRef.current((prev) => {
+          if (prev === waypoint.id) return null;
+          queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
+          return waypoint.id;
+        });
       });
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
         .setLngLat([waypoint.lng, waypoint.lat])
-        .setPopup(popup)
         .addTo(map);
 
       marker.on("dragend", () => {
@@ -1369,20 +1403,8 @@ const AdminVoyageManager = ({
 
       markersRef.current.push(marker);
       markersByWaypointRef.current[waypoint.id] = marker;
-
-      if (openedPopupWaypointId === waypoint.id) {
-        requestAnimationFrame(() => {
-          const nextPopup = marker.getPopup();
-          if (nextPopup && !nextPopup.isOpen()) {
-            marker.togglePopup();
-            if (pendingPopupOpenWaypointIdRef.current === waypoint.id) {
-              pendingPopupOpenWaypointIdRef.current = null;
-            }
-          }
-        });
-      }
     });
-  }, [createWaypointMarkerEl, createWaypointPopupContent, ensureSegmentPreviewMarker, updateWaypoint]);
+  }, [createWaypointMarkerEl, ensureSegmentPreviewMarker, updateWaypoint]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -1447,12 +1469,11 @@ const AdminVoyageManager = ({
       if (Date.now() < suppressMapClickUntilRef.current) return;
 
       const target = event.originalEvent.target as HTMLElement | null;
-      if (target?.closest(".voyage-admin-marker") || target?.closest(".maplibregl-popup")) return;
+      if (target?.closest(".voyage-admin-marker") || target?.closest("[data-waypoint-editor-panel]")) return;
 
       const activeRelocation = waypointRelocationRef.current;
       if (activeRelocation) {
         waypointRelocationRef.current = null;
-        pendingPopupOpenWaypointIdRef.current = activeRelocation.waypointId;
 
         void (async () => {
           const success = await updateWaypoint(
@@ -1462,8 +1483,8 @@ const AdminVoyageManager = ({
             { successMessage: "Waypoint moved", syncGeometry: true }
           );
 
-          if (!success) {
-            pendingPopupOpenWaypointIdRef.current = null;
+          if (success) {
+            setWaypointEditorPanelId(activeRelocation.waypointId);
           }
           const map = mapRef.current;
           if (map && !segmentInsertRef.current) {
@@ -1473,11 +1494,8 @@ const AdminVoyageManager = ({
         return;
       }
 
-      const openedPopupMarker = Object.values(markersByWaypointRef.current).find((marker) =>
-        marker.getPopup()?.isOpen()
-      );
-      if (openedPopupMarker) {
-        openedPopupMarker.getPopup()?.remove();
+      if (waypointEditorPanelIdRef.current) {
+        setWaypointEditorPanelId(null);
         return;
       }
 
@@ -2370,9 +2388,34 @@ const AdminVoyageManager = ({
         )}
       </div>
 
-      <div className="border border-border">
-          <div className="relative" style={{ height: "420px" }}>
-            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
+      <div className="border border-border overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-stretch min-h-[min(420px,70vh)]">
+            <div className="relative flex-1 min-w-0 min-h-[280px] lg:min-h-[420px]" style={{ height: "420px" }}>
+              <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
+            </div>
+            <aside
+              data-waypoint-editor-panel
+              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-all duration-300 ease-out overflow-hidden ${
+                waypointEditorPanelId
+                  ? "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
+                  : "max-h-0 lg:max-h-none lg:w-0 lg:opacity-0 lg:pointer-events-none border-t-0 lg:border-l-0"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border/60 shrink-0">
+                <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Waypoint
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setWaypointEditorPanelId(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                  aria-label="Chiudi pannello waypoint"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div ref={waypointPanelMountRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2" />
+            </aside>
           </div>
 
           {!selectedVoyageId && (
