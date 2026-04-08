@@ -200,7 +200,7 @@ const VoyageLegend = ({
                   className="relative flex items-center"
                   style={{
                     flex: `${growValue} 1 0%`,
-                    minWidth: 56,
+                    minWidth: 72,
                   }}
                 >
                   {/* Distance label centered above the line */}

@@ -586,8 +586,8 @@ const Journal = () => {
                   isMobile
                     ? "left-3 right-3 max-w-none"
                     : sidebarVisible
-                      ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] max-w-[min(680px,calc(100vw-340px-3rem))] xl:max-w-[min(680px,calc(100vw-390px-3rem))]"
-                      : "left-4 max-w-[min(680px,calc(100vw-2rem))]"
+                      ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] right-4"
+                      : "left-4 right-4"
                 }`}
               >
                 <VoyageLegend
