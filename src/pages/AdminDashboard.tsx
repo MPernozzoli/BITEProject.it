@@ -111,6 +111,7 @@ const AdminDashboard = () => {
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
   const [routeLeaveGuard, setRouteLeaveGuard] = useState<null | (() => Promise<boolean>)>(null);
   const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
+  const [requestEditVoyageId, setRequestEditVoyageId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -385,26 +386,36 @@ const AdminDashboard = () => {
                           routeSidebarVoyages.map((voyage) => {
                             const displayName = voyage.name_it || voyage.name_en || voyage.name || "Untitled voyage";
                             return (
-                              <button
-                                key={voyage.id}
-                                type="button"
-                                onClick={() => {
-                                  void (async () => {
-                                    if (!(await runRouteLeaveGuard())) return;
-                                    setSelectedRouteVoyageId(voyage.id);
-                                  })();
-                                }}
-                                className={`w-full rounded-[18px] border px-3 py-2 text-left transition-colors ${
-                                  selectedRouteVoyageId === voyage.id
-                                    ? "border-accent bg-accent/10"
-                                    : "border-border/70 bg-background/40 hover:border-accent/50"
-                                }`}
-                              >
-                                <span className="block text-sm font-sans text-foreground truncate">{displayName}</span>
-                                <span className="mt-1 block text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                                  {voyage.type} · {voyage.status}
-                                </span>
-                              </button>
+                              <div key={voyage.id} className="flex items-stretch gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void (async () => {
+                                      if (!(await runRouteLeaveGuard())) return;
+                                      setSelectedRouteVoyageId(voyage.id);
+                                    })();
+                                  }}
+                                  className={`flex-1 min-w-0 rounded-[18px] border px-3 py-2 text-left transition-colors ${
+                                    selectedRouteVoyageId === voyage.id
+                                      ? "border-accent bg-accent/10"
+                                      : "border-border/70 bg-background/40 hover:border-accent/50"
+                                  }`}
+                                >
+                                  <span className="block text-sm font-sans text-foreground truncate">{displayName}</span>
+                                  <span className="mt-1 block text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                                    {voyage.type} · {voyage.status}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRequestEditVoyageId(voyage.id)}
+                                  className="shrink-0 self-stretch inline-flex items-center justify-center rounded-[18px] border border-border/70 bg-background/80 px-2.5 text-muted-foreground hover:border-accent hover:text-foreground transition-colors"
+                                  title="Modifica nome e dettagli rotta"
+                                  aria-label="Modifica info rotta"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                              </div>
                             );
                           })
                         )}
@@ -695,6 +706,8 @@ const AdminDashboard = () => {
                     onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)}
                     selectedVoyageId={selectedRouteVoyageId}
                     onSelectedVoyageIdChange={setSelectedRouteVoyageId}
+                    requestEditVoyageId={requestEditVoyageId}
+                    onRequestEditVoyageConsumed={() => setRequestEditVoyageId(null)}
                   />
                 </Suspense>
               </div>

@@ -102,6 +102,11 @@ const popupTextareaStyle = `${popupInputStyle}min-height:68px;resize:vertical;`;
 const popupMetaStyle = "margin:0;font-size:12px;color:hsl(220,15%,30%);";
 const popupSectionStyle = "display:grid;gap:10px;padding:12px;border:1px solid hsl(var(--border));background:hsla(var(--background),0.94);";
 const popupSectionTitleStyle = "margin:0;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:hsl(220,10%,45%);font-family:var(--font-sans);";
+const popupLangTabRowStyle = "display:flex;gap:6px;margin-bottom:10px;";
+const popupLangTabBaseStyle =
+  "flex:1;padding:8px 10px;border:1px solid hsl(var(--border));font-size:11px;font-weight:600;font-family:var(--font-sans);cursor:pointer;transition:background 0.15s,border-color 0.15s,color 0.15s;";
+const popupLangTabInactiveStyle = `${popupLangTabBaseStyle}background:hsl(var(--muted));color:hsl(var(--foreground));`;
+const popupLangTabActiveStyle = `${popupLangTabBaseStyle}background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-color:transparent;`;
 const popupLanguageOptions = [
   { code: "it", label: "Italiano" },
   { code: "en", label: "English" },
@@ -284,6 +289,9 @@ interface AdminVoyageManagerProps {
   onRegisterLeaveGuard?: (guard: (() => Promise<boolean>) | null) => void;
   selectedVoyageId?: string | null;
   onSelectedVoyageIdChange?: (voyageId: string | null) => void;
+  /** Impostato dal parent (es. sidebar dashboard): apre il form info viaggio per quell'id, poi invoca onRequestEditVoyageConsumed. */
+  requestEditVoyageId?: string | null;
+  onRequestEditVoyageConsumed?: () => void;
 }
 
 const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
@@ -346,6 +354,8 @@ const AdminVoyageManager = ({
   onRegisterLeaveGuard,
   selectedVoyageId: controlledSelectedVoyageId,
   onSelectedVoyageIdChange,
+  requestEditVoyageId = null,
+  onRequestEditVoyageConsumed,
 }: AdminVoyageManagerProps) => {
   const initialStoredRouteDraft = loadStoredRouteDraft();
   const initialStoredVoyageFormDraft = loadStoredVoyageFormDraft();
@@ -358,6 +368,7 @@ const AdminVoyageManager = ({
   const [showVoyageForm, setShowVoyageForm] = useState(Boolean(initialStoredVoyageFormDraft));
   const [editingVoyage, setEditingVoyage] = useState<Voyage | null>(null);
   const [voyageForm, setVoyageForm] = useState<VoyageFormState>(initialStoredVoyageFormDraft?.voyageForm || emptyVoyageForm);
+  const [voyageFormLang, setVoyageFormLang] = useState<"it" | "en">("it");
   const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
   const [listSort, setListSort] = useState<VoyageListSort>(defaultVoyageListSort);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
@@ -1006,18 +1017,52 @@ const AdminVoyageManager = ({
           </span>
         </div>
         <section style="${popupSectionStyle}">
-          <p style="${popupSectionTitleStyle}">Identity</p>
-          ${popupLanguageOptions.map(({ code, label }) => `
+          <p style="${popupSectionTitleStyle}">Testi</p>
+          <div style="${popupLangTabRowStyle}" role="tablist" aria-label="Lingua contenuti waypoint">
+            <button type="button" data-popup-lang="it" aria-selected="true" style="${popupLangTabActiveStyle}">Italiano</button>
+            <button type="button" data-popup-lang="en" aria-selected="false" style="${popupLangTabInactiveStyle}">English</button>
+          </div>
+          <div data-popup-panel="it" style="display:grid;gap:10px;">
             <div>
-              <label style="${popupLabelStyle}">Name · ${label}</label>
+              <label style="${popupLabelStyle}">Nome</label>
               <input
-                name="name_${code}"
+                name="name_it"
                 type="text"
-                value="${escapeHtml((code === "it" ? waypoint.name_it : waypoint.name_en) || defaultNames[code])}"
+                value="${escapeHtml((waypoint.name_it || defaultNames.it))}"
                 style="${popupInputStyle}"
               />
             </div>
-          `).join("")}
+            <div>
+              <label style="${popupLabelStyle}">Descrizione</label>
+              <textarea
+                name="description_it"
+                rows="4"
+                style="${popupTextareaStyle}"
+              >${escapeHtml(waypoint.description_it || "")}</textarea>
+            </div>
+          </div>
+          <div data-popup-panel="en" style="display:none;grid;gap:10px;">
+            <div>
+              <label style="${popupLabelStyle}">Name</label>
+              <input
+                name="name_en"
+                type="text"
+                value="${escapeHtml((waypoint.name_en || defaultNames.en))}"
+                style="${popupInputStyle}"
+              />
+            </div>
+            <div>
+              <label style="${popupLabelStyle}">Description</label>
+              <textarea
+                name="description_en"
+                rows="4"
+                style="${popupTextareaStyle}"
+              >${escapeHtml(waypoint.description_en || "")}</textarea>
+            </div>
+          </div>
+        </section>
+        <section style="${popupSectionStyle}">
+          <p style="${popupSectionTitleStyle}">Details</p>
           <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
             <div>
               <label style="${popupLabelStyle}">Date</label>
@@ -1036,19 +1081,6 @@ const AdminVoyageManager = ({
               <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
             </select>
           </div>
-        </section>
-        <section style="${popupSectionStyle}">
-          <p style="${popupSectionTitleStyle}">Descriptions</p>
-          ${popupLanguageOptions.map(({ code, label }) => `
-            <div>
-              <label style="${popupLabelStyle}">Description · ${label}</label>
-              <textarea
-                name="description_${code}"
-                rows="4"
-                style="${popupTextareaStyle}"
-              >${escapeHtml((code === "it" ? waypoint.description_it : waypoint.description_en) || "")}</textarea>
-            </div>
-          `).join("")}
         </section>
         <section style="${popupSectionStyle}">
           <p style="${popupSectionTitleStyle}">Media</p>
@@ -1073,6 +1105,24 @@ const AdminVoyageManager = ({
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
       const relocateButton = wrapper.querySelector('[data-action="relocate"]') as HTMLButtonElement | null;
       const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
+      const langTabButtons = wrapper.querySelectorAll<HTMLButtonElement>("[data-popup-lang]");
+      const langPanels = wrapper.querySelectorAll<HTMLElement>("[data-popup-panel]");
+
+      langTabButtons.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const code = tab.getAttribute("data-popup-lang");
+          if (code !== "it" && code !== "en") return;
+          langTabButtons.forEach((btn) => {
+            const active = btn.getAttribute("data-popup-lang") === code;
+            btn.setAttribute("aria-selected", active ? "true" : "false");
+            btn.style.cssText = active ? popupLangTabActiveStyle : popupLangTabInactiveStyle;
+          });
+          langPanels.forEach((panel) => {
+            const show = panel.getAttribute("data-popup-panel") === code;
+            panel.style.display = show ? "grid" : "none";
+          });
+        });
+      });
 
       const refreshPopup = () => {
         const nextWaypoint = (waypointsRef.current[waypoint.voyage_id] || []).find((item) => item.id === waypoint.id);
@@ -1518,8 +1568,17 @@ const AdminVoyageManager = ({
       initialVoyageFormSnapshotRef.current = serializeVoyageForm(emptyVoyageForm);
       setVoyageForm(emptyVoyageForm);
     }
+    setVoyageFormLang("it");
     setShowVoyageForm(true);
   }, []);
+
+  useEffect(() => {
+    if (!requestEditVoyageId) return;
+    const voyage = voyages.find((v) => v.id === requestEditVoyageId);
+    if (!voyage) return;
+    openVoyageForm(voyage);
+    onRequestEditVoyageConsumed?.();
+  }, [requestEditVoyageId, voyages, openVoyageForm, onRequestEditVoyageConsumed]);
 
   const saveVoyage = useCallback(async () => {
     const nameIt = voyageForm.name_it.trim();
@@ -1986,22 +2045,66 @@ const AdminVoyageManager = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-3">
-              {popupLanguageOptions.map(({ code, label }) => (
-                <div key={`voyage-name-${code}`}>
-                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                    Name · {label}
-                  </label>
-                  <input
-                    type="text"
-                    value={code === "it" ? voyageForm.name_it : voyageForm.name_en}
-                    onChange={(event) => setVoyageForm((form) => ({
-                      ...form,
-                      [code === "it" ? "name_it" : "name_en"]: event.target.value,
-                    }))}
-                    className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                  />
-                </div>
-              ))}
+              <p className="text-[10px] font-sans font-semibold uppercase tracking-[0.14em] text-muted-foreground">Testi viaggio</p>
+              <div className="flex gap-1.5 rounded-[14px] border border-border p-1 bg-muted/30">
+                {popupLanguageOptions.map(({ code, label }) => (
+                  <button
+                    key={`voyage-lang-${code}`}
+                    type="button"
+                    onClick={() => setVoyageFormLang(code)}
+                    className={`flex-1 rounded-[10px] px-3 py-2 text-xs font-sans font-semibold transition-colors ${
+                      voyageFormLang === code
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {voyageFormLang === "it" ? (
+                <>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Nome</label>
+                    <input
+                      type="text"
+                      value={voyageForm.name_it}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, name_it: event.target.value }))}
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Descrizione</label>
+                    <textarea
+                      value={voyageForm.description_it}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, description_it: event.target.value }))}
+                      rows={3}
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Name</label>
+                    <input
+                      type="text"
+                      value={voyageForm.name_en}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, name_en: event.target.value }))}
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description</label>
+                    <textarea
+                      value={voyageForm.description_en}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, description_en: event.target.value }))}
+                      rows={3}
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -2049,25 +2152,6 @@ const AdminVoyageManager = ({
                 </span>
               </span>
             </label>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {popupLanguageOptions.map(({ code, label }) => (
-              <div key={`voyage-description-${code}`}>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                  Description · {label}
-                </label>
-                <textarea
-                  value={code === "it" ? voyageForm.description_it : voyageForm.description_en}
-                  onChange={(event) => setVoyageForm((form) => ({
-                    ...form,
-                    [code === "it" ? "description_it" : "description_en"]: event.target.value,
-                  }))}
-                  rows={3}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
-                />
-              </div>
-            ))}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2242,6 +2326,48 @@ const AdminVoyageManager = ({
         <p className="text-xs text-muted-foreground font-sans">
           {visibleVoyages.length} {visibleVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
         </p>
+      </div>
+
+      <div className="rounded-[20px] border border-border/70 bg-background/40 p-3 space-y-2">
+        <p className="text-xs font-sans font-medium text-foreground">Elenco rotte</p>
+        {visibleVoyages.length === 0 ? (
+          <p className="text-xs text-muted-foreground font-sans py-1">Nessuna rotta con i filtri attuali.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-[min(240px,40vh)] overflow-y-auto pr-1">
+            {visibleVoyages.map((voyage) => {
+              const displayName = getLocalizedVoyageName(voyage, lang);
+              const isActive = selectedVoyageId === voyage.id;
+              return (
+                <div key={voyage.id} className="flex items-stretch gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void selectVoyage(voyage.id)}
+                    className={`flex-1 min-w-0 rounded-[14px] border px-3 py-2 text-left text-sm font-sans transition-colors ${
+                      isActive
+                        ? "border-accent bg-accent/10 text-foreground"
+                        : "border-border/70 bg-background/60 hover:border-accent/50 text-foreground"
+                    }`}
+                  >
+                    <span className="block truncate">{displayName}</span>
+                    <span className="mt-0.5 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                      {voyage.type} · {voyage.status}
+                      {!voyage.is_published ? " · bozza" : ""}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openVoyageForm(voyage)}
+                    className="shrink-0 self-stretch inline-flex items-center justify-center rounded-[14px] border border-border/70 bg-background/80 px-2.5 text-muted-foreground hover:border-accent hover:text-foreground transition-colors"
+                    title="Modifica nome, descrizione e dettagli viaggio (non i waypoint)"
+                    aria-label="Modifica info viaggio"
+                  >
+                    <Edit size={15} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="border border-border">
