@@ -3,10 +3,11 @@ import { Check } from "lucide-react";
 import AppleShareIcon from "@/components/AppleShareIcon";
 import { useI18n } from "@/lib/i18n";
 
-interface ShareButtonProps {
+export interface ShareButtonProps {
   url?: string;
   title?: string;
   size?: number;
+  instagramStoryImageUrl?: string;
 }
 
 const ShareButton = ({ url, title, size = 18 }: ShareButtonProps) => {

@@ -45,7 +45,7 @@ const ArticleMapAside = ({ latitude, longitude, title }: ArticleMapAsideProps) =
       },
       center: [longitude, latitude],
       zoom: 10,
-      attributionControl: true,
+      attributionControl: { compact: true },
     });
 
     mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");

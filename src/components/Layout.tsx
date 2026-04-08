@@ -9,6 +9,9 @@ const Layout = ({ children }: { children: ReactNode }) => {
   const hideNavbar = pathname === "/links";
 
   useEffect(() => {
+    // Reset body overflow in case a modal left it hidden
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
     window.scrollTo(0, 0);
   }, [pathname]);
 
