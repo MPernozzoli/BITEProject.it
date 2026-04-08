@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { X, Ship, Mountain } from "lucide-react";
 import {
   getLocalizedVoyageName,
@@ -31,7 +31,17 @@ const formatDate = (dateStr: string | null, lang: Language): string | null => {
   }
 };
 
-const STEM_HEIGHT = 10;
+const formatDistance = (nm: number, isWater: boolean): string => {
+  if (isWater) {
+    if (nm < 0.5) return `${Math.round(nm * 1852)} m`;
+    return `${nm < 10 ? nm.toFixed(1) : Math.round(nm)} NM`;
+  }
+  const km = nm * 1.852;
+  if (km < 0.5) return `${Math.round(km * 1000)} m`;
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+};
+
+const STEM_H = 14;
 
 const VoyageLegend = ({
   voyage,
@@ -62,6 +72,12 @@ const VoyageLegend = ({
     [segments]
   );
 
+  const useUniform = useMemo(() => {
+    if (segments.length === 0 || totalDistance === 0) return true;
+    const minRatio = Math.min(...segments.map((s) => s / totalDistance));
+    return minRatio < 0.05 || visibleWaypoints.length > 10;
+  }, [segments, totalDistance, visibleWaypoints.length]);
+
   const voyageName = getLocalizedVoyageName(voyage, lang);
   const startLabel = formatDate(voyage.start_date, lang);
   const endLabel = formatDate(voyage.end_date, lang);
@@ -70,18 +86,17 @@ const VoyageLegend = ({
 
   if (visibleWaypoints.length < 2) return null;
 
-  const dotColor = isWater ? "bg-sky-500" : "bg-orange-500";
+  const dotBase = isWater ? "bg-sky-500" : "bg-orange-500";
   const dotHover = isWater ? "group-hover:bg-sky-700" : "group-hover:bg-orange-700";
-  const dotRing = isWater ? "ring-sky-200/60" : "ring-orange-200/60";
-  const stemColor = isWater ? "bg-sky-300/50" : "bg-orange-300/50";
-  const lineColor = isWater ? "bg-sky-300/70" : "bg-orange-300/70";
+  const ringColor = isWater ? "ring-sky-200/50" : "ring-orange-200/50";
+  const stemBg = isWater ? "bg-sky-300/40" : "bg-orange-300/40";
+  const lineBg = isWater ? "bg-sky-300/60" : "bg-orange-300/60";
+  const distColor = isWater ? "text-sky-500/70" : "text-orange-500/70";
 
   return (
-    <div
-      className="pointer-events-auto rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-5 pt-4 pb-3 min-w-[280px] w-full"
-    >
+    <div className="pointer-events-auto rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4 w-full">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="flex items-start justify-between gap-3 mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
           <TypeIcon
             size={15}
@@ -102,83 +117,73 @@ const VoyageLegend = ({
       </div>
 
       {(startLabel || endLabel) && (
-        <p className="text-[11px] font-sans text-muted-foreground mb-3 -mt-0.5">
+        <p className="text-[11px] font-sans text-muted-foreground mb-4">
           {startLabel}
           {startLabel && endLabel ? " — " : ""}
           {endLabel}
         </p>
       )}
 
-      {/* Route: dots + proportional segments on a horizontal line, labels alternate above/below */}
-      <div className="flex items-center w-full py-7">
+      {/* Route diagram */}
+      <div
+        className="flex items-center w-full overflow-x-auto"
+        style={{ paddingTop: 44, paddingBottom: 32 }}
+      >
         {visibleWaypoints.map((wp, i) => {
           const wpName = getLocalizedWaypointName(wp, lang, i);
           const isFirst = i === 0;
           const isLast = i === visibleWaypoints.length - 1;
           const isEndpoint = isFirst || isLast;
-          const labelAbove = !isEndpoint && i % 2 === 1;
+          const labelAbove = i % 2 === 1;
 
           const segDist = i < segments.length ? segments[i] : 0;
-          const growValue = totalDistance > 0 && segDist > 0 ? segDist / totalDistance : 0;
+          const growValue =
+            useUniform || totalDistance === 0
+              ? 1
+              : segDist / totalDistance;
 
           return (
-            <div
-              key={wp.id}
-              className="flex items-center"
-              style={{
-                flex: isLast ? "0 0 auto" : `${growValue} 1 0%`,
-                minWidth: 0,
-              }}
-            >
+            <Fragment key={wp.id}>
               {/* Waypoint dot + label */}
               <button
                 type="button"
                 onClick={() => onWaypointClick?.(wp)}
-                className="group relative shrink-0 cursor-pointer"
+                className="group relative shrink-0 cursor-pointer z-10"
                 title={wpName}
               >
-                {/* Dot */}
                 <span
                   className={`
                     block rounded-full transition-colors
-                    ${isEndpoint ? "w-3 h-3" : "w-2.5 h-2.5"}
-                    ${dotColor} ${dotHover} ring-2 ${dotRing}
+                    ${isEndpoint ? "w-3.5 h-3.5" : "w-2.5 h-2.5"}
+                    ${dotBase} ${dotHover} ring-2 ${ringColor}
                   `}
                 />
 
-                {/* Label + stem, absolutely positioned */}
+                {/* Label positioned above or below */}
                 <div
                   className={`
                     absolute left-1/2 -translate-x-1/2 flex flex-col items-center
                     ${labelAbove ? "bottom-full" : "top-full"}
                   `}
-                  style={labelAbove ? { marginBottom: 1 } : { marginTop: 1 }}
+                  style={labelAbove ? { marginBottom: 2 } : { marginTop: 2 }}
                 >
                   {labelAbove ? (
                     <>
-                      <span
-                        className="text-[10px] leading-tight font-sans font-medium text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap"
-                      >
+                      <span className="text-[10px] leading-tight font-sans font-medium text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap">
                         {wpName}
                       </span>
-                      <div
-                        className={`w-px ${stemColor}`}
-                        style={{ height: STEM_HEIGHT }}
-                      />
+                      <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
                     </>
                   ) : (
                     <>
                       {!isEndpoint && (
-                        <div
-                          className={`w-px ${stemColor}`}
-                          style={{ height: STEM_HEIGHT }}
-                        />
+                        <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
                       )}
                       <span
                         className={`
                           text-[10px] leading-tight font-sans transition-colors whitespace-nowrap
                           ${isEndpoint
-                            ? "font-semibold text-foreground mt-1.5"
+                            ? "font-semibold text-foreground mt-1"
                             : "font-medium text-muted-foreground group-hover:text-foreground"}
                         `}
                       >
@@ -189,14 +194,27 @@ const VoyageLegend = ({
                 </div>
               </button>
 
-              {/* Segment line */}
+              {/* Segment line + distance label */}
               {!isLast && (
                 <div
-                  className={`h-[2px] rounded-full flex-1 ${lineColor}`}
-                  style={{ minWidth: 8 }}
-                />
+                  className="relative flex items-center"
+                  style={{
+                    flex: `${growValue} 1 0%`,
+                    minWidth: 56,
+                  }}
+                >
+                  {/* Distance label centered above the line */}
+                  <span
+                    className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 text-[9px] font-sans font-medium whitespace-nowrap ${distColor}`}
+                  >
+                    {formatDistance(segDist, isWater)}
+                  </span>
+
+                  {/* Line */}
+                  <div className={`h-[2px] w-full rounded-full ${lineBg}`} />
+                </div>
               )}
-            </div>
+            </Fragment>
           );
         })}
       </div>
