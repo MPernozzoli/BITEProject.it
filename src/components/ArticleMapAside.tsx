@@ -4,10 +4,16 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useI18n } from "@/lib/i18n";
 import { MapPin } from "lucide-react";
 
-interface ArticleMapAsideProps {
+export interface ArticleMapAsideProps {
   latitude: number;
   longitude: number;
   title: string;
+  scenes?: unknown[];
+  activeSceneId?: string | null;
+  camera?: { latitude: number; longitude: number; zoom: number } | null;
+  primaryRouteCoordinates?: [number, number][] | null;
+  distanceValue?: number | null;
+  distanceUnit?: "KM" | "NM" | null;
 }
 
 /** Mappa compatta a lato articolo, centrata sulla georef */
