@@ -78,12 +78,7 @@ const VoyageLegend = ({
 
   return (
     <div
-      className={`
-        pointer-events-auto
-        rounded-xl border bg-background/90 backdrop-blur-md shadow-xl
-        px-5 pt-4 pb-3 min-w-[280px] w-full
-        ${isWater ? "border-sky-200/60" : "border-orange-200/60"}
-      `}
+      className="pointer-events-auto rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-5 pt-4 pb-3 min-w-[280px] w-full"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-2">
