@@ -951,8 +951,8 @@ const AdminNewsletterManager = () => {
               />
             ) : (
               <RichTextEditor
-                content={form.bodyJsonTranslations[language]}
-                onChange={(content) => updateBodyJson(language, content as Json)}
+                content={form.bodyJsonTranslations[language] as object}
+                onChange={(content) => updateBodyJson(language, content as unknown as Json)}
                 onHtmlChange={(html) => updateBodyHtml(language, html)}
                 placeholder={language === "en" ? "Write the email body..." : "Scrivi il contenuto della mail..."}
               />
