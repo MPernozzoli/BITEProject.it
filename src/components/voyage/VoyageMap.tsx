@@ -24,6 +24,7 @@ interface VoyageMapProps {
   highlightedVoyageId?: string | null;
   onArticleClick?: (article: GeoArticle) => void;
   onVoyageSelect?: (voyageId: string | null) => void;
+  selectedRouteVoyageId?: string | null;
   flyToWaypointRef?: React.MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
@@ -189,6 +190,7 @@ const VoyageMap = ({
   highlightedVoyageId,
   onArticleClick,
   onVoyageSelect,
+  selectedRouteVoyageId: controlledRouteVoyageId,
   flyToWaypointRef,
   lang,
   initialFitReady = true,
@@ -260,6 +262,12 @@ const VoyageMap = ({
   // Keep refs in sync
   onArticleClickRef.current = onArticleClick;
   onVoyageSelectRef.current = onVoyageSelect;
+
+  useEffect(() => {
+    if (controlledRouteVoyageId !== undefined) {
+      setHoveredRouteVoyageId(controlledRouteVoyageId);
+    }
+  }, [controlledRouteVoyageId]);
 
   // Initialize map
   useEffect(() => {

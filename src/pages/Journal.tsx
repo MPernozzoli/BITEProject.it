@@ -13,8 +13,9 @@ import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
+import VoyageLegend from "@/components/voyage/VoyageLegend";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getArticleVoyageFocus, getLocalizedVoyageName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
+import { getArticleVoyageFocus, getLocalizedVoyageName, getLocalizedWaypointName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -58,6 +59,8 @@ const Journal = () => {
   const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
+  const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
+  const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
@@ -471,6 +474,28 @@ const Journal = () => {
     };
   }, [viewMode]);
 
+  useEffect(() => {
+    if (typeof document === "undefined" || viewMode !== "map") return;
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    const applyScrollLock = () => {
+      html.style.overflow = "hidden";
+      html.style.overscrollBehavior = "none";
+      body.style.overflow = "hidden";
+      body.style.overscrollBehavior = "none";
+    };
+
+    const observer = new MutationObserver(() => {
+      if (body.style.overflow !== "hidden") applyScrollLock();
+    });
+
+    observer.observe(body, { attributes: true, attributeFilter: ["style"] });
+
+    return () => observer.disconnect();
+  }, [viewMode]);
+
   // Highlighted voyage based on selected article
   const selectedArticle = useMemo(
     () => articles.find((article) => article.id === selectedArticleId) || null,
@@ -538,6 +563,9 @@ const Journal = () => {
             hoveredArticleId={hoveredArticleId}
             highlightedVoyageId={highlightedVoyageId}
             onArticleClick={handleArticleClick}
+            onVoyageSelect={setSelectedRouteVoyageId}
+            selectedRouteVoyageId={selectedRouteVoyageId}
+            flyToWaypointRef={flyToWaypointRef}
             lang={lang}
             disableInteractions={isMapInteractionLocked}
             initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
@@ -546,6 +574,26 @@ const Journal = () => {
           />
 
           {isMapInteractionLocked && <div className="absolute inset-0 z-10" aria-hidden />}
+
+          {/* Voyage route legend — bottom left */}
+          {selectedRouteVoyageId && (() => {
+            const legendVoyage = voyages.find((v) => v.id === selectedRouteVoyageId);
+            if (!legendVoyage) return null;
+            return (
+              <div className="fixed bottom-6 left-4 z-30 pointer-events-none max-w-[min(520px,calc(100vw-2rem))]">
+                <VoyageLegend
+                  voyage={legendVoyage}
+                  waypoints={waypointsMap[selectedRouteVoyageId] || []}
+                  articles={filtered}
+                  lang={lang}
+                  onClose={() => setSelectedRouteVoyageId(null)}
+                  onWaypointClick={(wp) => {
+                    flyToWaypointRef.current?.(wp.lat, wp.lng, getLocalizedWaypointName(wp, lang, (waypointsMap[selectedRouteVoyageId] || []).indexOf(wp)));
+                  }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Floating controls — top right */}
           <div

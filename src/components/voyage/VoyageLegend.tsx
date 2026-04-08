@@ -6,7 +6,8 @@ import {
   getPublicVoyageWaypoints,
   haversineNM,
 } from "@/lib/voyage-utils";
-import type { Voyage, VoyageWaypoint, GeoArticle, Language } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import type { Language } from "@/lib/i18n";
 
 interface VoyageLegendProps {
   voyage: Voyage;
@@ -111,77 +112,63 @@ const VoyageLegend = ({
       )}
 
       {/* Route visualization */}
-      <div className="flex items-center w-full" style={{ minHeight: 36 }}>
+      <div className="flex items-start w-full" style={{ minHeight: 42 }}>
         {visibleWaypoints.map((wp, i) => {
           const wpName = getLocalizedWaypointName(wp, lang, i);
           const isFirst = i === 0;
           const isLast = i === visibleWaypoints.length - 1;
 
-          const segAfter = i < segments.length ? segments[i] : 0;
-          const pct =
-            totalDistance > 0 && segAfter > 0
-              ? Math.max(4, (segAfter / totalDistance) * 100)
-              : 0;
+          const segDist = i < segments.length ? segments[i] : 0;
+          const growValue = totalDistance > 0 && segDist > 0 ? segDist / totalDistance : 0;
 
           return (
             <div
               key={wp.id}
               className="flex items-center"
               style={{
-                flexShrink: 0,
-                ...(isLast ? {} : { flexGrow: 0 }),
+                flex: isLast ? "0 0 auto" : `${growValue} 1 0%`,
+                minWidth: 0,
               }}
             >
-              {/* Waypoint dot + label */}
-              <div className="flex flex-col items-center" style={{ width: "max-content" }}>
-                <button
-                  type="button"
-                  onClick={() => onWaypointClick?.(wp)}
+              <button
+                type="button"
+                onClick={() => onWaypointClick?.(wp)}
+                className="group flex flex-col items-center cursor-pointer transition-colors shrink-0"
+                style={{ width: "max-content" }}
+                title={wpName}
+              >
+                <span
                   className={`
-                    group flex flex-col items-center cursor-pointer
+                    block rounded-full
+                    ${isFirst || isLast ? "w-3 h-3" : "w-2.5 h-2.5"}
+                    ${accentColor === "sky"
+                      ? "bg-sky-500 group-hover:bg-sky-700 ring-2 ring-sky-200/60"
+                      : "bg-orange-500 group-hover:bg-orange-700 ring-2 ring-orange-200/60"}
                     transition-colors
                   `}
-                  title={wpName}
+                />
+                <span
+                  className={`
+                    mt-1.5 text-[10px] leading-tight font-sans max-w-[72px] text-center
+                    ${isFirst || isLast
+                      ? "font-semibold text-foreground"
+                      : "font-medium text-muted-foreground group-hover:text-foreground"}
+                    transition-colors truncate
+                  `}
                 >
-                  <span
-                    className={`
-                      block rounded-full
-                      ${isFirst || isLast ? "w-3 h-3" : "w-2.5 h-2.5"}
-                      ${accentColor === "sky"
-                        ? "bg-sky-500 group-hover:bg-sky-700 ring-2 ring-sky-200/60"
-                        : "bg-orange-500 group-hover:bg-orange-700 ring-2 ring-orange-200/60"}
-                      transition-colors
-                    `}
-                  />
-                  <span
-                    className={`
-                      mt-1.5 text-[10px] leading-tight font-sans max-w-[72px] text-center
-                      ${isFirst || isLast
-                        ? "font-semibold text-foreground"
-                        : "font-medium text-muted-foreground group-hover:text-foreground"}
-                      transition-colors truncate
-                    `}
-                  >
-                    {wpName}
-                  </span>
-                </button>
-              </div>
+                  {wpName}
+                </span>
+              </button>
 
-              {/* Segment line */}
               {!isLast && (
                 <div
                   className={`
-                    h-[2px] self-start mt-[5px] rounded-full
+                    h-[2px] rounded-full flex-1
                     ${accentColor === "sky"
                       ? "bg-sky-300/70"
                       : "bg-orange-300/70"}
                   `}
-                  style={{
-                    width: `${pct}%`,
-                    minWidth: 12,
-                    flexGrow: 1,
-                    flexShrink: 1,
-                  }}
+                  style={{ marginTop: 5, minWidth: 8 }}
                 />
               )}
             </div>

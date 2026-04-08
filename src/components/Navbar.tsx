@@ -56,7 +56,9 @@ const Navbar = () => {
     document.body.style.overflow = mobileOpen ? "hidden" : previousOverflow;
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      // Se il menu si apre sopra il logbook in mappa, il body è già "hidden".
+      // Ripristinare quel valore dopo navigazione lascerebbe la pagina successiva non scrollabile.
+      document.body.style.overflow = previousOverflow === "hidden" ? "" : previousOverflow;
     };
   }, [mobileOpen]);
 
