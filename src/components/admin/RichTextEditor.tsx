@@ -21,6 +21,7 @@ import {
 interface RichTextEditorProps {
   content: object;
   onChange: (content: object) => void;
+  onHtmlChange?: (html: string) => void;
   placeholder?: string;
 }
 
