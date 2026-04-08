@@ -575,12 +575,21 @@ const Journal = () => {
 
           {isMapInteractionLocked && <div className="absolute inset-0 z-10" aria-hidden />}
 
-          {/* Voyage route legend — bottom left */}
+          {/* Voyage route legend — bottom, next to sidebar */}
           {selectedRouteVoyageId && (() => {
             const legendVoyage = voyages.find((v) => v.id === selectedRouteVoyageId);
             if (!legendVoyage) return null;
+            const sidebarVisible = !isMobile && sidebarOpen && !isSidebarAutoHidden;
             return (
-              <div className="fixed bottom-6 left-4 z-30 pointer-events-none max-w-[min(520px,calc(100vw-2rem))]">
+              <div
+                className={`fixed bottom-6 z-30 pointer-events-none transition-all duration-300 ease-out ${
+                  isMobile
+                    ? "left-3 right-3 max-w-none"
+                    : sidebarVisible
+                      ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] max-w-[min(520px,calc(100vw-340px-3rem))] xl:max-w-[min(520px,calc(100vw-390px-3rem))]"
+                      : "left-4 max-w-[min(520px,calc(100vw-2rem))]"
+                }`}
+              >
                 <VoyageLegend
                   voyage={legendVoyage}
                   waypoints={waypointsMap[selectedRouteVoyageId] || []}
