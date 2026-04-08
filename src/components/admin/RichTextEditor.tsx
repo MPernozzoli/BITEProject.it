@@ -51,7 +51,7 @@ const MenuButton = ({
   </button>
 );
 
-const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }: RichTextEditorProps) => {
+const RichTextEditor = ({ content, onChange, onHtmlChange, placeholder = "Start writing..." }: RichTextEditorProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
@@ -71,6 +71,7 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }:
     content: content && Object.keys(content).length > 0 ? content : undefined,
     onUpdate: ({ editor }) => {
       onChange(editor.getJSON());
+      onHtmlChange?.(editor.getHTML());
     },
     editorProps: {
       attributes: {
