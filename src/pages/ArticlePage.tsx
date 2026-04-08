@@ -1,39 +1,50 @@
-import { useParams, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { generateHTML } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
-import LinkExt from "@tiptap/extension-link";
-import Youtube from "@tiptap/extension-youtube";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
-import TextAlign from "@tiptap/extension-text-align";
-import Underline from "@tiptap/extension-underline";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { format } from "date-fns";
-import ProfileCard from "@/components/ProfileCard";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import ArticleSidebar from "@/components/ArticleSidebar";
-import ArticleMapAside from "@/components/ArticleMapAside";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
-import { useRegisterArticleRead } from "@/hooks/useArticleReads";
-import { useEffect, useMemo, useRef } from "react";
+import ArticleVoyageMediaWidget from "@/components/ArticleVoyageMediaWidget";
+import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
-
-const extensions = [
-  StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-  Image,
-  LinkExt,
-  Youtube.configure({ width: 640, height: 360 }),
-  TextStyle,
-  Color,
-  TextAlign.configure({ types: ["heading", "paragraph"] }),
-  Underline,
-];
+import LiveReadCounter from "@/components/LiveReadCounter";
+import { articleContentExtensions } from "@/lib/article-content";
+import ProfileAvatar from "@/components/ProfileAvatar";
+import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import LazyArticleMapAside from "@/components/LazyArticleMapAside";
+import { extractImagesFromRichContent } from "@/lib/content-images";
+import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
+import {
+  getArticleSceneCameraCenter,
+  getArticleSceneAnchorId,
+  getArticleSceneAnchorIndex,
+  getArticleSceneAnchorPreview,
+  getArticleSceneDescription,
+  getArticleOverlayLabel,
+  getArticleSceneTitle,
+  getArticleSceneWindLabel,
+  normalizeArticleMapScenes,
+  sortArticleMapScenesForLanguage,
+} from "@/lib/article-map";
+import {
+  buildPublicVoyageGeometry,
+  buildVoyageSegmentGeometry,
+  formatWaypointMoment,
+  getLocalizedWaypointDescription,
+  getLocalizedWaypointName,
+  normalizeWaypointMedia,
+  totalCoordinateDistanceKm,
+  totalWaypointDistance,
+} from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 type StoryChapter = {
   id: string;
@@ -45,10 +56,14 @@ type StoryChapter = {
 
 const ArticlePage = () => {
   const { slug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { lang } = useI18n();
-  const markAsRead = useRegisterArticleRead(slug);
-  const queryClient = useQueryClient();
-  const viewIncrementedFor = useRef<string | null>(null);
+  const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const articleContentRef = useRef<HTMLDivElement | null>(null);
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
+  const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+  const focusedCommentId = searchParams.get("comment");
+  const focusTarget = searchParams.get("focus");
 
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
@@ -65,6 +80,8 @@ const ArticlePage = () => {
   });
 
   const storyId = (article as any)?.story_id as string | null | undefined;
+  useQualifiedArticleRead(article?.id ?? null, slug);
+  useSyncArticleViewCount(article?.id ?? null, slug);
 
   const { data: storyChapters = [] } = useQuery({
     queryKey: ["story-chapters-published", storyId],
@@ -81,37 +98,6 @@ const ArticlePage = () => {
     },
   });
 
-  const incrementViews = useMutation({
-    mutationFn: async (articleId: string) => {
-      const { data, error } = await supabase.rpc("increment_article_view_count", {
-        _article_id: articleId,
-      });
-      if (error) throw error;
-      return Number(data ?? 0);
-    },
-    onSuccess: (count) => {
-      queryClient.setQueryData(["article", slug], (old: unknown) =>
-        old && typeof old === "object" ? { ...(old as Record<string, unknown>), view_count: count } : old
-      );
-    },
-    onError: () => {
-      /* RPC assente finché non è applicata la migration */
-    },
-  });
-
-  useEffect(() => {
-    if (!article?.id) return;
-    if (viewIncrementedFor.current === article.id) return;
-    viewIncrementedFor.current = article.id;
-    incrementViews.mutate(article.id);
-  }, [article?.id]);
-
-  useEffect(() => {
-    if (article?.id) {
-      markAsRead.mutate(article.id);
-    }
-  }, [article?.id]);
-
   const { data: authors = [] } = useQuery({
     queryKey: ["article-authors", article?.id],
     enabled: !!article?.id,
@@ -123,7 +109,7 @@ const ArticlePage = () => {
       if (!authorLinks?.length) return [];
       const ids = authorLinks.map((a) => a.profile_id);
       const { data: profiles } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, avatar_url")
         .in("id", ids);
       return profiles || [];
@@ -152,6 +138,28 @@ const ArticlePage = () => {
       return data;
     },
   });
+  const { data: linkedVoyage } = useQuery({
+    queryKey: ["article-linked-voyage", article?.voyage_id],
+    enabled: Boolean(article?.voyage_id),
+    queryFn: async () => {
+      const { data, error } = await supabase.from("voyages").select("*").eq("id", article!.voyage_id).eq("is_published", true).maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as Voyage | null;
+    },
+  });
+  const { data: linkedVoyageWaypoints = [] } = useQuery({
+    queryKey: ["article-linked-voyage-waypoints", article?.voyage_id],
+    enabled: Boolean(linkedVoyage?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_waypoints")
+        .select("*")
+        .eq("voyage_id", linkedVoyage!.id)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as unknown as VoyageWaypoint[];
+    },
+  });
 
   const chapterPrevNext = useMemo(() => {
     if (!article?.id || !storyChapters.length) return { prev: null as StoryChapter | null, next: null as StoryChapter | null };
@@ -162,6 +170,34 @@ const ArticlePage = () => {
       next: idx < storyChapters.length - 1 ? storyChapters[idx + 1] : null,
     };
   }, [article?.id, storyChapters]);
+
+  useEffect(() => {
+    if (focusTarget !== "likes") return;
+
+    const element = document.getElementById("article-engagement-panel");
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("comment-notification-flash");
+
+    const timeoutId = window.setTimeout(() => {
+      element.classList.remove("comment-notification-flash");
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("focus");
+      nextParams.delete("notification");
+      setSearchParams(nextParams, { replace: true });
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [focusTarget, searchParams, setSearchParams]);
+
+  const handleCommentFocusHandled = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("comment");
+    nextParams.delete("focus");
+    nextParams.delete("notification");
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const coverFocal = useMemo(() => {
     if (!article) return clampCoverFocal(50, 50, 1);
@@ -179,6 +215,370 @@ const ArticlePage = () => {
       !Number.isNaN(article.latitude) &&
       !Number.isNaN(article.longitude)
   );
+  const articleScenes = useMemo(
+    () => normalizeArticleMapScenes((article as any)?.article_map_scenes),
+    [article]
+  );
+
+  const title = article
+    ? (lang === "en" ? article.title_en : (article.title_it || article.title_en))
+    : "";
+  const content = article
+    ? (lang === "en" ? article.content_en : (article.content_it || article.content_en))
+    : null;
+  const contentNodes = useMemo(() => {
+    if (!content || typeof content !== "object" || !Array.isArray((content as any).content)) return [];
+    return (content as any).content as Record<string, unknown>[];
+  }, [content]);
+  const hasStructuredContent = Boolean(
+    content && typeof content === "object" && Object.keys(content).length > 0
+  );
+  let contentRenderFailed = false;
+  let htmlContent = "";
+
+  if (hasStructuredContent) {
+    try {
+      htmlContent = sanitizeRichHtml(
+        generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions)
+      );
+    } catch (error) {
+      contentRenderFailed = true;
+      console.error("Failed to render article content", error);
+    }
+  }
+
+  const localizedScenes = useMemo(() => {
+    const sortedScenes = sortArticleMapScenesForLanguage(articleScenes, lang);
+    return sortedScenes.flatMap((scene) => {
+      const cameraCenter = getArticleSceneCameraCenter(scene);
+      if (!cameraCenter || typeof scene.latitude !== "number" || typeof scene.longitude !== "number") return [];
+
+      return [{
+        cameraLatitude: cameraCenter.latitude,
+        cameraLongitude: cameraCenter.longitude,
+        id: scene.id,
+        title: getArticleSceneTitle(scene, lang),
+        description: getArticleSceneDescription(scene, lang),
+        windLabel: getArticleSceneWindLabel(scene, lang),
+        latitude: scene.latitude,
+        longitude: scene.longitude,
+        zoom: scene.zoom,
+        windAngle: scene.wind_angle,
+        anchorId: getArticleSceneAnchorId(scene, lang),
+        anchorPreview: getArticleSceneAnchorPreview(scene, lang),
+        anchorIndex: getArticleSceneAnchorIndex(scene, lang),
+        showMainRoute: scene.show_main_route,
+        vessels: scene.vessels,
+        overlays: scene.overlays.map((overlay) => ({
+          ...overlay,
+          label: getArticleOverlayLabel(overlay, lang),
+        })),
+      }];
+    });
+  }, [articleScenes, lang]);
+  const primaryRouteCoordinates = useMemo(() => {
+    if (!article?.voyage_id || !linkedVoyage || linkedVoyageWaypoints.length < 2) return null;
+    const geometrySource = linkedVoyage.cached_geometry as { coordinates?: [number, number][] } | null;
+    const cachedGeometry = Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
+
+    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
+      const start = Math.max(0, Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, linkedVoyageWaypoints.length - 1));
+      const end = Math.max(0, Math.min(article.voyage_segment_end ?? article.voyage_segment_start ?? start, linkedVoyageWaypoints.length - 1));
+      const segmentGeometry = buildVoyageSegmentGeometry(
+        linkedVoyageWaypoints,
+        linkedVoyage.type,
+        start,
+        end,
+        cachedGeometry
+      );
+      return segmentGeometry.length >= 2 ? segmentGeometry : null;
+    }
+
+    return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
+  const articleRouteDistance = useMemo(() => {
+    if (!article?.voyage_id || linkedVoyageWaypoints.length < 2) return null;
+
+    let relevantWaypoints = linkedVoyageWaypoints;
+    let relevantGeometry = primaryRouteCoordinates;
+    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
+      const rawStart = article.voyage_segment_start ?? article.voyage_segment_end ?? 0;
+      const rawEnd = article.voyage_segment_end ?? article.voyage_segment_start ?? rawStart;
+      const safeStart = Math.max(0, Math.min(Math.min(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
+      const safeEnd = Math.max(0, Math.min(Math.max(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
+      relevantWaypoints = linkedVoyageWaypoints.slice(safeStart, safeEnd + 1);
+      relevantGeometry = linkedVoyage
+        ? buildVoyageSegmentGeometry(
+            linkedVoyageWaypoints,
+            linkedVoyage.type,
+            safeStart,
+            safeEnd,
+            (linkedVoyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates
+          )
+        : null;
+    }
+
+    if (relevantWaypoints.length < 2) return null;
+    if (linkedVoyage?.type === "land") {
+      const distanceKm = relevantGeometry && relevantGeometry.length >= 2 ? totalCoordinateDistanceKm(relevantGeometry) : 0;
+      return distanceKm > 0 ? { value: distanceKm, unit: "KM" as const } : null;
+    }
+    return { value: totalWaypointDistance(relevantWaypoints), unit: "NM" as const };
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints, primaryRouteCoordinates]);
+  const articleVoyageMediaItems = useMemo(() => {
+    if (!article?.voyage_id || linkedVoyageWaypoints.length === 0) return [];
+
+    const hasExplicitSegment = article.voyage_segment_start != null || article.voyage_segment_end != null;
+    const startIndex = hasExplicitSegment
+      ? Math.max(
+          0,
+          Math.min(
+            Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, article.voyage_segment_end ?? article.voyage_segment_start ?? 0),
+            linkedVoyageWaypoints.length - 1
+          )
+        )
+      : 0;
+    const endIndex = hasExplicitSegment
+      ? Math.max(
+          0,
+          Math.min(
+            Math.max(article.voyage_segment_end ?? article.voyage_segment_start ?? startIndex, article.voyage_segment_start ?? article.voyage_segment_end ?? startIndex),
+            linkedVoyageWaypoints.length - 1
+          )
+        )
+      : linkedVoyageWaypoints.length - 1;
+
+    return linkedVoyageWaypoints.slice(startIndex, endIndex + 1).flatMap((waypoint, relativeIndex) => {
+      const originalIndex = startIndex + relativeIndex;
+      const waypointName = getLocalizedWaypointName(waypoint, lang, originalIndex);
+      const waypointDescription = getLocalizedWaypointDescription(waypoint, lang);
+      const waypointDate = formatWaypointMoment(waypoint, lang === "it" ? "it-IT" : "en-US");
+      const waypointCoordinates = `Lat ${waypoint.lat.toFixed(5)} · Long ${waypoint.lng.toFixed(5)}`;
+
+      return normalizeWaypointMedia(waypoint.media).map((mediaItem, mediaIndex) => ({
+        id: `${waypoint.id}-${mediaIndex}-${mediaItem.url}`,
+        waypointId: waypoint.id,
+        waypointName,
+        waypointDescription,
+        waypointCoordinates,
+        waypointDate,
+        media: mediaItem,
+      }));
+    });
+  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, lang, linkedVoyageWaypoints]);
+  const fallbackSceneCoordinates = useMemo(() => {
+    if (hasGeo && article) {
+      return {
+        latitude: article.latitude!,
+        longitude: article.longitude!,
+      };
+    }
+
+    if (primaryRouteCoordinates && primaryRouteCoordinates.length > 0) {
+      const middleCoordinate = primaryRouteCoordinates[Math.floor(primaryRouteCoordinates.length / 2)];
+      return {
+        longitude: middleCoordinate[0],
+        latitude: middleCoordinate[1],
+      };
+    }
+
+    return null;
+  }, [article, hasGeo, primaryRouteCoordinates]);
+  const effectiveScenes = useMemo(() => {
+    if (localizedScenes.length > 0) return localizedScenes;
+    if (!fallbackSceneCoordinates) return [];
+
+    return [{
+      id: "article-default-scene",
+      title: title || (lang === "it" ? "Posizione articolo" : "Article location"),
+      description: article?.location_name || "",
+      windLabel: "",
+      latitude: fallbackSceneCoordinates.latitude,
+      longitude: fallbackSceneCoordinates.longitude,
+      zoom: hasGeo ? 7 : 6,
+      windAngle: null,
+      anchorId: "",
+      anchorPreview: "",
+      anchorIndex: 0,
+      showMainRoute: Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1),
+      vessels: [],
+      overlays: [],
+    }];
+  }, [article?.location_name, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
+  const shouldShowMapWidget = effectiveScenes.length > 0 || Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
+
+  const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
+  const dateLabel = article?.published_at ? format(new Date(article.published_at), dateFmt) : null;
+  const views = Number((article as any)?.view_count ?? 0);
+
+  const coverStyle = article?.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
+  const instagramStoryImage = getArticleInstagramStoryImage(article, lang);
+  const shareUrl =
+    typeof window === "undefined"
+      ? ""
+      : (() => {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("lang", lang);
+          return nextUrl.toString();
+        })();
+
+  const prevTitle = chapterPrevNext.prev
+    ? lang === "en"
+      ? chapterPrevNext.prev.title_en
+      : chapterPrevNext.prev.title_it || chapterPrevNext.prev.title_en
+    : "";
+  const nextTitle = chapterPrevNext.next
+    ? lang === "en"
+      ? chapterPrevNext.next.title_en
+      : chapterPrevNext.next.title_it || chapterPrevNext.next.title_en
+    : "";
+
+  useEffect(() => {
+    if (!article) return;
+
+    const seoDescription =
+      (lang === "en" ? article.excerpt_en : article.excerpt_it || article.excerpt_en) ||
+      DEFAULT_DESCRIPTION;
+    const authorNames = authors
+      .map((author: any) => author?.name)
+      .filter((name): name is string => typeof name === "string" && name.length > 0);
+    const inlineImages = [
+      ...extractImagesFromRichContent(article.content_en as any),
+      ...extractImagesFromRichContent(article.content_it as any),
+    ];
+    const imageUrls = Array.from(
+      new Set([article.cover_image, ...inlineImages.map((image) => image.src)].filter((value): value is string => Boolean(value)))
+    );
+
+    applySeo({
+      title: `${title} | BITE`,
+      description: seoDescription,
+      pathname: `/logbook/${article.slug}`,
+      image: article.cover_image,
+      type: "article",
+      structuredData: [
+        {
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: title,
+          description: seoDescription,
+          url: `${window.location.origin}/logbook/${article.slug}`,
+          mainEntityOfPage: `${window.location.origin}/logbook/${article.slug}`,
+          image: imageUrls.length ? imageUrls : undefined,
+          datePublished: article.published_at || undefined,
+          dateModified: article.updated_at || article.published_at || undefined,
+          articleSection: article.category || "Logbook",
+          keywords: tags.map((tag: any) => tag.name).filter(Boolean),
+          author: authorNames.length
+            ? authorNames.map((name) => ({
+                "@type": "Person",
+                name,
+              }))
+            : undefined,
+          publisher: { "@id": ORGANIZATION_ID },
+          isPartOf: { "@id": WEBSITE_ID },
+          inLanguage: lang,
+          associatedMedia: inlineImages.length
+            ? inlineImages.map((image) => ({
+                "@type": "ImageObject",
+              contentUrl: image.src,
+              url: image.src,
+              caption: image.caption || image.alt || image.title || undefined,
+              name: image.title || image.caption || image.alt || undefined,
+            }))
+            : undefined,
+        },
+      ],
+    });
+  }, [article, authors, lang, tags, title]);
+
+  useEffect(() => {
+    if (!article) return;
+
+    if (!localizedScenes.length) {
+      setActiveSceneId(null);
+      setMapCamera(hasGeo ? { latitude: article.latitude!, longitude: article.longitude!, zoom: 7 } : null);
+      return;
+    }
+
+    const updateFromScroll = () => {
+      const scenePositions = localizedScenes.map((scene) => {
+        const anchorElement = scene.anchorId
+          ? articleContentRef.current?.querySelector<HTMLElement>(`[data-map-scene-anchor-id="${scene.anchorId}"]`) ?? null
+          : null;
+        const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
+        const fallbackElement = articleBlockRefs.current[anchorIndex];
+        const top = anchorElement
+          ? anchorElement.getBoundingClientRect().top + window.scrollY
+          : fallbackElement
+            ? fallbackElement.getBoundingClientRect().top + window.scrollY
+            : window.scrollY;
+
+        return { ...scene, top };
+      });
+
+      const currentY = window.scrollY + window.innerHeight * 0.34;
+
+      if (scenePositions.length === 1) {
+        const [scene] = scenePositions;
+        setActiveSceneId(scene.id);
+        setMapCamera({ latitude: scene.cameraLatitude, longitude: scene.cameraLongitude, zoom: scene.zoom });
+        return;
+      }
+
+      if (currentY <= scenePositions[0].top) {
+        const firstScene = scenePositions[0];
+        setActiveSceneId(firstScene.id);
+        setMapCamera({ latitude: firstScene.cameraLatitude, longitude: firstScene.cameraLongitude, zoom: firstScene.zoom });
+        return;
+      }
+
+      const lastScene = scenePositions[scenePositions.length - 1];
+      if (currentY >= lastScene.top) {
+        setActiveSceneId(lastScene.id);
+        setMapCamera({ latitude: lastScene.cameraLatitude, longitude: lastScene.cameraLongitude, zoom: lastScene.zoom });
+        return;
+      }
+
+      for (let index = 0; index < scenePositions.length - 1; index += 1) {
+        const currentScene = scenePositions[index];
+        const nextScene = scenePositions[index + 1];
+
+        if (currentY < currentScene.top || currentY > nextScene.top) continue;
+
+        const span = Math.max(nextScene.top - currentScene.top, 1);
+        const progress = Math.min(Math.max((currentY - currentScene.top) / span, 0), 1);
+        const interpolate = (start: number, end: number) => start + (end - start) * progress;
+        const nearestScene = progress < 0.5 ? currentScene : nextScene;
+
+        setActiveSceneId(nearestScene.id);
+        setMapCamera({
+          latitude: interpolate(currentScene.cameraLatitude, nextScene.cameraLatitude),
+          longitude: interpolate(currentScene.cameraLongitude, nextScene.cameraLongitude),
+          zoom: interpolate(currentScene.zoom, nextScene.zoom),
+        });
+        return;
+      }
+    };
+
+    let frameId = 0;
+    const requestUpdate = () => {
+      cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateFromScroll);
+    };
+
+    requestUpdate();
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate);
+    window.addEventListener("load", requestUpdate);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener("scroll", requestUpdate);
+      window.removeEventListener("resize", requestUpdate);
+      window.removeEventListener("load", requestUpdate);
+    };
+  }, [article, contentNodes.length, hasGeo, localizedScenes]);
 
   if (isLoading) {
     return (
@@ -205,58 +605,36 @@ const ArticlePage = () => {
     );
   }
 
-  const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-  const content = lang === "en" ? article.content_en : (article.content_it || article.content_en);
-  const htmlContent =
-    content && typeof content === "object" && Object.keys(content).length > 0
-      ? generateHTML(content as any, extensions)
-      : "";
-  const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";
-  const dateLabel = article.published_at ? format(new Date(article.published_at), dateFmt) : null;
-  const views = Number((article as any).view_count ?? 0);
-  const viewsFmt = views.toLocaleString(lang === "it" ? "it-IT" : "en-US");
-
-  const coverStyle = article.cover_image ? coverImageStyle(article.cover_image, coverFocal) : undefined;
-
-  const prevTitle = chapterPrevNext.prev
-    ? lang === "en"
-      ? chapterPrevNext.prev.title_en
-      : chapterPrevNext.prev.title_it || chapterPrevNext.prev.title_en
-    : "";
-  const nextTitle = chapterPrevNext.next
-    ? lang === "en"
-      ? chapterPrevNext.next.title_en
-      : chapterPrevNext.next.title_it || chapterPrevNext.next.title_en
-    : "";
-
   return (
-    <div>
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       {article.cover_image && (
-        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden">
-          <img
-            src={article.cover_image}
-            alt=""
-            className="absolute inset-0 w-full max-w-none pointer-events-none"
-            style={coverStyle}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/25 to-transparent pointer-events-none" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
-            <div className="max-w-4xl">
-              <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-foreground drop-shadow-sm">
-                {title}
-              </h1>
+        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden mt-24 mx-4 md:mx-6 glass-frame rounded-[36px] p-2">
+          <div className="relative h-full overflow-hidden rounded-[30px]">
+            <img
+              src={article.cover_image}
+              alt=""
+              className="absolute inset-0 w-full max-w-none pointer-events-none"
+              style={coverStyle}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[rgba(12,20,31,0.72)] via-[rgba(12,20,31,0.18)] to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
+              <div className="max-w-4xl">
+                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-white [text-shadow:0_10px_34px_rgba(0,0,0,0.34)]">
+                  {title}
+                </h1>
+              </div>
             </div>
           </div>
         </section>
       )}
 
-      <div className="page-section !pt-8 md:!pt-14">
+      <div className="page-section !pt-4 md:!pt-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-10 lg:gap-12">
-            <article className="min-w-0">
+            <article className="min-w-0 glass-panel rounded-[34px] p-6 md:p-8 lg:p-10">
               <Link
                 to="/logbook"
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
               >
                 <ArrowLeft size={14} /> {lang === "it" ? "Torna al diario" : "Back to Logbook"}
               </Link>
@@ -268,7 +646,7 @@ const ArticlePage = () => {
               {story && (
                 <Link
                   to={`/logbook/story/${story.slug}`}
-                  className="flex items-center gap-3 mb-6 p-4 border border-border hover:border-accent transition-colors group bg-card/30"
+                  className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group"
                 >
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
                   <div>
@@ -291,7 +669,7 @@ const ArticlePage = () => {
                     <Link
                       to={`/logbook/${chapterPrevNext.prev.slug}`}
                       title={prevTitle}
-                      className="flex-1 inline-flex items-center gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors"
+                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors"
                     >
                       <ChevronLeft size={18} className="shrink-0 text-accent" />
                       <span className="min-w-0">
@@ -308,7 +686,7 @@ const ArticlePage = () => {
                     <Link
                       to={`/logbook/${chapterPrevNext.next.slug}`}
                       title={nextTitle}
-                      className="flex-1 inline-flex items-center justify-end gap-2 border border-border px-4 py-3 text-sm font-sans text-foreground hover:border-accent hover:bg-muted/40 transition-colors sm:text-right"
+                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center justify-end gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors sm:text-right"
                     >
                       <span className="min-w-0 order-2 sm:order-1">
                         <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5 sm:text-right">
@@ -322,51 +700,98 @@ const ArticlePage = () => {
                 </nav>
               )}
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 pb-8 mb-8 border-b border-border">
-                  {authors.map((a: any) => (
-                    <ProfileCard key={a.id} name={a.name} avatarUrl={a.avatar_url || undefined} size="sm" />
+              <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-3 p-4 md:p-5 mb-8">
+                  {authors.map((author: any) => (
+                    <Link
+                      key={author.id}
+                      to={`/profile/${author.id}`}
+                      className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors"
+                    >
+                      <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                        <ProfileAvatar
+                          name={author.name || "Anonymous"}
+                          avatarUrl={author.avatar_url || undefined}
+                          imgClassName="h-full w-full object-cover"
+                          fallback={<User size={12} className="text-muted-foreground" />}
+                        />
+                      </span>
+                      <span>{author.name}</span>
+                    </Link>
                   ))}
                   {dateLabel && (
-                    <span className="text-sm font-sans text-muted-foreground">
+                    <span className="glass-chip inline-flex items-center px-3 py-2 text-xs font-sans text-muted-foreground">
                       {lang === "it" ? "Pubblicato il " : "Published "}
-                      <time dateTime={article.published_at || undefined}>{dateLabel}</time>
+                      <time className="ml-1" dateTime={article.published_at || undefined}>{dateLabel}</time>
                     </span>
                   )}
-                <span
-                  className="inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground"
-                  title={lang === "it" ? "Visualizzazioni totali" : "Total views"}
-                >
-                  <Eye size={15} className="shrink-0 opacity-80" aria-hidden />
-                  <span>
-                    {viewsFmt} {lang === "it" ? "visualizzazioni" : "views"}
-                  </span>
-                </span>
+                <LiveReadCounter count={views} lang={lang} />
               </div>
 
-              {htmlContent && (
-                <div
-                  className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-sm prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
-                  dangerouslySetInnerHTML={{ __html: htmlContent }}
-                />
+              {contentNodes.length > 0 && (
+                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
+                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
+                    {contentNodes.map((node, index) => {
+                      const blockHtml = sanitizeRichHtml(
+                        generateHTML(
+                          { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
+                          articleContentExtensions
+                        )
+                      );
+
+                      return (
+                        <div
+                          key={`article-block-${index}`}
+                          ref={(element) => {
+                            articleBlockRefs.current[index] = element;
+                          }}
+                          data-article-block-index={index}
+                          dangerouslySetInnerHTML={{ __html: blockHtml }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {contentNodes.length === 0 && htmlContent && (
+                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
+                  <div
+                    className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic"
+                    dangerouslySetInnerHTML={{ __html: htmlContent }}
+                  />
+                </div>
+              )}
+              {contentRenderFailed && (
+                <p className="text-sm font-sans text-muted-foreground">
+                  {lang === "it"
+                    ? "Il contenuto di questo articolo non puo essere mostrato al momento."
+                    : "This article content cannot be displayed right now."}
+                </p>
               )}
 
-              <div className="flex items-center gap-6 mt-12 pt-8 border-t border-border">
+              <div
+                id="article-engagement-panel"
+                className="glass-panel-soft rounded-[24px] flex items-center gap-6 mt-12 p-4 md:p-5 scroll-mt-28"
+              >
                 <LikeButton articleId={article.id} />
-                <ShareButton title={title} />
+                <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
               </div>
 
-              <CommentSection articleId={article.id} />
+              <CommentSection
+                articleId={article.id}
+                focusCommentId={focusedCommentId}
+                onFocusHandled={handleCommentFocusHandled}
+              />
 
               {tags.length > 0 && (
-                <footer className="mt-14 pt-10 border-t border-border">
+                <footer className="mt-14">
                   <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
                     {lang === "it" ? "Hashtag" : "Tags"}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="glass-panel-soft rounded-[24px] flex flex-wrap gap-2 p-4">
                     {tags.map((tag: any) => (
                       <span
                         key={tag.id}
-                        className="text-xs font-sans px-2.5 py-1 border border-border text-muted-foreground bg-muted/40"
+                        className="glass-chip text-xs font-sans px-2.5 py-1 text-muted-foreground"
                       >
                         #{tag.name}
                       </span>
@@ -377,16 +802,38 @@ const ArticlePage = () => {
             </article>
 
             <aside className="min-w-0 space-y-8">
-              {hasGeo && (
+              {shouldShowMapWidget && (
                 <div className="lg:sticky lg:top-24 space-y-8">
-                  <ArticleMapAside latitude={article.latitude!} longitude={article.longitude!} title={title} />
+                  <LazyArticleMapAside
+                    latitude={fallbackSceneCoordinates?.latitude ?? article.latitude ?? 0}
+                    longitude={fallbackSceneCoordinates?.longitude ?? article.longitude ?? 0}
+                    title={title}
+                    scenes={effectiveScenes}
+                    activeSceneId={activeSceneId ?? effectiveScenes[0]?.id ?? null}
+                    camera={mapCamera ?? (fallbackSceneCoordinates ? {
+                      latitude: fallbackSceneCoordinates.latitude,
+                      longitude: fallbackSceneCoordinates.longitude,
+                      zoom: hasGeo ? 7 : 6,
+                    } : null)}
+                    primaryRouteCoordinates={primaryRouteCoordinates}
+                    distanceValue={articleRouteDistance?.value ?? null}
+                    distanceUnit={articleRouteDistance?.unit ?? null}
+                  />
+                  {articleVoyageMediaItems.length > 0 && (
+                    <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
+                  )}
                   <div>
                     <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                   </div>
                 </div>
               )}
-              {!hasGeo && (
+              {!shouldShowMapWidget && (
                 <div className="lg:sticky lg:top-24">
+                  {articleVoyageMediaItems.length > 0 && (
+                    <div className="mb-8">
+                      <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
+                    </div>
+                  )}
                   <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
                 </div>
               )}
