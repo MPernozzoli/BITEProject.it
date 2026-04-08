@@ -14,16 +14,6 @@ export function getSupabaseAuthStorageKey(): string {
   }
 }
 
-/**
- * Rinvia il lavoro dopo il tick corrente: in `onAuthStateChange` evita deadlock/chiamate annidate
- * verso Supabase (raccomandazione SDK).
- */
-export function deferSupabaseAuthWork(fn: () => void | Promise<void>): void {
-  queueMicrotask(() => {
-    void fn();
-  });
-}
-
 /** True se l'errore PostgREST indica JWT / sessione non valida. */
 export function isAuthFailureError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -31,6 +21,18 @@ export function isAuthFailureError(error: unknown): boolean {
   if (e.code === "PGRST301" || e.code === "401") return true;
   const m = (e.message || "").toLowerCase();
   return m.includes("jwt") || m.includes("invalid token") || m.includes("session");
+}
+
+/**
+ * Supabase sconsiglia chiamate async/client dentro onAuthStateChange:
+ * le rimandiamo al tick successivo per evitare deadlock del client auth.
+ */
+export function deferSupabaseAuthWork(work: () => void | Promise<void>) {
+  window.setTimeout(() => {
+    void Promise.resolve(work()).catch((error) => {
+      console.error("Deferred auth work failed", error);
+    });
+  }, 0);
 }
 
 /**

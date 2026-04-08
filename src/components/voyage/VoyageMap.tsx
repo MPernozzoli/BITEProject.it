@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import Supercluster from "supercluster";
 import {
   buildPublicVoyageGeometry,
   buildVoyageSegmentGeometry,
@@ -23,9 +22,6 @@ interface VoyageMapProps {
   hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
   onArticleClick?: (article: GeoArticle) => void;
-  onVoyageSelect?: (voyageId: string | null) => void;
-  selectedRouteVoyageId?: string | null;
-  flyToWaypointRef?: React.MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
   disableInteractions?: boolean;
@@ -151,36 +147,6 @@ const getArticleSegmentGeometry = (
   return buildVoyageSegmentGeometry(waypoints, type, startIndex, endIndex, cachedGeometry);
 };
 
-type PositionedArticle = GeoArticle & { displayLat: number; displayLng: number };
-
-function buildPositionedArticlesForCluster(
-  articles: GeoArticle[],
-  waypointsMap: Record<string, VoyageWaypoint[]>
-): PositionedArticle[] {
-  return articles
-    .map((article) => {
-      if (article.latitude != null && article.longitude != null) {
-        return { ...article, displayLat: article.latitude, displayLng: article.longitude };
-      }
-      if (article.voyage_id) {
-        const wps = waypointsMap[article.voyage_id] || [];
-        if (wps.length < 1) return null;
-        const range = getArticleWaypointRange(article);
-        if (range) {
-          const start = clampWaypointIndex(range[0], wps.length - 1);
-          const end = clampWaypointIndex(range[1], wps.length - 1);
-          const midIdx = Math.round((start + end) / 2);
-          const wp = wps[midIdx] || wps[0];
-          return { ...article, displayLat: wp.lat, displayLng: wp.lng };
-        }
-        const mid = wps[Math.floor(wps.length / 2)];
-        return { ...article, displayLat: mid.lat, displayLng: mid.lng };
-      }
-      return null;
-    })
-    .filter(Boolean) as PositionedArticle[];
-}
-
 const VoyageMap = ({
   voyages,
   waypointsMap,
@@ -189,9 +155,6 @@ const VoyageMap = ({
   hoveredArticleId,
   highlightedVoyageId,
   onArticleClick,
-  onVoyageSelect,
-  selectedRouteVoyageId: controlledRouteVoyageId,
-  flyToWaypointRef,
   lang,
   initialFitReady = true,
   disableInteractions = false,
@@ -202,7 +165,6 @@ const VoyageMap = ({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const lineLayerHandlersRef = useRef<Record<string, {
-    click: () => void;
     mouseenter: () => void;
     mouseleave: () => void;
   }>>({});
@@ -212,28 +174,11 @@ const VoyageMap = ({
     mouseleave: (event: maplibregl.MapLayerMouseEvent) => void;
   }>>({});
   const onArticleClickRef = useRef(onArticleClick);
-  const onVoyageSelectRef = useRef(onVoyageSelect);
   const hasPerformedInitialFitRef = useRef(false);
   const mapResizeCleanupRef = useRef<(() => void) | null>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredRouteVoyageId, setHoveredRouteVoyageId] = useState<string | null>(null);
-
-  const clusterIndexRef = useRef<Supercluster | null>(null);
-  const articlesByIdRef = useRef<Map<string, PositionedArticle>>(new Map());
-  const runArticleMarkersSyncRef = useRef<() => void>(() => {});
-  const hoveredRouteVoyageIdRef = useRef<string | null>(null);
-  hoveredRouteVoyageIdRef.current = hoveredRouteVoyageId;
-
-  const publishedVoyages = useMemo(() => voyages.filter((v) => v.is_published), [voyages]);
-  const articlesForMap = useMemo(
-    () => articles.filter((a) => a.published_at != null),
-    [articles]
-  );
-  const positionedArticles = useMemo(
-    () => buildPositionedArticlesForCluster(articlesForMap, waypointsMap),
-    [articlesForMap, waypointsMap]
-  );
 
   useEffect(() => {
     if (mapUnavailable) {
@@ -243,7 +188,6 @@ const VoyageMap = ({
 
   const clearInteractiveLayerHandlers = useCallback((map: maplibregl.Map) => {
     Object.entries(lineLayerHandlersRef.current).forEach(([layerId, handlers]) => {
-      map.off("click", layerId, handlers.click);
       map.off("mouseenter", layerId, handlers.mouseenter);
       map.off("mouseleave", layerId, handlers.mouseleave);
     });
@@ -261,13 +205,6 @@ const VoyageMap = ({
 
   // Keep refs in sync
   onArticleClickRef.current = onArticleClick;
-  onVoyageSelectRef.current = onVoyageSelect;
-
-  useEffect(() => {
-    if (controlledRouteVoyageId !== undefined) {
-      setHoveredRouteVoyageId(controlledRouteVoyageId);
-    }
-  }, [controlledRouteVoyageId]);
 
   // Initialize map
   useEffect(() => {
@@ -299,15 +236,6 @@ const VoyageMap = ({
 
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-
-      map.on("click", (e) => {
-        const hitLayers = Object.keys(lineLayerHandlersRef.current);
-        const features = hitLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: hitLayers }) : [];
-        if (features.length === 0) {
-          setHoveredRouteVoyageId(null);
-          onVoyageSelectRef.current?.(null);
-        }
-      });
 
       mapResizeCleanupRef.current = bindMapToContainerResize(map, containerRef.current);
       mapRef.current = map;
@@ -342,45 +270,6 @@ const VoyageMap = ({
       mapRef.current = null;
     };
   }, [clearInteractiveLayerHandlers, mapUnavailable]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !flyToWaypointRef) return;
-
-    flyToWaypointRef.current = (lat: number, lng: number, popupLabel?: string) => {
-      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 10), duration: 1200 });
-
-      popupRef.current?.remove();
-      popupRef.current = null;
-
-      if (popupLabel) {
-        const popup = new maplibregl.Popup({
-          offset: 12,
-          closeButton: true,
-          closeOnClick: true,
-          maxWidth: "260px",
-        });
-
-        const popupHtml = `
-          <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:120px;max-width:240px;">
-            <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(popupLabel)}</strong>
-          </div>
-        `;
-
-        popup.setLngLat([lng, lat]).setHTML(popupHtml);
-
-        map.once("moveend", () => {
-          popup.addTo(map);
-        });
-
-        popupRef.current = popup;
-      }
-    };
-
-    return () => {
-      if (flyToWaypointRef) flyToWaypointRef.current = null;
-    };
-  }, [flyToWaypointRef]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -426,8 +315,7 @@ const VoyageMap = ({
         return Array.isArray(coordinates) ? coordinates : [];
       };
 
-      const activeArticle =
-        articlesForMap.find((article) => article.id === (hoveredArticleId ?? selectedArticleId)) || null;
+      const activeArticle = articles.find((article) => article.id === (hoveredArticleId ?? selectedArticleId)) || null;
       const activeArticleFocus = activeArticle ? getArticleVoyageFocus(activeArticle) : null;
       const routeFocusVoyageId = activeArticleFocus?.voyageId || highlightedVoyageId || null;
       const hoverFocusVoyageId = routeFocusVoyageId ? null : hoveredRouteVoyageId;
@@ -449,7 +337,7 @@ const VoyageMap = ({
         });
       }
 
-      publishedVoyages.forEach((voyage) => {
+      voyages.forEach((voyage) => {
         const wps = waypointsMap[voyage.id] || [];
         if (!wps.length) return;
 
@@ -464,7 +352,7 @@ const VoyageMap = ({
         const routeCoordinates = buildPublicVoyageGeometry(
           wps,
           voyage.type,
-          articlesForMap,
+          articles,
           voyage.id,
           getCachedGeometryCoordinates(voyage)
         );
@@ -536,22 +424,17 @@ const VoyageMap = ({
           });
 
           const lineHandlers = {
-            click: () => {
-              const isAlreadySelected = hoveredRouteVoyageIdRef.current === voyage.id;
-              const nextId = isAlreadySelected ? null : voyage.id;
-              setHoveredRouteVoyageId(nextId);
-              onVoyageSelectRef.current?.(nextId);
-            },
             mouseenter: () => {
               map.getCanvas().style.cursor = "pointer";
+              setHoveredRouteVoyageId((current) => current === voyage.id ? current : voyage.id);
             },
             mouseleave: () => {
               map.getCanvas().style.cursor = "";
+              setHoveredRouteVoyageId((current) => current === voyage.id ? null : current);
             },
           };
 
           lineLayerHandlersRef.current[lineHitId] = lineHandlers;
-          map.on("click", lineHitId, lineHandlers.click);
           map.on("mouseenter", lineHitId, lineHandlers.mouseenter);
           map.on("mouseleave", lineHitId, lineHandlers.mouseleave);
         }
@@ -624,7 +507,7 @@ const VoyageMap = ({
           }
         }
 
-        const visibleWaypoints = getPublicVoyageWaypoints(wps, articlesForMap, voyage.id);
+        const visibleWaypoints = getPublicVoyageWaypoints(wps, articles, voyage.id);
         if (visibleWaypoints.length) {
           const wpId = `voyage-wp-${voyage.id}`;
           map.addSource(wpId, {
@@ -634,7 +517,7 @@ const VoyageMap = ({
               features: visibleWaypoints.map((w, visibleIndex) => {
                 const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
                 const safeIndex = routeIndex >= 0 ? routeIndex : visibleIndex;
-                const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex);
+                const associatedArticle = getAssociatedArticleForWaypoint(articles, voyage.id, safeIndex);
                 const isStart = safeIndex === 0;
                 const isEnd = safeIndex === wps.length - 1;
                 return {
@@ -770,61 +653,70 @@ const VoyageMap = ({
     if (map.isStyleLoaded()) {
       draw();
     } else {
-      map.once("load", draw);
+      map.on("load", draw);
     }
-
-    return () => {
-      map.off("load", draw);
-    };
   }, [
-    articlesForMap,
+    articles,
     clearInteractiveLayerHandlers,
     highlightedVoyageId,
     hoveredArticleId,
     hoveredRouteVoyageId,
     lang,
-    publishedVoyages,
     selectedArticleId,
+    voyages,
     waypointsMap,
   ]);
 
-  // Articoli sulla mappa: cluster + stile precedente (focus/hover/sfocatura per viaggio)
+  // Draw article markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const index = new Supercluster({
-      radius: 72,
-      maxZoom: 17,
-      minPoints: 2,
-    });
+    const draw = () => {
+      const markerFocusVoyageId = highlightedVoyageId || hoveredRouteVoyageId || null;
 
-    index.load(
-      positionedArticles.map((a) => ({
-        type: "Feature" as const,
-        properties: { id: a.id },
-        geometry: { type: "Point" as const, coordinates: [a.displayLng, a.displayLat] },
-      }))
-    );
+      // Clear old markers
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
 
-    clusterIndexRef.current = index;
-    articlesByIdRef.current = new Map(positionedArticles.map((a) => [a.id, a]));
+      // Compute article positions: use lat/lng if present, else derive from voyage
+      const positionedArticles = articles.map((article) => {
+        if (article.latitude && article.longitude) {
+          return { ...article, displayLat: article.latitude, displayLng: article.longitude };
+        }
+        // If associated to a voyage with segments
+        if (article.voyage_id) {
+          const wps = waypointsMap[article.voyage_id] || [];
+          if (wps.length < 1) return null;
+          const range = getArticleWaypointRange(article);
+          if (range) {
+            const start = clampWaypointIndex(range[0], wps.length - 1);
+            const end = clampWaypointIndex(range[1], wps.length - 1);
+            const midIdx = Math.round((start + end) / 2);
+            const wp = wps[midIdx] || wps[0];
+            return { ...article, displayLat: wp.lat, displayLng: wp.lng };
+          }
+          // Full voyage - use midpoint
+          const mid = wps[Math.floor(wps.length / 2)];
+          return { ...article, displayLat: mid.lat, displayLng: mid.lng };
+        }
+        return null;
+      }).filter(Boolean) as (GeoArticle & { displayLat: number; displayLng: number })[];
 
-    const buildArticleMarkerElement = (article: PositionedArticle) => {
-      const markerFocusVoyageId = highlightedVoyageId || hoveredRouteVoyageIdRef.current || null;
-      const isSelected = article.id === selectedArticleId;
-      const isHovered = article.id === hoveredArticleId;
-      const isFocused = isSelected || isHovered;
-      const isDimmed = Boolean(markerFocusVoyageId && article.voyage_id !== markerFocusVoyageId && !isFocused);
-      const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
-      const size = isFocused ? 56 : isDimmed ? 38 : 44;
+      positionedArticles.forEach((article) => {
+        const isSelected = article.id === selectedArticleId;
+        const isHovered = article.id === hoveredArticleId;
+        const isFocused = isSelected || isHovered;
+        const isDimmed = Boolean(markerFocusVoyageId && article.voyage_id !== markerFocusVoyageId && !isFocused);
+        const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
+        const size = isFocused ? 56 : isDimmed ? 38 : 44;
 
-      const el = document.createElement("div");
-      el.className = "voyage-marker-wrap";
-      el.style.cssText = `cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
+        const el = document.createElement("div");
+        el.className = "voyage-marker-wrap";
+        el.style.cssText = `cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
 
-      const circle = document.createElement("div");
-      circle.style.cssText = `
+        const circle = document.createElement("div");
+        circle.style.cssText = `
           width:${size}px;height:${size}px;border-radius:50%;
           border:3px solid ${isFocused ? "hsl(180,20%,35%)" : "#fff"};
           background:${article.cover_image ? `url(${article.cover_image}) center/cover` : "hsl(220,40%,15%)"};
@@ -832,10 +724,10 @@ const VoyageMap = ({
           transition:all 0.3s ease;
         `;
 
-      const label = document.createElement("div");
-      label.textContent = title;
-      label.title = title;
-      const labelBase = `
+        const label = document.createElement("div");
+        label.textContent = title;
+        label.title = title;
+        const labelBase = `
           font-family:var(--font-sans);font-size:11px;font-weight:500;line-height:1.35;
           color:hsl(220,40%,15%);background:hsla(40,20%,97%,0.95);
           padding:6px 10px;border-radius:4px;
@@ -844,156 +736,56 @@ const VoyageMap = ({
           text-align:center;pointer-events:none;
           opacity:${isFocused ? "1" : "0"};transition:opacity 0.2s,max-width 0.2s ease,box-shadow 0.2s;
         `;
-      label.style.cssText = labelBase;
-      if (isFocused) {
-        label.style.maxWidth = "min(280px,calc(100vw - 48px))";
-        label.style.whiteSpace = "normal";
-        label.style.overflow = "visible";
-        label.style.textOverflow = "clip";
-      }
-
-      el.appendChild(circle);
-      el.appendChild(label);
-
-      el.addEventListener("mouseenter", () => {
-        circle.style.transform = "scale(1.1)";
-        el.style.opacity = "1";
-        label.style.opacity = "1";
-        label.style.maxWidth = "min(280px,calc(100vw - 48px))";
-        label.style.whiteSpace = "normal";
-        label.style.overflow = "visible";
-        label.style.textOverflow = "clip";
-      });
-      el.addEventListener("mouseleave", () => {
-        if (article.id !== selectedArticleId && article.id !== hoveredArticleId) {
-          circle.style.transform = "scale(1)";
-          el.style.opacity = isDimmed ? "0.32" : "1";
-          label.style.opacity = "0";
-          label.style.maxWidth = "120px";
-          label.style.whiteSpace = "nowrap";
-          label.style.overflow = "hidden";
-          label.style.textOverflow = "ellipsis";
+        label.style.cssText = labelBase;
+        if (isFocused) {
+          label.style.maxWidth = "min(280px,calc(100vw - 48px))";
+          label.style.whiteSpace = "normal";
+          label.style.overflow = "visible";
+          label.style.textOverflow = "clip";
         }
+
+        el.appendChild(circle);
+        el.appendChild(label);
+
+        el.addEventListener("mouseenter", () => {
+          circle.style.transform = "scale(1.1)";
+          el.style.opacity = "1";
+          label.style.opacity = "1";
+          label.style.maxWidth = "min(280px,calc(100vw - 48px))";
+          label.style.whiteSpace = "normal";
+          label.style.overflow = "visible";
+          label.style.textOverflow = "clip";
+        });
+        el.addEventListener("mouseleave", () => {
+          if (article.id !== selectedArticleId && article.id !== hoveredArticleId) {
+            circle.style.transform = "scale(1)";
+            el.style.opacity = isDimmed ? "0.32" : "1";
+            label.style.opacity = "0";
+            label.style.maxWidth = "120px";
+            label.style.whiteSpace = "nowrap";
+            label.style.overflow = "hidden";
+            label.style.textOverflow = "ellipsis";
+          }
+        });
+
+        el.addEventListener("click", () => {
+          onArticleClickRef.current?.(article);
+        });
+
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat([article.displayLng, article.displayLat])
+          .addTo(map);
+
+        markersRef.current.push(marker);
       });
-
-      el.addEventListener("click", () => {
-        onArticleClickRef.current?.(article);
-      });
-
-      return el;
     };
-
-    const syncMarkers = () => {
-      const sc = clusterIndexRef.current;
-      if (!map || !sc) return;
-
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-
-      if (positionedArticles.length === 0) return;
-
-      const b = map.getBounds();
-      const bbox: [number, number, number, number] = [
-        b.getWest(),
-        b.getSouth(),
-        b.getEast(),
-        b.getNorth(),
-      ];
-      const z = Math.floor(map.getZoom());
-      const features = sc.getClusters(bbox, z);
-
-      for (const feature of features) {
-        const geom = feature.geometry as { type?: string; coordinates?: [number, number] };
-        if (!geom?.coordinates) continue;
-        const [lng, lat] = geom.coordinates;
-        const props = feature.properties as {
-          cluster?: boolean;
-          cluster_id?: number;
-          point_count?: number;
-          point_count_abbreviated?: string | number;
-          id?: string;
-        };
-
-        if (props.cluster && props.cluster_id != null) {
-          const countLabel =
-            props.point_count_abbreviated != null
-              ? String(props.point_count_abbreviated)
-              : String(props.point_count ?? "");
-          const el = document.createElement("div");
-          el.className = "voyage-cluster-marker";
-          el.style.cssText = `
-            width:48px;height:48px;border-radius:50%;
-            background:hsl(210,55%,38%);color:#fff;
-            font-family:var(--font-sans),system-ui,sans-serif;font-size:15px;font-weight:600;
-            display:flex;align-items:center;justify-content:center;
-            border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,0.28);
-            cursor:pointer;user-select:none;
-          `;
-          el.textContent = countLabel;
-          el.setAttribute(
-            "aria-label",
-            lang === "it"
-              ? `${props.point_count ?? ""} articoli in questo punto`
-              : `${props.point_count ?? ""} articles at this location`
-          );
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const expansion = sc.getClusterExpansionZoom(props.cluster_id!);
-            const currentZoom = map.getZoom();
-            const targetZoom = Math.min(Math.max(expansion, currentZoom + 0.15), 18);
-            const zoomDelta = Math.abs(targetZoom - currentZoom);
-            const easeOutSoft = (t: number) => 1 - (1 - t) ** 3;
-            map.easeTo({
-              center: [lng, lat],
-              zoom: targetZoom,
-              duration: Math.min(2200, 780 + zoomDelta * 380),
-              easing: easeOutSoft,
-            });
-          });
-          markersRef.current.push(
-            new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map)
-          );
-        } else if (props.id) {
-          const article = articlesByIdRef.current.get(props.id);
-          if (!article) continue;
-          const el = buildArticleMarkerElement(article);
-          markersRef.current.push(
-            new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map)
-          );
-        }
-      }
-    };
-
-    const onReady = () => syncMarkers();
-
-    runArticleMarkersSyncRef.current = syncMarkers;
-    const onMapIdleMove = () => runArticleMarkersSyncRef.current();
 
     if (map.isStyleLoaded()) {
-      onReady();
+      draw();
     } else {
-      map.once("load", onReady);
+      map.on("load", draw);
     }
-
-    map.on("moveend", onMapIdleMove);
-    map.on("zoomend", onMapIdleMove);
-
-    return () => {
-      map.off("moveend", onMapIdleMove);
-      map.off("zoomend", onMapIdleMove);
-      map.off("load", onReady);
-      markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
-      clusterIndexRef.current = null;
-    };
-  }, [
-    positionedArticles,
-    selectedArticleId,
-    hoveredArticleId,
-    highlightedVoyageId,
-    hoveredRouteVoyageId,
-    lang,
-  ]);
+  }, [articles, highlightedVoyageId, hoveredArticleId, hoveredRouteVoyageId, lang, selectedArticleId, waypointsMap]);
 
   // Fly to selected article with smart bounds
   useEffect(() => {
@@ -1054,7 +846,7 @@ const VoyageMap = ({
 
     const fit = () => {
       const points: [number, number][] = [];
-      publishedVoyages.forEach((voyage) => {
+      voyages.forEach((voyage) => {
         const geometryCoordinates = (voyage.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
         geometryCoordinates?.forEach((coordinate) => {
           if (isValidLngLat(coordinate)) {
@@ -1062,14 +854,14 @@ const VoyageMap = ({
           }
         });
       });
-      publishedVoyages.forEach((voyage) => {
-        (waypointsMap[voyage.id] || []).forEach((w) => {
+      Object.values(waypointsMap).forEach((wps) =>
+        wps.forEach((w) => {
           if (Number.isFinite(w.lat) && Number.isFinite(w.lng)) {
             points.push([w.lng, w.lat]);
           }
-        });
-      });
-      articlesForMap.forEach((a) => {
+        })
+      );
+      articles.forEach((a) => {
         if (Number.isFinite(a.latitude) && Number.isFinite(a.longitude)) {
           points.push([a.longitude, a.latitude]);
         }
@@ -1097,11 +889,7 @@ const VoyageMap = ({
     } else {
       map.once("load", fit);
     }
-
-    return () => {
-      map.off("load", fit);
-    };
-  }, [initialFitReady, publishedVoyages, waypointsMap, articlesForMap]);
+  }, [initialFitReady, voyages, waypointsMap, articles]);
 
   if (mapUnavailable) {
     return (

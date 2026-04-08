@@ -78,6 +78,17 @@ const VoyageLegend = ({
     return minRatio < 0.05 || visibleWaypoints.length > 10;
   }, [segments, totalDistance, visibleWaypoints.length]);
 
+  /** Minimum scrollable track width so proportional flex segments get real space (flex + w-max alone under-measures). */
+  const diagramContentMinPx = useMemo(() => {
+    const n = visibleWaypoints.length;
+    const segCount = Math.max(0, n - 1);
+    const perDot = 28;
+    const perSegMin = 80;
+    const base = n * perDot + segCount * perSegMin;
+    const scaled = 260 + segCount * 96;
+    return Math.max(base, scaled);
+  }, [visibleWaypoints.length]);
+
   const voyageName = getLocalizedVoyageName(voyage, lang);
   const startLabel = formatDate(voyage.start_date, lang);
   const endLabel = formatDate(voyage.end_date, lang);
@@ -93,8 +104,14 @@ const VoyageLegend = ({
   const lineBg = isWater ? "bg-sky-300/60" : "bg-orange-300/60";
   const distColor = isWater ? "text-sky-500/70" : "text-orange-500/70";
 
+  const routeRegionLabel = lang === "it" ? "Schema percorso" : "Route diagram";
+  const scrollHint =
+    lang === "it"
+      ? "Scorri in orizzontale per vedere tutto il percorso"
+      : "Scroll horizontally to see the full route";
+
   return (
-    <div className="pointer-events-auto rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4 w-full">
+    <div className="pointer-events-auto w-max max-w-full rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
@@ -124,11 +141,22 @@ const VoyageLegend = ({
         </p>
       )}
 
-      {/* Route diagram */}
+      {/* Route diagram: width follows voyage length; scroll inside if wider than window */}
       <div
-        className="flex items-center w-full overflow-x-auto"
-        style={{ paddingTop: 44, paddingBottom: 32 }}
+        className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] rounded-lg pb-1"
+        role="region"
+        aria-label={routeRegionLabel}
+        title={visibleWaypoints.length > 5 ? scrollHint : undefined}
       >
+        <div
+          className="flex min-w-full items-center"
+          style={{
+            paddingTop: 44,
+            paddingBottom: 32,
+            width: "max-content",
+            minWidth: `max(100%, ${diagramContentMinPx}px)`,
+          }}
+        >
         {visibleWaypoints.map((wp, i) => {
           const wpName = getLocalizedWaypointName(wp, lang, i);
           const isFirst = i === 0;
@@ -197,9 +225,9 @@ const VoyageLegend = ({
               {/* Segment line + distance label */}
               {!isLast && (
                 <div
-                  className="relative flex items-center"
+                  className="relative flex shrink-0 items-center"
                   style={{
-                    flex: `${growValue} 1 0%`,
+                    flex: `${growValue} 0 auto`,
                     minWidth: 72,
                   }}
                 >
@@ -217,6 +245,7 @@ const VoyageLegend = ({
             </Fragment>
           );
         })}
+        </div>
       </div>
     </div>
   );

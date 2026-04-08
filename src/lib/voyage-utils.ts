@@ -447,32 +447,6 @@ export function getStraightVoyageGeometry(waypoints: { lat: number; lng: number 
   return waypoints.map((waypoint) => [waypoint.lng, waypoint.lat]);
 }
 
-/** LineString [lng,lat][] per mappa: terra usa geometria OSRM in cache se valida, altrimenti spezzata tra waypoint. */
-export function getVoyageMapLineStringCoordinates(
-  voyage: Pick<Voyage, "type" | "cached_geometry">,
-  waypoints: VoyageWaypoint[]
-): [number, number][] {
-  if (waypoints.length < 2) return [];
-  const straight = getStraightVoyageGeometry(waypoints);
-  if (voyage.type !== "land") return straight;
-
-  const cached = voyage.cached_geometry?.coordinates;
-  if (
-    Array.isArray(cached) &&
-    cached.length >= 2 &&
-    cached.every(
-      (c) =>
-        Array.isArray(c) &&
-        c.length >= 2 &&
-        Number.isFinite(Number(c[0])) &&
-        Number.isFinite(Number(c[1]))
-    )
-  ) {
-    return cached as [number, number][];
-  }
-  return straight;
-}
-
 export function buildPublicVoyageGeometry(
   waypoints: VoyageWaypoint[],
   type: VoyageType,

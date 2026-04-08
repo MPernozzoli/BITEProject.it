@@ -146,11 +146,6 @@ const ArticleSidebar = ({ currentArticleId, storyId }: ArticleSidebarProps) => {
 
   const getTitle = (a: Pick<SidebarArticle, "title_en" | "title_it">) => lang === "en" ? a.title_en : (a.title_it || a.title_en);
 
-  const hasChapterList = Boolean(storyId && storyChapters.length > 1);
-  const hasPopular = popularArticles.length > 0;
-  const hasRecent = recentArticles.length > 0;
-  if (!hasChapterList && !hasPopular && !hasRecent) return null;
-
   const SidebarLink = ({ article, showReadBadge = true }: { article: SidebarArticle; showReadBadge?: boolean }) => (
     <Link
       to={`/logbook/${article.slug}`}

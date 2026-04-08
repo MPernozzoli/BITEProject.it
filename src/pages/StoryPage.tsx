@@ -107,8 +107,23 @@ const StoryPage = () => {
     },
   });
 
-  const title = story ? (lang === "en" ? story.title_en : (story.title_it || story.title_en)) : "";
-  const desc = story ? (lang === "en" ? story.description_en : (story.description_it || story.description_en)) : "";
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading...</p></div>;
+  }
+
+  if (!story) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-20">
+        <div className="text-center">
+          <p className="text-muted-foreground mb-4">Story not found.</p>
+          <Link to="/logbook" className="text-accent hover:text-foreground transition-colors text-sm">← Back to Logbook</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const title = lang === "en" ? story.title_en : (story.title_it || story.title_en);
+  const desc = lang === "en" ? story.description_en : (story.description_it || story.description_en);
 
   useEffect(() => {
     if (!story) return;

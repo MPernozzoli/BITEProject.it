@@ -1,24 +1,96 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
 import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon } from "lucide-react";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { geocodePlace } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
-import CoverFocalPicker from "@/components/admin/CoverFocalPicker";
+import CoverCropDialog from "@/components/admin/CoverCropDialog";
+import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
+import { normalizeArticleMapScenes } from "@/lib/article-map";
+
+type ArticleLanguage = "en" | "it";
+
+const ARTICLE_DRAFT_STORAGE_PREFIX = "bite_article_editor_draft";
+
+type ArticleEditorDraft = {
+  titleEn: string;
+  titleIt: string;
+  slug: string;
+  excerptEn: string;
+  excerptIt: string;
+  contentEn: object;
+  contentIt: object;
+  articleMapScenes: ReturnType<typeof normalizeArticleMapScenes>;
+  coverImage: string;
+  instagramStoryImageEn: string;
+  instagramStoryImageIt: string;
+  instagramStoryUseCoverEn: boolean;
+  instagramStoryUseCoverIt: boolean;
+  coverFocal: CoverFocal;
+  category: string;
+  publishDate: string;
+  authorIds: string[];
+  selectedTagIds: string[];
+  selectedStoryId: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationName: string;
+  selectedVoyageId: string | null;
+  voyageSegStart: number | null;
+  voyageSegEnd: number | null;
+};
+
+const getSaveErrorMessage = (error: { code?: string; message?: string }) => {
+  if (error.code === "23505") return "Esiste già un articolo con questo slug.";
+  if (error.message?.includes("instagram_story_")) {
+    return "Il database non è aggiornato: applica la migration delle colonne Instagram Stories.";
+  }
+  return "Salvataggio non riuscito.";
+};
+
+const getWaypointOptionLabel = (waypoint: VoyageWaypoint, index: number, total: number) => {
+  const customName = waypoint.name_en?.trim() || waypoint.name_it?.trim() || waypoint.name?.trim();
+  const prefix = index === 0
+    ? "Start"
+    : index === total - 1
+      ? "Arrival"
+      : `WP ${String(index + 1).padStart(2, "0")}`;
+
+  return customName ? `${prefix} · ${customName}` : prefix;
+};
+
+const inferAssociationMode = (
+  voyageId: string | null,
+  start: number | null,
+  end: number | null,
+  lat: number | null,
+  lng: number | null
+): "point" | "segment" | "full" => {
+  if (!voyageId) return "point";
+  if (start == null && end == null) {
+    return lat != null && lng != null ? "point" : "full";
+  }
+
+  const safeStart = start ?? end;
+  const safeEnd = end ?? start;
+  return safeStart === safeEnd ? "point" : "segment";
+};
 
 const ArticleEditor = () => {
   const { id } = useParams();
   const isNew = id === "new";
   const navigate = useNavigate();
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const instagramEnInputRef = useRef<HTMLInputElement>(null);
+  const instagramItInputRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"en" | "it">("en");
@@ -29,7 +101,13 @@ const ArticleEditor = () => {
   const [excerptIt, setExcerptIt] = useState("");
   const [contentEn, setContentEn] = useState<object>({});
   const [contentIt, setContentIt] = useState<object>({});
+  const [articleMapScenes, setArticleMapScenes] = useState(() => normalizeArticleMapScenes(null));
   const [coverImage, setCoverImage] = useState("");
+  const [coverCropOpen, setCoverCropOpen] = useState(false);
+  const [instagramStoryImageEn, setInstagramStoryImageEn] = useState("");
+  const [instagramStoryImageIt, setInstagramStoryImageIt] = useState("");
+  const [instagramStoryUseCoverEn, setInstagramStoryUseCoverEn] = useState(true);
+  const [instagramStoryUseCoverIt, setInstagramStoryUseCoverIt] = useState(true);
   const [coverFocal, setCoverFocal] = useState<CoverFocal>({ ...DEFAULT_COVER_FOCAL });
   const [category, setCategory] = useState("Notes from the Boat");
   const [publishDate, setPublishDate] = useState("");
@@ -60,11 +138,84 @@ const ArticleEditor = () => {
   const geoMapInstanceRef = useRef<maplibregl.Map | null>(null);
   const geoMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [associationMode, setAssociationMode] = useState<"point" | "segment" | "full">("point");
-  const segmentClicksRef = useRef<number[]>([]);
+  const geoWaypointClickHandlerRef = useRef<((event: maplibregl.MapLayerMouseEvent) => void) | null>(null);
+  const geoWaypointMouseEnterRef = useRef<(() => void) | null>(null);
+  const geoWaypointMouseLeaveRef = useRef<(() => void) | null>(null);
+  const fittedVoyageIdRef = useRef<string | null>(null);
+  const hydratedDraftRef = useRef(false);
+  const skipNextDraftSaveRef = useRef(true);
+  const hasLocalChangesRef = useRef(false);
+  const draftStorageKey = `${ARTICLE_DRAFT_STORAGE_PREFIX}:${id ?? "new"}`;
 
   useEffect(() => { init(); }, [id]);
 
+  useEffect(() => {
+    hydratedDraftRef.current = false;
+    skipNextDraftSaveRef.current = true;
+    hasLocalChangesRef.current = false;
+  }, [draftStorageKey]);
+
   const loginPath = () => navigate("/login", { state: { from: `/admin/article/${id}` } });
+
+  const applyDraft = useCallback((draft: ArticleEditorDraft) => {
+    setTitleEn(draft.titleEn || "");
+    setTitleIt(draft.titleIt || "");
+    setSlug(draft.slug || "");
+    setExcerptEn(draft.excerptEn || "");
+    setExcerptIt(draft.excerptIt || "");
+    setContentEn(draft.contentEn || {});
+    setContentIt(draft.contentIt || {});
+    setArticleMapScenes(normalizeArticleMapScenes(draft.articleMapScenes));
+    setCoverImage(draft.coverImage || "");
+    setInstagramStoryImageEn(draft.instagramStoryImageEn || "");
+    setInstagramStoryImageIt(draft.instagramStoryImageIt || "");
+    setInstagramStoryUseCoverEn(draft.instagramStoryUseCoverEn ?? true);
+    setInstagramStoryUseCoverIt(draft.instagramStoryUseCoverIt ?? true);
+    setCoverFocal(
+      clampCoverFocal(
+        Number(draft.coverFocal?.focalX ?? DEFAULT_COVER_FOCAL.focalX),
+        Number(draft.coverFocal?.focalY ?? DEFAULT_COVER_FOCAL.focalY),
+        Number(draft.coverFocal?.zoom ?? DEFAULT_COVER_FOCAL.zoom)
+      )
+    );
+    setCategory(draft.category || "Notes from the Boat");
+    setPublishDate(draft.publishDate || "");
+    setAuthorIds(Array.isArray(draft.authorIds) ? draft.authorIds : []);
+    setSelectedTagIds(Array.isArray(draft.selectedTagIds) ? draft.selectedTagIds : []);
+    setSelectedStoryId(draft.selectedStoryId || null);
+    setLatitude(typeof draft.latitude === "number" ? draft.latitude : null);
+    setLongitude(typeof draft.longitude === "number" ? draft.longitude : null);
+    setLocationName(draft.locationName || "");
+    setSelectedVoyageId(draft.selectedVoyageId || null);
+    setVoyageSegStart(typeof draft.voyageSegStart === "number" ? draft.voyageSegStart : null);
+    setVoyageSegEnd(typeof draft.voyageSegEnd === "number" ? draft.voyageSegEnd : null);
+    setAssociationMode(
+      inferAssociationMode(
+        draft.selectedVoyageId || null,
+        typeof draft.voyageSegStart === "number" ? draft.voyageSegStart : null,
+        typeof draft.voyageSegEnd === "number" ? draft.voyageSegEnd : null,
+        typeof draft.latitude === "number" ? draft.latitude : null,
+        typeof draft.longitude === "number" ? draft.longitude : null
+      )
+    );
+  }, []);
+
+  const restoreDraftFromStorage = useCallback(() => {
+    if (hydratedDraftRef.current) return;
+
+    const rawDraft = window.localStorage.getItem(draftStorageKey);
+    hydratedDraftRef.current = true;
+    if (!rawDraft) return;
+
+    try {
+      applyDraft(JSON.parse(rawDraft) as ArticleEditorDraft);
+      hasLocalChangesRef.current = true;
+      toast.message("Bozza locale ripristinata.");
+    } catch (error) {
+      console.error("Failed to restore local article draft", error);
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  }, [applyDraft, draftStorageKey]);
 
   const init = async () => {
     const { session } = await validateSessionOrSignOut();
@@ -72,6 +223,22 @@ const ArticleEditor = () => {
       loginPath();
       return;
     }
+
+    const { data: isAdmin, error: adminError } = await supabase.rpc("has_role", {
+      _user_id: session.user.id,
+      _role: "admin",
+    });
+    if (adminError) {
+      console.error("Admin check failed", adminError);
+      loginPath();
+      return;
+    }
+    if (!isAdmin) {
+      toast.error("Accesso non autorizzato");
+      navigate("/", { replace: true });
+      return;
+    }
+
     setCurrentUserId(session.user.id);
 
     // Load tags, stories, and voyages
@@ -87,6 +254,7 @@ const ArticleEditor = () => {
     if (isNew) {
       setAuthorIds([session.user.id]);
       setPublishDate(new Date().toISOString().slice(0, 16));
+      restoreDraftFromStorage();
     } else {
       loadArticle(session.user.id);
     }
@@ -110,7 +278,12 @@ const ArticleEditor = () => {
     setExcerptIt(data.excerpt_it || "");
     setContentEn(data.content_en as object || {});
     setContentIt(data.content_it as object || {});
+    setArticleMapScenes(normalizeArticleMapScenes((data as any).article_map_scenes));
     setCoverImage(data.cover_image || "");
+    setInstagramStoryImageEn((data as any).instagram_story_image_en || "");
+    setInstagramStoryImageIt((data as any).instagram_story_image_it || "");
+    setInstagramStoryUseCoverEn((data as any).instagram_story_use_cover_en ?? true);
+    setInstagramStoryUseCoverIt((data as any).instagram_story_use_cover_it ?? true);
     setCoverFocal(
       clampCoverFocal(
         Number((data as any).cover_focal_x ?? DEFAULT_COVER_FOCAL.focalX),
@@ -127,6 +300,15 @@ const ArticleEditor = () => {
     setSelectedVoyageId((data as any).voyage_id || null);
     setVoyageSegStart((data as any).voyage_segment_start ?? null);
     setVoyageSegEnd((data as any).voyage_segment_end ?? null);
+    setAssociationMode(
+      inferAssociationMode(
+        (data as any).voyage_id || null,
+        (data as any).voyage_segment_start ?? null,
+        (data as any).voyage_segment_end ?? null,
+        (data as any).latitude || null,
+        (data as any).longitude || null
+      )
+    );
 
     // Load waypoints if voyage selected
     if ((data as any).voyage_id) {
@@ -142,7 +324,187 @@ const ArticleEditor = () => {
     if (authorsRes.data?.length) setAuthorIds(authorsRes.data.map((a) => a.profile_id));
     else setAuthorIds([userId]);
     if (tagsRes.data?.length) setSelectedTagIds(tagsRes.data.map((t) => t.tag_id));
+
+    restoreDraftFromStorage();
   };
+
+  const selectPointWaypoint = useCallback((index: number | null) => {
+    if (index == null) {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegStart(index);
+    setVoyageSegEnd(index);
+  }, []);
+
+  const selectSegmentWaypoint = useCallback((index: number) => {
+    if (voyageSegStart == null || voyageSegEnd != null) {
+      setVoyageSegStart(index);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    if (index <= voyageSegStart) {
+      setVoyageSegStart(index);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegEnd(index);
+  }, [voyageSegEnd, voyageSegStart]);
+
+  const handleAssociationModeChange = useCallback((nextMode: "point" | "segment" | "full") => {
+    setAssociationMode(nextMode);
+
+    if (nextMode === "full") {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    if (nextMode === "point") {
+      const selectedIndex = voyageSegStart ?? voyageSegEnd;
+      if (selectedIndex == null) {
+        setVoyageSegStart(null);
+        setVoyageSegEnd(null);
+        return;
+      }
+
+      setVoyageSegStart(selectedIndex);
+      setVoyageSegEnd(selectedIndex);
+      return;
+    }
+
+    if (voyageSegStart != null && voyageSegEnd != null && voyageSegStart === voyageSegEnd) {
+      setVoyageSegEnd(null);
+    }
+  }, [voyageSegEnd, voyageSegStart]);
+
+  const handleVoyageWaypointMapSelect = useCallback((index: number) => {
+    if (associationMode === "full") return;
+    if (associationMode === "point") {
+      selectPointWaypoint(index);
+      return;
+    }
+
+    selectSegmentWaypoint(index);
+  }, [associationMode, selectPointWaypoint, selectSegmentWaypoint]);
+
+  const handleSegmentStartChange = useCallback((value: string) => {
+    if (!value) {
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    const nextStart = Number(value);
+    if (!Number.isFinite(nextStart)) return;
+
+    setVoyageSegStart(nextStart);
+    setVoyageSegEnd((currentEnd) => currentEnd != null && currentEnd > nextStart ? currentEnd : null);
+  }, []);
+
+  const handleSegmentEndChange = useCallback((value: string) => {
+    if (!value) {
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    const nextEnd = Number(value);
+    if (!Number.isFinite(nextEnd)) return;
+
+    if (voyageSegStart == null) {
+      setVoyageSegStart(nextEnd);
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    if (nextEnd <= voyageSegStart) {
+      setVoyageSegEnd(null);
+      return;
+    }
+
+    setVoyageSegEnd(nextEnd);
+  }, [voyageSegStart]);
+
+  useEffect(() => {
+    if (!hydratedDraftRef.current) return;
+    if (skipNextDraftSaveRef.current) {
+      skipNextDraftSaveRef.current = false;
+      return;
+    }
+
+    const draft: ArticleEditorDraft = {
+      titleEn,
+      titleIt,
+      slug,
+      excerptEn,
+      excerptIt,
+      contentEn: contentEn as object,
+      contentIt: contentIt as object,
+      articleMapScenes,
+      coverImage,
+      instagramStoryImageEn,
+      instagramStoryImageIt,
+      instagramStoryUseCoverEn,
+      instagramStoryUseCoverIt,
+      coverFocal,
+      category,
+      publishDate,
+      authorIds,
+      selectedTagIds,
+      selectedStoryId,
+      latitude,
+      longitude,
+      locationName,
+      selectedVoyageId,
+      voyageSegStart,
+      voyageSegEnd,
+    };
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    hasLocalChangesRef.current = true;
+  }, [
+    articleMapScenes,
+    authorIds,
+    category,
+    contentEn,
+    contentIt,
+    coverFocal,
+    coverImage,
+    draftStorageKey,
+    excerptEn,
+    excerptIt,
+    instagramStoryImageEn,
+    instagramStoryImageIt,
+    instagramStoryUseCoverEn,
+    instagramStoryUseCoverIt,
+    latitude,
+    locationName,
+    longitude,
+    publishDate,
+    selectedStoryId,
+    selectedTagIds,
+    selectedVoyageId,
+    slug,
+    titleEn,
+    titleIt,
+    voyageSegEnd,
+    voyageSegStart,
+  ]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasLocalChangesRef.current || saving) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [saving]);
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
@@ -152,27 +514,52 @@ const ArticleEditor = () => {
     if (isNew || !slug) setSlug(generateSlug(val));
   };
 
-  const handleCoverUpload = async (file: File) => {
-    const previewUrl = URL.createObjectURL(file);
-    setCoverImage(previewUrl);
-    const ext = file.name.split(".").pop();
-    const path = `covers/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await supabase.storage.from("logbook-media").upload(path, file);
     if (error) {
-      URL.revokeObjectURL(previewUrl);
-      console.error("Cover upload error:", error);
-      setCoverImage("");
-      toast.error("Upload copertina non riuscito.");
+      console.error("Article image upload error:", error);
+      toast.error(errorMessage);
       if (isAuthFailureError(error)) {
         await supabase.auth.signOut();
         loginPath();
       }
-      return;
+      return null;
     }
     const { data: urlData } = supabase.storage.from("logbook-media").getPublicUrl(path);
-    URL.revokeObjectURL(previewUrl);
-    setCoverImage(urlData.publicUrl);
+    return urlData.publicUrl;
+  };
+
+  const handleCoverUpload = async (file: File) => {
+    const publicUrl = await uploadArticleImage(file, "covers", "Upload copertina non riuscito.");
+    if (!publicUrl) return;
+    setCoverImage(publicUrl);
     setCoverFocal({ ...DEFAULT_COVER_FOCAL });
+    setCoverCropOpen(true);
+  };
+
+  const handleCoverCropConfirm = async (nextCoverFocal: CoverFocal) => {
+    setCoverFocal(nextCoverFocal);
+    setCoverCropOpen(false);
+  };
+
+  const handleInstagramStoryUpload = async (language: ArticleLanguage, file: File) => {
+    const publicUrl = await uploadArticleImage(
+      file,
+      `instagram-stories/${language}`,
+      "Upload immagine Instagram Stories non riuscito."
+    );
+    if (!publicUrl) return;
+
+    if (language === "en") {
+      setInstagramStoryImageEn(publicUrl);
+      setInstagramStoryUseCoverEn(false);
+      return;
+    }
+
+    setInstagramStoryImageIt(publicUrl);
+    setInstagramStoryUseCoverIt(false);
   };
 
   const addNewTag = async () => {
@@ -236,6 +623,36 @@ const ArticleEditor = () => {
     let finalStatus: "draft" | "scheduled" | "published";
     let publishedAt: string | null = null;
     let scheduledAt: string | null = null;
+    const trimmedSlug = slug.trim();
+
+    if (!trimmedSlug) {
+      toast.error("Inserisci almeno un titolo inglese o uno slug prima di salvare.");
+      setSaving(false);
+      return;
+    }
+
+    let normalizedVoyageSegStart: number | null = null;
+    let normalizedVoyageSegEnd: number | null = null;
+    if (selectedVoyageId) {
+      if (associationMode === "point") {
+        const selectedIndex = voyageSegStart ?? voyageSegEnd;
+        if (selectedIndex == null) {
+          toast.error("Seleziona un waypoint della rotta per associare l'articolo a un punto.");
+          setSaving(false);
+          return;
+        }
+        normalizedVoyageSegStart = selectedIndex;
+        normalizedVoyageSegEnd = selectedIndex;
+      } else if (associationMode === "segment") {
+        if (voyageSegStart == null || voyageSegEnd == null || voyageSegEnd <= voyageSegStart) {
+          toast.error("Seleziona due waypoint della rotta per definire il segmento.");
+          setSaving(false);
+          return;
+        }
+        normalizedVoyageSegStart = Math.min(voyageSegStart, voyageSegEnd);
+        normalizedVoyageSegEnd = Math.max(voyageSegStart, voyageSegEnd);
+      }
+    }
 
     if (action === "draft") {
       finalStatus = "draft";
@@ -247,15 +664,55 @@ const ArticleEditor = () => {
       publishedAt = selectedDate.toISOString();
     }
 
-    const articleData: any = {
+    if (action === "publish" && articleMapScenes.length > 0) {
+      const incompleteScenes = articleMapScenes.filter((scene) => {
+        const hasEnAnchor = Boolean(scene.anchor_id_en?.trim());
+        const hasItAnchor = Boolean(scene.anchor_id_it?.trim());
+        return !hasEnAnchor || !hasItAnchor;
+      });
+
+      if (incompleteScenes.length > 0) {
+        const warningLines = incompleteScenes.map((scene, index) => {
+          const sceneLabel = scene.title_en || scene.title_it || `Scene ${index + 1}`;
+          const hasEnAnchor = Boolean(scene.anchor_id_en?.trim());
+          const hasItAnchor = Boolean(scene.anchor_id_it?.trim());
+
+          if (!hasEnAnchor && !hasItAnchor) return `- ${sceneLabel}: non agganciata in EN e IT`;
+          if (!hasEnAnchor) return `- ${sceneLabel}: manca aggancio EN`;
+          return `- ${sceneLabel}: manca aggancio IT`;
+        });
+
+        const shouldContinue = window.confirm(
+          [
+            isFuture
+              ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi programmare comunque l'articolo?"
+              : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?",
+            "",
+            ...warningLines,
+          ].join("\n")
+        );
+
+        if (!shouldContinue) {
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
+    const articleData = {
       title_en: titleEn,
       title_it: titleIt,
-      slug,
+      slug: trimmedSlug,
       excerpt_en: excerptEn,
       excerpt_it: excerptIt,
       content_en: contentEn as Json,
       content_it: contentIt as Json,
+      article_map_scenes: articleMapScenes as unknown as Json,
       cover_image: coverImage,
+      instagram_story_image_en: instagramStoryImageEn || null,
+      instagram_story_image_it: instagramStoryImageIt || null,
+      instagram_story_use_cover_en: instagramStoryUseCoverEn,
+      instagram_story_use_cover_it: instagramStoryUseCoverIt,
       category,
       status: finalStatus,
       published_at: publishedAt,
@@ -265,8 +722,8 @@ const ArticleEditor = () => {
       longitude,
       location_name: locationName || null,
       voyage_id: selectedVoyageId || null,
-      voyage_segment_start: voyageSegStart,
-      voyage_segment_end: voyageSegEnd,
+      voyage_segment_start: normalizedVoyageSegStart,
+      voyage_segment_end: normalizedVoyageSegEnd,
       cover_focal_x: coverFocal.focalX,
       cover_focal_y: coverFocal.focalY,
       cover_zoom: coverFocal.zoom,
@@ -276,10 +733,11 @@ const ArticleEditor = () => {
     if (isNew) {
       const { data, error } = await supabase.from("logbook_articles").insert(articleData).select().single();
       if (error) {
+        console.error("Article insert failed:", error);
         if (isAuthFailureError(error)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/new` } });
-        } else toast.error("Salvataggio non riuscito.");
+        } else toast.error(getSaveErrorMessage(error));
         setSaving(false);
         return;
       }
@@ -293,10 +751,11 @@ const ArticleEditor = () => {
     } else {
       const { error: upErr } = await supabase.from("logbook_articles").update(articleData).eq("id", id);
       if (upErr) {
+        console.error("Article update failed:", upErr);
         if (isAuthFailureError(upErr)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/${id}` } });
-        } else toast.error("Salvataggio non riuscito.");
+        } else toast.error(getSaveErrorMessage(upErr));
         setSaving(false);
         return;
       }
@@ -304,10 +763,18 @@ const ArticleEditor = () => {
 
     // Save authors and tags
     if (articleId && articleId !== "new") {
-      await Promise.all([
+      const [authorsDeleteRes, tagsDeleteRes] = await Promise.all([
         supabase.from("article_authors").delete().eq("article_id", articleId),
         supabase.from("article_tags").delete().eq("article_id", articleId),
       ]);
+
+      const relationDeleteError = authorsDeleteRes.error || tagsDeleteRes.error;
+      if (relationDeleteError) {
+        console.error("Article relation cleanup failed:", relationDeleteError);
+        toast.error("Salvataggio autori o tag non riuscito.");
+        setSaving(false);
+        return;
+      }
 
       const inserts = [];
       if (authorIds.length > 0) {
@@ -320,7 +787,14 @@ const ArticleEditor = () => {
           selectedTagIds.map((tagId) => ({ article_id: articleId!, tag_id: tagId }))
         ));
       }
-      await Promise.all(inserts);
+      const insertResults = inserts.length ? await Promise.all(inserts) : [];
+      const relationInsertError = insertResults.find((result) => result.error)?.error;
+      if (relationInsertError) {
+        console.error("Article relation save failed:", relationInsertError);
+        toast.error("Salvataggio autori o tag non riuscito.");
+        setSaving(false);
+        return;
+      }
 
       // Send email notifications to story subscribers when publishing a new chapter
       if (finalStatus === "published" && selectedStoryId && articleId) {
@@ -333,35 +807,38 @@ const ArticleEditor = () => {
             .select("profile_id")
             .eq("story_id", selectedStoryId);
           if (subs && subs.length > 0) {
-            const subProfileIds = subs.map((s) => s.profile_id);
-            const { data: subProfiles } = await supabase
-              .from("profiles")
-              .select("id, email")
-              .in("id", subProfileIds);
             const origin = window.location.origin;
-            for (const profile of subProfiles || []) {
-              if (profile.email) {
-                await supabase.functions.invoke("send-transactional-email", {
-                  body: {
-                    templateName: "new-chapter-notification",
-                    recipientEmail: profile.email,
-                    idempotencyKey: `new-chapter-${articleId}-${profile.id}`,
-                    templateData: {
-                      storyTitle: story?.title_en || "",
-                      chapterTitle: titleEn,
-                      chapterUrl: `${origin}/logbook/${slug}`,
-                      storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
-                    },
-                  },
-                });
-              }
-            }
+            await supabase.functions.invoke("notify-story-subscribers", {
+              body: {
+                storyId: selectedStoryId,
+                articleId,
+                storyTitle: story?.title_en || "",
+                chapterTitle: titleEn,
+                chapterUrl: `${origin}/logbook/${slug}`,
+                storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
+              },
+            });
           }
         } catch (e) {
           console.error("Failed to send story notifications:", e);
         }
       }
+
+      if (finalStatus === "published" && articleId) {
+        try {
+          await supabase.functions.invoke("notify-article-publication", {
+            body: {
+              articleId,
+            },
+          });
+        } catch (e) {
+          console.error("Failed to create publication notifications:", e);
+        }
+      }
     }
+
+    window.localStorage.removeItem(draftStorageKey);
+    hasLocalChangesRef.current = false;
 
     if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
       window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
@@ -369,7 +846,7 @@ const ArticleEditor = () => {
     }
 
     setSaving(false);
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, coverImage, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories, draftStorageKey]);
 
   // Geo map initialization
   useEffect(() => {
@@ -396,6 +873,9 @@ const ArticleEditor = () => {
     }
 
     map.on("click", (e) => {
+      const clickedWaypointFeatures = map.queryRenderedFeatures(e.point, { layers: ["editor-waypoints"] });
+      if (clickedWaypointFeatures.length) return;
+
       const lat = e.lngLat.lat;
       const lng = e.lngLat.lng;
       setLatitude(lat);
@@ -411,35 +891,330 @@ const ArticleEditor = () => {
 
   // Load voyage waypoints when voyage changes
   useEffect(() => {
-    if (!selectedVoyageId) { setVoyageWaypoints([]); return; }
+    fittedVoyageIdRef.current = null;
+    if (!selectedVoyageId) {
+      setVoyageWaypoints([]);
+      setVoyageSegStart(null);
+      setVoyageSegEnd(null);
+      return;
+    }
+
     (async () => {
       const { data } = await supabase.from("voyage_waypoints").select("*").eq("voyage_id", selectedVoyageId).order("sort_order", { ascending: true });
-      setVoyageWaypoints((data || []) as unknown as VoyageWaypoint[]);
+      const nextWaypoints = (data || []) as unknown as VoyageWaypoint[];
+      setVoyageWaypoints(nextWaypoints);
+      setVoyageSegStart((current) => current != null && current < nextWaypoints.length ? current : null);
+      setVoyageSegEnd((current) => current != null && current < nextWaypoints.length ? current : null);
     })();
   }, [selectedVoyageId]);
+
+  const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+  const selectedVoyageCachedGeometry = useMemo(() => {
+    const geometrySource = selectedVoyage?.cached_geometry as { coordinates?: [number, number][] } | null;
+    return Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
+  }, [selectedVoyage]);
+  const selectedVoyageRouteCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
+    return buildPublicVoyageGeometry(
+      voyageWaypoints,
+      selectedVoyage.type,
+      [],
+      selectedVoyage.id,
+      selectedVoyageCachedGeometry
+    );
+  }, [selectedVoyage, selectedVoyageCachedGeometry, voyageWaypoints]);
+  const selectedVoyageHighlightCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return [];
+
+    if (associationMode === "full") {
+      return selectedVoyageRouteCoordinates;
+    }
+
+    if (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null) {
+      return buildVoyageSegmentGeometry(
+        voyageWaypoints,
+        selectedVoyage.type,
+        voyageSegStart,
+        voyageSegEnd,
+        selectedVoyageCachedGeometry
+      );
+    }
+
+    return [];
+  }, [
+    associationMode,
+    selectedVoyage,
+    selectedVoyageCachedGeometry,
+    selectedVoyageRouteCoordinates,
+    voyageSegEnd,
+    voyageSegStart,
+    voyageWaypoints,
+  ]);
 
   // Draw voyage route on geo map
   useEffect(() => {
     const map = geoMapInstanceRef.current;
     if (!map) return;
+
     const draw = () => {
-      if (map.getLayer("editor-route")) map.removeLayer("editor-route");
-      if (map.getSource("editor-route")) map.removeSource("editor-route");
-      if (voyageWaypoints.length < 2) return;
-      map.addSource("editor-route", {
+      if (geoWaypointClickHandlerRef.current) {
+        map.off("click", "editor-waypoints", geoWaypointClickHandlerRef.current);
+        geoWaypointClickHandlerRef.current = null;
+      }
+      if (geoWaypointMouseEnterRef.current) {
+        map.off("mouseenter", "editor-waypoints", geoWaypointMouseEnterRef.current);
+        geoWaypointMouseEnterRef.current = null;
+      }
+      if (geoWaypointMouseLeaveRef.current) {
+        map.off("mouseleave", "editor-waypoints", geoWaypointMouseLeaveRef.current);
+        geoWaypointMouseLeaveRef.current = null;
+      }
+
+      [
+        "editor-route-highlight",
+        "editor-route",
+        "editor-waypoints-selected",
+        "editor-waypoints",
+      ].forEach((layerId) => {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(layerId)) map.removeSource(layerId);
+      });
+
+      if (!selectedVoyageId || !voyageWaypoints.length) return;
+
+      const routeCoordinates = selectedVoyageRouteCoordinates;
+      const hasSpecificSelection =
+        (associationMode === "point" && voyageSegStart != null) ||
+        (associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null);
+
+      if (routeCoordinates.length >= 2) {
+        map.addSource("editor-route", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: routeCoordinates },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route",
+          type: "line",
+          source: "editor-route",
+          paint: {
+            "line-color": "hsl(210,60%,45%)",
+            "line-width": hasSpecificSelection ? 4 : 3,
+            "line-opacity": hasSpecificSelection ? 0.72 : 0.42,
+          },
+        });
+      }
+
+      map.addSource("editor-waypoints", {
         type: "geojson",
-        data: { type: "Feature", geometry: { type: "LineString", coordinates: voyageWaypoints.map((w) => [w.lng, w.lat]) }, properties: {} },
+        data: {
+          type: "FeatureCollection",
+          features: voyageWaypoints.map((waypoint, index) => ({
+            type: "Feature" as const,
+            geometry: {
+              type: "Point" as const,
+              coordinates: [waypoint.lng, waypoint.lat],
+            },
+            properties: {
+              index,
+              label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
+              isTerminal: index === 0 || index === voyageWaypoints.length - 1,
+            },
+          })),
+        },
       });
       map.addLayer({
-        id: "editor-route",
-        type: "line",
-        source: "editor-route",
-        paint: { "line-color": "hsl(210,60%,45%)", "line-width": 3, "line-opacity": 0.6 },
+        id: "editor-waypoints",
+        type: "circle",
+        source: "editor-waypoints",
+        paint: {
+          "circle-radius": ["case", ["boolean", ["get", "isTerminal"], false], 6, 4.5],
+          "circle-color": ["case", ["boolean", ["get", "isTerminal"], false], "hsl(210,60%,45%)", "hsl(215,20%,58%)"],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+          "circle-opacity": 0.96,
+        },
       });
+
+      const selectedFeatures: GeoJSON.Feature<GeoJSON.Point>[] = [];
+      if (associationMode === "point" && voyageSegStart != null && voyageWaypoints[voyageSegStart]) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegStart].lng, voyageWaypoints[voyageSegStart].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (associationMode === "segment" && voyageSegStart != null && voyageWaypoints[voyageSegStart]) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegStart].lng, voyageWaypoints[voyageSegStart].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (
+        associationMode === "segment" &&
+        voyageSegStart != null &&
+        voyageSegEnd != null &&
+        voyageWaypoints[voyageSegEnd]
+      ) {
+        selectedFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [voyageWaypoints[voyageSegEnd].lng, voyageWaypoints[voyageSegEnd].lat],
+          },
+          properties: {},
+        });
+      }
+
+      if (associationMode === "full" && routeCoordinates.length >= 2) {
+        map.addSource("editor-route-highlight", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: routeCoordinates },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route-highlight",
+          type: "line",
+          source: "editor-route-highlight",
+          paint: { "line-color": "hsl(210,60%,45%)", "line-width": 5, "line-opacity": 0.82 },
+        });
+      }
+
+      if (
+        associationMode === "segment" &&
+        voyageSegStart != null &&
+        voyageSegEnd != null &&
+        selectedVoyageHighlightCoordinates.length >= 2
+      ) {
+        map.addSource("editor-route-highlight", {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: selectedVoyageHighlightCoordinates,
+            },
+            properties: {},
+          },
+        });
+        map.addLayer({
+          id: "editor-route-highlight",
+          type: "line",
+          source: "editor-route-highlight",
+          paint: { "line-color": "hsl(180,68%,34%)", "line-width": 5, "line-opacity": 0.9 },
+        });
+      }
+
+      if (selectedFeatures.length) {
+        map.addSource("editor-waypoints-selected", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: selectedFeatures,
+          },
+        });
+        map.addLayer({
+          id: "editor-waypoints-selected",
+          type: "circle",
+          source: "editor-waypoints-selected",
+          paint: {
+            "circle-radius": 7.5,
+            "circle-color": "hsl(180,68%,34%)",
+            "circle-stroke-width": 3,
+            "circle-stroke-color": "#fff",
+          },
+        });
+      }
+
+      geoWaypointClickHandlerRef.current = (event: maplibregl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+        const index = Number(feature?.properties?.index);
+        if (!Number.isFinite(index)) return;
+        handleVoyageWaypointMapSelect(index);
+      };
+      geoWaypointMouseEnterRef.current = () => {
+        map.getCanvas().style.cursor = associationMode === "full" ? "" : "pointer";
+      };
+      geoWaypointMouseLeaveRef.current = () => {
+        map.getCanvas().style.cursor = "";
+      };
+
+      map.on("click", "editor-waypoints", geoWaypointClickHandlerRef.current);
+      map.on("mouseenter", "editor-waypoints", geoWaypointMouseEnterRef.current);
+      map.on("mouseleave", "editor-waypoints", geoWaypointMouseLeaveRef.current);
     };
+
     if (map.isStyleLoaded()) draw();
     else map.on("load", draw);
-  }, [voyageWaypoints]);
+  }, [associationMode, handleVoyageWaypointMapSelect, selectedVoyageHighlightCoordinates, selectedVoyageId, selectedVoyageRouteCoordinates, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+
+  useEffect(() => {
+    const map = geoMapInstanceRef.current;
+    if (!map || !selectedVoyageId || !voyageWaypoints.length) return;
+    if (fittedVoyageIdRef.current === selectedVoyageId) return;
+
+    const fit = () => {
+      const coordinates = selectedVoyageRouteCoordinates;
+      if (!coordinates.length) return;
+
+      if (coordinates.length === 1) {
+        map.flyTo({ center: coordinates[0], zoom: 9, duration: 500 });
+      } else {
+        const bounds = coordinates.reduce(
+          (accumulator, coordinate) => accumulator.extend(coordinate),
+          new maplibregl.LngLatBounds(coordinates[0], coordinates[0])
+        );
+        map.fitBounds(bounds, { padding: 42, duration: 500, maxZoom: 9.5 });
+      }
+
+      fittedVoyageIdRef.current = selectedVoyageId;
+    };
+
+    if (map.isStyleLoaded()) fit();
+    else map.once("load", fit);
+  }, [selectedVoyageId, selectedVoyageRouteCoordinates]);
+
+  useEffect(() => {
+    if (
+      associationMode !== "point" ||
+      !selectedVoyageId ||
+      voyageSegStart != null ||
+      voyageSegEnd != null ||
+      latitude == null ||
+      longitude == null ||
+      !voyageWaypoints.length
+    ) {
+      return;
+    }
+
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    voyageWaypoints.forEach((waypoint, index) => {
+      const distance = Math.hypot(waypoint.lat - latitude, waypoint.lng - longitude);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    setVoyageSegStart(nearestIndex);
+    setVoyageSegEnd(nearestIndex);
+  }, [associationMode, latitude, longitude, selectedVoyageId, voyageSegEnd, voyageSegStart, voyageWaypoints]);
 
   const handleGeoSearch = async () => {
     if (!geoSearchQuery.trim()) return;
@@ -463,6 +1238,161 @@ const ArticleEditor = () => {
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
+  const sceneOptionsEn = useMemo(
+    () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_en || scene.title_it || `Scene ${index + 1}` })),
+    [articleMapScenes]
+  );
+  const sceneOptionsIt = useMemo(
+    () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_it || scene.title_en || `Scena ${index + 1}` })),
+    [articleMapScenes]
+  );
+  const primaryRouteCoordinates = useMemo(() => {
+    if (!selectedVoyage || voyageWaypoints.length < 2) return null;
+
+    if (voyageSegStart != null || voyageSegEnd != null) {
+      const start = Math.max(0, Math.min(voyageSegStart ?? voyageSegEnd ?? 0, voyageWaypoints.length - 1));
+      const end = Math.max(0, Math.min(voyageSegEnd ?? voyageSegStart ?? start, voyageWaypoints.length - 1));
+      const segmentGeometry = buildVoyageSegmentGeometry(
+        voyageWaypoints,
+        selectedVoyage.type,
+        start,
+        end,
+        selectedVoyageCachedGeometry
+      );
+      return segmentGeometry.length >= 2 ? segmentGeometry : null;
+    }
+
+    return selectedVoyageRouteCoordinates.length >= 2 ? selectedVoyageRouteCoordinates : null;
+  }, [selectedVoyage, selectedVoyageCachedGeometry, selectedVoyageRouteCoordinates, voyageSegEnd, voyageSegStart, voyageWaypoints]);
+
+  const handleSceneAnchorLink = useCallback((language: ArticleLanguage, sceneId: string, payload: { anchorId: string; anchorPreview: string }) => {
+    setArticleMapScenes((currentScenes) =>
+      currentScenes.map((scene) => {
+        if (scene.id !== sceneId) return scene;
+        return language === "en"
+          ? { ...scene, anchor_id_en: payload.anchorId, anchor_preview_en: payload.anchorPreview }
+          : { ...scene, anchor_id_it: payload.anchorId, anchor_preview_it: payload.anchorPreview };
+      })
+    );
+  }, []);
+  const voyageWaypointOptions = voyageWaypoints.map((waypoint, index) => ({
+    value: String(index),
+    label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
+  }));
+  const segmentEndWaypointOptions =
+    voyageSegStart == null
+      ? []
+      : voyageWaypointOptions.slice(voyageSegStart + 1);
+  const selectedPointWaypointLabel =
+    associationMode === "point" && voyageSegStart != null
+      ? voyageWaypointOptions[voyageSegStart]?.label || null
+      : null;
+  const selectedSegmentSummary =
+    associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null
+      ? `${voyageWaypointOptions[voyageSegStart]?.label || `WP ${voyageSegStart + 1}`} → ${voyageWaypointOptions[voyageSegEnd]?.label || `WP ${voyageSegEnd + 1}`}`
+      : null;
+
+  const renderInstagramStorySection = ({
+    language,
+    label,
+    useCover,
+    customImage,
+    setUseCover,
+    setCustomImage,
+    inputRef,
+  }: {
+    language: ArticleLanguage;
+    label: string;
+    useCover: boolean;
+    customImage: string;
+    setUseCover: (value: boolean) => void;
+    setCustomImage: (value: string) => void;
+    inputRef: RefObject<HTMLInputElement>;
+  }) => {
+    const previewImage = useCover ? coverImage : customImage;
+
+    return (
+      <div className="border border-border p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-sans tracking-[0.18em] uppercase text-muted-foreground">{label}</p>
+          <div className="inline-flex border border-border">
+            <button
+              type="button"
+              onClick={() => setUseCover(true)}
+              className={`px-2.5 py-1 text-[11px] font-sans transition-colors ${useCover ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Use cover
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseCover(false)}
+              className={`px-2.5 py-1 text-[11px] font-sans transition-colors ${!useCover ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Custom image
+            </button>
+          </div>
+        </div>
+
+        {previewImage ? (
+          <div className="relative aspect-[9/16] overflow-hidden border border-border bg-muted">
+            <img src={previewImage} alt={`${label} Instagram Story`} className="h-full w-full object-cover" />
+            {!useCover && (
+              <button
+                type="button"
+                onClick={() => setCustomImage("")}
+                className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="aspect-[9/16] border border-dashed border-border flex items-center justify-center px-4 text-center text-xs text-muted-foreground">
+            {useCover ? "No cover image selected yet." : "Upload a dedicated image for Instagram Stories."}
+          </div>
+        )}
+
+        {useCover ? (
+          <p className="text-[11px] text-muted-foreground">
+            Instagram Stories will use the current cover image for the {label.toLowerCase()} article version.
+          </p>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+            >
+              <ImageIcon size={14} />
+              {customImage ? "Replace image" : "Upload image"}
+            </button>
+            {customImage && (
+              <button
+                type="button"
+                onClick={() => setCustomImage("")}
+                className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
+              >
+                <X size={14} />
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleInstagramStoryUpload(language, file);
+            e.target.value = "";
+          }}
+        />
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
@@ -503,10 +1433,29 @@ const ArticleEditor = () => {
             )}
 
             {activeTab === "en" ? (
-              <RichTextEditor content={contentEn} onChange={setContentEn} placeholder="Start writing your article in English..." />
+              <RichTextEditor
+                content={contentEn}
+                onChange={setContentEn}
+                placeholder="Start writing your article in English..."
+                mapScenes={sceneOptionsEn}
+                onMapSceneLink={(sceneId, payload) => handleSceneAnchorLink("en", sceneId, payload)}
+              />
             ) : (
-              <RichTextEditor content={contentIt} onChange={setContentIt} placeholder="Inizia a scrivere l'articolo in italiano..." />
+              <RichTextEditor
+                content={contentIt}
+                onChange={setContentIt}
+                placeholder="Inizia a scrivere l'articolo in italiano..."
+                mapScenes={sceneOptionsIt}
+                onMapSceneLink={(sceneId, payload) => handleSceneAnchorLink("it", sceneId, payload)}
+              />
             )}
+
+            <ArticleMiniMapEditor
+              value={articleMapScenes}
+              onChange={setArticleMapScenes}
+              activeLanguage={activeTab}
+              primaryRouteCoordinates={primaryRouteCoordinates}
+            />
           </div>
 
           {/* Sidebar */}
@@ -525,13 +1474,26 @@ const ArticleEditor = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => { setCoverImage(""); setCoverFocal({ ...DEFAULT_COVER_FOCAL }); }}
+                      onClick={() => setCoverCropOpen(true)}
+                      className="absolute top-2 right-20 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 inline-flex items-center gap-1.5"
+                    >
+                      <Crop size={12} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setCoverImage(""); setCoverFocal({ ...DEFAULT_COVER_FOCAL }); setCoverCropOpen(false); }}
                       className="absolute top-2 right-2 bg-primary/80 text-primary-foreground px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10"
                     >
                       Remove
                     </button>
                   </div>
-                  <CoverFocalPicker imageUrl={coverImage} value={coverFocal} onChange={setCoverFocal} />
+                  <button
+                    type="button"
+                    onClick={() => setCoverCropOpen(true)}
+                    className="inline-flex items-center gap-2 text-[11px] font-sans text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Crop size={13} /> Modifica ritaglio copertina
+                  </button>
                 </>
               ) : (
                 <button type="button" onClick={() => coverInputRef.current?.click()} className="w-full aspect-[16/10] border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:border-accent hover:text-accent transition-colors">
@@ -539,6 +1501,43 @@ const ArticleEditor = () => {
                 </button>
               )}
               <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleCoverUpload(file); e.target.value = ""; }} />
+            </div>
+            <CoverCropDialog
+              open={coverCropOpen}
+              imageUrl={coverImage || null}
+              value={coverFocal}
+              onOpenChange={(nextOpen) => {
+                if (!nextOpen) setCoverCropOpen(false);
+              }}
+              onCancel={() => setCoverCropOpen(false)}
+              onConfirm={handleCoverCropConfirm}
+            />
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Instagram Stories</label>
+                <p className="text-[11px] text-muted-foreground">
+                  Per il web share proviamo a passare immagine + link articolo sui browser mobile che supportano la condivisione file.
+                </p>
+              </div>
+              {renderInstagramStorySection({
+                language: "en",
+                label: "English",
+                useCover: instagramStoryUseCoverEn,
+                customImage: instagramStoryImageEn,
+                setUseCover: setInstagramStoryUseCoverEn,
+                setCustomImage: setInstagramStoryImageEn,
+                inputRef: instagramEnInputRef,
+              })}
+              {renderInstagramStorySection({
+                language: "it",
+                label: "Italiano",
+                useCover: instagramStoryUseCoverIt,
+                customImage: instagramStoryImageIt,
+                setUseCover: setInstagramStoryUseCoverIt,
+                setCustomImage: setInstagramStoryImageIt,
+                inputRef: instagramItInputRef,
+              })}
             </div>
 
             {/* Slug */}
@@ -658,9 +1657,11 @@ const ArticleEditor = () => {
                 <select
                   value={selectedVoyageId || ""}
                   onChange={(e) => {
-                    setSelectedVoyageId(e.target.value || null);
+                    const nextVoyageId = e.target.value || null;
+                    setSelectedVoyageId(nextVoyageId);
                     setVoyageSegStart(null);
                     setVoyageSegEnd(null);
+                    setAssociationMode(nextVoyageId ? "full" : "point");
                   }}
                   className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
                 >
@@ -677,40 +1678,108 @@ const ArticleEditor = () => {
                   <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground block">Association</label>
                   <div className="flex gap-1">
                     <button
-                      onClick={() => { setAssociationMode("full"); setVoyageSegStart(null); setVoyageSegEnd(null); }}
+                      onClick={() => handleAssociationModeChange("full")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "full" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Full voyage
                     </button>
                     <button
-                      onClick={() => setAssociationMode("point")}
+                      onClick={() => handleAssociationModeChange("point")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "point" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Point
                     </button>
                     <button
-                      onClick={() => setAssociationMode("segment")}
+                      onClick={() => handleAssociationModeChange("segment")}
                       className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "segment" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       Segment
                     </button>
                   </div>
 
-                  {associationMode === "point" && latitude && (
+                  {!voyageWaypoints.length ? (
                     <p className="text-[10px] text-muted-foreground">
-                      Point set at {latitude.toFixed(4)}, {longitude?.toFixed(4)}
+                      This voyage has no waypoints yet.
+                    </p>
+                  ) : null}
+
+                  {associationMode === "full" && voyageWaypoints.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      The full traced voyage is associated with this article.
                     </p>
                   )}
-                  {associationMode === "segment" && (
-                    <div className="grid grid-cols-2 gap-2">
+
+                  {associationMode === "point" && voyageWaypoints.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        Click a waypoint on the minimap or choose it below.
+                      </p>
                       <div>
-                        <label className="text-[10px] font-sans text-muted-foreground block">Start WP #</label>
-                        <input type="number" min={0} value={voyageSegStart ?? ""} onChange={(e) => setVoyageSegStart(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                        <label className="text-[10px] font-sans text-muted-foreground block">Waypoint</label>
+                        <select
+                          value={voyageSegStart != null ? String(voyageSegStart) : ""}
+                          onChange={(e) => selectPointWaypoint(e.target.value ? Number(e.target.value) : null)}
+                          className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                        >
+                          <option value="">Choose a waypoint</option>
+                          {voyageWaypointOptions.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
                       </div>
-                      <div>
-                        <label className="text-[10px] font-sans text-muted-foreground block">End WP #</label>
-                        <input type="number" min={0} value={voyageSegEnd ?? ""} onChange={(e) => setVoyageSegEnd(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent" />
+                      {selectedPointWaypointLabel && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Selected: {selectedPointWaypointLabel}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {associationMode === "segment" && voyageWaypoints.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        Click two waypoints on the minimap or choose them below.
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div>
+                          <label className="text-[10px] font-sans text-muted-foreground block">From</label>
+                          <select
+                            value={voyageSegStart != null ? String(voyageSegStart) : ""}
+                            onChange={(e) => handleSegmentStartChange(e.target.value)}
+                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                          >
+                            <option value="">Choose start waypoint</option>
+                            {voyageWaypointOptions.map((option) => (
+                              <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-sans text-muted-foreground block">To</label>
+                          <select
+                            value={voyageSegEnd != null ? String(voyageSegEnd) : ""}
+                            onChange={(e) => handleSegmentEndChange(e.target.value)}
+                            disabled={voyageSegStart == null || !segmentEndWaypointOptions.length}
+                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
+                          >
+                            <option value="">
+                              {voyageSegStart == null
+                                ? "Choose start first"
+                                : segmentEndWaypointOptions.length
+                                  ? "Choose end waypoint"
+                                  : "No later waypoint available"}
+                            </option>
+                            {segmentEndWaypointOptions.map((option) => (
+                              <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
+                      {selectedSegmentSummary && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Selected: {selectedSegmentSummary}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

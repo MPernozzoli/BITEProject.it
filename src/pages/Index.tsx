@@ -1148,6 +1148,13 @@ const Index = () => {
         </div>
       </section>
 
+      <section className="px-4 md:px-6">
+        <div className="glass-frame rounded-[34px] p-2 h-[50vh] md:h-[60vh] overflow-hidden">
+          <div className="overflow-hidden rounded-[28px] h-full">
+            <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" loading="lazy" decoding="async" />
+          </div>
+        </div>
+      </section>
 
       {shouldShowNewsletterSection ? (
         <section className="page-section pt-0">

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { generateHTML } from "@tiptap/react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, MapPin, User, X } from "lucide-react";
+import { ArrowLeft, MapPin, User, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import LikeButton from "@/components/LikeButton";
@@ -16,8 +16,6 @@ import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
-import ArticleRelatedSection from "@/components/ArticleRelatedSection";
-import ArticleSidebar from "@/components/ArticleSidebar";
 import {
   getArticleSceneCameraCenter,
   getArticleSceneAnchorId,
@@ -32,14 +30,6 @@ import {
 } from "@/lib/article-map";
 import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
-
-type StoryChapter = {
-  id: string;
-  slug: string;
-  title_en: string;
-  title_it: string;
-  published_at: string | null;
-};
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -142,56 +132,6 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
         .filter((tag): tag is { id: string; name: string } => Boolean(tag));
     },
   });
-
-  const storyId = article ? ((article as { story_id?: string | null }).story_id ?? null) : null;
-
-  const { data: storyChapters = [] } = useQuery({
-    queryKey: ["story-chapters-published", storyId],
-    enabled: Boolean(storyId),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("logbook_articles")
-        .select("id, slug, title_en, title_it, published_at")
-        .eq("story_id", storyId!)
-        .eq("status", "published")
-        .order("published_at", { ascending: true, nullsFirst: false });
-      if (error) throw error;
-      return (data || []) as StoryChapter[];
-    },
-  });
-
-  const { data: story } = useQuery({
-    queryKey: ["article-story", article?.id],
-    enabled: Boolean(article?.id),
-    queryFn: async () => {
-      const sid = (article as { story_id?: string | null } | undefined)?.story_id;
-      if (!sid) return null;
-      const { data } = await supabase.from("stories").select("*").eq("id", sid).single();
-      return data;
-    },
-  });
-
-  const chapterPrevNext = useMemo(() => {
-    if (!article?.id || !storyChapters.length) return { prev: null as StoryChapter | null, next: null as StoryChapter | null };
-    const idx = storyChapters.findIndex((c) => c.id === article.id);
-    if (idx < 0) return { prev: null, next: null };
-    return {
-      prev: idx > 0 ? storyChapters[idx - 1] : null,
-      next: idx < storyChapters.length - 1 ? storyChapters[idx + 1] : null,
-    };
-  }, [article?.id, storyChapters]);
-
-  const prevTitle = chapterPrevNext.prev
-    ? lang === "en"
-      ? chapterPrevNext.prev.title_en
-      : chapterPrevNext.prev.title_it || chapterPrevNext.prev.title_en
-    : "";
-  const nextTitle = chapterPrevNext.next
-    ? lang === "en"
-      ? chapterPrevNext.next.title_en
-      : chapterPrevNext.next.title_it || chapterPrevNext.next.title_en
-    : "";
-
   const { data: linkedVoyage } = useQuery({
     queryKey: ["expanded-article-linked-voyage", article?.voyage_id],
     enabled: Boolean(article?.voyage_id),
@@ -670,66 +610,6 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                     </div>
                   )}
 
-                  {story && (
-                    <Link
-                      to={`/logbook/story/${(story as { slug: string }).slug}`}
-                      className="mt-5 flex items-center gap-3 rounded-[24px] border border-black/6 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)] transition-colors hover:border-black/12 group"
-                    >
-                      <BookOpen size={16} className="shrink-0 text-accent" />
-                      <div className="min-w-0">
-                        <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
-                          {lang === "it" ? "Parte della storia" : "Part of story"}
-                        </span>
-                        <p className="editorial-heading text-sm transition-colors group-hover:text-accent">
-                          {lang === "en"
-                            ? (story as { title_en: string }).title_en
-                            : (story as { title_it: string | null; title_en: string }).title_it ||
-                              (story as { title_en: string }).title_en}
-                        </p>
-                      </div>
-                    </Link>
-                  )}
-
-                  {story && (chapterPrevNext.prev || chapterPrevNext.next) && (
-                    <nav
-                      className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch"
-                      aria-label={lang === "it" ? "Navigazione capitoli" : "Chapter navigation"}
-                    >
-                      {chapterPrevNext.prev ? (
-                        <Link
-                          to={`/logbook/${chapterPrevNext.prev.slug}`}
-                          title={prevTitle}
-                          className="inline-flex flex-1 items-center gap-2 rounded-[24px] border border-black/6 bg-white px-4 py-3 text-sm font-sans text-foreground shadow-[0_16px_40px_rgba(15,23,42,0.05)] transition-colors hover:border-black/12"
-                        >
-                          <ChevronLeft size={18} className="shrink-0 text-accent" />
-                          <span className="min-w-0">
-                            <span className="mb-0.5 block text-[10px] uppercase tracking-wider text-muted-foreground">
-                              {lang === "it" ? "Precedente" : "Previous"}
-                            </span>
-                            <span className="block line-clamp-2 leading-snug">{prevTitle}</span>
-                          </span>
-                        </Link>
-                      ) : (
-                        <div className="hidden flex-1 sm:block" aria-hidden />
-                      )}
-                      {chapterPrevNext.next ? (
-                        <Link
-                          to={`/logbook/${chapterPrevNext.next.slug}`}
-                          title={nextTitle}
-                          className="inline-flex flex-1 items-center justify-end gap-2 rounded-[24px] border border-black/6 bg-white px-4 py-3 text-sm font-sans text-foreground shadow-[0_16px_40px_rgba(15,23,42,0.05)] transition-colors hover:border-black/12 sm:text-right"
-                        >
-                          <span className="order-2 min-w-0 sm:order-1">
-                            <span className="mb-0.5 block text-[10px] uppercase tracking-wider text-muted-foreground sm:text-right">
-                              {lang === "it" ? "Successivo" : "Next"}
-                            </span>
-                            <span className="block line-clamp-2 leading-snug sm:text-right">{nextTitle}</span>
-                          </span>
-                          <ChevronRight size={18} className="order-1 shrink-0 text-accent sm:order-2" />
-                        </Link>
-                      ) : null}
-                    </nav>
-                  )}
-
                   {(resolvedAuthors.length > 0 || dateLabel) && (
                     <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-black/6 pt-6">
                       {resolvedAuthors.map((author) => (
@@ -833,8 +713,6 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   <CommentSection articleId={article.id} />
                 </section>
 
-                <ArticleSidebar currentArticleId={article.id} storyId={storyId} />
-
                 {tags.length > 0 && (
                   <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                     <p className="mb-3 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
@@ -852,8 +730,6 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                     </div>
                   </section>
                 )}
-
-                <ArticleRelatedSection articleId={article.id} tagIds={tags.map((t) => t.id)} lang={lang} />
               </div>
             )}
           </div>
