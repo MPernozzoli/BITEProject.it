@@ -558,7 +558,7 @@ const Journal = () => {
                     : sidebarVisible
                       ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] right-4 max-w-[calc(100vw-340px-2.5rem)] xl:max-w-[calc(100vw-390px-2.5rem)]"
                       : "left-4 right-4 max-w-[calc(100vw-2rem)]"
-                }`}
+                } w-full`}
               >
                 <VoyageLegend
                   voyage={legendVoyage}

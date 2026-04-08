@@ -111,7 +111,7 @@ const VoyageLegend = ({
       : "Scroll horizontally to see the full route";
 
   return (
-    <div className="pointer-events-auto w-max max-w-full rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
+    <div className="pointer-events-auto w-full min-w-0 rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-1.5">
         <div className="flex items-center gap-2 min-w-0">
@@ -141,18 +141,18 @@ const VoyageLegend = ({
         </p>
       )}
 
-      {/* Route diagram: width follows voyage length; scroll inside if wider than window */}
+      {/* Route diagram: larghezza = finestra (container); scroll orizzontale con padding per WPT e scrollbar */}
       <div
-        className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] rounded-lg pb-1"
+        className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] rounded-lg pb-3 pt-0.5"
         role="region"
         aria-label={routeRegionLabel}
         title={visibleWaypoints.length > 5 ? scrollHint : undefined}
       >
         <div
-          className="flex min-w-full items-center"
+          className="flex min-w-full items-center pl-5 pr-3"
           style={{
             paddingTop: 44,
-            paddingBottom: 32,
+            paddingBottom: 40,
             width: "max-content",
             minWidth: `max(100%, ${diagramContentMinPx}px)`,
           }}

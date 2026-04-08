@@ -244,6 +244,63 @@ const VoyageMap = ({
     [articlesForMap, waypointsMap]
   );
 
+  /** Tutti i waypoint pubblici (tutti i viaggi) per cluster sulla mappa */
+  const mapWaypointClusterInputs = useMemo(() => {
+    type Item = {
+      key: string;
+      lng: number;
+      lat: number;
+      voyageId: string;
+      waypoint: VoyageWaypoint;
+      name: string;
+      articleTitle: string;
+      fillColor: string;
+    };
+    const items: Item[] = [];
+    for (const voyage of publishedVoyages) {
+      const wps = waypointsMap[voyage.id] || [];
+      if (!wps.length) continue;
+      const visible = getPublicVoyageWaypoints(wps, articlesForMap, voyage.id);
+      const isActive = voyage.status === "active";
+      for (const w of visible) {
+        const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
+        const safeIndex = routeIndex >= 0 ? routeIndex : 0;
+        const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex);
+        const isStart = safeIndex === 0;
+        const isEnd = safeIndex === wps.length - 1;
+        const fillColor = isStart
+          ? "hsl(136, 42%, 42%)"
+          : isEnd
+            ? "hsl(8, 65%, 54%)"
+            : isActive
+              ? "hsl(180, 20%, 35%)"
+              : "hsl(220, 10%, 70%)";
+        const name = getLocalizedWaypointName(w, lang, safeIndex);
+        const articleTitle = associatedArticle
+          ? lang === "en"
+            ? associatedArticle.title_en
+            : associatedArticle.title_it || associatedArticle.title_en
+          : "";
+        items.push({
+          key: `${voyage.id}:${w.id}`,
+          lng: w.lng,
+          lat: w.lat,
+          voyageId: voyage.id,
+          waypoint: w,
+          name,
+          articleTitle,
+          fillColor,
+        });
+      }
+    }
+    return items;
+  }, [publishedVoyages, waypointsMap, articlesForMap, lang]);
+
+  const waypointClusterIndexRef = useRef<Supercluster | null>(null);
+  const mapWaypointsByKeyRef = useRef<Map<string, (typeof mapWaypointClusterInputs)[0]>>(new Map());
+  const waypointMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const runWaypointMarkersSyncRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (mapUnavailable) {
       onMapUnavailable?.();
@@ -333,6 +390,8 @@ const VoyageMap = ({
       }
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      waypointMarkersRef.current.forEach((marker) => marker.remove());
+      waypointMarkersRef.current = [];
       mapResizeCleanupRef.current?.();
       mapResizeCleanupRef.current = null;
       mapRef.current?.remove();
@@ -351,6 +410,8 @@ const VoyageMap = ({
       popupRef.current = null;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      waypointMarkersRef.current.forEach((marker) => marker.remove());
+      waypointMarkersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -632,145 +693,46 @@ const VoyageMap = ({
           }
         }
 
-        const visibleWaypoints = getPublicVoyageWaypoints(wps, articlesForMap, voyage.id);
-        if (visibleWaypoints.length) {
-          const wpId = `voyage-wp-${voyage.id}`;
-          map.addSource(wpId, {
-            type: "geojson",
-            data: {
-              type: "FeatureCollection",
-              features: visibleWaypoints.map((w, visibleIndex) => {
-                const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
-                const safeIndex = routeIndex >= 0 ? routeIndex : visibleIndex;
-                const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex);
-                const isStart = safeIndex === 0;
-                const isEnd = safeIndex === wps.length - 1;
-                return {
-                  type: "Feature" as const,
-                  geometry: { type: "Point" as const, coordinates: [w.lng, w.lat] },
-                  properties: {
-                    name: getLocalizedWaypointName(w, lang, safeIndex),
-                    articleTitle: associatedArticle
-                      ? lang === "en"
-                        ? associatedArticle.title_en
-                        : associatedArticle.title_it || associatedArticle.title_en
-                      : "",
-                    markerColor: isStart
-                      ? "hsl(136, 42%, 42%)"
-                      : isEnd
-                        ? "hsl(8, 65%, 54%)"
-                        : isActive
-                          ? "hsl(180, 20%, 35%)"
-                          : "hsl(220, 10%, 70%)",
-                    markerRadius: isStart || isEnd ? 5 : isActive ? 5 : 4,
+        /* Waypoint visibili: cluster HTML (effect separato), non layer circle */
+
+        if (
+          activeArticleFocus?.voyageId === voyage.id &&
+          activeArticleFocus.mode === "point" &&
+          activeArticleFocus.startIndex != null &&
+          wps.length
+        ) {
+          const focusPointIndex = clampWaypointIndex(activeArticleFocus.startIndex, wps.length - 1);
+          const focusWaypoint = wps[focusPointIndex];
+          const focusPointId = `voyage-point-focus-${voyage.id}`;
+
+          if (focusWaypoint) {
+            map.addSource(focusPointId, {
+              type: "geojson",
+              data: {
+                type: "FeatureCollection",
+                features: [{
+                  type: "Feature",
+                  geometry: {
+                    type: "Point",
+                    coordinates: [focusWaypoint.lng, focusWaypoint.lat],
                   },
-                };
-              }),
-            },
-          });
+                  properties: {},
+                }],
+              },
+            });
 
-          map.addLayer({
-            id: wpId,
-            type: "circle",
-            source: wpId,
-            paint: {
-              "circle-radius": ["coalesce", ["get", "markerRadius"], isActive ? 5 : 4],
-              "circle-color": ["coalesce", ["get", "markerColor"], isActive ? "hsl(180, 20%, 35%)" : "hsl(220, 10%, 70%)"],
-              "circle-stroke-width": 2,
-              "circle-stroke-color": "#fff",
-              "circle-opacity": isDimmed ? 0.24 : 1,
-              "circle-stroke-opacity": isDimmed ? 0.45 : 1,
-            },
-          });
-
-          if (
-            activeArticleFocus?.voyageId === voyage.id &&
-            activeArticleFocus.mode === "point" &&
-            activeArticleFocus.startIndex != null
-          ) {
-            const focusPointIndex = clampWaypointIndex(activeArticleFocus.startIndex, wps.length - 1);
-            const focusWaypoint = wps[focusPointIndex];
-            const focusPointId = `voyage-point-focus-${voyage.id}`;
-
-            if (focusWaypoint) {
-              map.addSource(focusPointId, {
-                type: "geojson",
-                data: {
-                  type: "FeatureCollection",
-                  features: [{
-                    type: "Feature",
-                    geometry: {
-                      type: "Point",
-                      coordinates: [focusWaypoint.lng, focusWaypoint.lat],
-                    },
-                    properties: {},
-                  }],
-                },
-              });
-
-              map.addLayer({
-                id: focusPointId,
-                type: "circle",
-                source: focusPointId,
-                paint: {
-                  "circle-radius": 8,
-                  "circle-color": focusColor,
-                  "circle-stroke-width": 3,
-                  "circle-stroke-color": "#fff",
-                },
-              });
-            }
+            map.addLayer({
+              id: focusPointId,
+              type: "circle",
+              source: focusPointId,
+              paint: {
+                "circle-radius": 8,
+                "circle-color": focusColor,
+                "circle-stroke-width": 3,
+                "circle-stroke-color": "#fff",
+              },
+            });
           }
-
-          const renderWaypointHoverPopup = (event: maplibregl.MapLayerMouseEvent) => {
-            const feature = event.features?.[0];
-            if (!feature?.geometry || feature.geometry.type !== "Point") return;
-            const coords = feature.geometry.coordinates as [number, number];
-            const name = String(feature.properties?.name || "");
-            const articleTitle = String(feature.properties?.articleTitle || "");
-            if (!name) return;
-
-            const popupHtml = `
-              <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:160px;max-width:240px;">
-                <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(name)}</strong>
-                ${articleTitle
-                  ? `<span style="font-size:11px;line-height:1.4;color:hsl(220,15%,40%);">${lang === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
-                  : ""}
-              </div>
-            `;
-
-            if (!popupRef.current) {
-              popupRef.current = new maplibregl.Popup({
-                offset: 12,
-                closeButton: false,
-                closeOnClick: false,
-                closeOnMove: false,
-                maxWidth: "260px",
-              });
-            }
-
-            popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
-          };
-
-          const handlers = {
-            mouseenter: (event: maplibregl.MapLayerMouseEvent) => {
-              map.getCanvas().style.cursor = "pointer";
-              renderWaypointHoverPopup(event);
-            },
-            mousemove: (event: maplibregl.MapLayerMouseEvent) => {
-              renderWaypointHoverPopup(event);
-            },
-            mouseleave: () => {
-              map.getCanvas().style.cursor = "";
-              popupRef.current?.remove();
-              popupRef.current = null;
-            },
-          };
-
-          waypointLayerHandlersRef.current[wpId] = handlers;
-          map.on("mouseenter", wpId, handlers.mouseenter);
-          map.on("mousemove", wpId, handlers.mousemove);
-          map.on("mouseleave", wpId, handlers.mouseleave);
         }
       });
     };
@@ -794,6 +756,192 @@ const VoyageMap = ({
     selectedArticleId,
     waypointsMap,
   ]);
+
+  // Waypoint pubblici (tutti i viaggi): cluster leggeri, distinti dagli articoli
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const index = new Supercluster({
+      radius: 56,
+      maxZoom: 22,
+      minPoints: 2,
+      minZoom: 0,
+    });
+
+    index.load(
+      mapWaypointClusterInputs.map((item) => ({
+        type: "Feature" as const,
+        properties: { id: item.key },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [item.lng, item.lat] as [number, number],
+        },
+      }))
+    );
+
+    waypointClusterIndexRef.current = index;
+    mapWaypointsByKeyRef.current = new Map(mapWaypointClusterInputs.map((i) => [i.key, i]));
+
+    const showWaypointPopup = (coords: [number, number], name: string, articleTitle: string) => {
+      if (!name) return;
+      const L = langRef.current;
+      const popupHtml = `
+        <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:140px;max-width:220px;">
+          <strong style="font-size:11px;line-height:1.35;color:hsl(220,25%,22%);">${escapePopupHtml(name)}</strong>
+          ${articleTitle
+            ? `<span style="font-size:10px;line-height:1.4;color:hsl(220,12%,42%);">${L === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
+            : ""}
+        </div>
+      `;
+      if (!popupRef.current) {
+        popupRef.current = new maplibregl.Popup({
+          offset: 10,
+          closeButton: false,
+          closeOnClick: false,
+          closeOnMove: false,
+          maxWidth: "240px",
+        });
+      }
+      popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
+    };
+
+    const syncWaypointMarkers = () => {
+      const sc = waypointClusterIndexRef.current;
+      if (!sc) return;
+
+      waypointMarkersRef.current.forEach((m) => m.remove());
+      waypointMarkersRef.current = [];
+
+      const bounds = map.getBounds();
+      const zoom = Math.floor(map.getZoom());
+      const clusters = sc.getClusters(
+        [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        zoom
+      );
+
+      const markerFocusVoyageId =
+        highlightedVoyageIdRef.current || hoveredRouteVoyageIdRef.current || null;
+
+      clusters.forEach((feature) => {
+        if (feature.geometry.type !== "Point") return;
+        const [lng, lat] = feature.geometry.coordinates as [number, number];
+        const props = feature.properties as {
+          cluster?: boolean;
+          cluster_id?: number;
+          point_count?: number;
+          id?: string;
+        };
+
+        if (props.cluster === true) {
+          const el = document.createElement("div");
+          el.style.cssText = `
+            cursor:pointer;display:flex;align-items:center;justify-content:center;
+            z-index:4;pointer-events:auto;
+            min-width:22px;height:22px;padding:0 5px;border-radius:9999px;
+            background:hsla(210, 18%, 96%, 0.96);color:hsl(220, 20%, 34%);
+            font-size:10.5px;font-weight:600;font-family:var(--font-sans);
+            box-shadow:0 1px 4px rgba(15,23,42,0.12);
+            border:1px solid hsl(220, 14%, 82%);
+          `;
+          el.textContent = String(props.point_count ?? "");
+          el.title =
+            langRef.current === "it"
+              ? `${props.point_count ?? ""} scali vicini`
+              : `${props.point_count ?? ""} nearby stops`;
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const cid = props.cluster_id;
+            if (cid == null) return;
+            const expansionZoom = Math.min(sc.getClusterExpansionZoom(cid), 19);
+            map.easeTo({ center: [lng, lat], zoom: expansionZoom, duration: 420 });
+          });
+          waypointMarkersRef.current.push(
+            new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map)
+          );
+          return;
+        }
+
+        const meta = mapWaypointsByKeyRef.current.get(String(props.id));
+        if (!meta) return;
+
+        const isDimmed = Boolean(
+          markerFocusVoyageId && meta.voyageId !== markerFocusVoyageId
+        );
+        const size = 17;
+        const el = document.createElement("div");
+        el.style.cssText = `cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ease;`;
+
+        const dot = document.createElement("div");
+        dot.style.cssText = `
+          width:${size}px;height:${size}px;border-radius:50%;
+          border:1.5px solid hsl(0,0%,100%);
+          background:${meta.fillColor};
+          box-shadow:0 1px 5px rgba(15,23,42,0.14);
+          transition:transform 0.2s ease;
+        `;
+        el.appendChild(dot);
+
+        const coords: [number, number] = [lng, lat];
+
+        el.addEventListener("mouseenter", () => {
+          dot.style.transform = "scale(1.12)";
+          el.style.opacity = "1";
+          showWaypointPopup(coords, meta.name, meta.articleTitle);
+        });
+        el.addEventListener("mouseleave", () => {
+          dot.style.transform = "scale(1)";
+          if (isDimmed) el.style.opacity = "0.38";
+          popupRef.current?.remove();
+          popupRef.current = null;
+        });
+
+        waypointMarkersRef.current.push(
+          new maplibregl.Marker({ element: el, anchor: "center" })
+            .setLngLat(coords)
+            .addTo(map)
+        );
+      });
+    };
+
+    runWaypointMarkersSyncRef.current = syncWaypointMarkers;
+
+    let zoomRafWp = 0;
+    const scheduleWpZoom = () => {
+      if (zoomRafWp) return;
+      zoomRafWp = window.requestAnimationFrame(() => {
+        zoomRafWp = 0;
+        syncWaypointMarkers();
+      });
+    };
+
+    const onMoveEndWp = () => syncWaypointMarkers();
+    map.on("moveend", onMoveEndWp);
+    map.on("zoomend", onMoveEndWp);
+    map.on("zoom", scheduleWpZoom);
+
+    if (map.isStyleLoaded()) {
+      syncWaypointMarkers();
+    } else {
+      map.once("load", syncWaypointMarkers);
+    }
+
+    return () => {
+      if (zoomRafWp) window.cancelAnimationFrame(zoomRafWp);
+      map.off("moveend", onMoveEndWp);
+      map.off("zoomend", onMoveEndWp);
+      map.off("zoom", scheduleWpZoom);
+      map.off("load", syncWaypointMarkers);
+      waypointMarkersRef.current.forEach((m) => m.remove());
+      waypointMarkersRef.current = [];
+      waypointClusterIndexRef.current = null;
+      runWaypointMarkersSyncRef.current = () => {};
+    };
+  }, [mapWaypointClusterInputs]);
+
+  useEffect(() => {
+    runWaypointMarkersSyncRef.current();
+  }, [highlightedVoyageId, hoveredRouteVoyageId]);
 
   // Articoli sulla mappa: Supercluster + marker (stesso stile di prima)
   useEffect(() => {
@@ -853,6 +1001,7 @@ const VoyageMap = ({
           const el = document.createElement("div");
           el.style.cssText = `
             cursor:pointer;display:flex;align-items:center;justify-content:center;
+            z-index:6;pointer-events:auto;
             min-width:36px;min-height:36px;padding:0 8px;border-radius:9999px;
             background:hsl(220,40%,22%);color:#fff;font-size:13px;font-weight:700;
             font-family:var(--font-sans);box-shadow:0 2px 10px rgba(0,0,0,0.25);
@@ -886,7 +1035,7 @@ const VoyageMap = ({
 
         const el = document.createElement("div");
         el.className = "voyage-marker-wrap";
-        el.style.cssText = `cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
+        el.style.cssText = `cursor:pointer;z-index:6;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
 
         const circle = document.createElement("div");
         circle.style.cssText = `
