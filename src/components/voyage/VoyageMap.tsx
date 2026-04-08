@@ -23,6 +23,8 @@ interface VoyageMapProps {
   hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
   onArticleClick?: (article: GeoArticle) => void;
+  onVoyageSelect?: (voyageId: string | null) => void;
+  flyToWaypointRef?: React.MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
   disableInteractions?: boolean;
@@ -186,6 +188,8 @@ const VoyageMap = ({
   hoveredArticleId,
   highlightedVoyageId,
   onArticleClick,
+  onVoyageSelect,
+  flyToWaypointRef,
   lang,
   initialFitReady = true,
   disableInteractions = false,
@@ -196,6 +200,7 @@ const VoyageMap = ({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const lineLayerHandlersRef = useRef<Record<string, {
+    click: () => void;
     mouseenter: () => void;
     mouseleave: () => void;
   }>>({});
@@ -205,6 +210,7 @@ const VoyageMap = ({
     mouseleave: (event: maplibregl.MapLayerMouseEvent) => void;
   }>>({});
   const onArticleClickRef = useRef(onArticleClick);
+  const onVoyageSelectRef = useRef(onVoyageSelect);
   const hasPerformedInitialFitRef = useRef(false);
   const mapResizeCleanupRef = useRef<(() => void) | null>(null);
   const [mapUnavailable, setMapUnavailable] = useState(false);
@@ -235,6 +241,7 @@ const VoyageMap = ({
 
   const clearInteractiveLayerHandlers = useCallback((map: maplibregl.Map) => {
     Object.entries(lineLayerHandlersRef.current).forEach(([layerId, handlers]) => {
+      map.off("click", layerId, handlers.click);
       map.off("mouseenter", layerId, handlers.mouseenter);
       map.off("mouseleave", layerId, handlers.mouseleave);
     });
@@ -252,6 +259,7 @@ const VoyageMap = ({
 
   // Keep refs in sync
   onArticleClickRef.current = onArticleClick;
+  onVoyageSelectRef.current = onVoyageSelect;
 
   // Initialize map
   useEffect(() => {
@@ -283,6 +291,15 @@ const VoyageMap = ({
 
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+
+      map.on("click", (e) => {
+        const hitLayers = Object.keys(lineLayerHandlersRef.current);
+        const features = hitLayers.length > 0 ? map.queryRenderedFeatures(e.point, { layers: hitLayers }) : [];
+        if (features.length === 0) {
+          setHoveredRouteVoyageId(null);
+          onVoyageSelectRef.current?.(null);
+        }
+      });
 
       mapResizeCleanupRef.current = bindMapToContainerResize(map, containerRef.current);
       mapRef.current = map;
@@ -317,6 +334,45 @@ const VoyageMap = ({
       mapRef.current = null;
     };
   }, [clearInteractiveLayerHandlers, mapUnavailable]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !flyToWaypointRef) return;
+
+    flyToWaypointRef.current = (lat: number, lng: number, popupLabel?: string) => {
+      map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 10), duration: 1200 });
+
+      popupRef.current?.remove();
+      popupRef.current = null;
+
+      if (popupLabel) {
+        const popup = new maplibregl.Popup({
+          offset: 12,
+          closeButton: true,
+          closeOnClick: true,
+          maxWidth: "260px",
+        });
+
+        const popupHtml = `
+          <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:120px;max-width:240px;">
+            <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(popupLabel)}</strong>
+          </div>
+        `;
+
+        popup.setLngLat([lng, lat]).setHTML(popupHtml);
+
+        map.once("moveend", () => {
+          popup.addTo(map);
+        });
+
+        popupRef.current = popup;
+      }
+    };
+
+    return () => {
+      if (flyToWaypointRef) flyToWaypointRef.current = null;
+    };
+  }, [flyToWaypointRef]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -472,17 +528,22 @@ const VoyageMap = ({
           });
 
           const lineHandlers = {
+            click: () => {
+              const isAlreadySelected = hoveredRouteVoyageIdRef.current === voyage.id;
+              const nextId = isAlreadySelected ? null : voyage.id;
+              setHoveredRouteVoyageId(nextId);
+              onVoyageSelectRef.current?.(nextId);
+            },
             mouseenter: () => {
               map.getCanvas().style.cursor = "pointer";
-              setHoveredRouteVoyageId((current) => current === voyage.id ? current : voyage.id);
             },
             mouseleave: () => {
               map.getCanvas().style.cursor = "";
-              setHoveredRouteVoyageId((current) => current === voyage.id ? null : current);
             },
           };
 
           lineLayerHandlersRef.current[lineHitId] = lineHandlers;
+          map.on("click", lineHitId, lineHandlers.click);
           map.on("mouseenter", lineHitId, lineHandlers.mouseenter);
           map.on("mouseleave", lineHitId, lineHandlers.mouseleave);
         }
