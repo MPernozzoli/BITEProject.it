@@ -310,13 +310,16 @@ const VoyageMap = ({
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
       map.on("click", (e) => {
-        const hitLayerIds = Object.keys(lineLayerHandlersRef.current);
-        const features =
-          hitLayerIds.length > 0 ? map.queryRenderedFeatures(e.point, { layers: hitLayerIds }) : [];
-        if (features.length === 0) {
-          setHoveredRouteVoyageId(null);
-          onVoyageSelectRef.current?.(null);
-        }
+        const point = e.point;
+        queueMicrotask(() => {
+          const hitLayerIds = Object.keys(lineLayerHandlersRef.current);
+          const features =
+            hitLayerIds.length > 0 ? map.queryRenderedFeatures(point, { layers: hitLayerIds }) : [];
+          if (features.length === 0) {
+            setHoveredRouteVoyageId(null);
+            onVoyageSelectRef.current?.(null);
+          }
+        });
       });
 
       mapResizeCleanupRef.current = bindMapToContainerResize(map, containerRef.current);
@@ -437,7 +440,7 @@ const VoyageMap = ({
       };
 
       const activeArticle =
-        articlesForMap.find((article) => article.id === (hoveredArticleId ?? selectedArticleId)) || null;
+        articlesForMap.find((article) => article.id === selectedArticleId) || null;
       const activeArticleFocus = activeArticle ? getArticleVoyageFocus(activeArticle) : null;
       const routeFocusVoyageId = activeArticleFocus?.voyageId || highlightedVoyageId || null;
       const hoverFocusVoyageId = routeFocusVoyageId ? null : hoveredRouteVoyageId;
@@ -534,7 +537,7 @@ const VoyageMap = ({
             source: lineId,
             paint: {
               "line-color": baseColor,
-              "line-width": 18,
+              "line-width": 30,
               "line-opacity": 0,
             },
           });
@@ -785,7 +788,6 @@ const VoyageMap = ({
     articlesForMap,
     clearInteractiveLayerHandlers,
     highlightedVoyageId,
-    hoveredArticleId,
     hoveredRouteVoyageId,
     lang,
     publishedVoyages,
@@ -799,9 +801,10 @@ const VoyageMap = ({
     if (!map) return;
 
     const index = new Supercluster({
-      radius: 72,
-      maxZoom: 17,
+      radius: 96,
+      maxZoom: 22,
       minPoints: 2,
+      minZoom: 0,
     });
 
     index.load(
@@ -846,7 +849,7 @@ const VoyageMap = ({
           id?: string;
         };
 
-        if (props.cluster) {
+        if (props.cluster === true) {
           const el = document.createElement("div");
           el.style.cssText = `
             cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -955,9 +958,19 @@ const VoyageMap = ({
 
     runArticleMarkersSyncRef.current = syncMarkers;
 
+    let zoomRaf = 0;
+    const scheduleSyncFromZoom = () => {
+      if (zoomRaf) return;
+      zoomRaf = window.requestAnimationFrame(() => {
+        zoomRaf = 0;
+        syncMarkers();
+      });
+    };
+
     const onMoveEnd = () => syncMarkers();
     map.on("moveend", onMoveEnd);
     map.on("zoomend", onMoveEnd);
+    map.on("zoom", scheduleSyncFromZoom);
 
     if (map.isStyleLoaded()) {
       syncMarkers();
@@ -966,8 +979,10 @@ const VoyageMap = ({
     }
 
     return () => {
+      if (zoomRaf) window.cancelAnimationFrame(zoomRaf);
       map.off("moveend", onMoveEnd);
       map.off("zoomend", onMoveEnd);
+      map.off("zoom", scheduleSyncFromZoom);
       map.off("load", syncMarkers);
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];

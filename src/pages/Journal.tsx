@@ -479,19 +479,12 @@ const Journal = () => {
     () => articles.find((article) => article.id === selectedArticleId) || null,
     [articles, selectedArticleId]
   );
-  const hoveredArticle = useMemo(
-    () => articles.find((article) => article.id === hoveredArticleId) || null,
-    [articles, hoveredArticleId]
-  );
+  /** Solo articolo selezionato + filtro viaggio: niente hover lista (lo scroll non deve accendere le rotte sulla mappa). */
   const highlightedVoyageId = useMemo(() => {
-    const hoveredFocus = hoveredArticle ? getArticleVoyageFocus(hoveredArticle) : null;
-    if (hoveredFocus?.voyageId) return hoveredFocus.voyageId;
-
     const selectedFocus = selectedArticle ? getArticleVoyageFocus(selectedArticle) : null;
     if (selectedFocus?.voyageId) return selectedFocus.voyageId;
-
     return focusedVoyageId;
-  }, [focusedVoyageId, hoveredArticle, selectedArticle]);
+  }, [focusedVoyageId, selectedArticle]);
 
   const filteredVoyages = useMemo(() => {
     if (voyageTypeFilter === "all") return voyages;
