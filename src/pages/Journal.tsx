@@ -13,8 +13,9 @@ import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
+import VoyageLegend from "@/components/voyage/VoyageLegend";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getArticleVoyageFocus, getLocalizedVoyageName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
+import { getArticleVoyageFocus, getLocalizedVoyageName, getLocalizedWaypointName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -58,6 +59,8 @@ const Journal = () => {
   const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
+  const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
+  const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
@@ -538,6 +541,9 @@ const Journal = () => {
             hoveredArticleId={hoveredArticleId}
             highlightedVoyageId={highlightedVoyageId}
             onArticleClick={handleArticleClick}
+            onVoyageSelect={setSelectedRouteVoyageId}
+            selectedRouteVoyageId={selectedRouteVoyageId}
+            flyToWaypointRef={flyToWaypointRef}
             lang={lang}
             disableInteractions={isMapInteractionLocked}
             initialFitReady={!isArticlesLoading && !isVoyagesLoading && !isWaypointsLoading}
@@ -546,6 +552,39 @@ const Journal = () => {
           />
 
           {isMapInteractionLocked && <div className="absolute inset-0 z-10" aria-hidden />}
+
+          {selectedRouteVoyageId && (() => {
+            const legendVoyage = voyages.find((v) => v.id === selectedRouteVoyageId);
+            if (!legendVoyage) return null;
+            const sidebarVisible = !isMobile && sidebarOpen && !isSidebarAutoHidden;
+            return (
+              <div
+                className={`fixed bottom-6 z-30 min-w-0 pointer-events-none transition-all duration-300 ease-out ${
+                  isMobile
+                    ? "left-3 right-3 max-w-none"
+                    : sidebarVisible
+                      ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] right-4 max-w-[calc(100vw-340px-2.5rem)] xl:max-w-[calc(100vw-390px-2.5rem)]"
+                      : "left-4 right-4 max-w-[calc(100vw-2rem)]"
+                }`}
+              >
+                <VoyageLegend
+                  voyage={legendVoyage}
+                  waypoints={waypointsMap[selectedRouteVoyageId] || []}
+                  articles={filtered}
+                  lang={lang}
+                  onClose={() => setSelectedRouteVoyageId(null)}
+                  onWaypointClick={(wp) => {
+                    const wps = waypointsMap[selectedRouteVoyageId] || [];
+                    flyToWaypointRef.current?.(
+                      wp.lat,
+                      wp.lng,
+                      getLocalizedWaypointName(wp, lang, wps.indexOf(wp))
+                    );
+                  }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Floating controls — top right */}
           <div

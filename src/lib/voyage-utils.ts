@@ -499,6 +499,40 @@ export function buildPublicVoyageGeometry(
   return smoothed;
 }
 
+/** Line coordinates for the public map: land uses cached road geometry when valid, else straight segments between waypoints. */
+export function getVoyageMapLineStringCoordinates(
+  voyage: Pick<Voyage, "id" | "type" | "cached_geometry">,
+  waypoints: VoyageWaypoint[],
+  articles: Parameters<typeof buildPublicVoyageGeometry>[2] = []
+): [number, number][] {
+  if (waypoints.length < 2) return [];
+
+  const cached = voyage.cached_geometry?.coordinates;
+  const validCached =
+    Array.isArray(cached) &&
+    cached.length >= 2 &&
+    cached.every(
+      (c) =>
+        Array.isArray(c) &&
+        c.length >= 2 &&
+        Number.isFinite(Number(c[0])) &&
+        Number.isFinite(Number(c[1]))
+    );
+
+  if (voyage.type === "land") {
+    if (validCached) return cached as [number, number][];
+    return getStraightVoyageGeometry(waypoints);
+  }
+
+  return buildPublicVoyageGeometry(
+    waypoints,
+    voyage.type,
+    articles,
+    voyage.id,
+    validCached ? (cached as [number, number][]) : null
+  );
+}
+
 const getNearestGeometryCoordinateIndex = (
   geometry: [number, number][],
   target: [number, number]
