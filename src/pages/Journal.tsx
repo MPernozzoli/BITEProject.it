@@ -15,7 +15,14 @@ import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getArticleVoyageFocus, getLocalizedVoyageName, getLocalizedWaypointName, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
+import {
+  getArticleVoyageFocus,
+  getLocalizedVoyageName,
+  getLocalizedWaypointName,
+  getVoyageRecencyMillis,
+  totalCoordinateDistanceKm,
+  totalWaypointDistance,
+} from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 
@@ -523,8 +530,10 @@ const Journal = () => {
   }, [focusedVoyageId, selectedArticle]);
 
   const filteredVoyages = useMemo(() => {
-    if (voyageTypeFilter === "all") return voyages;
-    return voyages.filter((voyage) => voyage.type === voyageTypeFilter);
+    const list =
+      voyageTypeFilter === "all" ? [...voyages] : voyages.filter((voyage) => voyage.type === voyageTypeFilter);
+    list.sort((a, b) => getVoyageRecencyMillis(b) - getVoyageRecencyMillis(a));
+    return list;
   }, [voyageTypeFilter, voyages]);
 
   const articleReaderActive = Boolean(expandedArticle);

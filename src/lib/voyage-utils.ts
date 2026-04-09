@@ -337,6 +337,23 @@ export function formatVoyageDateRange(
   return start || end;
 }
 
+/** Per elenchi: più recente = fine viaggio, altrimenti inizio, poi ultimo aggiornamento. */
+export function getVoyageRecencyMillis(
+  voyage: Pick<Voyage, "end_date" | "start_date" | "updated_at" | "created_at">
+): number {
+  const parse = (s: string | null | undefined): number => {
+    if (!s) return 0;
+    const t = Date.parse(s);
+    return Number.isFinite(t) ? t : 0;
+  };
+  return (
+    parse(voyage.end_date) ||
+    parse(voyage.start_date) ||
+    parse(voyage.updated_at) ||
+    parse(voyage.created_at)
+  );
+}
+
 export function formatWaypointMoment(
   waypoint: Pick<VoyageWaypoint, "event_date" | "event_time" | "date_start" | "date_end">,
   locale = "en-US"
