@@ -5,7 +5,6 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
@@ -68,7 +67,7 @@ const App = () => {
   const [queryPersister] = useState(createAppPersister);
 
   const appTree = (
-    <TooltipProvider>
+    <>
       <Toaster />
       <Sonner />
       <I18nProvider>
@@ -110,7 +109,7 @@ const App = () => {
         </BrowserRouter>
         </AuthProvider>
       </I18nProvider>
-    </TooltipProvider>
+    </>
   );
 
   if (!queryPersister) {
