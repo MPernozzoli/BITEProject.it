@@ -636,6 +636,31 @@ export function getLocalizedArticleTitle(
   return en || it || "";
 }
 
+/** Etichetta posizione in anteprima: se l'articolo copre un leg (segmento), usa il nome del waypoint di partenza. */
+export function getArticlePreviewLocationLabel(
+  article: Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "location_name"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >,
+  waypointsMap: Record<string, VoyageWaypoint[]>,
+  lang: Language
+): string {
+  const voyageId = article.voyage_id;
+  if (!voyageId) return article.location_name?.trim() || "";
+  const wps = waypointsMap[voyageId];
+  if (!wps?.length) return article.location_name?.trim() || "";
+  const range = resolveArticleRouteRange(article, wps);
+  if (!range || range[0] === range[1]) return article.location_name?.trim() || "";
+  const startWp = wps[range[0]];
+  if (!startWp) return article.location_name?.trim() || "";
+  return getLocalizedWaypointName(startWp, lang, range[0]);
+}
+
 /** Punti/segmenti nella legenda mappa per collegare articoli alle tappe visibili. */
 export type VoyageLegendRouteBinding =
   | { kind: "point"; visibleIndex: number; articles: GeoArticle[] }

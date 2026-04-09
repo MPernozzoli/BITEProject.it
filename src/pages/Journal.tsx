@@ -19,6 +19,7 @@ import {
   getArticleVoyageFocus,
   getLocalizedVoyageName,
   getLocalizedWaypointName,
+  getArticlePreviewLocationLabel,
   getVoyageRecencyMillis,
   totalCoordinateDistanceKm,
   totalWaypointDistance,
@@ -543,6 +544,8 @@ const Journal = () => {
   const isDetailPanelAutoHidden = hideMapChromeOnScroll && sidePanelVisible;
   const shouldOffsetControlsForDetail = sidePanelVisible && !isDetailPanelAutoHidden;
   const mobileSidebarVisible = mobileSidebarMode !== "collapsed";
+  const previewAllowsMapInteraction =
+    Boolean(panelArticle) && !articleReaderActive && !panelProfileId;
   const mobileSidebarHeight = typeof window === "undefined"
     ? 560
     : Math.max(360, Math.round(window.innerHeight * MOBILE_SIDEBAR_OPEN));
@@ -559,7 +562,9 @@ const Journal = () => {
       : Math.max(0, mobileSidebarBaseOffset - mobileSidebarDragOffset);
   const isMapInteractionLocked =
     viewMode === "map" &&
-    (articleReaderActive || showPreviewPanel || Boolean(panelProfileId) || (isMobile && mobileSidebarVisible));
+    (articleReaderActive ||
+      Boolean(panelProfileId) ||
+      (isMobile && mobileSidebarVisible && !previewAllowsMapInteraction));
 
   const handleMapUnavailable = useCallback(() => {
     setMapFallbackActive(true);
@@ -1040,6 +1045,9 @@ const Journal = () => {
       {showPreviewPanel && !panelProfileId ? (
         <ArticleSlidePanel
           article={panelArticle}
+          locationLabel={
+            panelArticle ? getArticlePreviewLocationLabel(panelArticle, waypointsMap, lang) : undefined
+          }
           panelRef={articlePanelRef}
           isSoftHidden={articleReaderActive && expandedArticlePhase !== "closing"}
           isAutoHidden={isDetailPanelAutoHidden}
