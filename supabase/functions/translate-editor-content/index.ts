@@ -7,7 +7,8 @@ const corsHeaders = {
 }
 
 const MAX_INPUT_CHARS = 100_000
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions'
+const AI_MODEL = 'google/gemini-2.5-flash'
 
 type Claims = Record<string, unknown> | null
 
@@ -34,7 +35,8 @@ function parseJwtClaims(token: string): Claims {
 
 async function authorizeRequest(
   req: Request,
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
@@ -74,35 +76,34 @@ function readString(value: unknown, max: number): string {
   return value.slice(0, max)
 }
 
-async function callGeminiJson(prompt: string, apiKey: string): Promise<Record<string, unknown>> {
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`
-
-  const res = await fetch(url, {
+async function callAiJson(prompt: string, apiKey: string): Promise<Record<string, unknown>> {
+  const res = await fetch(AI_GATEWAY_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 32768,
-        responseMimeType: 'application/json',
-      },
+      model: AI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
     }),
   })
 
   if (!res.ok) {
     const t = await res.text()
-    console.error('Gemini HTTP error', res.status, t.slice(0, 800))
-    throw new Error(`Model error (${res.status})`)
+    console.error('AI Gateway error', res.status, t.slice(0, 800))
+    if (res.status === 429) throw new Error('Rate limit exceeded')
+    if (res.status === 402) throw new Error('AI credits exhausted')
+    throw new Error(`AI error (${res.status})`)
   }
 
   const json = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    choices?: Array<{ message?: { content?: string } }>
   }
-  const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+  const text = json?.choices?.[0]?.message?.content
   if (typeof text !== 'string') {
-    throw new Error('Invalid model response')
+    throw new Error('Invalid AI response')
   }
 
   try {
@@ -111,7 +112,7 @@ async function callGeminiJson(prompt: string, apiKey: string): Promise<Record<st
       ? (parsed as Record<string, unknown>)
       : {}
   } catch {
-    throw new Error('Model returned non-JSON')
+    throw new Error('AI returned non-JSON')
   }
 }
 
@@ -187,7 +188,6 @@ function isTiptapEffectivelyEmpty(doc: unknown): boolean {
   return true
 }
 
-/** Attributi testuali da tradurre (didascalie, accessibilità, etichette anchor mappa). Mai src/href/id. */
 const DOC_I18N_ATTR_KEYS = ['caption', 'alt', 'title', 'sceneLabel', 'anchorText'] as const
 
 type DocStringTarget =
@@ -240,23 +240,25 @@ function applyTargetTranslation(t: DocStringTarget, translated: string): void {
   }
 }
 
+type ArticleBodyPlan = {
+  doc: Record<string, unknown>
+  targets: DocStringTarget[]
+  outKey: 'content_it' | 'content_en'
+}
+
 type ArticleTranslationPlan = {
   prompt: string | null
   metaKeys: string[]
-  body?: {
-    doc: Record<string, unknown>
-    targets: DocStringTarget[]
-    outKey: 'content_it' | 'content_en'
-  }
+  bodyPlan?: ArticleBodyPlan
 }
 
-function buildArticleTranslationPlan(body: Record<string, unknown>): ArticleTranslationPlan | null {
-  const title_it = readString(body.title_it, 500)
-  const title_en = readString(body.title_en, 500)
-  const excerpt_it = readString(body.excerpt_it, 4000)
-  const excerpt_en = readString(body.excerpt_en, 4000)
-  const content_it = body.content_it
-  const content_en = body.content_en
+function buildArticleTranslationPlan(reqBody: Record<string, unknown>): ArticleTranslationPlan | null {
+  const title_it = readString(reqBody.title_it, 500)
+  const title_en = readString(reqBody.title_en, 500)
+  const excerpt_it = readString(reqBody.excerpt_it, 4000)
+  const excerpt_en = readString(reqBody.excerpt_en, 4000)
+  const content_it = reqBody.content_it
+  const content_en = reqBody.content_en
 
   const metaTasks: string[] = []
   const metaKeys: string[] = []
@@ -283,37 +285,37 @@ function buildArticleTranslationPlan(body: Record<string, unknown>): ArticleTran
   const enHas = Boolean(enDoc && !isTiptapEffectivelyEmpty(enDoc))
   const itHas = Boolean(itDoc && !isTiptapEffectivelyEmpty(itDoc))
 
-  let body: ArticleTranslationPlan['body']
+  let bodyPlan: ArticleBodyPlan | undefined
 
   if (enDoc && enHas && (!itDoc || isTiptapEffectivelyEmpty(itDoc))) {
     const doc = deepCloneJson(enDoc) as Record<string, unknown>
     const targets: DocStringTarget[] = []
     collectDocStringTargets(doc, targets)
-    body = { doc, targets, outKey: 'content_it' }
+    bodyPlan = { doc, targets, outKey: 'content_it' }
   } else if (itDoc && itHas && (!enDoc || isTiptapEffectivelyEmpty(enDoc))) {
     const doc = deepCloneJson(itDoc) as Record<string, unknown>
     const targets: DocStringTarget[] = []
     collectDocStringTargets(doc, targets)
-    body = { doc, targets, outKey: 'content_en' }
+    bodyPlan = { doc, targets, outKey: 'content_en' }
   }
 
-  if (metaKeys.length === 0 && !body) {
+  if (metaKeys.length === 0 && !bodyPlan) {
     return null
   }
 
-  if (metaKeys.length === 0 && body && body.targets.length === 0) {
-    return { prompt: null, metaKeys: [], body }
+  if (metaKeys.length === 0 && bodyPlan && bodyPlan.targets.length === 0) {
+    return { prompt: null, metaKeys: [], bodyPlan }
   }
 
   const responseKeys: string[] = [...metaKeys]
-  if (body && body.targets.length > 0) {
+  if (bodyPlan && bodyPlan.targets.length > 0) {
     responseKeys.push('docStrings')
   }
 
   const directionLabel =
-    body?.outKey === 'content_it'
+    bodyPlan?.outKey === 'content_it'
       ? 'inglese → italiano'
-      : body?.outKey === 'content_en'
+      : bodyPlan?.outKey === 'content_en'
         ? 'italiano → inglese'
         : ''
 
@@ -325,8 +327,8 @@ function buildArticleTranslationPlan(body: Record<string, unknown>): ArticleTran
     parts.push(`Campi meta:\n${metaTasks.join('\n')}`)
   }
 
-  if (body && body.targets.length > 0) {
-    const sources = body.targets.map((t) => getTargetSourceText(t))
+  if (bodyPlan && bodyPlan.targets.length > 0) {
+    const sources = bodyPlan.targets.map((t: DocStringTarget) => getTargetSourceText(t))
     parts.push(
       `Corpo articolo (TipTap): la struttura del documento è già fissata lato server. Ti viene dato l'array JSON "docStrings" con ${sources.length} stringhe in ordine di attraversamento depth-first del documento.`,
     )
@@ -336,21 +338,20 @@ function buildArticleTranslationPlan(body: Record<string, unknown>): ArticleTran
     parts.push(
       `Traduci ogni stringa ${directionLabel ? `(${directionLabel})` : ''}. Mantieni interruzioni di riga e spazi significativi; non unire né spezzare elementi: l'array "docStrings" nella risposta deve avere ESATTAMENTE ${sources.length} stringhe nello stesso ordine.`,
     )
-    parts.push(`Non tradurre URL, percorsi file, codici, né UUID. I nomi propri geografici marittimi lasciali riconoscibili.`,
-    )
+    parts.push(`Non tradurre URL, percorsi file, codici, né UUID. I nomi propri geografici marittimi lasciali riconoscibili.`)
     parts.push(`docStrings sorgente:\n${JSON.stringify(sources)}`)
   }
 
   parts.push(
     `Rispondi con un unico oggetto JSON con le chiavi: ${responseKeys.map((k) => JSON.stringify(k)).join(', ')}.` +
-      (body && body.targets.length > 0
+      (bodyPlan && bodyPlan.targets.length > 0
         ? ` Il valore di "docStrings" deve essere un array di stringhe della stessa lunghezza della sorgente.`
         : ''),
   )
 
   const prompt = parts.join('\n\n')
 
-  return { prompt, metaKeys, body }
+  return { prompt, metaKeys, bodyPlan }
 }
 
 Deno.serve(async (req) => {
@@ -364,20 +365,14 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const apiKey = Deno.env.get('GEMINI_API_KEY')?.trim() || Deno.env.get('GOOGLE_AI_API_KEY')?.trim()
+  const apiKey = Deno.env.get('LOVABLE_API_KEY')?.trim()
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
   if (!apiKey) {
-    return jsonResponse(
-      {
-        error:
-          'GEMINI_API_KEY mancante: aggiungi il secret su Supabase (stesso ecosistema modelli usato da Lovable AI).',
-      },
-      503,
-    )
+    return jsonResponse({ error: 'LOVABLE_API_KEY non configurata.' }, 503)
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
@@ -404,7 +399,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Input troppo grande per la traduzione' }, 413)
     }
     try {
-      const fields = await callGeminiJson(built.prompt, apiKey)
+      const fields = await callAiJson(built.prompt, apiKey)
       const out: Record<string, unknown> = {}
       for (const key of built.keys) {
         const v = fields[key]
@@ -431,8 +426,8 @@ Deno.serve(async (req) => {
     const out: Record<string, unknown> = {}
 
     if (plan.prompt === null) {
-      if (plan.body) {
-        out[plan.body.outKey] = plan.body.doc
+      if (plan.bodyPlan) {
+        out[plan.bodyPlan.outKey] = plan.bodyPlan.doc
       }
       return jsonResponse({ ok: true, fields: out }, 200)
     }
@@ -442,7 +437,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-      const parsed = await callGeminiJson(plan.prompt, apiKey)
+      const parsed = await callAiJson(plan.prompt, apiKey)
 
       for (const key of plan.metaKeys) {
         const v = parsed[key]
@@ -455,25 +450,25 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: 'Traduzione meta incompleta' }, 502)
       }
 
-      if (plan.body) {
-        if (plan.body.targets.length === 0) {
-          out[plan.body.outKey] = plan.body.doc
+      if (plan.bodyPlan) {
+        if (plan.bodyPlan.targets.length === 0) {
+          out[plan.bodyPlan.outKey] = plan.bodyPlan.doc
         } else {
           const arr = parsed.docStrings
-          if (!Array.isArray(arr) || arr.length !== plan.body.targets.length) {
+          if (!Array.isArray(arr) || arr.length !== plan.bodyPlan.targets.length) {
             return jsonResponse(
-              { error: `docStrings: attesi ${plan.body.targets.length} elementi, modello incoerente` },
+              { error: `docStrings: attesi ${plan.bodyPlan.targets.length} elementi, modello incoerente` },
               502,
             )
           }
-          for (let i = 0; i < plan.body.targets.length; i++) {
+          for (let i = 0; i < plan.bodyPlan.targets.length; i++) {
             const s = arr[i]
             if (typeof s !== 'string') {
               return jsonResponse({ error: 'docStrings: elemento non stringa' }, 502)
             }
-            applyTargetTranslation(plan.body.targets[i]!, s)
+            applyTargetTranslation(plan.bodyPlan.targets[i]!, s)
           }
-          out[plan.body.outKey] = plan.body.doc
+          out[plan.bodyPlan.outKey] = plan.bodyPlan.doc
         }
       }
 
