@@ -46,6 +46,8 @@ interface VoyageFormState {
   description_it: string;
   description_en: string;
   type: "water" | "land";
+  /** BRouter river profile; only applies when type is water; stored separately from voyage_type. */
+  waterway_autoroute: boolean;
   status: "planned" | "active" | "completed";
   is_published: boolean;
   start_date: string;
@@ -74,6 +76,7 @@ const emptyVoyageForm: VoyageFormState = {
   description_it: "",
   description_en: "",
   type: "water",
+  waterway_autoroute: false,
   status: "planned",
   is_published: true,
   start_date: "",
@@ -137,7 +140,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en", "is_published"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -179,6 +182,7 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   description_it: (voyage?.description_it ?? voyage?.description ?? "") as string,
   description_en: (voyage?.description_en ?? voyage?.description ?? "") as string,
   cached_geometry: (voyage?.cached_geometry ?? null) as Voyage["cached_geometry"],
+  waterway_autoroute: Boolean(voyage?.waterway_autoroute),
   is_published: (voyage?.is_published ?? true) as boolean,
   start_date: (voyage?.start_date ?? null) as string | null,
   start_time: (voyage?.start_time ?? null) as string | null,
@@ -414,6 +418,8 @@ const AdminVoyageManager = ({
   const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
   const [isRegeneratingGeometry, setIsRegeneratingGeometry] = useState(false);
+  /** Bumps when async route geometry (OSRM / BRouter) finishes so the map redraws even if waypoints state is unchanged. */
+  const [routeGeometryTick, setRouteGeometryTick] = useState(0);
   const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
   const waypointEditorPanelIdRef = useRef<string | null>(null);
 
@@ -569,6 +575,11 @@ const AdminVoyageManager = ({
     segmentPreviewMarkerRef.current.setLngLat([lng, lat]);
   }, []);
 
+  const voyageUsesWaterwayAutoroute = (voyageId: string) => {
+    const voyage = voyagesRef.current.find((item) => item.id === voyageId);
+    return Boolean(voyage && voyage.type === "water" && voyage.waterway_autoroute);
+  };
+
   const refreshVoyageGeometryPreview = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
     const voyage = voyagesRef.current.find((item) => item.id === voyageId);
     if (!voyage) return;
@@ -577,11 +588,21 @@ const AdminVoyageManager = ({
     const requestId = (geometryRequestRef.current[voyageId] || 0) + 1;
     geometryRequestRef.current[voyageId] = requestId;
 
-    const coordinates = await buildVoyageGeometry(sortedWaypoints, voyage.type);
+    const coordinates = await buildVoyageGeometry(sortedWaypoints, voyage.type, {
+      waterwayAutoroute: voyage.type === "water" && Boolean(voyage.waterway_autoroute),
+    });
     if (geometryRequestRef.current[voyageId] !== requestId) return;
 
     geometryOverrideRef.current[voyageId] = coordinates;
+    setRouteGeometryTick((tick) => tick + 1);
   }, []);
+
+  const primeGeometryOverrideAfterWaypointEdit = useCallback((voyageId: string, waypointList: VoyageWaypoint[]) => {
+    if (!voyageUsesWaterwayAutoroute(voyageId)) {
+      geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(waypointList);
+    }
+    void refreshVoyageGeometryPreview(voyageId, waypointList);
+  }, [refreshVoyageGeometryPreview]);
 
   const syncVoyageGeometry = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
     await refreshVoyageGeometryPreview(voyageId, candidateWaypoints);
@@ -720,8 +741,7 @@ const AdminVoyageManager = ({
       );
 
       if (options?.syncGeometry) {
-        geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
-        void refreshVoyageGeometryPreview(voyageId, nextWaypoints);
+        primeGeometryOverrideAfterWaypointEdit(voyageId, nextWaypoints);
       }
 
       if (options?.successMessage) {
@@ -730,7 +750,7 @@ const AdminVoyageManager = ({
 
       return true;
     },
-    [commitWaypoints, refreshVoyageGeometryPreview]
+    [commitWaypoints, primeGeometryOverrideAfterWaypointEdit]
   );
 
   const insertWaypointAtIndex = useCallback(
@@ -765,8 +785,7 @@ const AdminVoyageManager = ({
         voyageId,
         nextWaypoints.map((waypoint, index) => normalizeWaypoint({ ...waypoint, sort_order: index }))
       );
-      geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(committedWaypoints);
-      void refreshVoyageGeometryPreview(voyageId, committedWaypoints);
+      primeGeometryOverrideAfterWaypointEdit(voyageId, committedWaypoints);
 
       setWaypointEditorPanelId(createdWaypoint.id);
       window.setTimeout(() => {
@@ -792,7 +811,7 @@ const AdminVoyageManager = ({
       });
       return true;
     },
-    [commitWaypoints, lang, refreshVoyageGeometryPreview, setWaypointEditorPanelId, updateWaypoint]
+    [commitWaypoints, lang, primeGeometryOverrideAfterWaypointEdit, setWaypointEditorPanelId, updateWaypoint]
   );
 
   const deleteWaypoint = useCallback(
@@ -803,10 +822,9 @@ const AdminVoyageManager = ({
         voyageId,
         (waypointsRef.current[voyageId] || []).filter((waypoint) => waypoint.id !== waypointId)
       );
-      geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(nextWaypoints);
-      void refreshVoyageGeometryPreview(voyageId, nextWaypoints);
+      primeGeometryOverrideAfterWaypointEdit(voyageId, nextWaypoints);
     },
-    [commitWaypoints, refreshVoyageGeometryPreview]
+    [commitWaypoints, primeGeometryOverrideAfterWaypointEdit]
   );
 
   const runLandSearch = useCallback(async () => {
@@ -1541,7 +1559,7 @@ const AdminVoyageManager = ({
     const draw = () => drawRouteOnMap(map);
     if (map.isStyleLoaded()) draw();
     else map.once("load", draw);
-  }, [drawRouteOnMap, selectedVoyageId, waypoints]);
+  }, [drawRouteOnMap, routeGeometryTick, selectedVoyageId, waypoints]);
 
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas();
@@ -1576,6 +1594,7 @@ const AdminVoyageManager = ({
         description_it: voyage.description_it || voyage.description || "",
         description_en: voyage.description_en || voyage.description || "",
         type: voyage.type,
+        waterway_autoroute: voyage.type === "water" ? Boolean(voyage.waterway_autoroute) : false,
         status: voyage.status,
         is_published: voyage.is_published,
         start_date: voyage.start_date || "",
@@ -1625,6 +1644,7 @@ const AdminVoyageManager = ({
       end_date: voyageForm.end_date || null,
       end_time: voyageForm.end_time || null,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
+      waterway_autoroute: voyageForm.type === "water" ? voyageForm.waterway_autoroute : false,
     };
     const legacyData: Pick<TablesInsert<"voyages">, "name" | "description" | "type" | "status" | "sort_order"> = {
       name: data.name,
@@ -1726,10 +1746,9 @@ const AdminVoyageManager = ({
       nextWaypoints.map((waypoint, index) => normalizeWaypoint({ ...waypoint, sort_order: index }))
     );
 
-    geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(committedWaypoints);
-    void refreshVoyageGeometryPreview(voyageId, committedWaypoints);
+    primeGeometryOverrideAfterWaypointEdit(voyageId, committedWaypoints);
     return true;
-  }, [commitWaypoints, refreshVoyageGeometryPreview]);
+  }, [commitWaypoints, primeGeometryOverrideAfterWaypointEdit]);
 
   const moveWaypoint = useCallback(async (waypoint: VoyageWaypoint, direction: "up" | "down") => {
     const currentWaypoints = waypointsRef.current[waypoint.voyage_id] || [];
@@ -1753,6 +1772,14 @@ const AdminVoyageManager = ({
         getCachedGeometryCoordinates(selectedVoyage);
       const distanceKm = routeGeometry.length >= 2 ? totalCoordinateDistanceKm(routeGeometry) : 0;
       return distanceKm > 0 ? { value: distanceKm, unit: "KM" as const } : null;
+    }
+    if (selectedVoyage.waterway_autoroute) {
+      const routeGeometry =
+        geometryOverrideRef.current[selectedVoyage.id] ||
+        getCachedGeometryCoordinates(selectedVoyage);
+      const distanceNm =
+        routeGeometry.length >= 2 ? totalCoordinateDistanceKm(routeGeometry) / 1.852 : 0;
+      return distanceNm > 0 ? { value: distanceNm, unit: "NM" as const } : null;
     }
     return { value: totalWaypointDistance(selectedWaypoints), unit: "NM" as const };
   }, [selectedVoyage, selectedWaypoints, waypoints]);
@@ -1939,20 +1966,30 @@ const AdminVoyageManager = ({
 
   const regenerateSelectedVoyageGeometry = useCallback(async () => {
     if (!selectedVoyageId || !selectedVoyage) return;
-    if (selectedVoyage.type !== "land") return;
+    const isLand = selectedVoyage.type === "land";
+    const isWaterAutoroute = selectedVoyage.type === "water" && selectedVoyage.waterway_autoroute;
+    if (!isLand && !isWaterAutoroute) return;
     if (isRouteDraftDirty) {
-      toast.error("Salva prima i waypoint della rotta, poi rigenera la geometria stradale.");
+      toast.error(
+        isLand
+          ? "Salva prima i waypoint della rotta, poi rigenera la geometria stradale."
+          : "Salva prima i waypoint della rotta, poi rigenera la geometria sulle vie d'acqua."
+      );
       return;
     }
     if (persistedSelectedWaypoints.length < 2) {
-      toast.error("Servono almeno due waypoint salvati per generare la geometria stradale.");
+      toast.error(
+        isLand
+          ? "Servono almeno due waypoint salvati per generare la geometria stradale."
+          : "Servono almeno due waypoint salvati per il routing sulle vie d'acqua."
+      );
       return;
     }
 
     setIsRegeneratingGeometry(true);
     try {
       await syncVoyageGeometry(selectedVoyageId, persistedSelectedWaypoints);
-      toast.success("Geometria stradale rigenerata e salvata");
+      toast.success(isLand ? "Geometria stradale rigenerata e salvata" : "Geometria vie navigabili rigenerata e salvata");
     } finally {
       setIsRegeneratingGeometry(false);
     }
@@ -2135,7 +2172,14 @@ const AdminVoyageManager = ({
                 <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Type</label>
                 <select
                   value={voyageForm.type}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, type: event.target.value as Voyage["type"] }))}
+                  onChange={(event) => {
+                    const nextType = event.target.value as Voyage["type"];
+                    setVoyageForm((form) => ({
+                      ...form,
+                      type: nextType,
+                      waterway_autoroute: nextType === "land" ? false : form.waterway_autoroute,
+                    }));
+                  }}
                   className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
                 >
                   <option value="water">🚢 Water</option>
@@ -2156,6 +2200,29 @@ const AdminVoyageManager = ({
                 </select>
               </div>
             </div>
+
+            {voyageForm.type === "water" && (
+              <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={voyageForm.waterway_autoroute}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({ ...form, waterway_autoroute: event.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                    Mare · autoroute vie navigabili
+                  </span>
+                  <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
+                    Routing su canali/fiumi (OpenStreetMap tramite BRouter, profilo river). I waypoint devono essere
+                    vicini all&apos;asse navigabile; dove non c&apos;è grafo utile resta il segmento in linea retta. Sul
+                    sito il voyage resta acqua come gli altri (nessuna etichetta diversa).
+                  </span>
+                </span>
+              </label>
+            )}
 
             <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
               <input
@@ -2529,6 +2596,44 @@ const AdminVoyageManager = ({
                 </div>
               )}
 
+              {selectedVoyage?.type === "water" && selectedVoyage.waterway_autoroute && (
+                <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
+                  <div className="rounded-[18px] border border-border/60 bg-background/60 px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-sans text-foreground">
+                          {selectedVoyageHasCachedGeometry ? "Geometria vie navigabili salvata" : "Geometria vie navigabili mancante"}
+                        </p>
+                        {distance?.unit === "NM" && selectedVoyage.waterway_autoroute ? (
+                          <p className="mt-1 text-xs font-sans text-foreground/80">
+                            {Math.round(distance.value).toLocaleString()} NM sulla polyline instradata (stima)
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-[11px] font-sans text-muted-foreground">
+                          {selectedVoyageHasCachedGeometry
+                            ? "Rigenera se hai spostato i waypoint o vuoi riallinearti al grafo OSM aggiornato."
+                            : "Genera e salva la linea sui canali/fiumi per la mappa pubblica (stesso tipo voyage: acqua)."}
+                        </p>
+                        {isRouteDraftDirty ? (
+                          <p className="mt-2 text-[11px] font-sans text-amber-700">
+                            Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void regenerateSelectedVoyageGeometry()}
+                        disabled={isRegeneratingGeometry || isSavingRouteDraft || isRouteDraftDirty || persistedSelectedWaypoints.length < 2}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 border border-border px-3 py-2 text-xs font-sans text-foreground hover:border-accent hover:text-accent disabled:opacity-50"
+                      >
+                        {isRegeneratingGeometry ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
+                        {selectedVoyageHasCachedGeometry ? "Rigenera geometria" : "Genera geometria"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
@@ -2537,7 +2642,9 @@ const AdminVoyageManager = ({
                       ? `${Math.round(distance.value)} ${distance.unit} traced${voyageDates ? ` · ${voyageDates}` : ""}`
                       : voyageDates || (selectedVoyage?.type === "land"
                         ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
-                        : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
+                        : selectedVoyage?.waterway_autoroute
+                          ? "Per l’autoroute acqua, avvicina i waypoint al canale; altrimenti il segmento resta retto."
+                          : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                   </p>
                   {isRouteDraftDirty && (
                     <p className="mt-1 text-[11px] font-sans text-amber-700">

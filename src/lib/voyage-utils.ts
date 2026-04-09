@@ -2,6 +2,7 @@ import type { Language } from "@/lib/i18n";
 
 const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
 const OSRM_BASE_URL = "https://router.project-osrm.org";
+const BROUTER_BASE_URL = "https://brouter.de";
 
 // Haversine distance in nautical miles
 export function haversineNM(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -52,6 +53,50 @@ export async function fetchOSRMRoute(
       (coordinate: [number, number]) => [coordinate[1], coordinate[0]]
     );
     return { geometry, distanceKm: route.distance / 1000 };
+  } catch {
+    return null;
+  }
+}
+
+/** BRouter `river` profile: OSM waterways (canals, rivers). Start/end must be near routable water or the API returns 400. */
+export async function fetchBRouterWaterwaySegment(
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number }
+): Promise<{ coordinates: [number, number][]; distanceKm: number } | null> {
+  const params = new URLSearchParams({
+    lonlats: `${start.lng},${start.lat}|${end.lng},${end.lat}`,
+    profile: "river",
+    alternativeidx: "0",
+    format: "geojson",
+  });
+  try {
+    const res = await fetch(`${BROUTER_BASE_URL}/brouter?${params.toString()}`, {
+      headers: { "User-Agent": BITE_MAPS_USER_AGENT },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      features?: Array<{ geometry?: { type?: string; coordinates?: [number, number][] } }>;
+    };
+    const geometry = data.features?.[0]?.geometry;
+    if (geometry?.type !== "LineString" || !Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) {
+      return null;
+    }
+    const coordinates = geometry.coordinates.filter(
+      (c): c is [number, number] =>
+        Array.isArray(c) &&
+        c.length >= 2 &&
+        Number.isFinite(Number(c[0])) &&
+        Number.isFinite(Number(c[1]))
+    );
+    if (coordinates.length < 2) return null;
+
+    let distanceKm = 0;
+    for (let i = 1; i < coordinates.length; i += 1) {
+      const [lng0, lat0] = coordinates[i - 1];
+      const [lng1, lat1] = coordinates[i];
+      distanceKm += haversineNM(lat0, lng0, lat1, lng1) * 1.852;
+    }
+    return { coordinates, distanceKm };
   } catch {
     return null;
   }
@@ -587,15 +632,41 @@ export function buildVoyageSegmentGeometry(
       : [];
   }
 
+  if (type === "water" && cachedGeometry && cachedGeometry.length >= 2) {
+    const startCoordinate: [number, number] = [waypoints[safeStart].lng, waypoints[safeStart].lat];
+    const endCoordinate: [number, number] = [waypoints[safeEnd].lng, waypoints[safeEnd].lat];
+    const cachedStartIndex = getNearestGeometryCoordinateIndex(cachedGeometry, startCoordinate);
+    const cachedEndIndex = getNearestGeometryCoordinateIndex(cachedGeometry, endCoordinate);
+
+    if (cachedStartIndex === cachedEndIndex) return [];
+
+    const slicedGeometry = cachedGeometry.slice(
+      Math.min(cachedStartIndex, cachedEndIndex),
+      Math.max(cachedStartIndex, cachedEndIndex) + 1
+    );
+
+    return slicedGeometry.length >= 2
+      ? (safeStart <= safeEnd ? slicedGeometry : [...slicedGeometry].reverse())
+      : [];
+  }
+
   return buildPublicVoyageGeometry(segmentWaypoints, type, []);
 }
 
+export type VoyageGeometryBuildOptions = {
+  /** When true with type water, use BRouter river profile between consecutive waypoints. */
+  waterwayAutoroute?: boolean;
+};
+
 export async function buildVoyageGeometry(
   waypoints: { lat: number; lng: number }[],
-  type: VoyageType
+  type: VoyageType,
+  options?: VoyageGeometryBuildOptions
 ): Promise<[number, number][]> {
   if (waypoints.length < 2) return getStraightVoyageGeometry(waypoints);
-  if (type !== "land") return getStraightVoyageGeometry(waypoints);
+
+  const useWaterwayRouting = type === "water" && Boolean(options?.waterwayAutoroute);
+  if (type !== "land" && !useWaterwayRouting) return getStraightVoyageGeometry(waypoints);
 
   const snappedWaypointCache = new Map<string, { lat: number; lng: number }>();
   const getSnappedWaypoint = async (waypoint: { lat: number; lng: number }) => {
@@ -610,6 +681,32 @@ export async function buildVoyageGeometry(
   };
 
   const fullRoute: [number, number][] = [];
+
+  if (useWaterwayRouting) {
+    for (let index = 1; index < waypoints.length; index += 1) {
+      const start = waypoints[index - 1];
+      const end = waypoints[index];
+
+      if (areCoordinatesNearlyEqual([start.lng, start.lat], [end.lng, end.lat])) {
+        appendRouteCoordinates(fullRoute, [[start.lng, start.lat]]);
+        appendRouteCoordinates(fullRoute, [[end.lng, end.lat]]);
+        continue;
+      }
+
+      const routed = await fetchBRouterWaterwaySegment(start, end);
+      if (routed?.coordinates?.length) {
+        appendRouteCoordinates(fullRoute, routed.coordinates);
+        continue;
+      }
+
+      appendRouteCoordinates(fullRoute, [
+        [start.lng, start.lat],
+        [end.lng, end.lat],
+      ]);
+    }
+
+    return fullRoute.length >= 2 ? fullRoute : getStraightVoyageGeometry(waypoints);
+  }
 
   for (let index = 1; index < waypoints.length; index += 1) {
     const start = waypoints[index - 1];
@@ -660,6 +757,8 @@ export interface Voyage {
   description_en: string | null;
   description_it: string | null;
   type: VoyageType;
+  /** When true with type water, geometry follows inland waterways (BRouter); still shown everywhere as a normal water voyage. Omitted = false. */
+  waterway_autoroute?: boolean;
   status: VoyageStatus;
   is_published: boolean;
   sort_order: number;

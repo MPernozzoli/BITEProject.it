@@ -1325,6 +1325,7 @@ export type Database = {
           status: Database["public"]["Enums"]["voyage_status"]
           type: Database["public"]["Enums"]["voyage_type"]
           updated_at: string
+          waterway_autoroute: boolean
         }
         Insert: {
           cached_geometry?: Json | null
@@ -1345,6 +1346,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
+          waterway_autoroute?: boolean
         }
         Update: {
           cached_geometry?: Json | null
@@ -1365,6 +1367,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
           updated_at?: string
+          waterway_autoroute?: boolean
         }
         Relationships: []
       }

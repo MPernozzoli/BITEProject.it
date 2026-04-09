@@ -89,6 +89,45 @@ describe("buildVoyageGeometry", () => {
       [10.1, 44.2],
     ]);
   });
+
+  it("builds water geometry from BRouter river segments when waterwayAutoroute is enabled", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      createJsonResponse({
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [7.95, 48.57],
+                [7.96, 48.58],
+              ],
+            },
+          },
+        ],
+      })
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const geometry = await buildVoyageGeometry(
+      [
+        { lat: 48.57, lng: 7.95 },
+        { lat: 48.58, lng: 7.96 },
+      ],
+      "water",
+      { waterwayAutoroute: true }
+    );
+
+    expect(geometry).toEqual([
+      [7.95, 48.57],
+      [7.96, 48.58],
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("brouter.de/brouter");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("profile=river");
+  });
 });
 
 describe("buildVoyageSegmentGeometry", () => {
@@ -124,6 +163,27 @@ describe("buildVoyageSegmentGeometry", () => {
 
     expect(buildVoyageSegmentGeometry(waypoints, "land", 0, 1)).toEqual([]);
     expect(buildPublicVoyageGeometry(waypoints, "land")).toEqual([]);
+  });
+
+  it("slices cached waterway geometry between segment endpoints like land", () => {
+    const waypoints = [
+      { id: "wp-1", voyage_id: "voyage-1", lat: 48.57, lng: 7.95, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 48.58, lng: 7.96, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-3", voyage_id: "voyage-1", lat: 48.59, lng: 7.97, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+    ] satisfies VoyageWaypoint[];
+
+    const cached: [number, number][] = [
+      [7.95, 48.57],
+      [7.955, 48.575],
+      [7.96, 48.58],
+      [7.965, 48.585],
+      [7.97, 48.59],
+    ];
+
+    const geometry = buildVoyageSegmentGeometry(waypoints, "water", 0, 2, cached);
+    expect(geometry[0]).toEqual([7.95, 48.57]);
+    expect(geometry[geometry.length - 1]).toEqual([7.97, 48.59]);
+    expect(geometry.length).toBeGreaterThanOrEqual(3);
   });
 });
 
