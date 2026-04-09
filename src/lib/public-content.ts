@@ -262,7 +262,7 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
     supabase
       .from("logbook_articles")
       .select(
-        "id, title_en, title_it, slug, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, updated_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, location_name, story_id, category, view_count"
+        "id, title_en, title_it, slug, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, updated_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, voyage_waypoint_start_id, voyage_waypoint_end_id, location_name, story_id, category, view_count"
       )
       .eq("status", "published")
       .order("published_at", { ascending: false, nullsFirst: false })
@@ -379,6 +379,8 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
       voyage_id: article.voyage_id,
       voyage_segment_start: article.voyage_segment_start,
       voyage_segment_end: article.voyage_segment_end,
+      voyage_waypoint_start_id: article.voyage_waypoint_start_id,
+      voyage_waypoint_end_id: article.voyage_waypoint_end_id,
       location_name: article.location_name,
       story_id: article.story_id,
       category: article.category,

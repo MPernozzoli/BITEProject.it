@@ -630,6 +630,8 @@ export type Database = {
           voyage_id: string | null
           voyage_segment_end: number | null
           voyage_segment_start: number | null
+          voyage_waypoint_end_id: string | null
+          voyage_waypoint_start_id: string | null
         }
         Insert: {
           article_map_scenes?: Json | null
@@ -663,6 +665,8 @@ export type Database = {
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
+          voyage_waypoint_end_id?: string | null
+          voyage_waypoint_start_id?: string | null
         }
         Update: {
           article_map_scenes?: Json | null
@@ -696,6 +700,8 @@ export type Database = {
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
+          voyage_waypoint_end_id?: string | null
+          voyage_waypoint_start_id?: string | null
         }
         Relationships: [
           {

@@ -466,8 +466,60 @@ export const getArticleWaypointRange = (
   return [Math.min(start, end), Math.max(start, end)] as const;
 };
 
+/**
+ * Indici [lo, hi] nella lista waypoint ordinata (sort_order). Preferisce gli UUID se risolvibili,
+ * così riordini/inserimenti non rompono il legame rispetto ai soli voyage_segment_*.
+ */
+export function resolveArticleRouteRange(
+  article: Pick<
+    GeoArticle,
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >,
+  waypoints: Pick<VoyageWaypoint, "id">[]
+): readonly [number, number] | null {
+  const n = waypoints.length;
+  if (n === 0) return null;
+
+  const clampIdx = (value: number) => Math.max(0, Math.min(value, n - 1));
+
+  const startId = article.voyage_waypoint_start_id?.trim() || null;
+  const endId = article.voyage_waypoint_end_id?.trim() || null;
+  const idxStart = startId ? waypoints.findIndex((w) => w.id === startId) : -1;
+  const idxEnd = endId ? waypoints.findIndex((w) => w.id === endId) : -1;
+
+  if (idxStart >= 0 && idxEnd >= 0) {
+    const lo = clampIdx(Math.min(idxStart, idxEnd));
+    const hi = clampIdx(Math.max(idxStart, idxEnd));
+    return [lo, hi] as const;
+  }
+
+  const pointAtStart = idxStart >= 0 && (!endId || endId === startId);
+  const pointAtEndOnly = idxEnd >= 0 && !startId;
+  if (pointAtStart || pointAtEndOnly) {
+    const i = clampIdx(pointAtStart ? idxStart : idxEnd);
+    return [i, i] as const;
+  }
+
+  const numeric = getArticleWaypointRange(article);
+  if (!numeric) return null;
+  const lo = clampIdx(Math.min(numeric[0], numeric[1]));
+  const hi = clampIdx(Math.max(numeric[0], numeric[1]));
+  return [lo, hi] as const;
+}
+
 export function getArticleVoyageFocus(
-  article: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">
+  article: Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >,
+  orderedWaypoints?: Pick<VoyageWaypoint, "id">[]
 ): {
   voyageId: string | null;
   mode: "none" | "point" | "segment" | "voyage";
@@ -483,7 +535,9 @@ export function getArticleVoyageFocus(
     };
   }
 
-  const range = getArticleWaypointRange(article);
+  const resolved =
+    orderedWaypoints && orderedWaypoints.length > 0 ? resolveArticleRouteRange(article, orderedWaypoints) : null;
+  const range = resolved ?? getArticleWaypointRange(article);
   if (!range) {
     return {
       voyageId: article.voyage_id,
@@ -502,14 +556,22 @@ export function getArticleVoyageFocus(
 }
 
 const collectArticleLinkedWaypointIndexes = (
-  articles: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[],
-  voyageId?: string | null
+  articles: Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >[],
+  voyageId: string | null | undefined,
+  orderedWaypoints: Pick<VoyageWaypoint, "id">[]
 ) => {
   const linkedIndexes = new Set<number>();
 
   articles.forEach((article) => {
     if (!voyageId || article.voyage_id !== voyageId) return;
-    const range = getArticleWaypointRange(article);
+    const range = resolveArticleRouteRange(article, orderedWaypoints);
     if (!range) return;
     if (range[0] !== range[1]) return;
     linkedIndexes.add(range[0]);
@@ -520,11 +582,18 @@ const collectArticleLinkedWaypointIndexes = (
 
 export function getPublicVoyageWaypoints(
   waypoints: VoyageWaypoint[],
-  articles: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[] = [],
+  articles: Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >[] = [],
   voyageId?: string | null
 ): VoyageWaypoint[] {
   const targetVoyageId = voyageId ?? waypoints[0]?.voyage_id ?? null;
-  const articleLinkedIndexes = collectArticleLinkedWaypointIndexes(articles, targetVoyageId);
+  const articleLinkedIndexes = collectArticleLinkedWaypointIndexes(articles, targetVoyageId, waypoints);
 
   return waypoints.filter(
     (waypoint, index) =>
@@ -533,15 +602,23 @@ export function getPublicVoyageWaypoints(
 }
 
 export function getAssociatedArticleForWaypoint<
-  T extends Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">
+  T extends Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >
 >(
   articles: T[],
   voyageId: string | null | undefined,
-  waypointIndex: number
+  waypointIndex: number,
+  orderedWaypoints: Pick<VoyageWaypoint, "id">[]
 ): T | null {
   for (const article of articles) {
     if (!voyageId || article.voyage_id !== voyageId) continue;
-    const range = getArticleWaypointRange(article);
+    const range = resolveArticleRouteRange(article, orderedWaypoints);
     if (!range) continue;
     if (range[0] === range[1] && waypointIndex === range[0]) return article;
   }
@@ -594,15 +671,14 @@ export function buildVoyageLegendArticlePlan(
   for (const article of voyageArticles) {
     if (article.story_id) storyIdsSet.add(article.story_id);
 
-    const range = getArticleWaypointRange(article);
-    if (!range) {
+    const resolved = resolveArticleRouteRange(article, waypoints);
+    if (!resolved) {
       wholeVoyageArticles.push(article);
       continue;
     }
 
-    const [rawA, rawB] = range;
-    const lo = Math.min(rawA, rawB);
-    const hi = Math.max(rawA, rawB);
+    const lo = resolved[0];
+    const hi = resolved[1];
 
     if (lo === hi) {
       const visIdx = visRoutes.findIndex((r) => r === lo);
@@ -703,7 +779,14 @@ export function getStraightVoyageGeometry(waypoints: { lat: number; lng: number 
 export function buildPublicVoyageGeometry(
   waypoints: VoyageWaypoint[],
   type: VoyageType,
-  articles: Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[] = [],
+  articles: Pick<
+    GeoArticle,
+    | "voyage_id"
+    | "voyage_segment_start"
+    | "voyage_segment_end"
+    | "voyage_waypoint_start_id"
+    | "voyage_waypoint_end_id"
+  >[] = [],
   voyageId?: string | null,
   cachedGeometry?: [number, number][] | null
 ): [number, number][] {
@@ -720,7 +803,7 @@ export function buildPublicVoyageGeometry(
   }
 
   const targetVoyageId = voyageId ?? waypoints[0]?.voyage_id ?? null;
-  const articleLinkedIndexes = collectArticleLinkedWaypointIndexes(articles, targetVoyageId);
+  const articleLinkedIndexes = collectArticleLinkedWaypointIndexes(articles, targetVoyageId, waypoints);
   const smoothed: [number, number][] = [[waypoints[0].lng, waypoints[0].lat]];
 
   for (let index = 1; index < waypoints.length - 1; index += 1) {
@@ -1000,6 +1083,8 @@ export interface GeoArticle {
   voyage_id: string | null;
   voyage_segment_start: number | null;
   voyage_segment_end: number | null;
+  voyage_waypoint_start_id?: string | null;
+  voyage_waypoint_end_id?: string | null;
   location_name: string | null;
   category?: string | null;
   story_id?: string | null;

@@ -28,8 +28,14 @@ import {
   normalizeArticleMapScenes,
   sortArticleMapScenesForLanguage,
 } from "@/lib/article-map";
-import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, totalCoordinateDistanceKm, totalWaypointDistance } from "@/lib/voyage-utils";
-import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import {
+  buildPublicVoyageGeometry,
+  buildVoyageSegmentGeometry,
+  resolveArticleRouteRange,
+  totalCoordinateDistanceKm,
+  totalWaypointDistance,
+} from "@/lib/voyage-utils";
+import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -155,6 +161,11 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     },
   });
 
+  const articleRouteSegment = useMemo(() => {
+    if (!article || linkedVoyageWaypoints.length === 0) return null;
+    return resolveArticleRouteRange(article as GeoArticle, linkedVoyageWaypoints);
+  }, [article, linkedVoyageWaypoints]);
+
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -271,26 +282,29 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     const geometrySource = linkedVoyage.cached_geometry as { coordinates?: [number, number][] } | null;
     const cachedGeometry = Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
 
-    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
-      const start = Math.max(0, Math.min(article.voyage_segment_start ?? article.voyage_segment_end ?? 0, linkedVoyageWaypoints.length - 1));
-      const end = Math.max(0, Math.min(article.voyage_segment_end ?? article.voyage_segment_start ?? start, linkedVoyageWaypoints.length - 1));
-      const segmentWaypoints = linkedVoyageWaypoints.slice(Math.min(start, end), Math.max(start, end) + 1);
-      if (segmentWaypoints.length < 2) return null;
-      return buildPublicVoyageGeometry(segmentWaypoints, linkedVoyage.type, []);
+    if (articleRouteSegment) {
+      const start = articleRouteSegment[0];
+      const end = articleRouteSegment[1];
+      const segmentGeometry = buildVoyageSegmentGeometry(
+        linkedVoyageWaypoints,
+        linkedVoyage.type,
+        start,
+        end,
+        cachedGeometry
+      );
+      return segmentGeometry.length >= 2 ? segmentGeometry : null;
     }
 
     return buildPublicVoyageGeometry(linkedVoyageWaypoints, linkedVoyage.type, [], linkedVoyage.id, cachedGeometry);
-  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints]);
+  }, [article?.voyage_id, articleRouteSegment, linkedVoyage, linkedVoyageWaypoints]);
   const articleRouteDistance = useMemo(() => {
     if (!article?.voyage_id || linkedVoyageWaypoints.length < 2) return null;
 
     let relevantWaypoints = linkedVoyageWaypoints;
     let relevantGeometry = primaryRouteCoordinates;
-    if (article.voyage_segment_start != null || article.voyage_segment_end != null) {
-      const rawStart = article.voyage_segment_start ?? article.voyage_segment_end ?? 0;
-      const rawEnd = article.voyage_segment_end ?? article.voyage_segment_start ?? rawStart;
-      const safeStart = Math.max(0, Math.min(Math.min(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
-      const safeEnd = Math.max(0, Math.min(Math.max(rawStart, rawEnd), linkedVoyageWaypoints.length - 1));
+    if (articleRouteSegment) {
+      const safeStart = articleRouteSegment[0];
+      const safeEnd = articleRouteSegment[1];
       relevantWaypoints = linkedVoyageWaypoints.slice(safeStart, safeEnd + 1);
       relevantGeometry = linkedVoyage
         ? buildVoyageSegmentGeometry(
@@ -309,7 +323,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       return distanceKm > 0 ? { value: distanceKm, unit: "KM" as const } : null;
     }
     return { value: totalWaypointDistance(relevantWaypoints), unit: "NM" as const };
-  }, [article?.voyage_id, article?.voyage_segment_end, article?.voyage_segment_start, linkedVoyage, linkedVoyageWaypoints, primaryRouteCoordinates]);
+  }, [article?.voyage_id, articleRouteSegment, linkedVoyage, linkedVoyageWaypoints, primaryRouteCoordinates]);
   const fallbackSceneCoordinates = useMemo(() => {
     if (hasGeo && article) {
       return {

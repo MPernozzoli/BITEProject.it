@@ -7,7 +7,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop, Languages, Loader2 } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, resolveArticleRouteRange } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
@@ -131,6 +131,8 @@ const ArticleEditor = () => {
   const [coverFocal, setCoverFocal] = useState<CoverFocal>({ ...DEFAULT_COVER_FOCAL });
   const [category, setCategory] = useState("Notes from the Boat");
   const [publishDate, setPublishDate] = useState("");
+  /** Stato ultimo persistito sul server (per etichette tipo "Applica modifiche"). */
+  const [persistedArticleStatus, setPersistedArticleStatus] = useState<"draft" | "scheduled" | "published" | null>(null);
   const [authorIds, setAuthorIds] = useState<string[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -171,6 +173,10 @@ const ArticleEditor = () => {
   const reopenLeaveAfterTranslationCancelRef = useRef(false);
   const ignoreNextPopRef = useRef(false);
   const draftStorageKey = `${ARTICLE_DRAFT_STORAGE_PREFIX}:${id ?? "new"}`;
+
+  useEffect(() => {
+    setPersistedArticleStatus(null);
+  }, [id]);
 
   useEffect(() => { init(); }, [id]);
 
@@ -300,6 +306,12 @@ const ArticleEditor = () => {
       navigate("/admin");
       return;
     }
+    const rowStatus = data.status;
+    if (rowStatus === "draft" || rowStatus === "scheduled" || rowStatus === "published") {
+      setPersistedArticleStatus(rowStatus);
+    } else {
+      setPersistedArticleStatus(null);
+    }
     setTitleEn(data.title_en || "");
     setTitleIt(data.title_it || "");
     setSlug(data.slug || "");
@@ -342,7 +354,21 @@ const ArticleEditor = () => {
     // Load waypoints if voyage selected
     if ((data as any).voyage_id) {
       const { data: wps } = await supabase.from("voyage_waypoints").select("*").eq("voyage_id", (data as any).voyage_id).order("sort_order", { ascending: true });
-      setVoyageWaypoints((wps || []) as unknown as VoyageWaypoint[]);
+      const list = (wps || []) as unknown as VoyageWaypoint[];
+      setVoyageWaypoints(list);
+      const resolved = resolveArticleRouteRange(
+        {
+          voyage_segment_start: (data as any).voyage_segment_start,
+          voyage_segment_end: (data as any).voyage_segment_end,
+          voyage_waypoint_start_id: (data as any).voyage_waypoint_start_id,
+          voyage_waypoint_end_id: (data as any).voyage_waypoint_end_id,
+        },
+        list
+      );
+      if (resolved) {
+        setVoyageSegStart(resolved[0]);
+        setVoyageSegEnd(resolved[1]);
+      }
     }
 
     // Load authors and tags
@@ -747,6 +773,31 @@ const ArticleEditor = () => {
       }
     }
 
+    let voyage_waypoint_start_id: string | null = null;
+    let voyage_waypoint_end_id: string | null = null;
+    if (!selectedVoyageId) {
+      voyage_waypoint_start_id = null;
+      voyage_waypoint_end_id = null;
+    } else if (associationMode === "full" || !voyageWaypoints.length) {
+      voyage_waypoint_start_id = null;
+      voyage_waypoint_end_id = null;
+    } else if (associationMode === "point" && normalizedVoyageSegStart != null) {
+      const wp = voyageWaypoints[normalizedVoyageSegStart];
+      if (wp?.id) {
+        voyage_waypoint_start_id = wp.id;
+        voyage_waypoint_end_id = wp.id;
+      }
+    } else if (
+      associationMode === "segment" &&
+      normalizedVoyageSegStart != null &&
+      normalizedVoyageSegEnd != null
+    ) {
+      const ws = voyageWaypoints[normalizedVoyageSegStart];
+      const we = voyageWaypoints[normalizedVoyageSegEnd];
+      if (ws?.id) voyage_waypoint_start_id = ws.id;
+      if (we?.id) voyage_waypoint_end_id = we.id;
+    }
+
     if (!bypassTranslationPrompt) {
       const gaps = getArticleTranslationGaps({
         titleEn: titleEn,
@@ -805,15 +856,13 @@ const ArticleEditor = () => {
           return `- ${sceneLabel}: manca aggancio IT`;
         });
 
-        const shouldContinue = window.confirm(
-          [
-            isFuture
-              ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi programmare comunque l'articolo?"
-              : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?",
-            "",
-            ...warningLines,
-          ].join("\n")
-        );
+        const sceneMapConfirmLead =
+          isFuture
+            ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi programmare comunque l'articolo?"
+            : persistedArticleStatus === "published"
+              ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi applicare comunque le modifiche?"
+              : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?";
+        const shouldContinue = window.confirm([sceneMapConfirmLead, "", ...warningLines].join("\n"));
 
         if (!shouldContinue) {
           setSaving(false);
@@ -847,6 +896,8 @@ const ArticleEditor = () => {
       voyage_id: selectedVoyageId || null,
       voyage_segment_start: normalizedVoyageSegStart,
       voyage_segment_end: normalizedVoyageSegEnd,
+      voyage_waypoint_start_id,
+      voyage_waypoint_end_id,
       cover_focal_x: coverFocal.focalX,
       cover_focal_y: coverFocal.focalY,
       cover_zoom: coverFocal.zoom,
@@ -962,6 +1013,7 @@ const ArticleEditor = () => {
 
     window.localStorage.removeItem(draftStorageKey);
     hasLocalChangesRef.current = false;
+    setPersistedArticleStatus(finalStatus);
 
     if (action === "publish" && finalStatus === "scheduled" && articleId) {
       const label = new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(selectedDate);
@@ -981,7 +1033,7 @@ const ArticleEditor = () => {
 
     setSaving(false);
     return true;
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories, draftStorageKey]);
+  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, voyageWaypoints, id, isNew, navigate, allStories, draftStorageKey, persistedArticleStatus]);
 
   const translationOfferLabels = useMemo(() => {
     if (!translationOfferOpen) return [] as string[];
@@ -1571,6 +1623,24 @@ const ArticleEditor = () => {
 
   const selectedDate = publishDate ? new Date(publishDate) : new Date();
   const isFuture = selectedDate > new Date();
+  const primaryPublishActionLabel = useMemo(() => {
+    if (persistedArticleStatus === "published") {
+      return isFuture ? "Programma" : "Applica modifiche";
+    }
+    if (persistedArticleStatus === "scheduled") {
+      return isFuture ? "Aggiorna programmazione" : "Pubblica ora";
+    }
+    return isFuture ? "Programma" : "Pubblica";
+  }, [persistedArticleStatus, isFuture]);
+  const translationOfferPublishSkipLabel = useMemo(() => {
+    if (persistedArticleStatus === "published") {
+      return isFuture ? "Programma senza tradurre" : "Applica modifiche senza tradurre";
+    }
+    if (persistedArticleStatus === "scheduled") {
+      return isFuture ? "Aggiorna programmazione senza tradurre" : "Pubblica ora senza tradurre";
+    }
+    return isFuture ? "Programma senza tradurre" : "Pubblica senza tradurre";
+  }, [persistedArticleStatus, isFuture]);
   const sceneOptionsEn = useMemo(
     () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_en || scene.title_it || `Scene ${index + 1}` })),
     [articleMapScenes]
@@ -1740,7 +1810,7 @@ const ArticleEditor = () => {
               <Save size={14} /> Save Draft
             </button>
             <button onClick={() => saveArticle("publish")} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
-              <Send size={14} /> {isFuture ? "Programma" : "Pubblica"}
+              <Send size={14} /> {primaryPublishActionLabel}
             </button>
           </div>
         </div>
@@ -2164,7 +2234,7 @@ const ArticleEditor = () => {
               disabled={saving || leaveBusy}
               onClick={() => void handleLeavePublish()}
             >
-              {isFuture ? "Programma" : "Pubblica"}
+              {primaryPublishActionLabel}
             </Button>
             <Button
               type="button"
@@ -2226,11 +2296,7 @@ const ArticleEditor = () => {
               disabled={saving || translationOfferBusy || aiTranslating}
               onClick={() => void handleTranslationOfferSkip()}
             >
-              {pendingTranslationAction === "publish"
-                ? isFuture
-                  ? "Programma senza tradurre"
-                  : "Pubblica senza tradurre"
-                : "Salva bozza senza tradurre"}
+              {pendingTranslationAction === "publish" ? translationOfferPublishSkipLabel : "Salva bozza senza tradurre"}
             </Button>
             <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
               Annulla

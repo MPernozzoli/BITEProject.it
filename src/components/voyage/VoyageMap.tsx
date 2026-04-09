@@ -5,12 +5,12 @@ import Supercluster from "supercluster";
 import {
   buildVoyageSegmentGeometry,
   getArticleVoyageFocus,
-  getArticleWaypointRange,
   getAssociatedArticleForWaypoint,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   getVoyageMapLineStringCoordinates,
   getWaypointSequenceHeading,
+  resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
@@ -57,7 +57,7 @@ function buildPositionedArticlesForCluster(
       if (article.voyage_id) {
         const wps = waypointsMap[article.voyage_id] || [];
         if (wps.length < 1) return null;
-        const range = getArticleWaypointRange(article);
+        const range = resolveArticleRouteRange(article, wps);
         if (range) {
           const start = clampWaypointIndex(range[0], wps.length - 1);
           const end = clampWaypointIndex(range[1], wps.length - 1);
@@ -267,7 +267,7 @@ const VoyageMap = ({
       for (const w of visible) {
         const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
         const safeIndex = routeIndex >= 0 ? routeIndex : 0;
-        const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex);
+        const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex, wps);
         const isStart = safeIndex === 0;
         const isEnd = safeIndex === wps.length - 1;
         const fillColor = isStart
@@ -531,6 +531,9 @@ const VoyageMap = ({
         const wps = waypointsMap[voyage.id] || [];
         if (!wps.length) return;
 
+        const routeArticleFocus =
+          activeArticle && activeArticle.voyage_id === voyage.id ? getArticleVoyageFocus(activeArticle, wps) : null;
+
         const isFocused = routeFocusVoyageId === voyage.id;
         const isHovered = hoverFocusVoyageId === voyage.id;
         const isActive = voyage.status === "active";
@@ -561,7 +564,7 @@ const VoyageMap = ({
             isFocused,
             isHovered,
             isDimmed,
-            activeArticleFocusMode: activeArticleFocus?.voyageId === voyage.id ? (activeArticleFocus.mode === "none" ? null : activeArticleFocus.mode) : null,
+            activeArticleFocusMode: routeArticleFocus ? (routeArticleFocus.mode === "none" ? null : routeArticleFocus.mode) : null,
           });
 
           map.addLayer({
@@ -629,8 +632,8 @@ const VoyageMap = ({
           map.on("mouseleave", lineHitId, lineHandlers.mouseleave);
         }
 
-        if (activeArticleFocus?.voyageId === voyage.id) {
-          if (activeArticleFocus.mode === "voyage" && routeCoordinates.length >= 2) {
+        if (routeArticleFocus?.voyageId === voyage.id) {
+          if (routeArticleFocus.mode === "voyage" && routeCoordinates.length >= 2) {
             const focusLineId = `voyage-line-focus-${voyage.id}`;
             map.addSource(focusLineId, {
               type: "geojson",
@@ -657,15 +660,15 @@ const VoyageMap = ({
           }
 
           if (
-            activeArticleFocus.mode === "segment" &&
-            activeArticleFocus.startIndex != null &&
-            activeArticleFocus.endIndex != null
+            routeArticleFocus.mode === "segment" &&
+            routeArticleFocus.startIndex != null &&
+            routeArticleFocus.endIndex != null
           ) {
             const focusSegmentCoordinates = getArticleSegmentGeometry(
               wps,
               voyage.type,
-              activeArticleFocus.startIndex,
-              activeArticleFocus.endIndex,
+              routeArticleFocus.startIndex,
+              routeArticleFocus.endIndex,
               getCachedGeometryCoordinates(voyage)
             );
 
@@ -700,12 +703,12 @@ const VoyageMap = ({
         /* Waypoint visibili: cluster HTML (effect separato), non layer circle */
 
         if (
-          activeArticleFocus?.voyageId === voyage.id &&
-          activeArticleFocus.mode === "point" &&
-          activeArticleFocus.startIndex != null &&
+          routeArticleFocus?.voyageId === voyage.id &&
+          routeArticleFocus.mode === "point" &&
+          routeArticleFocus.startIndex != null &&
           wps.length
         ) {
-          const focusPointIndex = clampWaypointIndex(activeArticleFocus.startIndex, wps.length - 1);
+          const focusPointIndex = clampWaypointIndex(routeArticleFocus.startIndex, wps.length - 1);
           const focusWaypoint = wps[focusPointIndex];
           const focusPointId = `voyage-point-focus-${voyage.id}`;
 
@@ -1165,11 +1168,13 @@ const VoyageMap = ({
     const article = articles.find((a) => a.id === selectedArticleId);
     if (!article) return;
 
-    // If article has segment bounds, fit to segment
-    if (article.voyage_id && article.voyage_segment_start != null && article.voyage_segment_end != null) {
+    // If article has segment bounds, fit to segment (indici risolti da UUID se presenti)
+    const segmentRange =
+      article.voyage_id ? resolveArticleRouteRange(article, waypointsMap[article.voyage_id] || []) : null;
+    if (article.voyage_id && segmentRange) {
       const wps = waypointsMap[article.voyage_id] || [];
-      const start = Math.min(article.voyage_segment_start, wps.length - 1);
-      const end = Math.min(article.voyage_segment_end, wps.length - 1);
+      const start = segmentRange[0];
+      const end = segmentRange[1];
       const segWps = wps.slice(start, end + 1);
       if (segWps.length >= 2) {
         const bounds = segWps.reduce(
@@ -1179,10 +1184,14 @@ const VoyageMap = ({
         map.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 1200 });
         return;
       }
+      if (segWps.length === 1) {
+        map.flyTo({ center: [segWps[0].lng, segWps[0].lat], zoom: 10, duration: 1200 });
+        return;
+      }
     }
 
     // If full voyage
-    if (article.voyage_id && article.voyage_segment_start == null && article.voyage_segment_end == null) {
+    if (article.voyage_id && !segmentRange) {
       const wps = waypointsMap[article.voyage_id] || [];
       if (wps.length >= 2) {
         const bounds = wps.reduce(

@@ -56,17 +56,22 @@ const VoyagesPage = () => {
   });
   const waypoints = publicContent?.voyageWaypoints ?? liveWaypoints;
 
-  const { data: liveArticleLinks = [] } = useQuery<Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]>({
+  const { data: liveArticleLinks = [] } = useQuery<
+    Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end" | "voyage_waypoint_start_id" | "voyage_waypoint_end_id">[]
+  >({
     queryKey: ["public-voyage-article-links"],
     enabled: !publicContent && !isPublicContentLoading,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
-        .select("voyage_id, voyage_segment_start, voyage_segment_end")
+        .select("voyage_id, voyage_segment_start, voyage_segment_end, voyage_waypoint_start_id, voyage_waypoint_end_id")
         .eq("status", "published")
         .not("voyage_id", "is", null);
       if (error) throw error;
-      return (data || []) as Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[];
+      return (data || []) as Pick<
+        GeoArticle,
+        "voyage_id" | "voyage_segment_start" | "voyage_segment_end" | "voyage_waypoint_start_id" | "voyage_waypoint_end_id"
+      >[];
     },
   });
   const articleLinks = useMemo(() => {
@@ -78,6 +83,8 @@ const VoyagesPage = () => {
         voyage_id: article.voyage_id,
         voyage_segment_start: article.voyage_segment_start,
         voyage_segment_end: article.voyage_segment_end,
+        voyage_waypoint_start_id: article.voyage_waypoint_start_id,
+        voyage_waypoint_end_id: article.voyage_waypoint_end_id,
       }));
   }, [liveArticleLinks, publicContent]);
 
@@ -91,7 +98,17 @@ const VoyagesPage = () => {
   }, [waypoints]);
 
   const articleLinkMap = useMemo(() => {
-    const map: Record<string, Pick<GeoArticle, "voyage_id" | "voyage_segment_start" | "voyage_segment_end">[]> = {};
+    const map: Record<
+      string,
+      Pick<
+        GeoArticle,
+        | "voyage_id"
+        | "voyage_segment_start"
+        | "voyage_segment_end"
+        | "voyage_waypoint_start_id"
+        | "voyage_waypoint_end_id"
+      >[]
+    > = {};
     articleLinks.forEach((article) => {
       if (!article.voyage_id) return;
       if (!map[article.voyage_id]) map[article.voyage_id] = [];
