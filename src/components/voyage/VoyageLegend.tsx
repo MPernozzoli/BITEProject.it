@@ -1,4 +1,14 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Link } from "react-router-dom";
 import { BookOpen, Mountain, Ship, X } from "lucide-react";
 import {
   buildVoyageLegendArticlePlan,
@@ -15,6 +25,7 @@ import type { Language } from "@/lib/i18n";
 export interface VoyageLegendStoryTitles {
   title_it: string | null;
   title_en: string | null;
+  slug: string | null;
 }
 
 interface VoyageLegendProps {
@@ -53,6 +64,23 @@ const formatDistance = (nm: number, isWater: boolean): string => {
 };
 
 const STEM_H = 14;
+
+/** Vertice a t=½ su una quadratica da (x0,y0) a (x2,y2) con controllo (xc,yc). */
+function quadBezierMidAtHalf(
+  x0: number,
+  y0: number,
+  xc: number,
+  yc: number,
+  x2: number,
+  y2: number
+): { x: number; y: number } {
+  const t = 0.5;
+  const u = 1 - t;
+  return {
+    x: u * u * x0 + 2 * u * t * xc + t * t * x2,
+    y: u * u * y0 + 2 * u * t * yc + t * t * y2,
+  };
+}
 
 const arcLayoutNearlyEqual = (
   a: { w: number; xs: number[] },
@@ -136,16 +164,17 @@ const VoyageLegend = ({
     [articlePlan.routeBindings]
   );
 
-  const storyDisplayNames = useMemo(() => {
+  const storyIndexLinks = useMemo(() => {
     return articlePlan.storyIds
       .map((id) => {
         const s = storyTitlesById?.[id];
         if (!s) return null;
         const name =
           lang === "it" ? s.title_it?.trim() || s.title_en?.trim() || "" : s.title_en?.trim() || s.title_it?.trim() || "";
-        return name || null;
+        if (!name) return null;
+        return { id, name, slug: s.slug?.trim() || null };
       })
-      .filter(Boolean) as string[];
+      .filter(Boolean) as { id: string; name: string; slug: string | null }[];
   }, [articlePlan.storyIds, storyTitlesById, lang]);
 
   const segments = useMemo(() => {
@@ -160,6 +189,21 @@ const VoyageLegend = ({
   }, [visibleWaypoints]);
 
   const totalDistance = useMemo(() => segments.reduce((sum, d) => sum + d, 0), [segments]);
+
+  /** Ortodromia su tutti i waypoint del viaggio (anche tecnici), ordine `waypoints`. */
+  const fullVoyageDistanceNm = useMemo(() => {
+    if (waypoints.length < 2) return null;
+    let total = 0;
+    for (let i = 1; i < waypoints.length; i++) {
+      total += haversineNM(
+        waypoints[i - 1].lat,
+        waypoints[i - 1].lng,
+        waypoints[i].lat,
+        waypoints[i].lng
+      );
+    }
+    return total;
+  }, [waypoints]);
 
   const useUniform = useMemo(() => {
     if (segments.length === 0 || totalDistance === 0) return true;
@@ -180,6 +224,7 @@ const VoyageLegend = ({
   const diagramRowRef = useRef<HTMLDivElement>(null);
   const dotElRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [arcLayout, setArcLayout] = useState<{ w: number; xs: number[] } | null>(null);
+  const arcFilterDomId = useId().replace(/:/g, "");
 
   const measureArcs = useCallback(() => {
     try {
@@ -248,7 +293,8 @@ const VoyageLegend = ({
       ? "Scorri in orizzontale per vedere tutto il percorso"
       : "Scroll horizontally to see the full route";
 
-  const arcBandPx = spanBindings.length > 0 ? 24 : 0;
+  const arcSvgTop = 8;
+  const arcBandPx = spanBindings.length > 0 ? 30 : 0;
   const paddingTopDiagram = 44 + arcBandPx;
 
   const openArticle = (a: GeoArticle) => {
@@ -258,30 +304,65 @@ const VoyageLegend = ({
   return (
     <div className="pointer-events-auto w-full min-w-0 rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
       <div className="flex items-start justify-between gap-3 mb-1.5">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <TypeIcon
             size={15}
             className={`shrink-0 ${isWater ? "text-sky-600" : "text-orange-600"}`}
           />
-          <span className="text-sm font-semibold font-sans text-foreground truncate">
-            {voyageName}
-          </span>
+          <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 p-1 -m-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          aria-label={lang === "it" ? "Chiudi" : "Close"}
-        >
-          <X size={14} />
-        </button>
+        <div className="flex shrink-0 items-start gap-3">
+          {storyIndexLinks.length > 0 ? (
+            <p className="max-w-[min(220px,46vw)] text-right text-[10px] font-sans leading-snug text-muted-foreground">
+              <span>{lang === "it" ? "Fa parte di " : "Part of "}</span>
+              {storyIndexLinks.map((s, idx) => (
+                <Fragment key={s.id}>
+                  {idx > 0 ? <span>, </span> : null}
+                  {s.slug ? (
+                    <Link
+                      to={`/logbook/story/${s.slug}`}
+                      className="font-medium text-accent underline-offset-2 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {s.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium text-foreground/90">{s.name}</span>
+                  )}
+                </Fragment>
+              ))}
+              <span className="text-muted-foreground/75">{lang === "it" ? " (tutte)" : " (all)"}</span>
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 p-1 -m-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            aria-label={lang === "it" ? "Chiudi" : "Close"}
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
-      {(startLabel || endLabel) && (
-        <p className="text-[11px] font-sans text-muted-foreground mb-3">
-          {startLabel}
-          {startLabel && endLabel ? " — " : ""}
-          {endLabel}
+      {(startLabel || endLabel || fullVoyageDistanceNm != null) && (
+        <p className="mb-3 text-[11px] font-sans leading-relaxed text-muted-foreground">
+          {(startLabel || endLabel) && (
+            <>
+              {startLabel}
+              {startLabel && endLabel ? " — " : ""}
+              {endLabel}
+            </>
+          )}
+          {(startLabel || endLabel) && fullVoyageDistanceNm != null ? (
+            <span className="text-muted-foreground/65"> · </span>
+          ) : null}
+          {fullVoyageDistanceNm != null ? (
+            <span className={isWater ? "font-medium text-sky-700/90" : "font-medium text-orange-700/90"}>
+              {lang === "it" ? "Lunghezza totale " : "Total distance "}
+              <span className="tabular-nums">{formatDistance(fullVoyageDistanceNm, isWater)}</span>
+            </span>
+          ) : null}
         </p>
       )}
 
@@ -304,14 +385,6 @@ const VoyageLegend = ({
         </div>
       )}
 
-      {storyDisplayNames.length > 0 && (
-        <p className="text-[10px] font-sans text-muted-foreground leading-snug mb-3">
-          <span>{lang === "it" ? "Fa parte di: " : "Part of: "}</span>
-          <span className="text-foreground/90">{storyDisplayNames.join(", ")}</span>
-          <span className="text-muted-foreground/75">{lang === "it" ? " (tutte)" : " (all)"}</span>
-        </p>
-      )}
-
       <div
         className="max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] rounded-lg pb-3 pt-0.5"
         role="region"
@@ -329,33 +402,75 @@ const VoyageLegend = ({
           }}
         >
           {arcLayout && spanBindings.length > 0 && (
-            <svg
-              className="pointer-events-none absolute left-0 overflow-visible text-accent/38"
-              style={{ top: 6, width: arcLayout.w, height: arcBandPx + 4 }}
-              width={arcLayout.w}
-              height={arcBandPx + 4}
-              aria-hidden
-            >
+            <>
+              <svg
+                className="pointer-events-none absolute left-0 overflow-visible"
+                style={{ top: arcSvgTop, width: arcLayout.w, height: arcBandPx + 6 }}
+                width={arcLayout.w}
+                height={arcBandPx + 6}
+                aria-hidden
+              >
+                <defs>
+                  <filter id={arcFilterDomId} x="-20%" y="-60%" width="140%" height="220%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="0.8" result="b" />
+                    <feMerge>
+                      <feMergeNode in="b" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                {spanBindings.map((span, si) => {
+                  const x0 = arcLayout.xs[span.fromVisible];
+                  const x1 = arcLayout.xs[span.toVisible];
+                  if (x0 == null || x1 == null || Number.isNaN(x0) || Number.isNaN(x1)) return null;
+                  const y = arcBandPx - 4 + si * 3;
+                  const mid = (x0 + x1) / 2;
+                  const dip = 14 + si * 4;
+                  const d = `M ${x0} ${y} Q ${mid} ${y - dip} ${x1} ${y}`;
+                  return (
+                    <g key={`arc-${String(span.fromVisible)}-${String(span.toVisible)}-${String(si)}`}>
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="hsl(var(--background))"
+                        strokeWidth={3.5}
+                        strokeLinecap="round"
+                        opacity={0.65}
+                      />
+                      <path
+                        d={d}
+                        fill="none"
+                        className="text-accent"
+                        stroke="currentColor"
+                        strokeWidth={1.35}
+                        strokeLinecap="round"
+                        strokeOpacity={0.55}
+                        filter={`url(#${arcFilterDomId})`}
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
               {spanBindings.map((span, si) => {
                 const x0 = arcLayout.xs[span.fromVisible];
                 const x1 = arcLayout.xs[span.toVisible];
-                if (x0 == null || x1 == null || Number.isNaN(x0) || Number.isNaN(x1)) return null;
-                const y = arcBandPx - 2 + si * 4;
+                if (x0 == null || x1 == null || Number.isNaN(x0) || Number.isNaN(x1) || !onArticleClick) return null;
+                const yLine = arcBandPx - 4 + si * 3;
                 const mid = (x0 + x1) / 2;
-                const dip = 11 + si * 3;
-                const d = `M ${x0} ${y} Q ${mid} ${y - dip} ${x1} ${y}`;
+                const dip = 14 + si * 4;
+                const yCtrl = yLine - dip;
+                const { x: cx, y: cy } = quadBezierMidAtHalf(x0, yLine, mid, yCtrl, x1, yLine);
                 return (
-                  <path
-                    key={`${String(span.fromVisible)}-${String(span.toVisible)}-${String(si)}`}
-                    d={d}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1}
-                    strokeLinecap="round"
-                  />
+                  <div
+                    key={`arc-chip-${String(span.fromVisible)}-${String(span.toVisible)}-${String(si)}`}
+                    className="pointer-events-auto absolute z-[12] -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: cx, top: arcSvgTop + cy }}
+                  >
+                    <LegendArticleChip articles={span.articles} lang={lang} onOpen={openArticle} />
+                  </div>
                 );
               })}
-            </svg>
+            </>
           )}
 
           {visibleWaypoints.map((wp, i) => {
@@ -384,9 +499,19 @@ const VoyageLegend = ({
                     dotElRefs.current[i] = el;
                   }}
                   onClick={() => onWaypointClick?.(wp)}
-                  className="group relative shrink-0 cursor-pointer z-10"
+                  className="group relative z-10 flex shrink-0 cursor-pointer flex-col items-center justify-center overflow-visible"
                   title={seqHeading ? `${seqHeading} — ${wpName}` : wpName}
                 >
+                  {!labelAbove && pointArts?.length && onArticleClick ? (
+                    <div
+                      className="absolute bottom-full left-1/2 z-[11] flex -translate-x-1/2 flex-col items-center"
+                      style={{ marginBottom: 2 }}
+                    >
+                      <LegendArticleChip articles={pointArts} lang={lang} onOpen={openArticle} />
+                      <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
+                    </div>
+                  ) : null}
+
                   <span
                     className={`
                     block rounded-full transition-colors
@@ -397,56 +522,56 @@ const VoyageLegend = ({
 
                   <div
                     className={`
-                    absolute left-1/2 -translate-x-1/2 flex flex-col items-center
+                    absolute left-1/2 flex -translate-x-1/2 flex-col items-center
                     ${labelAbove ? "bottom-full" : "top-full"}
                   `}
                     style={labelAbove ? { marginBottom: 2 } : { marginTop: 2 }}
                   >
                     {labelAbove ? (
                       <>
-                        <span className="flex flex-col items-center gap-0.5 max-w-[min(220px,45vw)]">
+                        <span className="flex max-w-[min(220px,45vw)] flex-col items-center gap-0.5">
                           {seqHeading ? (
-                            <span className="text-[8px] leading-tight font-sans uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">
+                            <span className="whitespace-nowrap text-[8px] font-sans uppercase leading-tight tracking-wider text-muted-foreground/80">
                               {seqHeading}
                             </span>
                           ) : null}
-                          <span className="inline-flex items-center justify-center gap-1">
-                            <span className="text-[10px] leading-tight font-sans font-medium text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap truncate max-w-[11rem]">
-                              {wpName}
-                            </span>
-                            {pointArts?.length && onArticleClick ? (
-                              <LegendArticleChip articles={pointArts} lang={lang} onOpen={openArticle} />
-                            ) : null}
+                          <span className="max-w-[11rem] truncate text-[10px] font-sans font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                            {wpName}
                           </span>
                         </span>
                         <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
                       </>
                     ) : (
                       <>
-                        {!isEndpoint && <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />}
+                        {!isEndpoint ? <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} /> : null}
                         <span
                           className={`
-                          flex flex-col items-center gap-0.5 text-[10px] leading-tight font-sans transition-colors max-w-[min(220px,45vw)]
+                          flex max-w-[min(220px,45vw)] flex-col items-center gap-0.5 text-[10px] font-sans leading-tight transition-colors
                           ${isEndpoint
-                            ? "font-semibold text-foreground mt-1"
+                            ? "mt-1 font-semibold text-foreground"
                             : "font-medium text-muted-foreground group-hover:text-foreground"}
                         `}
                         >
                           {seqHeading ? (
-                            <span className="text-[8px] font-normal uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">
+                            <span className="whitespace-nowrap text-[8px] font-normal uppercase tracking-wider text-muted-foreground/80">
                               {seqHeading}
                             </span>
                           ) : null}
-                          <span className="inline-flex items-center justify-center gap-1">
-                            <span className="truncate max-w-[11rem]">{wpName}</span>
-                            {pointArts?.length && onArticleClick ? (
-                              <LegendArticleChip articles={pointArts} lang={lang} onOpen={openArticle} />
-                            ) : null}
-                          </span>
+                          <span className="max-w-[11rem] truncate">{wpName}</span>
                         </span>
                       </>
                     )}
                   </div>
+
+                  {labelAbove && pointArts?.length && onArticleClick ? (
+                    <div
+                      className="absolute top-full left-1/2 z-[11] flex -translate-x-1/2 flex-col items-center"
+                      style={{ marginTop: 2 }}
+                    >
+                      <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
+                      <LegendArticleChip articles={pointArts} lang={lang} onOpen={openArticle} />
+                    </div>
+                  ) : null}
                 </button>
 
                 {!isLast && (

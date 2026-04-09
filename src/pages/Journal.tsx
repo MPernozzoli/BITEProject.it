@@ -238,10 +238,10 @@ const Journal = () => {
       try {
         const { data, error } = await supabase
           .from("stories")
-          .select("id, title_it, title_en")
+          .select("id, title_it, title_en, slug")
           .in("id", voyageLegendStoryIds);
         if (error) return [];
-        return (data || []) as { id: string; title_it: string | null; title_en: string | null }[];
+        return (data || []) as { id: string; title_it: string | null; title_en: string | null; slug: string | null }[];
       } catch {
         return [];
       }
@@ -249,9 +249,9 @@ const Journal = () => {
   });
 
   const voyageLegendStoryTitlesById = useMemo(() => {
-    const map: Record<string, { title_it: string | null; title_en: string | null }> = {};
+    const map: Record<string, { title_it: string | null; title_en: string | null; slug: string | null }> = {};
     voyageLegendStories.forEach((row) => {
-      map[row.id] = { title_it: row.title_it, title_en: row.title_en };
+      map[row.id] = { title_it: row.title_it, title_en: row.title_en, slug: row.slug };
     });
     return map;
   }, [voyageLegendStories]);
@@ -557,10 +557,21 @@ const Journal = () => {
     setViewMode("list");
   }, []);
 
+  const mapRootClass =
+    viewMode === "map"
+      ? isMobile
+        ? "fixed inset-0 z-0 h-[100dvh] max-h-[100dvh] w-full overflow-hidden md:relative md:inset-auto md:z-auto md:h-screen md:max-h-none"
+        : "h-screen overflow-hidden"
+      : "min-h-screen flex flex-col";
+
+  const mapInnerClass = isMobile
+    ? "relative h-full min-h-0 overflow-hidden overscroll-none md:h-screen"
+    : "relative h-screen overflow-hidden overscroll-none";
+
   return (
-    <div className={viewMode === "map" ? "h-screen overflow-hidden" : "min-h-screen flex flex-col"}>
+    <div className={mapRootClass}>
       {viewMode === "map" ? (
-        <div className="relative h-screen overflow-hidden overscroll-none">
+        <div className={mapInnerClass}>
           {/* Full-screen map */}
           <LazyVoyageMap
             voyages={voyages}
@@ -679,13 +690,17 @@ const Journal = () => {
                     <ChevronDown size={10} className={`transition-transform ${voyageFilterOpen ? "rotate-180" : ""}`} />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="center" sideOffset={12} className="w-[340px] rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl">
-                  <div className="mb-1 px-2 py-1">
+                <PopoverContent
+                  align="center"
+                  sideOffset={12}
+                  className="w-[340px] max-h-[min(72vh,560px)] flex flex-col overflow-hidden rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl"
+                >
+                  <div className="mb-1 shrink-0 px-2 py-1">
                     <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
                       {lang === "it" ? "Focus viaggio" : "Voyage focus"}
                     </p>
                   </div>
-                  <div className="mb-2 flex items-center gap-1 px-2">
+                  <div className="mb-2 flex shrink-0 items-center gap-1 px-2">
                     <button
                       type="button"
                       onClick={() => setVoyageTypeFilter("all")}
@@ -722,7 +737,7 @@ const Journal = () => {
                       {lang === "it" ? "terra" : "land"}
                     </button>
                   </div>
-                  <div className="space-y-1">
+                  <div className="max-h-[min(52vh,440px)] min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
                     <button
                       type="button"
                       onClick={() => handleVoyageFilterSelect(null)}

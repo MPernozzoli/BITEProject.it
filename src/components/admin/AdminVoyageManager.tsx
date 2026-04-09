@@ -437,7 +437,16 @@ const AdminVoyageManager = ({
   }, []);
 
   const commitWaypoints = useCallback((voyageId: string, nextWaypoints: VoyageWaypoint[]) => {
-    const sorted = sortWaypoints(nextWaypoints);
+    const seen = new Set<string>();
+    const uniqueOrdered: VoyageWaypoint[] = [];
+    for (const waypoint of nextWaypoints) {
+      if (seen.has(waypoint.id)) continue;
+      seen.add(waypoint.id);
+      uniqueOrdered.push(waypoint);
+    }
+    const sorted = sortWaypoints(uniqueOrdered).map((waypoint, index) =>
+      normalizeWaypoint({ ...waypoint, sort_order: index })
+    );
     const nextMap = { ...waypointsRef.current, [voyageId]: sorted };
     waypointsRef.current = nextMap;
     setWaypoints(nextMap);
@@ -656,6 +665,7 @@ const AdminVoyageManager = ({
       const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
 
       if (error) {
+        console.error("[AdminVoyageManager] syncVoyageGeometry failed", { voyageId, error });
         toast.error(getErrorMessage(error, "Impossibile salvare la geometria del percorso"));
         return false;
       }
@@ -702,32 +712,52 @@ const AdminVoyageManager = ({
     }
   }, []);
 
-  const persistWaypointPatch = useCallback(async (waypointId: string, changes: Partial<VoyageWaypoint>) => {
-    const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
-    let appliedChanges = changes;
-    let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
+  const persistWaypointPatch = useCallback(
+    async (
+      waypointId: string,
+      changes: Partial<VoyageWaypoint>,
+      options?: { notify?: boolean }
+    ): Promise<
+      | { success: true; appliedChanges: Partial<VoyageWaypoint> }
+      | { success: false; appliedChanges: null; error: { message?: string | null } | null }
+    > => {
+      const notify = options?.notify !== false;
+      const payload = changes as unknown as TablesUpdate<"voyage_waypoints">;
+      let appliedChanges = changes;
+      let { error } = await supabase.from("voyage_waypoints").update(payload).eq("id", waypointId);
 
-    if (error && isMissingWaypointMetadataColumnError(error)) {
-      const legacyPayload = stripUnsupportedWaypointMetadata(payload as Record<string, unknown>) as TablesUpdate<"voyage_waypoints">;
-      if (!Object.keys(legacyPayload).length) {
-        toast.error("Apply the latest waypoint migration to save localized content, dates, and media.");
-        return { success: false, appliedChanges: null as Partial<VoyageWaypoint> | null };
+      if (error && isMissingWaypointMetadataColumnError(error)) {
+        const legacyPayload = stripUnsupportedWaypointMetadata(payload as Record<string, unknown>) as TablesUpdate<"voyage_waypoints">;
+        if (!Object.keys(legacyPayload).length) {
+          const migrationMsg =
+            "Applica le migration waypoint più recenti per salvare testi localizzati, date e media.";
+          console.error("[AdminVoyageManager] persistWaypointPatch: migration required", { waypointId, error });
+          if (notify) toast.error(migrationMsg);
+          return { success: false, appliedChanges: null, error: { message: migrationMsg } };
+        }
+
+        const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
+        error = fallbackResult.error;
+        appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
       }
 
-      const fallbackResult = await supabase.from("voyage_waypoints").update(legacyPayload).eq("id", waypointId);
-      error = fallbackResult.error;
-      appliedChanges = legacyPayload as unknown as Partial<VoyageWaypoint>;
-    }
+      if (error) {
+        console.error("[AdminVoyageManager] persistWaypointPatch failed", { waypointId, changes, error });
+        if (notify) toast.error(getErrorMessage(error, "Impossibile aggiornare il waypoint"));
+        return { success: false, appliedChanges: null, error };
+      }
 
-    if (error) {
-      toast.error(getErrorMessage(error, "Unable to update waypoint"));
-      return { success: false, appliedChanges: null as Partial<VoyageWaypoint> | null };
-    }
+      return { success: true, appliedChanges };
+    },
+    []
+  );
 
-    return { success: true, appliedChanges };
-  }, []);
-
-  const persistWaypointInsert = useCallback(async (voyageId: string, waypoint: VoyageWaypoint, sortOrder: number) => {
+  const persistWaypointInsert = useCallback(async (
+    voyageId: string,
+    waypoint: VoyageWaypoint,
+    sortOrder: number,
+    options?: { notify?: boolean }
+  ) => {
     const name_it = waypoint.name_it?.trim() || null;
     const name_en = waypoint.name_en?.trim() || null;
     const legacyName = waypoint.name?.trim() || name_en || name_it || buildWaypointDefaultName(sortOrder, waypoint.lat, waypoint.lng);
@@ -762,8 +792,10 @@ const AdminVoyageManager = ({
       ({ data, error } = await runInsert(legacyBaseData));
     }
 
+    const notify = options?.notify !== false;
     if (error || !data) {
-      toast.error(getErrorMessage(error, "Unable to insert waypoint"));
+      console.error("[AdminVoyageManager] persistWaypointInsert failed", { voyageId, sortOrder, waypoint, error });
+      if (notify) toast.error(getErrorMessage(error, "Impossibile creare il waypoint"));
       return null;
     }
 
@@ -1976,75 +2008,127 @@ const AdminVoyageManager = ({
     if (!isRouteDraftDirty) return true;
 
     setIsSavingRouteDraft(true);
-    const draftWaypoints = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
-    const persistedWaypoints = sortWaypoints(persistedWaypointsRef.current[selectedVoyageId] || []);
-    const draftExistingIds = new Set(draftWaypoints.filter((waypoint) => !isLocalWaypointId(waypoint.id)).map((waypoint) => waypoint.id));
+    try {
+      const draftSnapshot = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
+      const persistedWaypoints = sortWaypoints(persistedWaypointsRef.current[selectedVoyageId] || []);
+      const draftExistingIds = new Set(
+        draftSnapshot.filter((waypoint) => !isLocalWaypointId(waypoint.id)).map((waypoint) => waypoint.id)
+      );
 
-    for (const removedWaypoint of persistedWaypoints) {
-      if (!draftExistingIds.has(removedWaypoint.id)) {
-        const { error } = await supabase.from("voyage_waypoints").delete().eq("id", removedWaypoint.id);
-        if (error) {
-          setIsSavingRouteDraft(false);
-          toast.error(getErrorMessage(error, "Unable to delete waypoint"));
+      for (const removedWaypoint of persistedWaypoints) {
+        if (!draftExistingIds.has(removedWaypoint.id)) {
+          const { error } = await supabase.from("voyage_waypoints").delete().eq("id", removedWaypoint.id);
+          if (error) {
+            console.error("[AdminVoyageManager] save route: delete waypoint failed", {
+              voyageId: selectedVoyageId,
+              waypointId: removedWaypoint.id,
+              error,
+            });
+            toast.error(
+              getErrorMessage(error, "Salvataggio rotta: impossibile eliminare un waypoint rimosso in modifica.")
+            );
+            return false;
+          }
+        }
+      }
+
+      for (const [index, waypoint] of draftSnapshot.entries()) {
+        const sort_order = index;
+        if (isLocalWaypointId(waypoint.id)) {
+          const insertedWaypoint = await persistWaypointInsert(selectedVoyageId, waypoint, sort_order, { notify: false });
+          if (!insertedWaypoint) {
+            toast.error(
+              "Salvataggio rotta: creazione di un nuovo waypoint non riuscita. Dettagli in console (persistWaypointInsert)."
+            );
+            return false;
+          }
+          const localId = waypoint.id;
+          const listAfterInsert = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
+          const merged = listAfterInsert.map((w) =>
+            w.id === localId ? normalizeWaypoint({ ...insertedWaypoint, sort_order: w.sort_order }) : w
+          );
+          commitWaypoints(
+            selectedVoyageId,
+            merged.map((w, i) => normalizeWaypoint({ ...w, sort_order: i }))
+          );
+          setWaypointEditorPanelId((prev) => (prev === localId ? insertedWaypoint.id : prev));
+          continue;
+        }
+
+        const persistedWaypoint = persistedWaypoints.find((item) => item.id === waypoint.id);
+        if (!persistedWaypoint) continue;
+        const changes: Partial<VoyageWaypoint> = {};
+        ([
+          "lat",
+          "lng",
+          "name",
+          "name_it",
+          "name_en",
+          "description_it",
+          "description_en",
+          "event_date",
+          "event_time",
+          "waypoint_type",
+          "visibility_mode",
+          "sort_order",
+          "media",
+        ] as const).forEach((key) => {
+          const nextValue = key === "sort_order" ? sort_order : waypoint[key];
+          const previousValue = key === "sort_order" ? persistedWaypoint.sort_order : persistedWaypoint[key];
+          if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
+            (changes as Record<string, unknown>)[key] = nextValue;
+          }
+        });
+        if (!Object.keys(changes).length) continue;
+
+        const result = await persistWaypointPatch(waypoint.id, changes, { notify: false });
+        if (!result.success) {
+          const detail = getErrorMessage(result.error, "errore sconosciuto");
+          console.error("[AdminVoyageManager] save route: patch waypoint failed", {
+            voyageId: selectedVoyageId,
+            waypointId: waypoint.id,
+            changes,
+            error: result.error,
+          });
+          toast.error(
+            `Salvataggio rotta: aggiornamento waypoint non riuscito (${waypoint.name_it || waypoint.name_en || waypoint.id}). ${detail}`
+          );
           return false;
         }
       }
-    }
 
-    for (const [index, waypoint] of draftWaypoints.entries()) {
-      const sort_order = index;
-      if (isLocalWaypointId(waypoint.id)) {
-        const insertedWaypoint = await persistWaypointInsert(selectedVoyageId, waypoint, sort_order);
-        if (!insertedWaypoint) {
-          setIsSavingRouteDraft(false);
-          return false;
-        }
-        continue;
+      storedRouteDraftRef.current = null;
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
       }
 
-      const persistedWaypoint = persistedWaypoints.find((item) => item.id === waypoint.id);
-      if (!persistedWaypoint) continue;
-      const changes: Partial<VoyageWaypoint> = {};
-      ([
-        "lat",
-        "lng",
-        "name",
-        "name_it",
-        "name_en",
-        "description_it",
-        "description_en",
-        "event_date",
-        "event_time",
-        "waypoint_type",
-        "visibility_mode",
-        "sort_order",
-        "media",
-      ] as const).forEach((key) => {
-        const nextValue = key === "sort_order" ? sort_order : waypoint[key];
-        const previousValue = key === "sort_order" ? persistedWaypoint.sort_order : persistedWaypoint[key];
-        if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
-          (changes as Record<string, unknown>)[key] = nextValue;
-        }
-      });
-      if (!Object.keys(changes).length) continue;
-
-      const result = await persistWaypointPatch(waypoint.id, changes);
-      if (!result.success) {
-        setIsSavingRouteDraft(false);
-        return false;
+      await fetchWaypoints(selectedVoyageId);
+      const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+      if (!geoOk) {
+        console.error("[AdminVoyageManager] save route: syncVoyageGeometry failed after waypoint save", {
+          voyageId: selectedVoyageId,
+        });
+        toast.error(
+          "Waypoint salvati sul database, ma la geometria della linea non è stata aggiornata. Usa «Rigenera geometria» o riprova il salvataggio."
+        );
+      } else {
+        toast.success("Rotta salvata correttamente (waypoint e geometria).");
       }
+      return true;
+    } finally {
+      setIsSavingRouteDraft(false);
     }
-
-    await fetchWaypoints(selectedVoyageId);
-    const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
-    setIsSavingRouteDraft(false);
-    if (!geoOk) {
-      toast.error("Waypoint salvati; geometria non aggiornata sul voyage. Usa «Rigenera geometria» o riprova.");
-    } else {
-      toast.success("Route saved");
-    }
-    return true;
-  }, [fetchWaypoints, isRouteDraftDirty, persistWaypointInsert, persistWaypointPatch, selectedVoyage, selectedVoyageId, syncVoyageGeometry]);
+  }, [
+    commitWaypoints,
+    fetchWaypoints,
+    isRouteDraftDirty,
+    persistWaypointInsert,
+    persistWaypointPatch,
+    selectedVoyage,
+    selectedVoyageId,
+    syncVoyageGeometry,
+    setWaypointEditorPanelId,
+  ]);
 
   const regenerateSelectedVoyageGeometry = useCallback(async () => {
     if (!selectedVoyageId || !selectedVoyage) return;
@@ -2752,7 +2836,7 @@ const AdminVoyageManager = ({
                     disabled={!isRouteDraftDirty || isSavingRouteDraft}
                     className="bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50"
                   >
-                    {isSavingRouteDraft ? "Saving..." : "Save route"}
+                    {isSavingRouteDraft ? "Salvataggio…" : "Salva rotta"}
                   </button>
                 </div>
               </div>
