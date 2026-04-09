@@ -102,11 +102,12 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+            <Toaster />
+            <Sonner />
           </Layout>
         </BrowserRouter>
-        </AuthProvider>
-      </I18nProvider>
-    </>
+      </AuthProvider>
+    </I18nProvider>
   );
 
   if (!queryPersister) {
