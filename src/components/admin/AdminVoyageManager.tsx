@@ -2090,7 +2090,7 @@ const AdminVoyageManager = ({
         description_en: wp.description_en ?? "",
       });
       if (!result.ok) {
-        toast.error(result.error);
+        toast.error((result as { ok: false; error: string }).error);
         return false;
       }
       if (result.skipped) {
