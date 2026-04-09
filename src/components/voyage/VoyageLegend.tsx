@@ -54,6 +54,15 @@ const formatDistance = (nm: number, isWater: boolean): string => {
 
 const STEM_H = 14;
 
+const arcLayoutNearlyEqual = (
+  a: { w: number; xs: number[] },
+  b: { w: number; xs: number[] }
+): boolean => {
+  if (Math.abs(a.w - b.w) > 0.5) return false;
+  if (a.xs.length !== b.xs.length) return false;
+  return a.xs.every((v, i) => Math.abs(v - (b.xs[i] ?? 0)) < 0.5);
+};
+
 function LegendArticleChip({
   articles,
   lang,
@@ -65,6 +74,8 @@ function LegendArticleChip({
   onOpen: (article: GeoArticle) => void;
   className?: string;
 }) {
+  const first = articles[0];
+  if (!first) return null;
   const label = articles.map((a) => getLocalizedArticleTitle(a, lang)).join(" · ");
   return (
     <button
@@ -73,7 +84,7 @@ function LegendArticleChip({
       aria-label={label}
       onClick={(e) => {
         e.stopPropagation();
-        onOpen(articles[0]!);
+        onOpen(first);
       }}
       className={`inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-accent/45 bg-background/92 text-accent shadow-sm transition hover:border-accent hover:bg-accent/10 pointer-events-auto ${className}`}
     >
@@ -171,19 +182,27 @@ const VoyageLegend = ({
   const [arcLayout, setArcLayout] = useState<{ w: number; xs: number[] } | null>(null);
 
   const measureArcs = useCallback(() => {
-    const root = diagramRowRef.current;
-    if (!root || visibleWaypoints.length < 2 || spanBindings.length === 0) {
-      setArcLayout(null);
-      return;
+    try {
+      const root = diagramRowRef.current;
+      if (!root || visibleWaypoints.length < 2 || spanBindings.length === 0) {
+        setArcLayout((prev) => (prev === null ? prev : null));
+        return;
+      }
+      const br = root.getBoundingClientRect();
+      const xs = visibleWaypoints.map((_, i) => {
+        const el = dotElRefs.current[i];
+        if (!el) return 0;
+        const r = el.getBoundingClientRect();
+        return r.left + r.width / 2 - br.left;
+      });
+      const next = { w: Math.max(1, br.width), xs };
+      setArcLayout((prev) => {
+        if (prev && arcLayoutNearlyEqual(prev, next)) return prev;
+        return next;
+      });
+    } catch {
+      setArcLayout((prev) => (prev === null ? prev : null));
     }
-    const br = root.getBoundingClientRect();
-    const xs = visibleWaypoints.map((_, i) => {
-      const el = dotElRefs.current[i];
-      if (!el) return 0;
-      const r = el.getBoundingClientRect();
-      return r.left + r.width / 2 - br.left;
-    });
-    setArcLayout({ w: Math.max(1, br.width), xs });
   }, [visibleWaypoints, spanBindings.length, segments, useUniform, diagramContentMinPx]);
 
   useLayoutEffect(() => {
@@ -192,10 +211,20 @@ const VoyageLegend = ({
 
   useEffect(() => {
     const root = diagramRowRef.current;
-    if (!root) return;
-    const ro = new ResizeObserver(() => measureArcs());
+    if (!root || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        measureArcs();
+      });
+    });
     ro.observe(root);
-    return () => ro.disconnect();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, [measureArcs]);
 
   const voyageName = getLocalizedVoyageName(voyage, lang);

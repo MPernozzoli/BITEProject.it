@@ -40,6 +40,7 @@ import {
 } from "@/lib/voyage-utils";
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 
 interface VoyageFormState {
   name_it: string;
@@ -1084,6 +1085,9 @@ const AdminVoyageManager = ({
         </div>
         <section style="${popupSectionStyle}">
           <p style="${popupSectionTitleStyle}">Testi</p>
+          <button type="button" data-action="ai-translate" style="justify-self:start;padding:6px 10px;border:1px solid hsl(var(--border));background:hsl(var(--muted));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:2px;">
+            Traduci campi vuoti (IT↔EN)
+          </button>
           <div style="${popupLangTabRowStyle}" role="tablist" aria-label="Lingua contenuti waypoint">
             <button type="button" data-popup-lang="it" aria-selected="true" style="${popupLangTabActiveStyle}">Italiano</button>
             <button type="button" data-popup-lang="en" aria-selected="false" style="${popupLangTabInactiveStyle}">English</button>
@@ -1170,6 +1174,7 @@ const AdminVoyageManager = ({
       const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
       const relocateButton = wrapper.querySelector('[data-action="relocate"]') as HTMLButtonElement | null;
+      const aiTranslateButton = wrapper.querySelector('[data-action="ai-translate"]') as HTMLButtonElement | null;
       const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
       const langTabButtons = wrapper.querySelectorAll<HTMLButtonElement>("[data-popup-lang]");
       const langPanels = wrapper.querySelectorAll<HTMLElement>("[data-popup-panel]");
@@ -1188,6 +1193,38 @@ const AdminVoyageManager = ({
             panel.style.display = show ? "grid" : "none";
           });
         });
+      });
+
+      aiTranslateButton?.addEventListener("click", () => {
+        void (async () => {
+          if (!aiTranslateButton) return;
+          aiTranslateButton.disabled = true;
+          try {
+            const result = await invokeTranslateEditorContent({
+              kind: "waypoint",
+              name_it: nameItInput?.value ?? "",
+              name_en: nameEnInput?.value ?? "",
+              description_it: descriptionItInput?.value ?? "",
+              description_en: descriptionEnInput?.value ?? "",
+            });
+            if (!result.ok) {
+              toast.error(result.error);
+              return;
+            }
+            if (result.skipped) {
+              toast.message("Niente da tradurre: compila i campi in una lingua e lascia vuoti quelli nell’altra.");
+              return;
+            }
+            const f = result.fields;
+            if (typeof f.name_en === "string" && nameEnInput) nameEnInput.value = f.name_en;
+            if (typeof f.name_it === "string" && nameItInput) nameItInput.value = f.name_it;
+            if (typeof f.description_en === "string" && descriptionEnInput) descriptionEnInput.value = f.description_en;
+            if (typeof f.description_it === "string" && descriptionItInput) descriptionItInput.value = f.description_it;
+            toast.success("Traduzione applicata nei campi (salva per confermare).");
+          } finally {
+            aiTranslateButton.disabled = false;
+          }
+        })();
       });
 
       const refreshPopup = () => {

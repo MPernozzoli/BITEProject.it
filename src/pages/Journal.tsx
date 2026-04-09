@@ -235,12 +235,16 @@ const Journal = () => {
     queryKey: ["voyage-legend-stories", voyageLegendStoriesQueryKey],
     enabled: Boolean(selectedRouteVoyageId && voyageLegendStoryIds.length > 0),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stories")
-        .select("id, title_it, title_en")
-        .in("id", voyageLegendStoryIds);
-      if (error) throw error;
-      return (data || []) as { id: string; title_it: string | null; title_en: string | null }[];
+      try {
+        const { data, error } = await supabase
+          .from("stories")
+          .select("id, title_it, title_en")
+          .in("id", voyageLegendStoryIds);
+        if (error) return [];
+        return (data || []) as { id: string; title_it: string | null; title_en: string | null }[];
+      } catch {
+        return [];
+      }
     },
   });
 

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
 import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop } from "lucide-react";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop, Languages, Loader2 } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace } from "@/lib/voyage-utils";
@@ -15,6 +15,7 @@ import CoverCropDialog from "@/components/admin/CoverCropDialog";
 import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 import { normalizeArticleMapScenes } from "@/lib/article-map";
+import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 
 type ArticleLanguage = "en" | "it";
 
@@ -93,6 +94,7 @@ const ArticleEditor = () => {
   const instagramItInputRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
+  const [aiTranslating, setAiTranslating] = useState(false);
   const [activeTab, setActiveTab] = useState<"en" | "it">("en");
   const [titleEn, setTitleEn] = useState("");
   const [titleIt, setTitleIt] = useState("");
@@ -606,6 +608,39 @@ const ArticleEditor = () => {
     }
     setNewTagInput("");
   };
+
+  const handleAiTranslateMissing = useCallback(async () => {
+    setAiTranslating(true);
+    try {
+      const result = await invokeTranslateEditorContent({
+        kind: "article",
+        title_en: titleEn,
+        title_it: titleIt,
+        excerpt_en: excerptEn,
+        excerpt_it: excerptIt,
+        content_en: contentEn,
+        content_it: contentIt,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.skipped) {
+        toast.message("Niente da tradurre: compila titolo, estratto o corpo in una lingua e lascia vuoti i campi nell’altra.");
+        return;
+      }
+      const f = result.fields;
+      if (typeof f.title_en === "string") setTitleEn(f.title_en);
+      if (typeof f.title_it === "string") setTitleIt(f.title_it);
+      if (typeof f.excerpt_en === "string") setExcerptEn(f.excerpt_en);
+      if (typeof f.excerpt_it === "string") setExcerptIt(f.excerpt_it);
+      if (f.content_en && typeof f.content_en === "object") setContentEn(f.content_en as object);
+      if (f.content_it && typeof f.content_it === "object") setContentIt(f.content_it as object);
+      toast.success("Traduzione applicata (salva per confermare).");
+    } finally {
+      setAiTranslating(false);
+    }
+  }, [titleEn, titleIt, excerptEn, excerptIt, contentEn, contentIt]);
 
   const saveArticle = useCallback(async (action: "draft" | "publish") => {
     setSaving(true);
@@ -1415,9 +1450,21 @@ const ArticleEditor = () => {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
           {/* Main content */}
           <div className="space-y-6">
-            <div className="flex gap-4 border-b border-border">
-              <button onClick={() => setActiveTab("en")} className={`pb-3 text-sm font-sans tracking-wide transition-colors border-b-2 ${activeTab === "en" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"}`}>English</button>
-              <button onClick={() => setActiveTab("it")} className={`pb-3 text-sm font-sans tracking-wide transition-colors border-b-2 ${activeTab === "it" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"}`}>Italiano</button>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border">
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setActiveTab("en")} className={`pb-3 text-sm font-sans tracking-wide transition-colors border-b-2 ${activeTab === "en" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"}`}>English</button>
+                <button type="button" onClick={() => setActiveTab("it")} className={`pb-3 text-sm font-sans tracking-wide transition-colors border-b-2 ${activeTab === "it" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground"}`}>Italiano</button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleAiTranslateMissing()}
+                disabled={aiTranslating}
+                className="mb-1 inline-flex items-center gap-2 border border-border px-3 py-1.5 text-xs font-sans tracking-wide text-muted-foreground hover:text-foreground hover:border-accent transition-colors disabled:opacity-50"
+                title="Traduce solo i campi vuoti; il corpo mantiene struttura TipTap, titoli, media e didascalie al loro posto."
+              >
+                {aiTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+                Traduci campi vuoti (IT↔EN)
+              </button>
             </div>
 
             {activeTab === "en" ? (

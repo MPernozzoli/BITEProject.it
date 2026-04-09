@@ -31,6 +31,8 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = true
   [functions.notify-story-subscribers]
     verify_jwt = true
+  [functions.translate-editor-content]
+    verify_jwt = true
   [functions.public-sitemap]
     verify_jwt = false
   [functions.public-llms]
