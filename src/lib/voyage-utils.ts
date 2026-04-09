@@ -58,22 +58,11 @@ export async function fetchOSRMRoute(
   }
 }
 
-/** BRouter `river` profile: OSM waterways (canals, rivers). Start/end must be near routable water or the API returns 400. */
-export async function fetchBRouterWaterwaySegment(
-  start: { lat: number; lng: number },
-  end: { lat: number; lng: number }
-): Promise<{ coordinates: [number, number][]; distanceKm: number } | null> {
-  const params = new URLSearchParams({
-    lonlats: `${start.lng},${start.lat}|${end.lng},${end.lat}`,
-    profile: "river",
-    alternativeidx: "0",
-    format: "geojson",
-  });
+const parseBRouterWaterwayGeoJson = async (
+  res: Response
+): Promise<{ coordinates: [number, number][]; distanceKm: number } | null> => {
+  if (!res.ok) return null;
   try {
-    const res = await fetch(`${BROUTER_BASE_URL}/brouter?${params.toString()}`, {
-      headers: { "User-Agent": BITE_MAPS_USER_AGENT },
-    });
-    if (!res.ok) return null;
     const data = (await res.json()) as {
       features?: Array<{ geometry?: { type?: string; coordinates?: [number, number][] } }>;
     };
@@ -100,6 +89,37 @@ export async function fetchBRouterWaterwaySegment(
   } catch {
     return null;
   }
+};
+
+/** One BRouter request for the whole chain (via points = pipe). Fewer 400s in the network tab than N−1 segment calls. */
+export async function fetchBRouterWaterwayRoute(waypoints: { lat: number; lng: number }[]): Promise<{
+  coordinates: [number, number][];
+  distanceKm: number;
+} | null> {
+  if (waypoints.length < 2) return null;
+  const lonlats = waypoints.map((w) => `${w.lng},${w.lat}`).join("|");
+  const params = new URLSearchParams({
+    lonlats,
+    profile: "river",
+    alternativeidx: "0",
+    format: "geojson",
+  });
+  try {
+    const res = await fetch(`${BROUTER_BASE_URL}/brouter?${params.toString()}`, {
+      headers: { "User-Agent": BITE_MAPS_USER_AGENT },
+    });
+    return parseBRouterWaterwayGeoJson(res);
+  } catch {
+    return null;
+  }
+}
+
+/** Single segment (fallback when the full-chain request fails). */
+export async function fetchBRouterWaterwaySegment(
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number }
+): Promise<{ coordinates: [number, number][]; distanceKm: number } | null> {
+  return fetchBRouterWaterwayRoute([start, end]);
 }
 
 export interface GeocodedPlace {
@@ -172,10 +192,14 @@ export async function geocodePlace(query: string): Promise<GeocodedPlace | null>
   return result || null;
 }
 
-export async function reverseGeocodePlace(lat: number, lng: number): Promise<string | null> {
+async function reverseGeocodePlaceWithAcceptLanguage(
+  lat: number,
+  lng: number,
+  acceptLanguage: string
+): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}&zoom=12`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}&zoom=12&accept-language=${encodeURIComponent(acceptLanguage)}`,
       { headers: { "User-Agent": BITE_MAPS_USER_AGENT } }
     );
     const data = await res.json();
@@ -197,16 +221,38 @@ export async function reverseGeocodePlace(lat: number, lng: number): Promise<str
   }
 }
 
+/** Reverse geocode in English (default for single-language callers). */
+export async function reverseGeocodePlace(lat: number, lng: number): Promise<string | null> {
+  return reverseGeocodePlaceWithAcceptLanguage(lat, lng, "en");
+}
+
+/** Reverse geocode with separate IT/EN labels from Nominatim (`accept-language`). */
+export async function reverseGeocodePlaceLocalized(
+  lat: number,
+  lng: number
+): Promise<{ it: string | null; en: string | null }> {
+  const [it, en] = await Promise.all([
+    reverseGeocodePlaceWithAcceptLanguage(lat, lng, "it"),
+    reverseGeocodePlaceWithAcceptLanguage(lat, lng, "en"),
+  ]);
+  return { it, en };
+}
+
 export function formatWaypointCoordinateLabel(lat: number, lng: number): string {
   const latHemisphere = lat >= 0 ? "N" : "S";
   const lngHemisphere = lng >= 0 ? "E" : "W";
   return `${Math.abs(lat).toFixed(2)}°${latHemisphere} · ${Math.abs(lng).toFixed(2)}°${lngHemisphere}`;
 }
 
-const waypointLabelPrefix = (index: number, lang: Language) => {
+/**
+ * Etichetta di sequenza lungo il percorso (da mostrare accanto al nome, non nel campo `name`).
+ * `total` = numero waypoint del viaggio; `index` = posizione nell’ordine `sort_order`.
+ */
+export function getWaypointSequenceHeading(index: number, total: number, lang: Language): string {
   if (index === 0) return lang === "it" ? "Partenza" : "Start";
+  if (total > 1 && index === total - 1) return lang === "it" ? "Arrivo" : "Arrival";
   return lang === "it" ? `Tappa ${String(index + 1).padStart(2, "0")}` : `Waypoint ${String(index + 1).padStart(2, "0")}`;
-};
+}
 
 export function slugifyVoyageName(value: string): string {
   return value
@@ -292,16 +338,21 @@ export function formatWaypointMoment(
 }
 
 export function buildWaypointDefaultLocalizedNames(
-  index: number,
+  _index: number,
   lat: number,
   lng: number,
-  placeName?: string | null
+  placeName?: string | null,
+  placeByLang?: { it: string | null; en: string | null } | null
 ): Record<Language, string> {
-  const suffix = placeName || formatWaypointCoordinateLabel(lat, lng);
-  return {
-    en: `${waypointLabelPrefix(index, "en")} · ${suffix}`,
-    it: `${waypointLabelPrefix(index, "it")} · ${suffix}`,
-  };
+  const fallback = formatWaypointCoordinateLabel(lat, lng);
+  if (placeByLang) {
+    return {
+      it: placeByLang.it?.trim() || placeByLang.en?.trim() || placeName?.trim() || fallback,
+      en: placeByLang.en?.trim() || placeByLang.it?.trim() || placeName?.trim() || fallback,
+    };
+  }
+  const single = placeName?.trim() || fallback;
+  return { it: single, en: single };
 }
 
 export function buildWaypointDefaultName(index: number, lat: number, lng: number, placeName?: string | null): string {
@@ -683,29 +734,12 @@ export async function buildVoyageGeometry(
   const fullRoute: [number, number][] = [];
 
   if (useWaterwayRouting) {
-    for (let index = 1; index < waypoints.length; index += 1) {
-      const start = waypoints[index - 1];
-      const end = waypoints[index];
-
-      if (areCoordinatesNearlyEqual([start.lng, start.lat], [end.lng, end.lat])) {
-        appendRouteCoordinates(fullRoute, [[start.lng, start.lat]]);
-        appendRouteCoordinates(fullRoute, [[end.lng, end.lat]]);
-        continue;
-      }
-
-      const routed = await fetchBRouterWaterwaySegment(start, end);
-      if (routed?.coordinates?.length) {
-        appendRouteCoordinates(fullRoute, routed.coordinates);
-        continue;
-      }
-
-      appendRouteCoordinates(fullRoute, [
-        [start.lng, start.lat],
-        [end.lng, end.lat],
-      ]);
+    const fullChain = await fetchBRouterWaterwayRoute(waypoints);
+    if (fullChain?.coordinates?.length && fullChain.coordinates.length >= 2) {
+      return fullChain.coordinates;
     }
-
-    return fullRoute.length >= 2 ? fullRoute : getStraightVoyageGeometry(waypoints);
+    // Un solo tentativo BRouter: se un via è fuori dal grafo idrico la risposta è 400 — evitiamo N−1 richieste uguali.
+    return getStraightVoyageGeometry(waypoints);
   }
 
   for (let index = 1; index < waypoints.length; index += 1) {

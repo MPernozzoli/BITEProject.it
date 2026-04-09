@@ -4,6 +4,7 @@ import {
   getLocalizedVoyageName,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  getWaypointSequenceHeading,
   haversineNM,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
@@ -158,7 +159,10 @@ const VoyageLegend = ({
           }}
         >
         {visibleWaypoints.map((wp, i) => {
-          const wpName = getLocalizedWaypointName(wp, lang, i);
+          const routeIndex = waypoints.findIndex((w) => w.id === wp.id);
+          const seqHeading =
+            routeIndex >= 0 ? getWaypointSequenceHeading(routeIndex, waypoints.length, lang) : "";
+          const wpName = getLocalizedWaypointName(wp, lang, routeIndex >= 0 ? routeIndex : i);
           const isFirst = i === 0;
           const isLast = i === visibleWaypoints.length - 1;
           const isEndpoint = isFirst || isLast;
@@ -177,7 +181,7 @@ const VoyageLegend = ({
                 type="button"
                 onClick={() => onWaypointClick?.(wp)}
                 className="group relative shrink-0 cursor-pointer z-10"
-                title={wpName}
+                title={seqHeading ? `${seqHeading} — ${wpName}` : wpName}
               >
                 <span
                   className={`
@@ -197,8 +201,15 @@ const VoyageLegend = ({
                 >
                   {labelAbove ? (
                     <>
-                      <span className="text-[10px] leading-tight font-sans font-medium text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap">
-                        {wpName}
+                      <span className="flex flex-col items-center gap-0.5">
+                        {seqHeading ? (
+                          <span className="text-[8px] leading-tight font-sans uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">
+                            {seqHeading}
+                          </span>
+                        ) : null}
+                        <span className="text-[10px] leading-tight font-sans font-medium text-muted-foreground group-hover:text-foreground transition-colors whitespace-nowrap">
+                          {wpName}
+                        </span>
                       </span>
                       <div className={`w-px ${stemBg}`} style={{ height: STEM_H }} />
                     </>
@@ -209,13 +220,18 @@ const VoyageLegend = ({
                       )}
                       <span
                         className={`
-                          text-[10px] leading-tight font-sans transition-colors whitespace-nowrap
+                          flex flex-col items-center gap-0.5 text-[10px] leading-tight font-sans transition-colors whitespace-nowrap
                           ${isEndpoint
                             ? "font-semibold text-foreground mt-1"
                             : "font-medium text-muted-foreground group-hover:text-foreground"}
                         `}
                       >
-                        {wpName}
+                        {seqHeading ? (
+                          <span className="text-[8px] font-normal uppercase tracking-wider text-muted-foreground/80">
+                            {seqHeading}
+                          </span>
+                        ) : null}
+                        <span>{wpName}</span>
                       </span>
                     </>
                   )}

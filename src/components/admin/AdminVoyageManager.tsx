@@ -25,7 +25,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   totalWaypointDistance,
   totalCoordinateDistanceKm,
-  reverseGeocodePlace,
+  reverseGeocodePlaceLocalized,
   buildWaypointDefaultName,
   buildWaypointDefaultLocalizedNames,
   formatWaypointCoordinateLabel,
@@ -34,6 +34,7 @@ import {
   getLocalizedWaypointName,
   getLocalizedVoyageName,
   getWaypointEffectiveType,
+  getWaypointSequenceHeading,
   getStraightVoyageGeometry,
   normalizeWaypointMedia,
 } from "@/lib/voyage-utils";
@@ -398,6 +399,7 @@ const AdminVoyageManager = ({
   const selectedVoyageRef = useRef<string | null>(null);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
+  const geometryDebounceTimersRef = useRef<Record<string, number>>({});
   const segmentInsertRef = useRef<{ voyageId: string; insertIndex: number } | null>(null);
   const waypointRelocationRef = useRef<{ voyageId: string; waypointId: string } | null>(null);
   const segmentPreviewMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -580,51 +582,92 @@ const AdminVoyageManager = ({
     return Boolean(voyage && voyage.type === "water" && voyage.waterway_autoroute);
   };
 
-  const refreshVoyageGeometryPreview = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
-    const voyage = voyagesRef.current.find((item) => item.id === voyageId);
-    if (!voyage) return;
+  const refreshVoyageGeometryPreview = useCallback(
+    async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]): Promise<[number, number][] | null> => {
+      const voyage = voyagesRef.current.find((item) => item.id === voyageId);
+      if (!voyage) return null;
 
-    const sortedWaypoints = sortWaypoints(candidateWaypoints || waypointsRef.current[voyageId] || []);
-    const requestId = (geometryRequestRef.current[voyageId] || 0) + 1;
-    geometryRequestRef.current[voyageId] = requestId;
+      const sortedWaypoints = sortWaypoints(candidateWaypoints || waypointsRef.current[voyageId] || []);
+      const requestId = (geometryRequestRef.current[voyageId] || 0) + 1;
+      geometryRequestRef.current[voyageId] = requestId;
 
-    const coordinates = await buildVoyageGeometry(sortedWaypoints, voyage.type, {
-      waterwayAutoroute: voyage.type === "water" && Boolean(voyage.waterway_autoroute),
-    });
-    if (geometryRequestRef.current[voyageId] !== requestId) return;
+      const coordinates = await buildVoyageGeometry(sortedWaypoints, voyage.type, {
+        waterwayAutoroute: voyage.type === "water" && Boolean(voyage.waterway_autoroute),
+      });
+      if (geometryRequestRef.current[voyageId] !== requestId) return null;
 
-    geometryOverrideRef.current[voyageId] = coordinates;
-    setRouteGeometryTick((tick) => tick + 1);
-  }, []);
+      geometryOverrideRef.current[voyageId] = coordinates;
+      setRouteGeometryTick((tick) => tick + 1);
+      return coordinates;
+    },
+    []
+  );
 
-  const primeGeometryOverrideAfterWaypointEdit = useCallback((voyageId: string, waypointList: VoyageWaypoint[]) => {
-    if (!voyageUsesWaterwayAutoroute(voyageId)) {
+  const primeGeometryOverrideAfterWaypointEdit = useCallback(
+    (voyageId: string, waypointList: VoyageWaypoint[]) => {
+      if (voyageUsesWaterwayAutoroute(voyageId)) {
+        const prev = geometryDebounceTimersRef.current[voyageId];
+        if (prev !== undefined) window.clearTimeout(prev);
+        geometryDebounceTimersRef.current[voyageId] = window.setTimeout(() => {
+          delete geometryDebounceTimersRef.current[voyageId];
+          void refreshVoyageGeometryPreview(voyageId, waypointList);
+        }, 320);
+        return;
+      }
       geometryOverrideRef.current[voyageId] = getStraightVoyageGeometry(waypointList);
-    }
-    void refreshVoyageGeometryPreview(voyageId, waypointList);
-  }, [refreshVoyageGeometryPreview]);
+      void refreshVoyageGeometryPreview(voyageId, waypointList);
+    },
+    [refreshVoyageGeometryPreview]
+  );
 
-  const syncVoyageGeometry = useCallback(async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]) => {
-    await refreshVoyageGeometryPreview(voyageId, candidateWaypoints);
+  const syncVoyageGeometry = useCallback(
+    async (voyageId: string, candidateWaypoints?: VoyageWaypoint[]): Promise<boolean> => {
+      const pendingTimer = geometryDebounceTimersRef.current[voyageId];
+      if (pendingTimer !== undefined) {
+        window.clearTimeout(pendingTimer);
+        delete geometryDebounceTimersRef.current[voyageId];
+      }
 
-    const coordinates = geometryOverrideRef.current[voyageId];
-    const cachedGeometry = coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
-    const payload: TablesUpdate<"voyages"> = { cached_geometry: cachedGeometry };
-    const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
+      const voyage = voyagesRef.current.find((item) => item.id === voyageId);
+      const sortedWaypoints = sortWaypoints(candidateWaypoints || waypointsRef.current[voyageId] || []);
 
-    if (error) {
-      console.error("Unable to sync voyage geometry", error);
-      return;
-    }
+      let coordinates = await refreshVoyageGeometryPreview(voyageId, candidateWaypoints);
+      if (!coordinates || coordinates.length < 2) {
+        const fromRef = geometryOverrideRef.current[voyageId];
+        if (fromRef && fromRef.length >= 2) {
+          coordinates = fromRef;
+        }
+      }
 
-    commitVoyages(
-      voyagesRef.current.map((item) =>
-        item.id === voyageId
-          ? normalizeVoyage({ ...item, cached_geometry: cachedGeometry })
-          : item
-      )
-    );
-  }, [commitVoyages, refreshVoyageGeometryPreview]);
+      if (!coordinates || coordinates.length < 2) {
+        if (!voyage) {
+          toast.error("Voyage non trovato: geometria non salvata.");
+          return false;
+        }
+        coordinates = await buildVoyageGeometry(sortedWaypoints, voyage.type, {
+          waterwayAutoroute: voyage.type === "water" && Boolean(voyage.waterway_autoroute),
+        });
+        geometryOverrideRef.current[voyageId] = coordinates;
+      }
+
+      const cachedGeometry = coordinates.length >= 2 ? { type: "LineString" as const, coordinates } : null;
+      const payload: TablesUpdate<"voyages"> = { cached_geometry: cachedGeometry };
+      const { error } = await supabase.from("voyages").update(payload).eq("id", voyageId);
+
+      if (error) {
+        toast.error(getErrorMessage(error, "Impossibile salvare la geometria del percorso"));
+        return false;
+      }
+
+      commitVoyages(
+        voyagesRef.current.map((item) =>
+          item.id === voyageId ? normalizeVoyage({ ...item, cached_geometry: cachedGeometry }) : item
+        )
+      );
+      return true;
+    },
+    [commitVoyages, refreshVoyageGeometryPreview]
+  );
 
   const uploadWaypointMediaAsset = useCallback(async (waypointId: string, file: File) => {
     const ext = file.name.split(".").pop() || "bin";
@@ -792,8 +835,8 @@ const AdminVoyageManager = ({
         void focusWaypointOnMapRef.current(createdWaypoint.id);
       }, 0);
 
-      const suggestedPlace = await reverseGeocodePlace(lat, lng);
-      if (!suggestedPlace) return true;
+      const suggestedPlace = await reverseGeocodePlaceLocalized(lat, lng);
+      if (!suggestedPlace.it && !suggestedPlace.en) return true;
 
       const currentWaypoint = (waypointsRef.current[voyageId] || []).find((item) => item.id === createdWaypoint.id);
       if (!currentWaypoint) return true;
@@ -801,7 +844,7 @@ const AdminVoyageManager = ({
       const hasCustomLocalizedName = currentWaypoint.name_it !== provisionalNames.it || currentWaypoint.name_en !== provisionalNames.en;
       if (hasCustomLocalizedName) return true;
 
-      const suggestedNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng, suggestedPlace);
+      const suggestedNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng, null, suggestedPlace);
       if (suggestedNames.it === provisionalNames.it && suggestedNames.en === provisionalNames.en) return true;
 
       await updateWaypoint(voyageId, createdWaypoint.id, {
@@ -988,8 +1031,6 @@ const AdminVoyageManager = ({
 
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
-      const isStart = index === 0;
-      const isEnd = total > 1 && index === total - 1;
       const effectiveType = getWaypointEffectiveType(waypoint, index, total);
       const defaultNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
@@ -1007,7 +1048,7 @@ const AdminVoyageManager = ({
         wrapper.scrollTop += event.deltaY;
       }, { passive: false });
 
-      const heading = isStart ? "Start" : isEnd ? "Arrival" : `Waypoint ${String(index + 1).padStart(2, "0")}`;
+      const heading = getWaypointSequenceHeading(index, total, lang);
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
       const mediaMarkup = waypoint.media.length
         ? waypoint.media.map((mediaItem, mediaIndex) => {
@@ -1289,7 +1330,7 @@ const AdminVoyageManager = ({
 
     el.type = "button";
     el.className = "voyage-admin-marker";
-    el.title = `${getLocalizedWaypointName(waypoint, lang, index)} · Drag to move`;
+    el.title = `${getWaypointSequenceHeading(index, total, lang)} · ${getLocalizedWaypointName(waypoint, lang, index)} · Drag to move`;
     el.style.cssText = `
       width:${size}px;
       height:${size}px;
@@ -1672,7 +1713,7 @@ const AdminVoyageManager = ({
       );
       commitVoyages(nextVoyages);
       if ((waypointsRef.current[editingVoyage.id] || []).length >= 2) {
-        void syncVoyageGeometry(editingVoyage.id, waypointsRef.current[editingVoyage.id]);
+        await syncVoyageGeometry(editingVoyage.id, waypointsRef.current[editingVoyage.id]);
       }
       toast.success("Voyage updated");
     } else {
@@ -1958,9 +1999,13 @@ const AdminVoyageManager = ({
     }
 
     await fetchWaypoints(selectedVoyageId);
-    await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+    const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
     setIsSavingRouteDraft(false);
-    toast.success("Route saved");
+    if (!geoOk) {
+      toast.error("Waypoint salvati; geometria non aggiornata sul voyage. Usa «Rigenera geometria» o riprova.");
+    } else {
+      toast.success("Route saved");
+    }
     return true;
   }, [fetchWaypoints, isRouteDraftDirty, persistWaypointInsert, persistWaypointPatch, selectedVoyage, selectedVoyageId, syncVoyageGeometry]);
 
@@ -1988,8 +2033,10 @@ const AdminVoyageManager = ({
 
     setIsRegeneratingGeometry(true);
     try {
-      await syncVoyageGeometry(selectedVoyageId, persistedSelectedWaypoints);
-      toast.success(isLand ? "Geometria stradale rigenerata e salvata" : "Geometria vie navigabili rigenerata e salvata");
+      const geoOk = await syncVoyageGeometry(selectedVoyageId, persistedSelectedWaypoints);
+      if (geoOk) {
+        toast.success(isLand ? "Geometria stradale rigenerata e salvata" : "Geometria vie navigabili rigenerata e salvata");
+      }
     } finally {
       setIsRegeneratingGeometry(false);
     }

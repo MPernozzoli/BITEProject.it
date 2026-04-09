@@ -10,6 +10,7 @@ import {
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   getVoyageMapLineStringCoordinates,
+  getWaypointSequenceHeading,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
@@ -252,6 +253,7 @@ const VoyageMap = ({
       lat: number;
       voyageId: string;
       waypoint: VoyageWaypoint;
+      sequenceHeading: string;
       name: string;
       articleTitle: string;
       fillColor: string;
@@ -276,6 +278,7 @@ const VoyageMap = ({
               ? "hsl(180, 20%, 35%)"
               : "hsl(220, 10%, 70%)";
         const name = getLocalizedWaypointName(w, lang, safeIndex);
+        const sequenceHeading = getWaypointSequenceHeading(safeIndex, wps.length, lang);
         const articleTitle = associatedArticle
           ? lang === "en"
             ? associatedArticle.title_en
@@ -287,6 +290,7 @@ const VoyageMap = ({
           lat: w.lat,
           voyageId: voyage.id,
           waypoint: w,
+          sequenceHeading,
           name,
           articleTitle,
           fillColor,
@@ -783,12 +787,22 @@ const VoyageMap = ({
     waypointClusterIndexRef.current = index;
     mapWaypointsByKeyRef.current = new Map(mapWaypointClusterInputs.map((i) => [i.key, i]));
 
-    const showWaypointPopup = (coords: [number, number], name: string, articleTitle: string) => {
-      if (!name) return;
+    const showWaypointPopup = (
+      coords: [number, number],
+      sequenceHeading: string,
+      name: string,
+      articleTitle: string
+    ) => {
+      if (!name && !sequenceHeading) return;
       const L = langRef.current;
       const popupHtml = `
         <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:140px;max-width:220px;">
-          <strong style="font-size:11px;line-height:1.35;color:hsl(220,25%,22%);">${escapePopupHtml(name)}</strong>
+          ${
+            sequenceHeading
+              ? `<span style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;line-height:1.3;color:hsl(220,12%,48%);">${escapePopupHtml(sequenceHeading)}</span>`
+              : ""
+          }
+          <strong style="font-size:11px;line-height:1.35;color:hsl(220,25%,22%);">${escapePopupHtml(name || "—")}</strong>
           ${articleTitle
             ? `<span style="font-size:10px;line-height:1.4;color:hsl(220,12%,42%);">${L === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
             : ""}
@@ -887,7 +901,7 @@ const VoyageMap = ({
         el.addEventListener("mouseenter", () => {
           dot.style.transform = "scale(1.12)";
           el.style.opacity = "1";
-          showWaypointPopup(coords, meta.name, meta.articleTitle);
+          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle);
         });
         el.addEventListener("mouseleave", () => {
           dot.style.transform = "scale(1)";
