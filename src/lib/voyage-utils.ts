@@ -636,8 +636,8 @@ export function getLocalizedArticleTitle(
   return en || it || "";
 }
 
-/** Etichetta posizione in anteprima: se l'articolo copre un leg (segmento), usa il nome del waypoint di partenza. */
-export function getArticlePreviewLocationLabel(
+/** Etichetta posizione mostrata al pubblico: se l'articolo copre un leg (segmento), usa il waypoint di partenza. */
+export function getArticleDisplayLocationLabel(
   article: Pick<
     GeoArticle,
     | "voyage_id"

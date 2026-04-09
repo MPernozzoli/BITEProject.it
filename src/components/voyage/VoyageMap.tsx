@@ -8,8 +8,8 @@ import {
   getAssociatedArticleForWaypoint,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  getVisibleStopsLegendHeading,
   getVoyageMapLineStringCoordinates,
-  getWaypointSequenceHeading,
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
@@ -264,12 +264,13 @@ const VoyageMap = ({
       if (!wps.length) continue;
       const visible = getPublicVoyageWaypoints(wps, articlesForMap, voyage.id);
       const isActive = voyage.status === "active";
-      for (const w of visible) {
+      for (let vi = 0; vi < visible.length; vi++) {
+        const w = visible[vi]!;
         const routeIndex = wps.findIndex((waypoint) => waypoint.id === w.id);
-        const safeIndex = routeIndex >= 0 ? routeIndex : 0;
+        const safeIndex = routeIndex >= 0 ? routeIndex : vi;
         const associatedArticle = getAssociatedArticleForWaypoint(articlesForMap, voyage.id, safeIndex, wps);
-        const isStart = safeIndex === 0;
-        const isEnd = safeIndex === wps.length - 1;
+        const isStart = vi === 0;
+        const isEnd = vi === visible.length - 1;
         const fillColor = isStart
           ? "hsl(136, 42%, 42%)"
           : isEnd
@@ -278,7 +279,7 @@ const VoyageMap = ({
               ? "hsl(180, 20%, 35%)"
               : "hsl(220, 10%, 70%)";
         const name = getLocalizedWaypointName(w, lang, safeIndex);
-        const sequenceHeading = getWaypointSequenceHeading(safeIndex, wps.length, lang);
+        const sequenceHeading = getVisibleStopsLegendHeading(vi, visible.length, lang);
         const articleTitle = associatedArticle
           ? lang === "en"
             ? associatedArticle.title_en
@@ -794,30 +795,37 @@ const VoyageMap = ({
       coords: [number, number],
       sequenceHeading: string,
       name: string,
-      articleTitle: string
+      articleTitle: string,
+      accentColor: string
     ) => {
       if (!name && !sequenceHeading) return;
       const L = langRef.current;
+      const seqBlock = sequenceHeading
+        ? `<div style="margin:0 0 8px;">
+            <span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:${accentColor};background:linear-gradient(135deg,hsla(0,0%,100%,0.95),hsl(210,25%,97%));border:1px solid hsl(220,14%,88%);box-shadow:0 1px 2px rgba(15,23,42,0.05);">${escapePopupHtml(sequenceHeading)}</span>
+          </div>`
+        : "";
+      const articleBlock = articleTitle
+        ? `<div style="margin-top:11px;padding-top:11px;border-top:1px solid hsl(220,14%,91%);">
+            <span style="display:block;font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:hsl(220,10%,52%);margin-bottom:4px;">${L === "it" ? "Articolo" : "Article"}</span>
+            <span style="font-size:11px;line-height:1.45;color:hsl(220,14%,34%);">${escapePopupHtml(articleTitle)}</span>
+          </div>`
+        : "";
       const popupHtml = `
-        <div style="display:grid;gap:4px;font-family:var(--font-sans);min-width:140px;max-width:220px;">
-          ${
-            sequenceHeading
-              ? `<span style="font-size:9px;letter-spacing:0.12em;text-transform:uppercase;line-height:1.3;color:hsl(220,12%,48%);">${escapePopupHtml(sequenceHeading)}</span>`
-              : ""
-          }
-          <strong style="font-size:11px;line-height:1.35;color:hsl(220,25%,22%);">${escapePopupHtml(name || "—")}</strong>
-          ${articleTitle
-            ? `<span style="font-size:10px;line-height:1.4;color:hsl(220,12%,42%);">${L === "it" ? "Articolo" : "Article"}: ${escapePopupHtml(articleTitle)}</span>`
-            : ""}
+        <div style="font-family:var(--font-sans),ui-sans-serif,system-ui,sans-serif;padding:14px 16px 15px;min-width:172px;max-width:280px;border-radius:16px;background:linear-gradient(165deg,hsl(0,0%,100%) 0%,hsl(210,40%,99.2%) 100%);box-shadow:0 14px 44px rgba(15,23,42,0.13),0 0 0 1px rgba(15,23,42,0.05);border-left:4px solid ${accentColor};">
+          ${seqBlock}
+          <div style="font-size:13px;font-weight:600;line-height:1.38;color:hsl(220,28%,14%);letter-spacing:-0.015em;">${escapePopupHtml(name || "—")}</div>
+          ${articleBlock}
         </div>
       `;
       if (!popupRef.current) {
         popupRef.current = new maplibregl.Popup({
-          offset: 10,
+          offset: 14,
           closeButton: false,
           closeOnClick: false,
           closeOnMove: false,
-          maxWidth: "240px",
+          maxWidth: "300px",
+          className: "voyage-waypoint-popup",
         });
       }
       popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
@@ -904,7 +912,7 @@ const VoyageMap = ({
         el.addEventListener("mouseenter", () => {
           dot.style.transform = "scale(1.12)";
           el.style.opacity = "1";
-          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle);
+          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle, meta.fillColor);
         });
         el.addEventListener("mouseleave", () => {
           dot.style.transform = "scale(1)";

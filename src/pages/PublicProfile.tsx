@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import {
@@ -19,6 +20,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { ALL_LANGUAGES, useI18n } from "@/lib/i18n";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import { getArticleDisplayLocationLabel, type VoyageWaypoint } from "@/lib/voyage-utils";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 
@@ -59,6 +61,11 @@ interface ProfileArticle {
   cover_focal_y: number;
   cover_zoom: number;
   location_name: string | null;
+  voyage_id: string | null;
+  voyage_segment_start: number | null;
+  voyage_segment_end: number | null;
+  voyage_waypoint_start_id: string | null;
+  voyage_waypoint_end_id: string | null;
   category: string;
   published_at: string | null;
   view_count: number;
@@ -197,7 +204,7 @@ const PublicProfile = () => {
       const { data: articleData } = await supabase
         .from("logbook_articles")
         .select(
-          "id, slug, title_en, title_it, excerpt_en, excerpt_it, cover_image, cover_focal_x, cover_focal_y, cover_zoom, location_name, category, published_at, view_count"
+          "id, slug, title_en, title_it, excerpt_en, excerpt_it, cover_image, cover_focal_x, cover_focal_y, cover_zoom, location_name, voyage_id, voyage_segment_start, voyage_segment_end, voyage_waypoint_start_id, voyage_waypoint_end_id, category, published_at, view_count"
         )
         .in("id", articleIds)
         .eq("status", "published")
@@ -256,6 +263,42 @@ const PublicProfile = () => {
   const formatNumber = (value: number) => value.toLocaleString(lang === "it" ? "it-IT" : "en-US");
   const totalViews = articles.reduce((sum, article) => sum + Number(article.view_count || 0), 0);
   const featuredArticle = articles[0] || null;
+
+  const profileArticleVoyageIdsKey = useMemo(() => {
+    const ids = [...new Set(articles.map((a) => a.voyage_id).filter(Boolean))] as string[];
+    ids.sort();
+    return ids.join(",");
+  }, [articles]);
+
+  const { data: profileVoyageWaypoints = [] } = useQuery({
+    queryKey: ["public-profile-voyage-waypoints", profileArticleVoyageIdsKey],
+    enabled: profileArticleVoyageIdsKey.length > 0,
+    queryFn: async () => {
+      const ids = profileArticleVoyageIdsKey.split(",").filter(Boolean);
+      if (!ids.length) return [];
+      const { data, error } = await supabase
+        .from("voyage_waypoints")
+        .select("*")
+        .in("voyage_id", ids)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as VoyageWaypoint[];
+    },
+  });
+
+  const profileArticleWaypointsMap = useMemo(() => {
+    const m: Record<string, VoyageWaypoint[]> = {};
+    profileVoyageWaypoints.forEach((wp) => {
+      if (!m[wp.voyage_id]) m[wp.voyage_id] = [];
+      m[wp.voyage_id].push(wp);
+    });
+    return m;
+  }, [profileVoyageWaypoints]);
+
+  const featuredArticleLocationLabel = useMemo(() => {
+    if (!featuredArticle) return "";
+    return getArticleDisplayLocationLabel(featuredArticle, profileArticleWaypointsMap, lang);
+  }, [featuredArticle, profileArticleWaypointsMap, lang]);
   const recentArticles = articles.slice(1, 4);
   const hasPublishedArticles = articles.length > 0;
   const stats = hasPublishedArticles
@@ -517,10 +560,10 @@ const PublicProfile = () => {
 
                       <div className="p-5 md:p-6 flex flex-col">
                         <div className="flex flex-wrap gap-2 mb-4">
-                          {featuredArticle.location_name && (
+                          {featuredArticleLocationLabel && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
                               <MapPin size={11} className="text-accent" />
-                              {featuredArticle.location_name}
+                              {featuredArticleLocationLabel}
                             </span>
                           )}
                           <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">

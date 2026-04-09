@@ -38,6 +38,7 @@ import {
   buildPublicVoyageGeometry,
   buildVoyageSegmentGeometry,
   formatWaypointMoment,
+  getArticleDisplayLocationLabel,
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
   normalizeWaypointMedia,
@@ -166,6 +167,17 @@ const ArticlePage = () => {
     if (!article || linkedVoyageWaypoints.length === 0) return null;
     return resolveArticleRouteRange(article as GeoArticle, linkedVoyageWaypoints);
   }, [article, linkedVoyageWaypoints]);
+
+  const articleWaypointsMap = useMemo(() => {
+    const vid = article?.voyage_id;
+    if (!vid || linkedVoyageWaypoints.length === 0) return {} as Record<string, VoyageWaypoint[]>;
+    return { [vid]: linkedVoyageWaypoints };
+  }, [article?.voyage_id, linkedVoyageWaypoints]);
+
+  const articleDisplayLocation = useMemo(() => {
+    if (!article) return "";
+    return getArticleDisplayLocationLabel(article as GeoArticle, articleWaypointsMap, lang);
+  }, [article, articleWaypointsMap, lang]);
 
   const chapterPrevNext = useMemo(() => {
     if (!article?.id || !storyChapters.length) return { prev: null as StoryChapter | null, next: null as StoryChapter | null };
@@ -378,7 +390,7 @@ const ArticlePage = () => {
     return [{
       id: "article-default-scene",
       title: title || (lang === "it" ? "Posizione articolo" : "Article location"),
-      description: article?.location_name || "",
+      description: articleDisplayLocation,
       windLabel: "",
       latitude: fallbackSceneCoordinates.latitude,
       longitude: fallbackSceneCoordinates.longitude,
@@ -391,7 +403,7 @@ const ArticlePage = () => {
       vessels: [],
       overlays: [],
     }];
-  }, [article?.location_name, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
+  }, [articleDisplayLocation, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
   const shouldShowMapWidget = effectiveScenes.length > 0 || Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
 
   const dateFmt = lang === "it" ? "d MMMM yyyy" : "MMMM d, yyyy";

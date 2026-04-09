@@ -31,6 +31,7 @@ import {
 import {
   buildPublicVoyageGeometry,
   buildVoyageSegmentGeometry,
+  getArticleDisplayLocationLabel,
   resolveArticleRouteRange,
   totalCoordinateDistanceKm,
   totalWaypointDistance,
@@ -165,6 +166,17 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     if (!article || linkedVoyageWaypoints.length === 0) return null;
     return resolveArticleRouteRange(article as GeoArticle, linkedVoyageWaypoints);
   }, [article, linkedVoyageWaypoints]);
+
+  const articleWaypointsMap = useMemo(() => {
+    const vid = article?.voyage_id;
+    if (!vid || linkedVoyageWaypoints.length === 0) return {} as Record<string, VoyageWaypoint[]>;
+    return { [vid]: linkedVoyageWaypoints };
+  }, [article?.voyage_id, linkedVoyageWaypoints]);
+
+  const articleDisplayLocation = useMemo(() => {
+    if (!article) return "";
+    return getArticleDisplayLocationLabel(article as GeoArticle, articleWaypointsMap, lang);
+  }, [article, articleWaypointsMap, lang]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -349,7 +361,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     return [{
       id: "article-default-scene",
       title: title || (lang === "it" ? "Posizione articolo" : "Article location"),
-      description: article?.location_name || "",
+      description: articleDisplayLocation,
       windLabel: "",
       latitude: fallbackSceneCoordinates.latitude,
       longitude: fallbackSceneCoordinates.longitude,
@@ -362,7 +374,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
       vessels: [],
       overlays: [],
     }];
-  }, [article?.location_name, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
+  }, [articleDisplayLocation, fallbackSceneCoordinates, hasGeo, lang, localizedScenes, primaryRouteCoordinates, title]);
   const shouldShowMapWidget = effectiveScenes.length > 0 || Boolean(primaryRouteCoordinates && primaryRouteCoordinates.length > 1);
 
   const { htmlContent, contentRenderFailed } = useMemo(() => {
@@ -607,10 +619,10 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
                 <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <div className="mb-5 flex flex-wrap items-center gap-2">
-                    {article.location_name && (
+                    {articleDisplayLocation && (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-black/7 bg-white px-3 py-1.5 text-xs font-sans text-muted-foreground">
                         <MapPin size={12} className="text-accent" />
-                        {article.location_name}
+                        {articleDisplayLocation}
                       </span>
                     )}
                     <LiveReadCounter count={views} lang={lang} className="rounded-full border border-black/7 bg-white px-3 py-1.5" />

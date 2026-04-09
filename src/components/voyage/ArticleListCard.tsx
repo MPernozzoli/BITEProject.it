@@ -1,12 +1,13 @@
 import { forwardRef } from "react";
 import { format } from "date-fns";
 import { MapPin, Eye, Heart, User } from "lucide-react";
-import type { GeoArticle } from "@/lib/voyage-utils";
+import { getArticleDisplayLocationLabel, type GeoArticle, type VoyageWaypoint } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
 
 interface ArticleListCardProps {
   article: GeoArticle;
+  waypointsMap?: Record<string, VoyageWaypoint[]>;
   lang: "en" | "it";
   isActive: boolean;
   isDimmed?: boolean;
@@ -17,7 +18,8 @@ interface ArticleListCardProps {
 }
 
 const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
-  ({ article, lang, isActive, isDimmed = false, isRead, onClick, onMouseEnter, onMouseLeave }, ref) => {
+  ({ article, waypointsMap = {}, lang, isActive, isDimmed = false, isRead, onClick, onMouseEnter, onMouseLeave }, ref) => {
+    const displayLocation = getArticleDisplayLocationLabel(article, waypointsMap, lang);
     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
     const views = Number(article.viewCount ?? 0).toLocaleString(lang === "it" ? "it-IT" : "en-US");
@@ -71,10 +73,10 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                   {lang === "it" ? "Solo elenco" : "List only"}
                 </span>
               )}
-              {article.location_name && (
+              {displayLocation && (
                 <span className="inline-flex items-center gap-0.5 text-[10px] font-sans text-accent truncate">
                   <MapPin size={8} />
-                  {article.location_name}
+                  {displayLocation}
                 </span>
               )}
               {article.published_at && (

@@ -19,7 +19,7 @@ import {
   getArticleVoyageFocus,
   getLocalizedVoyageName,
   getLocalizedWaypointName,
-  getArticlePreviewLocationLabel,
+  getArticleDisplayLocationLabel,
   getVoyageRecencyMillis,
   totalCoordinateDistanceKm,
   totalWaypointDistance,
@@ -224,9 +224,10 @@ const Journal = () => {
     return articles.filter((a) => {
       const title = (lang === "en" ? a.title_en : a.title_it || a.title_en).toLowerCase();
       const excerpt = (lang === "en" ? a.excerpt_en : a.excerpt_it || a.excerpt_en || "").toLowerCase();
-      return title.includes(q) || excerpt.includes(q) || a.location_name?.toLowerCase().includes(q);
+      const loc = getArticleDisplayLocationLabel(a, waypointsMap, lang).toLowerCase();
+      return title.includes(q) || excerpt.includes(q) || loc.includes(q);
     });
-  }, [articles, searchQuery, lang]);
+  }, [articles, searchQuery, lang, waypointsMap]);
 
   const voyageLegendStoryIds = useMemo(() => {
     if (!selectedRouteVoyageId) return [] as string[];
@@ -899,6 +900,7 @@ const Journal = () => {
                     key={article.id}
                     ref={(el) => { articleRefs.current[article.id] = el; }}
                     article={article}
+                    waypointsMap={waypointsMap}
                     lang={lang}
                     isActive={selectedArticleId === article.id}
                     isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
@@ -975,6 +977,7 @@ const Journal = () => {
                   {filtered.map((article) => {
                     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
                     const excerpt = lang === "en" ? article.excerpt_en : (article.excerpt_it || article.excerpt_en);
+                    const displayLocation = getArticleDisplayLocationLabel(article, waypointsMap, lang);
                     const gridCoverStyle =
                       article.cover_image &&
                       coverImageStyle(
@@ -1003,9 +1006,9 @@ const Journal = () => {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            {article.location_name && (
+                            {displayLocation && (
                               <span className="glass-chip inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-sans text-accent">
-                                <Map size={9} /> {article.location_name}
+                                <Map size={9} /> {displayLocation}
                               </span>
                             )}
                             {article.tags?.slice(0, 2).map((tag: any) => (
@@ -1046,7 +1049,7 @@ const Journal = () => {
         <ArticleSlidePanel
           article={panelArticle}
           locationLabel={
-            panelArticle ? getArticlePreviewLocationLabel(panelArticle, waypointsMap, lang) : undefined
+            panelArticle ? getArticleDisplayLocationLabel(panelArticle, waypointsMap, lang) : undefined
           }
           panelRef={articlePanelRef}
           isSoftHidden={articleReaderActive && expandedArticlePhase !== "closing"}
