@@ -2083,12 +2083,13 @@ const AdminVoyageManager = ({
 
         const result = await persistWaypointPatch(waypoint.id, changes, { notify: false });
         if (!result.success) {
-          const detail = getErrorMessage(result.error, "errore sconosciuto");
+          const errorDetail = "error" in result ? result.error : undefined;
+          const detail = getErrorMessage(errorDetail, "errore sconosciuto");
           console.error("[AdminVoyageManager] save route: patch waypoint failed", {
             voyageId: selectedVoyageId,
             waypointId: waypoint.id,
             changes,
-            error: result.error,
+            error: errorDetail,
           });
           toast.error(
             `Salvataggio rotta: aggiornamento waypoint non riuscito (${waypoint.name_it || waypoint.name_en || waypoint.id}). ${detail}`

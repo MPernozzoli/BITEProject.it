@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
   }
 
   const normalizedEmail = user.email.trim().toLowerCase()
-  const preferredLanguage = normalizeLanguage(body.preferred_language)
+  const preferredLanguage = normalizeLanguage(readNullableString(body.preferred_language, 8))
   const secondaryLanguage = readNullableString(body.secondary_language, 8)
   const subscribed = body.newsletter_subscribed === true
   const now = new Date().toISOString()
