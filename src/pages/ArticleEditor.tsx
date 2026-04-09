@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type RefObject } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
@@ -12,10 +12,22 @@ import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
 import CoverCropDialog from "@/components/admin/CoverCropDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 import { normalizeArticleMapScenes } from "@/lib/article-map";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
+import { getArticleTranslationGaps } from "@/lib/article-translation-gaps";
 
 type ArticleLanguage = "en" | "it";
 
@@ -89,11 +101,17 @@ const ArticleEditor = () => {
   const { id } = useParams();
   const isNew = id === "new";
   const navigate = useNavigate();
+  const location = useLocation();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const instagramEnInputRef = useRef<HTMLInputElement>(null);
   const instagramItInputRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [translationOfferOpen, setTranslationOfferOpen] = useState(false);
+  const [translationOfferBusy, setTranslationOfferBusy] = useState(false);
+  const [pendingTranslationAction, setPendingTranslationAction] = useState<"draft" | "publish" | null>(null);
+  const [leaveBusy, setLeaveBusy] = useState(false);
   const [aiTranslating, setAiTranslating] = useState(false);
   const [activeTab, setActiveTab] = useState<"en" | "it">("en");
   const [titleEn, setTitleEn] = useState("");
@@ -147,6 +165,11 @@ const ArticleEditor = () => {
   const hydratedDraftRef = useRef(false);
   const skipNextDraftSaveRef = useRef(true);
   const hasLocalChangesRef = useRef(false);
+  const pendingNavigationRef = useRef<{ type: "path"; to: string } | { type: "back" } | null>(null);
+  const pendingTranslationSaveRef = useRef<{ action: "draft" | "publish"; leaveTarget?: string } | null>(null);
+  const leaveDialogOpenRef = useRef(false);
+  const reopenLeaveAfterTranslationCancelRef = useRef(false);
+  const ignoreNextPopRef = useRef(false);
   const draftStorageKey = `${ARTICLE_DRAFT_STORAGE_PREFIX}:${id ?? "new"}`;
 
   useEffect(() => { init(); }, [id]);
@@ -156,6 +179,10 @@ const ArticleEditor = () => {
     skipNextDraftSaveRef.current = true;
     hasLocalChangesRef.current = false;
   }, [draftStorageKey]);
+
+  useEffect(() => {
+    leaveDialogOpenRef.current = leaveDialogOpen;
+  }, [leaveDialogOpen]);
 
   const loginPath = () => navigate("/login", { state: { from: `/admin/article/${id}` } });
 
@@ -499,14 +526,14 @@ const ArticleEditor = () => {
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!hasLocalChangesRef.current || saving) return;
+      if (!hasLocalChangesRef.current || saving || leaveBusy) return;
       event.preventDefault();
       event.returnValue = "";
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [saving]);
+  }, [leaveBusy, saving]);
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
@@ -609,7 +636,18 @@ const ArticleEditor = () => {
     setNewTagInput("");
   };
 
-  const handleAiTranslateMissing = useCallback(async () => {
+  type EditorialSnapshot = {
+    titleEn: string;
+    titleIt: string;
+    excerptEn: string;
+    excerptIt: string;
+    contentEn: object;
+    contentIt: object;
+  };
+
+  const runArticleAiTranslation = useCallback(async (): Promise<
+    { ok: false } | { ok: true; editorialSnapshot?: EditorialSnapshot }
+  > => {
     setAiTranslating(true);
     try {
       const result = await invokeTranslateEditorContent({
@@ -623,33 +661,56 @@ const ArticleEditor = () => {
       });
       if (!result.ok) {
         toast.error("error" in result ? result.error : "Errore di traduzione");
-        return;
+        return { ok: false };
       }
       if (result.skipped) {
         toast.message("Niente da tradurre: compila titolo, estratto o corpo in una lingua e lascia vuoti i campi nell’altra.");
-        return;
+        return { ok: true };
       }
       const f = result.fields;
-      if (typeof f.title_en === "string") setTitleEn(f.title_en);
-      if (typeof f.title_it === "string") setTitleIt(f.title_it);
-      if (typeof f.excerpt_en === "string") setExcerptEn(f.excerpt_en);
-      if (typeof f.excerpt_it === "string") setExcerptIt(f.excerpt_it);
-      if (f.content_en && typeof f.content_en === "object") setContentEn(f.content_en as object);
-      if (f.content_it && typeof f.content_it === "object") setContentIt(f.content_it as object);
-      toast.success("Traduzione applicata (salva per confermare).");
+      const next: EditorialSnapshot = {
+        titleEn: typeof f.title_en === "string" ? f.title_en : titleEn,
+        titleIt: typeof f.title_it === "string" ? f.title_it : titleIt,
+        excerptEn: typeof f.excerpt_en === "string" ? f.excerpt_en : excerptEn,
+        excerptIt: typeof f.excerpt_it === "string" ? f.excerpt_it : excerptIt,
+        contentEn: f.content_en && typeof f.content_en === "object" ? (f.content_en as object) : contentEn,
+        contentIt: f.content_it && typeof f.content_it === "object" ? (f.content_it as object) : contentIt,
+      };
+      setTitleEn(next.titleEn);
+      setTitleIt(next.titleIt);
+      setExcerptEn(next.excerptEn);
+      setExcerptIt(next.excerptIt);
+      setContentEn(next.contentEn);
+      setContentIt(next.contentIt);
+      toast.success("Traduzione applicata.");
+      return { ok: true, editorialSnapshot: next };
     } finally {
       setAiTranslating(false);
     }
   }, [titleEn, titleIt, excerptEn, excerptIt, contentEn, contentIt]);
 
-  const saveArticle = useCallback(async (action: "draft" | "publish") => {
-    setSaving(true);
+  const handleAiTranslateMissing = useCallback(() => {
+    void runArticleAiTranslation();
+  }, [runArticleAiTranslation]);
+
+  const saveArticle = useCallback(async (
+    action: "draft" | "publish",
+    options?: {
+      leaveTarget?: string;
+      bypassTranslationPrompt?: boolean;
+      /** Valori editoriali appena tradotti (lo stato React può non essere ancora aggiornato). */
+      editorialSnapshot?: EditorialSnapshot;
+    }
+  ): Promise<boolean> => {
+    const leaveTarget = options?.leaveTarget;
+    const bypassTranslationPrompt = options?.bypassTranslationPrompt === true;
+    const snap = options?.editorialSnapshot;
+
     const { session: live } = await validateSessionOrSignOut();
     if (!live) {
       toast.error("Sessione non valida. Effettua di nuovo l’accesso.");
       navigate("/login", { state: { from: `/admin/article/${id}` } });
-      setSaving(false);
-      return;
+      return false;
     }
     const selectedDate = publishDate ? new Date(publishDate) : new Date();
     const now = new Date();
@@ -662,8 +723,7 @@ const ArticleEditor = () => {
 
     if (!trimmedSlug) {
       toast.error("Inserisci almeno un titolo inglese o uno slug prima di salvare.");
-      setSaving(false);
-      return;
+      return false;
     }
 
     let normalizedVoyageSegStart: number | null = null;
@@ -673,21 +733,49 @@ const ArticleEditor = () => {
         const selectedIndex = voyageSegStart ?? voyageSegEnd;
         if (selectedIndex == null) {
           toast.error("Seleziona un waypoint della rotta per associare l'articolo a un punto.");
-          setSaving(false);
-          return;
+          return false;
         }
         normalizedVoyageSegStart = selectedIndex;
         normalizedVoyageSegEnd = selectedIndex;
       } else if (associationMode === "segment") {
         if (voyageSegStart == null || voyageSegEnd == null || voyageSegEnd <= voyageSegStart) {
           toast.error("Seleziona due waypoint della rotta per definire il segmento.");
-          setSaving(false);
-          return;
+          return false;
         }
         normalizedVoyageSegStart = Math.min(voyageSegStart, voyageSegEnd);
         normalizedVoyageSegEnd = Math.max(voyageSegStart, voyageSegEnd);
       }
     }
+
+    if (!bypassTranslationPrompt) {
+      const gaps = getArticleTranslationGaps({
+        titleEn: titleEn,
+        titleIt: titleIt,
+        excerptEn: excerptEn,
+        excerptIt: excerptIt,
+        contentEn: contentEn,
+        contentIt: contentIt,
+      });
+      if (gaps.hasGaps) {
+        pendingTranslationSaveRef.current = { action, leaveTarget };
+        setPendingTranslationAction(action);
+        if (leaveDialogOpenRef.current) {
+          reopenLeaveAfterTranslationCancelRef.current = true;
+          setLeaveDialogOpen(false);
+        }
+        setTranslationOfferOpen(true);
+        return false;
+      }
+    }
+
+    setSaving(true);
+
+    const saveTitleEn = snap?.titleEn ?? titleEn;
+    const saveTitleIt = snap?.titleIt ?? titleIt;
+    const saveExcerptEn = snap?.excerptEn ?? excerptEn;
+    const saveExcerptIt = snap?.excerptIt ?? excerptIt;
+    const saveContentEn = snap?.contentEn ?? contentEn;
+    const saveContentIt = snap?.contentIt ?? contentIt;
 
     if (action === "draft") {
       finalStatus = "draft";
@@ -729,19 +817,19 @@ const ArticleEditor = () => {
 
         if (!shouldContinue) {
           setSaving(false);
-          return;
+          return false;
         }
       }
     }
 
     const articleData = {
-      title_en: titleEn,
-      title_it: titleIt,
+      title_en: saveTitleEn,
+      title_it: saveTitleIt,
       slug: trimmedSlug,
-      excerpt_en: excerptEn,
-      excerpt_it: excerptIt,
-      content_en: contentEn as Json,
-      content_it: contentIt as Json,
+      excerpt_en: saveExcerptEn,
+      excerpt_it: saveExcerptIt,
+      content_en: saveContentEn as Json,
+      content_it: saveContentIt as Json,
       article_map_scenes: articleMapScenes as unknown as Json,
       cover_image: coverImage,
       instagram_story_image_en: instagramStoryImageEn || null,
@@ -774,12 +862,12 @@ const ArticleEditor = () => {
           navigate("/login", { state: { from: `/admin/article/new` } });
         } else toast.error(getSaveErrorMessage(error));
         setSaving(false);
-        return;
+        return false;
       }
       if (data) {
         articleId = data.id;
         const stayForPublishedView = action === "publish" && finalStatus === "published";
-        if (!stayForPublishedView) {
+        if (!stayForPublishedView && !leaveTarget) {
           navigate(`/admin/article/${data.id}`, { replace: true });
         }
       }
@@ -792,7 +880,7 @@ const ArticleEditor = () => {
           navigate("/login", { state: { from: `/admin/article/${id}` } });
         } else toast.error(getSaveErrorMessage(upErr));
         setSaving(false);
-        return;
+        return false;
       }
     }
 
@@ -808,7 +896,7 @@ const ArticleEditor = () => {
         console.error("Article relation cleanup failed:", relationDeleteError);
         toast.error("Salvataggio autori o tag non riuscito.");
         setSaving(false);
-        return;
+        return false;
       }
 
       const inserts = [];
@@ -828,7 +916,7 @@ const ArticleEditor = () => {
         console.error("Article relation save failed:", relationInsertError);
         toast.error("Salvataggio autori o tag non riuscito.");
         setSaving(false);
-        return;
+        return false;
       }
 
       // Send email notifications to story subscribers when publishing a new chapter
@@ -848,7 +936,7 @@ const ArticleEditor = () => {
                 storyId: selectedStoryId,
                 articleId,
                 storyTitle: story?.title_en || "",
-                chapterTitle: titleEn,
+                chapterTitle: saveTitleEn,
                 chapterUrl: `${origin}/logbook/${slug}`,
                 storyUrl: `${origin}/logbook/story/${story?.slug || ""}`,
               },
@@ -875,13 +963,223 @@ const ArticleEditor = () => {
     window.localStorage.removeItem(draftStorageKey);
     hasLocalChangesRef.current = false;
 
+    if (action === "publish" && finalStatus === "scheduled" && articleId) {
+      const label = new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(selectedDate);
+      toast.success(`Articolo programmato per il ${label}. Verrà pubblicato automaticamente all’orario impostato.`);
+    }
+
     if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
       window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
-      return;
+      return true;
+    }
+
+    if (leaveTarget) {
+      navigate(leaveTarget, { replace: true });
+      setSaving(false);
+      return true;
     }
 
     setSaving(false);
+    return true;
   }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, id, isNew, navigate, allStories, draftStorageKey]);
+
+  const translationOfferLabels = useMemo(() => {
+    if (!translationOfferOpen) return [] as string[];
+    return getArticleTranslationGaps({
+      titleEn,
+      titleIt,
+      excerptEn,
+      excerptIt,
+      contentEn,
+      contentIt,
+    }).labels;
+  }, [translationOfferOpen, titleEn, titleIt, excerptEn, excerptIt, contentEn, contentIt]);
+
+  const handleTranslationOfferClose = useCallback(() => {
+    setTranslationOfferOpen(false);
+    setPendingTranslationAction(null);
+    pendingTranslationSaveRef.current = null;
+    if (reopenLeaveAfterTranslationCancelRef.current) {
+      reopenLeaveAfterTranslationCancelRef.current = false;
+      setLeaveDialogOpen(true);
+    }
+  }, []);
+
+  const handleTranslationOfferTranslateAndContinue = useCallback(async () => {
+    const pending = pendingTranslationSaveRef.current;
+    if (!pending) return;
+    setTranslationOfferBusy(true);
+    try {
+      const tr = await runArticleAiTranslation();
+      if (!tr.ok) return;
+      pendingTranslationSaveRef.current = null;
+      setTranslationOfferOpen(false);
+      setPendingTranslationAction(null);
+      reopenLeaveAfterTranslationCancelRef.current = false;
+      const saved = await saveArticle(pending.action, {
+        leaveTarget: pending.leaveTarget,
+        bypassTranslationPrompt: true,
+        editorialSnapshot: tr.editorialSnapshot,
+      });
+      if (!saved && pending.leaveTarget) {
+        pendingNavigationRef.current = { type: "path", to: pending.leaveTarget };
+        setLeaveDialogOpen(true);
+      }
+    } finally {
+      setTranslationOfferBusy(false);
+    }
+  }, [runArticleAiTranslation, saveArticle]);
+
+  const handleTranslationOfferSkip = useCallback(async () => {
+    const pending = pendingTranslationSaveRef.current;
+    if (!pending) return;
+    setTranslationOfferBusy(true);
+    try {
+      pendingTranslationSaveRef.current = null;
+      setTranslationOfferOpen(false);
+      setPendingTranslationAction(null);
+      reopenLeaveAfterTranslationCancelRef.current = false;
+      const saved = await saveArticle(pending.action, {
+        leaveTarget: pending.leaveTarget,
+        bypassTranslationPrompt: true,
+      });
+      if (!saved && pending.leaveTarget) {
+        pendingNavigationRef.current = { type: "path", to: pending.leaveTarget };
+        setLeaveDialogOpen(true);
+      }
+    } finally {
+      setTranslationOfferBusy(false);
+    }
+  }, [saveArticle]);
+
+  const continuePendingNavigation = useCallback(() => {
+    const pending = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    setLeaveDialogOpen(false);
+    if (!pending) return;
+    if (pending.type === "path") {
+      navigate(pending.to);
+      return;
+    }
+    ignoreNextPopRef.current = true;
+    window.history.back();
+  }, [navigate]);
+
+  const requestLeave = useCallback(
+    (to: string) => {
+      if (!hasLocalChangesRef.current || saving || leaveBusy) {
+        navigate(to);
+        return;
+      }
+      pendingNavigationRef.current = { type: "path", to };
+      setLeaveDialogOpen(true);
+    },
+    [leaveBusy, navigate, saving],
+  );
+
+  const handleStayOnLeaveDialog = () => {
+    pendingNavigationRef.current = null;
+    setLeaveDialogOpen(false);
+  };
+
+  const handleDiscardLeaveFromEditor = () => {
+    window.localStorage.removeItem(draftStorageKey);
+    hasLocalChangesRef.current = false;
+    continuePendingNavigation();
+  };
+
+  const handleLeaveSaveDraft = async () => {
+    const pending = pendingNavigationRef.current;
+    if (!pending) return;
+    setLeaveBusy(true);
+    try {
+      if (pending.type === "path") {
+        const ok = await saveArticle("draft", { leaveTarget: pending.to });
+        if (!ok) return;
+        pendingNavigationRef.current = null;
+        setLeaveDialogOpen(false);
+        return;
+      }
+      const ok = await saveArticle("draft");
+      if (!ok) return;
+      pendingNavigationRef.current = null;
+      setLeaveDialogOpen(false);
+      ignoreNextPopRef.current = true;
+      window.history.back();
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
+  const handleLeavePublish = async () => {
+    const pending = pendingNavigationRef.current;
+    if (!pending) return;
+    setLeaveBusy(true);
+    try {
+      if (pending.type === "path") {
+        const ok = await saveArticle("publish", { leaveTarget: pending.to });
+        if (!ok) return;
+        pendingNavigationRef.current = null;
+        setLeaveDialogOpen(false);
+        return;
+      }
+      const ok = await saveArticle("publish");
+      if (!ok) return;
+      pendingNavigationRef.current = null;
+      setLeaveDialogOpen(false);
+      ignoreNextPopRef.current = true;
+      window.history.back();
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!hasLocalChangesRef.current || saving || leaveBusy) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) return;
+
+      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      if (currentUrl === nextPath) return;
+
+      event.preventDefault();
+      pendingNavigationRef.current = { type: "path", to: nextPath };
+      setLeaveDialogOpen(true);
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [leaveBusy, location.hash, location.pathname, location.search, saving]);
+
+  useEffect(() => {
+    const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+
+    const handlePopState = () => {
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      if (!hasLocalChangesRef.current || saving || leaveBusy) return;
+
+      pendingNavigationRef.current = { type: "back" };
+      setLeaveDialogOpen(true);
+      window.history.pushState(null, "", currentUrl);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [leaveBusy, location.hash, location.pathname, location.search, saving]);
 
   // Geo map initialization
   useEffect(() => {
@@ -1434,7 +1732,7 @@ const ArticleEditor = () => {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <button onClick={() => navigate("/admin")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => requestLeave("/admin")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={16} /> Back
           </button>
           <div className="flex items-center gap-3">
@@ -1442,7 +1740,7 @@ const ArticleEditor = () => {
               <Save size={14} /> Save Draft
             </button>
             <button onClick={() => saveArticle("publish")} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
-              <Send size={14} /> {isFuture ? "Schedule" : "Publish"}
+              <Send size={14} /> {isFuture ? "Programma" : "Pubblica"}
             </button>
           </div>
         </div>
@@ -1838,6 +2136,108 @@ const ArticleEditor = () => {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={leaveDialogOpen}>
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Modifiche non salvate</AlertDialogTitle>
+            <AlertDialogDescription className="font-sans text-sm leading-relaxed text-foreground/72">
+              Ci sono modifiche non ancora salvate nell&apos;articolo. Scegli cosa fare prima di uscire.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
+            <AlertDialogAction
+              type="button"
+              className="w-full rounded-full"
+              disabled={saving || leaveBusy}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleLeaveSaveDraft();
+              }}
+            >
+              {saving || leaveBusy ? "Salvataggio..." : "Salva come bozza (consigliato)"}
+            </AlertDialogAction>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={saving || leaveBusy}
+              onClick={() => void handleLeavePublish()}
+            >
+              {isFuture ? "Programma" : "Pubblica"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={saving || leaveBusy}
+              onClick={handleDiscardLeaveFromEditor}
+            >
+              Esci senza salvare
+            </Button>
+            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full" onClick={handleStayOnLeaveDialog}>
+              Annulla
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={translationOfferOpen}
+        onOpenChange={(open) => {
+          if (!open) handleTranslationOfferClose();
+        }}
+      >
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Traduzioni mancanti</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="font-sans text-sm leading-relaxed text-foreground/72 space-y-3">
+                <p>
+                  Prima di salvare risultano contenuti solo in una lingua. Vuoi generare automaticamente le parti mancanti
+                  (stesso comando &quot;Traduci campi vuoti&quot;) oppure procedere così com&apos;è?
+                </p>
+                {translationOfferLabels.length > 0 && (
+                  <ul className="list-disc pl-5 space-y-1 text-foreground/80">
+                    {translationOfferLabels.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
+            <AlertDialogAction
+              type="button"
+              className="w-full rounded-full"
+              disabled={saving || translationOfferBusy || aiTranslating}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleTranslationOfferTranslateAndContinue();
+              }}
+            >
+              {translationOfferBusy || aiTranslating ? "Traduzione in corso…" : "Traduci e continua"}
+            </AlertDialogAction>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={saving || translationOfferBusy || aiTranslating}
+              onClick={() => void handleTranslationOfferSkip()}
+            >
+              {pendingTranslationAction === "publish"
+                ? isFuture
+                  ? "Programma senza tradurre"
+                  : "Pubblica senza tradurre"
+                : "Salva bozza senza tradurre"}
+            </Button>
+            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
+              Annulla
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

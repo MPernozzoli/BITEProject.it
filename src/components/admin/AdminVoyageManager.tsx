@@ -9,6 +9,7 @@ import {
   X,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   Ship,
   Mountain,
   Eye,
@@ -41,6 +42,21 @@ import {
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
+import {
+  getRouteWaypointTranslationGapLabels,
+  waypointHasTranslationGap,
+} from "@/lib/route-waypoint-translation-gaps";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 interface VoyageFormState {
   name_it: string;
@@ -61,10 +77,10 @@ interface VoyageFormState {
 interface VoyageListFilters {
   type: "all" | Voyage["type"];
   publicationStatus: "all" | "published" | "draft";
-  createdFrom: string;
-  createdTo: string;
-  departureFrom: string;
-  departureTo: string;
+  /** Quale campo usare per il filtro date (stesso intervallo Da / A). */
+  dateFilterMode: "created" | "departure";
+  dateFrom: string;
+  dateTo: string;
 }
 
 interface VoyageListSort {
@@ -90,10 +106,9 @@ const emptyVoyageForm: VoyageFormState = {
 const emptyVoyageListFilters: VoyageListFilters = {
   type: "all",
   publicationStatus: "all",
-  createdFrom: "",
-  createdTo: "",
-  departureFrom: "",
-  departureTo: "",
+  dateFilterMode: "created",
+  dateFrom: "",
+  dateTo: "",
 };
 
 const defaultVoyageListSort: VoyageListSort = {
@@ -124,6 +139,44 @@ type WaypointEditorPanelHandle = {
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
+
+const WAYPOINT_PERSIST_PATCH_KEYS = [
+  "lat",
+  "lng",
+  "name",
+  "name_it",
+  "name_en",
+  "description_it",
+  "description_en",
+  "event_date",
+  "event_time",
+  "waypoint_type",
+  "visibility_mode",
+  "sort_order",
+  "media",
+] as const;
+
+const computeWaypointPersistChanges = (
+  waypoint: VoyageWaypoint,
+  persistedWaypoint: VoyageWaypoint,
+  sortOrder: number
+): Partial<VoyageWaypoint> => {
+  const changes: Partial<VoyageWaypoint> = {};
+  WAYPOINT_PERSIST_PATCH_KEYS.forEach((key) => {
+    const nextValue = key === "sort_order" ? sortOrder : waypoint[key];
+    const previousValue = key === "sort_order" ? persistedWaypoint.sort_order : persistedWaypoint[key];
+    if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
+      (changes as Record<string, unknown>)[key] = nextValue;
+    }
+  });
+  return changes;
+};
+
+/** Consente a React di dipingere aggiornamenti di progresso durante operazioni async lunghe. */
+const yieldToUi = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 
 const getErrorMessage = (error: { message?: string | null } | null, fallback: string) =>
   error?.message || fallback;
@@ -382,6 +435,8 @@ const AdminVoyageManager = ({
   const [voyageFormLang, setVoyageFormLang] = useState<"it" | "en">("it");
   const [listFilters, setListFilters] = useState<VoyageListFilters>(emptyVoyageListFilters);
   const [listSort, setListSort] = useState<VoyageListSort>(defaultVoyageListSort);
+  const [routeListFiltersExpanded, setRouteListFiltersExpanded] = useState(false);
+  const [routeListFiltersAdvanced, setRouteListFiltersAdvanced] = useState(false);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
   const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
@@ -420,6 +475,15 @@ const AdminVoyageManager = ({
   const [draggedWaypointId, setDraggedWaypointId] = useState<string | null>(null);
   const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
+  const [routeSaveProgress, setRouteSaveProgress] = useState<{
+    label: string;
+    percent: number;
+    step: number;
+    totalSteps: number;
+  } | null>(null);
+  const [routeTranslationOfferOpen, setRouteTranslationOfferOpen] = useState(false);
+  const [routeTranslationOfferBusy, setRouteTranslationOfferBusy] = useState(false);
+  const [routeTranslationGapLabels, setRouteTranslationGapLabels] = useState<string[]>([]);
   const [isRegeneratingGeometry, setIsRegeneratingGeometry] = useState(false);
   /** Bumps when async route geometry (OSRM / BRouter) finishes so the map redraws even if waypoints state is unchanged. */
   const [routeGeometryTick, setRouteGeometryTick] = useState(0);
@@ -1902,11 +1966,11 @@ const AdminVoyageManager = ({
         if (listFilters.publicationStatus === "published" && !voyage.is_published) return false;
         if (listFilters.publicationStatus === "draft" && voyage.is_published) return false;
 
-        const createdDate = getDateOnlyValue(voyage.created_at);
-        if (!isDateWithinRange(createdDate, listFilters.createdFrom, listFilters.createdTo)) return false;
-
-        const departureDate = getDateOnlyValue(voyage.start_date);
-        if (!isDateWithinRange(departureDate, listFilters.departureFrom, listFilters.departureTo)) return false;
+        const dateValue =
+          listFilters.dateFilterMode === "created"
+            ? getDateOnlyValue(voyage.created_at)
+            : getDateOnlyValue(voyage.start_date);
+        if (!isDateWithinRange(dateValue, listFilters.dateFrom, listFilters.dateTo)) return false;
 
         return true;
       }),
@@ -1935,7 +1999,11 @@ const AdminVoyageManager = ({
       return comparison * directionMultiplier;
     });
   }, [filteredVoyages, listSort.direction, listSort.field]);
-  const hasActiveFilters = Object.values(listFilters).some(Boolean);
+  const hasActiveFilters =
+    listFilters.type !== "all" ||
+    listFilters.publicationStatus !== "all" ||
+    Boolean(listFilters.dateFrom) ||
+    Boolean(listFilters.dateTo);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2003,11 +2071,72 @@ const AdminVoyageManager = ({
     setDragOverWaypointId(null);
   }, [cancelWaypointRelocation, commitWaypoints, selectedVoyageId]);
 
-  const saveSelectedRouteDraft = useCallback(async () => {
+  const applyRouteWaypointTranslations = useCallback(async (): Promise<boolean> => {
+    const vid = selectedVoyageId;
+    if (!vid) return false;
+    const list = sortWaypoints([...(waypointsRef.current[vid] || [])]);
+    const next: VoyageWaypoint[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const wp = list[i]!;
+      if (!waypointHasTranslationGap(wp)) {
+        next.push(wp);
+        continue;
+      }
+      const result = await invokeTranslateEditorContent({
+        kind: "waypoint",
+        name_it: wp.name_it ?? "",
+        name_en: wp.name_en ?? "",
+        description_it: wp.description_it ?? "",
+        description_en: wp.description_en ?? "",
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return false;
+      }
+      if (result.skipped) {
+        next.push(wp);
+        continue;
+      }
+      const f = result.fields;
+      const name_it = typeof f.name_it === "string" ? f.name_it : (wp.name_it ?? "");
+      const name_en = typeof f.name_en === "string" ? f.name_en : (wp.name_en ?? "");
+      const description_it = typeof f.description_it === "string" ? f.description_it : wp.description_it;
+      const description_en = typeof f.description_en === "string" ? f.description_en : wp.description_en;
+      const legacyName = (lang === "it" ? name_it : name_en) || name_it || name_en || wp.name;
+      next.push(
+        normalizeWaypoint({
+          ...wp,
+          name: legacyName,
+          name_it,
+          name_en,
+          description_it,
+          description_en,
+        } as WaypointRecord)
+      );
+    }
+    commitWaypoints(vid, next);
+    toast.success("Traduzioni waypoint applicate in bozza.");
+    return true;
+  }, [commitWaypoints, lang, selectedVoyageId]);
+
+  const saveSelectedRouteDraft = useCallback(async (options?: { bypassTranslationPrompt?: boolean }) => {
     if (!selectedVoyageId || !selectedVoyage) return true;
     if (!isRouteDraftDirty) return true;
 
+    if (!options?.bypassTranslationPrompt) {
+      const draftSnapshot = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
+      const gapLabels = getRouteWaypointTranslationGapLabels(draftSnapshot);
+      if (gapLabels.length > 0) {
+        setRouteTranslationGapLabels(gapLabels);
+        setRouteTranslationOfferOpen(true);
+        return false;
+      }
+    }
+
     setIsSavingRouteDraft(true);
+    setRouteSaveProgress({ label: "Preparazione…", percent: 0, step: 0, totalSteps: 1 });
+    await yieldToUi();
+
     try {
       const draftSnapshot = sortWaypoints(waypointsRef.current[selectedVoyageId] || []);
       const persistedWaypoints = sortWaypoints(persistedWaypointsRef.current[selectedVoyageId] || []);
@@ -2015,26 +2144,75 @@ const AdminVoyageManager = ({
         draftSnapshot.filter((waypoint) => !isLocalWaypointId(waypoint.id)).map((waypoint) => waypoint.id)
       );
 
-      for (const removedWaypoint of persistedWaypoints) {
-        if (!draftExistingIds.has(removedWaypoint.id)) {
-          const { error } = await supabase.from("voyage_waypoints").delete().eq("id", removedWaypoint.id);
-          if (error) {
-            console.error("[AdminVoyageManager] save route: delete waypoint failed", {
-              voyageId: selectedVoyageId,
-              waypointId: removedWaypoint.id,
-              error,
-            });
-            toast.error(
-              getErrorMessage(error, "Salvataggio rotta: impossibile eliminare un waypoint rimosso in modifica.")
-            );
-            return false;
-          }
+      const toDelete = persistedWaypoints.filter((w) => !draftExistingIds.has(w.id));
+      let mutationSteps = 0;
+      for (const [index, waypoint] of draftSnapshot.entries()) {
+        if (isLocalWaypointId(waypoint.id)) {
+          mutationSteps += 1;
+          continue;
+        }
+        const persistedWaypoint = persistedWaypoints.find((item) => item.id === waypoint.id);
+        if (!persistedWaypoint) continue;
+        const changes = computeWaypointPersistChanges(waypoint, persistedWaypoint, index);
+        if (Object.keys(changes).length) mutationSteps += 1;
+      }
+
+      const totalSteps = Math.max(1, toDelete.length + mutationSteps + 2);
+      let completed = 0;
+
+      const reportProgress = async (label: string) => {
+        completed += 1;
+        const percent = Math.min(99, Math.round((completed / totalSteps) * 100));
+        setRouteSaveProgress({ label, percent, step: completed, totalSteps });
+        await yieldToUi();
+      };
+
+      setRouteSaveProgress((prev) =>
+        prev
+          ? { ...prev, label: "Applicazione modifiche waypoint…", totalSteps, step: 0, percent: 0 }
+          : { label: "Applicazione modifiche waypoint…", totalSteps, step: 0, percent: 0 }
+      );
+      await yieldToUi();
+
+      for (let di = 0; di < toDelete.length; di += 1) {
+        const removedWaypoint = toDelete[di];
+        await reportProgress(
+          toDelete.length > 1
+            ? `Rimozione waypoint dal server (${di + 1}/${toDelete.length})…`
+            : "Rimozione waypoint rimosso dal server…"
+        );
+        const { error } = await supabase.from("voyage_waypoints").delete().eq("id", removedWaypoint.id);
+        if (error) {
+          console.error("[AdminVoyageManager] save route: delete waypoint failed", {
+            voyageId: selectedVoyageId,
+            waypointId: removedWaypoint.id,
+            error,
+          });
+          toast.error(
+            getErrorMessage(error, "Salvataggio rotta: impossibile eliminare un waypoint rimosso in modifica.")
+          );
+          return false;
         }
       }
+
+      let insertOrdinal = 0;
+      let patchOrdinal = 0;
+      const patchTotal = draftSnapshot.filter((wp, idx) => {
+        if (isLocalWaypointId(wp.id)) return false;
+        const p = persistedWaypoints.find((item) => item.id === wp.id);
+        return p ? Object.keys(computeWaypointPersistChanges(wp, p, idx)).length > 0 : false;
+      }).length;
+      const insertTotal = draftSnapshot.filter((wp) => isLocalWaypointId(wp.id)).length;
 
       for (const [index, waypoint] of draftSnapshot.entries()) {
         const sort_order = index;
         if (isLocalWaypointId(waypoint.id)) {
+          insertOrdinal += 1;
+          await reportProgress(
+            insertTotal > 1
+              ? `Creazione nuovi waypoint (${insertOrdinal}/${insertTotal})…`
+              : "Creazione nuovo waypoint…"
+          );
           const insertedWaypoint = await persistWaypointInsert(selectedVoyageId, waypoint, sort_order, { notify: false });
           if (!insertedWaypoint) {
             toast.error(
@@ -2057,29 +2235,15 @@ const AdminVoyageManager = ({
 
         const persistedWaypoint = persistedWaypoints.find((item) => item.id === waypoint.id);
         if (!persistedWaypoint) continue;
-        const changes: Partial<VoyageWaypoint> = {};
-        ([
-          "lat",
-          "lng",
-          "name",
-          "name_it",
-          "name_en",
-          "description_it",
-          "description_en",
-          "event_date",
-          "event_time",
-          "waypoint_type",
-          "visibility_mode",
-          "sort_order",
-          "media",
-        ] as const).forEach((key) => {
-          const nextValue = key === "sort_order" ? sort_order : waypoint[key];
-          const previousValue = key === "sort_order" ? persistedWaypoint.sort_order : persistedWaypoint[key];
-          if (JSON.stringify(previousValue) !== JSON.stringify(nextValue)) {
-            (changes as Record<string, unknown>)[key] = nextValue;
-          }
-        });
+        const changes = computeWaypointPersistChanges(waypoint, persistedWaypoint, sort_order);
         if (!Object.keys(changes).length) continue;
+
+        patchOrdinal += 1;
+        await reportProgress(
+          patchTotal > 1
+            ? `Aggiornamento waypoint esistenti (${patchOrdinal}/${patchTotal})…`
+            : "Aggiornamento waypoint…"
+        );
 
         const result = await persistWaypointPatch(waypoint.id, changes, { notify: false });
         if (!result.success) {
@@ -2102,8 +2266,17 @@ const AdminVoyageManager = ({
         window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
       }
 
+      await reportProgress("Sincronizzazione elenco dal database…");
       await fetchWaypoints(selectedVoyageId);
+
+      await reportProgress(
+        "Calcolo e salvataggio geometria (può richiedere diversi secondi se il routing è attivo)…"
+      );
       const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+
+      setRouteSaveProgress({ label: "Completato", percent: 100, step: totalSteps, totalSteps });
+      await yieldToUi();
+
       if (!geoOk) {
         console.error("[AdminVoyageManager] save route: syncVoyageGeometry failed after waypoint save", {
           voyageId: selectedVoyageId,
@@ -2117,6 +2290,11 @@ const AdminVoyageManager = ({
       return true;
     } finally {
       setIsSavingRouteDraft(false);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => setRouteSaveProgress(null), 400);
+      } else {
+        setRouteSaveProgress(null);
+      }
     }
   }, [
     commitWaypoints,
@@ -2129,6 +2307,35 @@ const AdminVoyageManager = ({
     syncVoyageGeometry,
     setWaypointEditorPanelId,
   ]);
+
+  const handleRouteTranslationOfferClose = useCallback(() => {
+    setRouteTranslationOfferOpen(false);
+    setRouteTranslationGapLabels([]);
+  }, []);
+
+  const handleRouteTranslationTranslateAndSave = useCallback(async () => {
+    setRouteTranslationOfferBusy(true);
+    try {
+      const ok = await applyRouteWaypointTranslations();
+      if (!ok) return;
+      setRouteTranslationOfferOpen(false);
+      setRouteTranslationGapLabels([]);
+      await saveSelectedRouteDraft({ bypassTranslationPrompt: true });
+    } finally {
+      setRouteTranslationOfferBusy(false);
+    }
+  }, [applyRouteWaypointTranslations, saveSelectedRouteDraft]);
+
+  const handleRouteTranslationSkipAndSave = useCallback(async () => {
+    setRouteTranslationOfferBusy(true);
+    try {
+      setRouteTranslationOfferOpen(false);
+      setRouteTranslationGapLabels([]);
+      await saveSelectedRouteDraft({ bypassTranslationPrompt: true });
+    } finally {
+      setRouteTranslationOfferBusy(false);
+    }
+  }, [saveSelectedRouteDraft]);
 
   const regenerateSelectedVoyageGeometry = useCallback(async () => {
     if (!selectedVoyageId || !selectedVoyage) return;
@@ -2169,7 +2376,7 @@ const AdminVoyageManager = ({
         "Hai modifiche locali non salvate alla rotta corrente. Premi OK per salvarle prima di cambiare rotta."
       );
       if (shouldSave) {
-        const saved = await saveSelectedRouteDraft();
+        const saved = await saveSelectedRouteDraft({ bypassTranslationPrompt: true });
         if (!saved) return;
       } else {
         const shouldDiscard = window.confirm("Vuoi scartare le modifiche locali e cambiare rotta?");
@@ -2198,7 +2405,7 @@ const AdminVoyageManager = ({
         "Hai modifiche locali non salvate ai waypoint. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
       );
       if (!shouldSaveRoute) return false;
-      return saveSelectedRouteDraft();
+      return saveSelectedRouteDraft({ bypassTranslationPrompt: true });
     }
 
     return true;
@@ -2251,6 +2458,7 @@ const AdminVoyageManager = ({
   }, [handleSaveBeforeLeave, isRouteDraftDirty, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="editorial-heading text-lg">Voyages</h3>
@@ -2461,129 +2669,187 @@ const AdminVoyageManager = ({
         </div>
       )}
 
-      <div className="rounded-[24px] border border-border/70 bg-muted/10 p-4 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h4 className="text-sm font-sans font-medium">Filtri rotte</h4>
-            <p className="text-xs text-muted-foreground font-sans">
-              Filtra per tipologia, data di creazione, data di partenza e stato pubblicazione.
-            </p>
-          </div>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={() => setListFilters(emptyVoyageListFilters)}
-              className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Reset
-            </button>
+      <div className="rounded-[16px] border border-border/70 bg-muted/10 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setRouteListFiltersExpanded((open) => !open)}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left font-sans hover:bg-muted/30 transition-colors"
+          aria-expanded={routeListFiltersExpanded}
+        >
+          {routeListFiltersExpanded ? (
+            <ChevronDown className="shrink-0 text-muted-foreground" size={16} aria-hidden />
+          ) : (
+            <ChevronRight className="shrink-0 text-muted-foreground" size={16} aria-hidden />
           )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Tipologia</label>
-            <select
-              value={listFilters.type}
-              onChange={(event) => setListFilters((current) => ({ ...current, type: event.target.value as VoyageListFilters["type"] }))}
-              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-            >
-              <option value="all">Tutte</option>
-              <option value="water">Acqua</option>
-              <option value="land">Terra</option>
-            </select>
+          <div className="min-w-0 flex-1">
+            <span className="text-sm font-medium text-foreground">Filtri rotte</span>
+            <span className="ml-2 text-[11px] text-muted-foreground">
+              {visibleVoyages.length}/{voyages.length} visibili
+              {hasActiveFilters ? " · filtri attivi" : ""}
+            </span>
           </div>
-
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Stato</label>
-            <select
-              value={listFilters.publicationStatus}
-              onChange={(event) =>
-                setListFilters((current) => ({
-                  ...current,
-                  publicationStatus: event.target.value as VoyageListFilters["publicationStatus"],
-                }))
-              }
-              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+          {hasActiveFilters ? (
+            <span
+              role="presentation"
+              className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-sans uppercase tracking-wider text-foreground"
             >
-              <option value="all">Tutte</option>
-              <option value="published">Pubblicate</option>
-              <option value="draft">Bozze</option>
-            </select>
-          </div>
+              Attivi
+            </span>
+          ) : null}
+        </button>
 
-          <div className="space-y-2">
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">Creazione</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={listFilters.createdFrom}
-                onChange={(event) => setListFilters((current) => ({ ...current, createdFrom: event.target.value }))}
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-              />
-              <input
-                type="date"
-                value={listFilters.createdTo}
-                onChange={(event) => setListFilters((current) => ({ ...current, createdTo: event.target.value }))}
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-              />
+        {routeListFiltersExpanded ? (
+          <div className="border-t border-border/60 px-3 pb-2.5 pt-1 space-y-2">
+            <div className="flex flex-wrap items-end gap-x-2 gap-y-2">
+              <div className="min-w-[7.5rem] flex-1">
+                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                  Tipologia
+                </label>
+                <select
+                  value={listFilters.type}
+                  onChange={(event) =>
+                    setListFilters((current) => ({ ...current, type: event.target.value as VoyageListFilters["type"] }))
+                  }
+                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                >
+                  <option value="all">Tutte</option>
+                  <option value="water">Acqua</option>
+                  <option value="land">Terra</option>
+                </select>
+              </div>
+
+              <div className="min-w-[7.5rem] flex-1">
+                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                  Stato
+                </label>
+                <select
+                  value={listFilters.publicationStatus}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      publicationStatus: event.target.value as VoyageListFilters["publicationStatus"],
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                >
+                  <option value="all">Tutte</option>
+                  <option value="published">Pubblicate</option>
+                  <option value="draft">Bozze</option>
+                </select>
+              </div>
+
+              <div className="min-w-[9.5rem] flex-1">
+                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                  Data (filtro)
+                </label>
+                <select
+                  value={listFilters.dateFilterMode}
+                  onChange={(event) =>
+                    setListFilters((current) => ({
+                      ...current,
+                      dateFilterMode: event.target.value as VoyageListFilters["dateFilterMode"],
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                >
+                  <option value="created">Creazione</option>
+                  <option value="departure">Partenza viaggio</option>
+                </select>
+              </div>
+
+              <div className="flex min-w-0 flex-[2] flex-wrap items-end gap-x-1.5 gap-y-1">
+                <div className="min-w-[6.5rem] flex-1">
+                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                    Da
+                  </label>
+                  <input
+                    type="date"
+                    value={listFilters.dateFrom}
+                    onChange={(event) => setListFilters((current) => ({ ...current, dateFrom: event.target.value }))}
+                    className="w-full min-w-0 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                  />
+                </div>
+                <div className="min-w-[6.5rem] flex-1">
+                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                    A
+                  </label>
+                  <input
+                    type="date"
+                    value={listFilters.dateTo}
+                    onChange={(event) => setListFilters((current) => ({ ...current, dateTo: event.target.value }))}
+                    className="w-full min-w-0 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">Partenza viaggio</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={listFilters.departureFrom}
-                onChange={(event) => setListFilters((current) => ({ ...current, departureFrom: event.target.value }))}
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-              />
-              <input
-                type="date"
-                value={listFilters.departureTo}
-                onChange={(event) => setListFilters((current) => ({ ...current, departureTo: event.target.value }))}
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRouteListFiltersAdvanced((v) => !v)}
+                className="text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {routeListFiltersAdvanced ? "Nascondi avanzate" : "Avanzate"}
+              </button>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={() => setListFilters(emptyVoyageListFilters)}
+                  className="text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Reset filtri
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setRouteListFiltersExpanded(false)}
+                className="ml-auto text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Chiudi
+              </button>
             </div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Ordina per</label>
-            <select
-              value={listSort.field}
-              onChange={(event) =>
-                setListSort((current) => ({ ...current, field: event.target.value as VoyageListSort["field"] }))
-              }
-              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-            >
-              <option value="created_at">Data creazione</option>
-              <option value="start_date">Data partenza</option>
-              <option value="type">Tipologia</option>
-              <option value="publicationStatus">Stato</option>
-            </select>
+            {routeListFiltersAdvanced ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-border/40">
+                <div>
+                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                    Ordina per
+                  </label>
+                  <select
+                    value={listSort.field}
+                    onChange={(event) =>
+                      setListSort((current) => ({ ...current, field: event.target.value as VoyageListSort["field"] }))
+                    }
+                    className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                  >
+                    <option value="created_at">Data creazione</option>
+                    <option value="start_date">Data partenza</option>
+                    <option value="type">Tipologia</option>
+                    <option value="publicationStatus">Stato</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
+                    Direzione
+                  </label>
+                  <select
+                    value={listSort.direction}
+                    onChange={(event) =>
+                      setListSort((current) => ({
+                        ...current,
+                        direction: event.target.value as VoyageListSort["direction"],
+                      }))
+                    }
+                    className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
+                  >
+                    <option value="desc">Decrescente</option>
+                    <option value="asc">Crescente</option>
+                  </select>
+                </div>
+              </div>
+            ) : null}
           </div>
-
-          <div>
-            <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Direzione</label>
-            <select
-              value={listSort.direction}
-              onChange={(event) =>
-                setListSort((current) => ({ ...current, direction: event.target.value as VoyageListSort["direction"] }))
-              }
-              className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-            >
-              <option value="desc">Decrescente</option>
-              <option value="asc">Crescente</option>
-            </select>
-          </div>
-        </div>
-
-        <p className="text-xs text-muted-foreground font-sans">
-          {visibleVoyages.length} {visibleVoyages.length === 1 ? "rotta visibile" : "rotte visibili"} su {voyages.length}
-        </p>
+        ) : null}
       </div>
 
       <div className="rounded-[20px] border border-border/70 bg-background/40 p-3 space-y-2">
@@ -2802,43 +3068,75 @@ const AdminVoyageManager = ({
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
-                  <p className="text-xs text-muted-foreground font-sans">
-                    {selectedWaypoints.length >= 2 && distance
-                      ? `${Math.round(distance.value)} ${distance.unit} traced${voyageDates ? ` · ${voyageDates}` : ""}`
-                      : voyageDates || (selectedVoyage?.type === "land"
-                        ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
-                        : selectedVoyage?.waterway_autoroute
-                          ? "Per l’autoroute acqua, avvicina i waypoint al canale; altrimenti il segmento resta retto."
-                          : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
-                  </p>
-                  {isRouteDraftDirty && (
-                    <p className="mt-1 text-[11px] font-sans text-amber-700">
-                      Modifiche locali non ancora salvate.
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-sm font-sans font-medium">Waypoints ({selectedWaypoints.length})</h4>
+                    <p className="text-xs text-muted-foreground font-sans">
+                      {selectedWaypoints.length >= 2 && distance
+                        ? `${Math.round(distance.value)} ${distance.unit} traced${voyageDates ? ` · ${voyageDates}` : ""}`
+                        : voyageDates || (selectedVoyage?.type === "land"
+                          ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
+                          : selectedVoyage?.waterway_autoroute
+                            ? "Per l’autoroute acqua, avvicina i waypoint al canale; altrimenti il segmento resta retto."
+                            : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                     </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {isRouteDraftDirty && (
+                    {isRouteDraftDirty && (
+                      <p className="mt-1 text-[11px] font-sans text-amber-700">
+                        Modifiche locali non ancora salvate.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isRouteDraftDirty && (
+                      <button
+                        type="button"
+                        onClick={discardSelectedRouteChanges}
+                        disabled={isSavingRouteDraft}
+                        className="border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        Discard
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={discardSelectedRouteChanges}
-                      className="border border-border px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground"
+                      onClick={() => void saveSelectedRouteDraft()}
+                      disabled={!isRouteDraftDirty || isSavingRouteDraft}
+                      className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50 min-w-[8.5rem]"
                     >
-                      Discard
+                      {isSavingRouteDraft ? <Loader2 size={14} className="animate-spin shrink-0" /> : null}
+                      {isSavingRouteDraft ? "Salvataggio…" : "Salva rotta"}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void saveSelectedRouteDraft()}
-                    disabled={!isRouteDraftDirty || isSavingRouteDraft}
-                    className="bg-primary text-primary-foreground px-3 py-2 text-xs font-sans font-medium disabled:opacity-50"
-                  >
-                    {isSavingRouteDraft ? "Salvataggio…" : "Salva rotta"}
-                  </button>
+                  </div>
                 </div>
+
+                {routeSaveProgress ? (
+                  <div
+                    className="rounded-lg border border-border/60 bg-muted/25 px-3 py-2.5 space-y-2"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy={isSavingRouteDraft}
+                  >
+                    <div className="flex items-start justify-between gap-2 text-[11px] font-sans text-muted-foreground">
+                      <span className="min-w-0 leading-snug">{routeSaveProgress.label}</span>
+                      <span className="shrink-0 tabular-nums font-medium text-foreground/80">
+                        {routeSaveProgress.percent}%
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted border border-border/40">
+                      <div
+                        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                        style={{ width: `${routeSaveProgress.percent}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] font-sans text-muted-foreground tabular-nums">
+                      Passo {routeSaveProgress.step} di {routeSaveProgress.totalSteps}
+                      {routeSaveProgress.label.includes("geometria") || routeSaveProgress.label.includes("routing")
+                        ? " · attendi, il calcolo rete può essere lento"
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-0 max-h-[260px] overflow-y-auto">
@@ -3020,6 +3318,60 @@ const AdminVoyageManager = ({
         </div>
       )}
     </div>
+
+      <AlertDialog
+        open={routeTranslationOfferOpen}
+        onOpenChange={(open) => {
+          if (!open) handleRouteTranslationOfferClose();
+        }}
+      >
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Waypoint: traduzioni mancanti</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="font-sans text-sm leading-relaxed text-foreground/72 space-y-3">
+                <p>
+                  Prima di salvare la rotta, alcuni waypoint hanno nome o descrizione solo in una lingua. Vuoi comporre
+                  automaticamente le parti mancanti (come dal pulsante nel popup del waypoint) oppure salvare comunque?
+                </p>
+                {routeTranslationGapLabels.length > 0 && (
+                  <ul className="list-disc pl-5 space-y-1 text-foreground/80">
+                    {routeTranslationGapLabels.map((line, idx) => (
+                      <li key={`${idx}-${line}`}>{line}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
+            <AlertDialogAction
+              type="button"
+              className="w-full rounded-full"
+              disabled={isSavingRouteDraft || routeTranslationOfferBusy}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleRouteTranslationTranslateAndSave();
+              }}
+            >
+              {routeTranslationOfferBusy ? "Traduzione in corso…" : "Traduci e salva rotta"}
+            </AlertDialogAction>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={isSavingRouteDraft || routeTranslationOfferBusy}
+              onClick={() => void handleRouteTranslationSkipAndSave()}
+            >
+              Salva senza tradurre
+            </Button>
+            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
+              Annulla
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

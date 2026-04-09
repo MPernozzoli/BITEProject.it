@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect, useCallback } from "react";
+import { Suspense, lazy, useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,6 +25,14 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  AdminCollapsibleListFilters,
+  adminFilterDateInputClass,
+  adminFilterLabelClass,
+  adminFilterSelectClass,
+  getDateOnlyValue,
+  isDateWithinRange,
+} from "@/components/admin/AdminCollapsibleListFilters";
 
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
@@ -53,7 +61,70 @@ interface Story {
   description_en: string | null;
   description_it: string | null;
   cover_image: string | null;
+  created_at: string;
+  updated_at: string;
 }
+
+type ArticleListFilters = {
+  status: "all" | "draft" | "scheduled" | "published";
+  category: string;
+  dateFilterMode: "created" | "updated" | "published" | "scheduled";
+  dateFrom: string;
+  dateTo: string;
+};
+
+type ArticleListSort = {
+  field: "updated_at" | "created_at" | "published_at" | "status" | "category";
+  direction: "asc" | "desc";
+};
+
+type StoryListFilters = {
+  dateFilterMode: "created" | "updated";
+  dateFrom: string;
+  dateTo: string;
+};
+
+type StoryListSort = {
+  field: "created_at" | "updated_at" | "title";
+  direction: "asc" | "desc";
+};
+
+const emptyArticleListFilters: ArticleListFilters = {
+  status: "all",
+  category: "all",
+  dateFilterMode: "updated",
+  dateFrom: "",
+  dateTo: "",
+};
+
+const defaultArticleListSort: ArticleListSort = {
+  field: "updated_at",
+  direction: "desc",
+};
+
+const emptyStoryListFilters: StoryListFilters = {
+  dateFilterMode: "created",
+  dateFrom: "",
+  dateTo: "",
+};
+
+const defaultStoryListSort: StoryListSort = {
+  field: "created_at",
+  direction: "desc",
+};
+
+const articleFilterDate = (article: Article, mode: ArticleListFilters["dateFilterMode"]) => {
+  switch (mode) {
+    case "created":
+      return getDateOnlyValue(article.created_at);
+    case "updated":
+      return getDateOnlyValue(article.updated_at);
+    case "published":
+      return getDateOnlyValue(article.published_at);
+    case "scheduled":
+      return getDateOnlyValue(article.scheduled_at);
+  }
+};
 
 interface VoyageSummary {
   id: string;
@@ -112,6 +183,14 @@ const AdminDashboard = () => {
   const [routeLeaveGuard, setRouteLeaveGuard] = useState<null | (() => Promise<boolean>)>(null);
   const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
   const [requestEditVoyageId, setRequestEditVoyageId] = useState<string | null>(null);
+  const [articleListFilters, setArticleListFilters] = useState<ArticleListFilters>(emptyArticleListFilters);
+  const [articleListSort, setArticleListSort] = useState<ArticleListSort>(defaultArticleListSort);
+  const [articleFiltersExpanded, setArticleFiltersExpanded] = useState(false);
+  const [articleFiltersAdvanced, setArticleFiltersAdvanced] = useState(false);
+  const [storyListFilters, setStoryListFilters] = useState<StoryListFilters>(emptyStoryListFilters);
+  const [storyListSort, setStoryListSort] = useState<StoryListSort>(defaultStoryListSort);
+  const [storyFiltersExpanded, setStoryFiltersExpanded] = useState(false);
+  const [storyFiltersAdvanced, setStoryFiltersAdvanced] = useState(false);
   const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
@@ -235,6 +314,89 @@ const AdminDashboard = () => {
   const latestArticle = articles[0] || null;
   const latestStory = stories[0] || null;
   const routeSidebarVoyages = voyages;
+
+  const articleCategories = useMemo(() => {
+    const next = new Set<string>();
+    articles.forEach((article) => {
+      const raw = article.category?.trim();
+      if (raw) next.add(raw);
+    });
+    return [...next].sort((a, b) => a.localeCompare(b));
+  }, [articles]);
+
+  const hasActiveArticleFilters =
+    articleListFilters.status !== "all" ||
+    articleListFilters.category !== "all" ||
+    Boolean(articleListFilters.dateFrom) ||
+    Boolean(articleListFilters.dateTo);
+
+  const filteredArticles = useMemo(
+    () =>
+      articles.filter((article) => {
+        if (articleListFilters.status !== "all" && article.status !== articleListFilters.status) return false;
+        if (articleListFilters.category !== "all" && article.category !== articleListFilters.category) return false;
+        const d = articleFilterDate(article, articleListFilters.dateFilterMode);
+        return isDateWithinRange(d, articleListFilters.dateFrom, articleListFilters.dateTo);
+      }),
+    [articles, articleListFilters]
+  );
+
+  const visibleArticles = useMemo(() => {
+    const mult = articleListSort.direction === "asc" ? 1 : -1;
+    return [...filteredArticles].sort((left, right) => {
+      let comparison = 0;
+      switch (articleListSort.field) {
+        case "updated_at":
+          comparison = (left.updated_at || "").localeCompare(right.updated_at || "");
+          break;
+        case "created_at":
+          comparison = (left.created_at || "").localeCompare(right.created_at || "");
+          break;
+        case "published_at":
+          comparison = (left.published_at || "").localeCompare(right.published_at || "");
+          break;
+        case "status":
+          comparison = left.status.localeCompare(right.status);
+          break;
+        case "category":
+          comparison = left.category.localeCompare(right.category);
+          break;
+      }
+      return comparison * mult;
+    });
+  }, [articleListSort, filteredArticles]);
+
+  const hasActiveStoryFilters = Boolean(storyListFilters.dateFrom) || Boolean(storyListFilters.dateTo);
+
+  const filteredStories = useMemo(
+    () =>
+      stories.filter((story) => {
+        const d =
+          storyListFilters.dateFilterMode === "created"
+            ? getDateOnlyValue(story.created_at)
+            : getDateOnlyValue(story.updated_at);
+        return isDateWithinRange(d, storyListFilters.dateFrom, storyListFilters.dateTo);
+      }),
+    [stories, storyListFilters]
+  );
+
+  const visibleStories = useMemo(() => {
+    const mult = storyListSort.direction === "asc" ? 1 : -1;
+    return [...filteredStories].sort((left, right) => {
+      let comparison = 0;
+      if (storyListSort.field === "created_at") {
+        comparison = (left.created_at || "").localeCompare(right.created_at || "");
+      } else if (storyListSort.field === "updated_at") {
+        comparison = (left.updated_at || "").localeCompare(right.updated_at || "");
+      } else {
+        const ta = (left.title_en || left.title_it || "").toLowerCase();
+        const tb = (right.title_en || right.title_it || "").toLowerCase();
+        comparison = ta.localeCompare(tb);
+      }
+      return comparison * mult;
+    });
+  }, [filteredStories, storyListSort]);
+
   const sectionTabs = [
     { id: "articles" as const, label: "Articoli", icon: FileText },
     { id: "stories" as const, label: "Stories", icon: BookOpen },
@@ -451,6 +613,140 @@ const AdminDashboard = () => {
                   </Link>
                 </div>
 
+                <AdminCollapsibleListFilters
+                  title="Filtri articoli"
+                  expanded={articleFiltersExpanded}
+                  onToggleExpanded={() => setArticleFiltersExpanded((open) => !open)}
+                  visibleCount={visibleArticles.length}
+                  totalCount={articles.length}
+                  hasActiveFilters={hasActiveArticleFilters}
+                  onResetFilters={() => {
+                    setArticleListFilters(emptyArticleListFilters);
+                  }}
+                  advancedOpen={articleFiltersAdvanced}
+                  onToggleAdvanced={() => setArticleFiltersAdvanced((open) => !open)}
+                  minimalRow={
+                    <>
+                      <div className="min-w-[6.5rem] flex-1">
+                        <label className={adminFilterLabelClass}>Stato</label>
+                        <select
+                          value={articleListFilters.status}
+                          onChange={(event) =>
+                            setArticleListFilters((current) => ({
+                              ...current,
+                              status: event.target.value as ArticleListFilters["status"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="all">Tutti</option>
+                          <option value="draft">Bozza</option>
+                          <option value="scheduled">Programmato</option>
+                          <option value="published">Pubblicato</option>
+                        </select>
+                      </div>
+                      <div className="min-w-[6.5rem] flex-1">
+                        <label className={adminFilterLabelClass}>Categoria</label>
+                        <select
+                          value={articleListFilters.category}
+                          onChange={(event) =>
+                            setArticleListFilters((current) => ({ ...current, category: event.target.value }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="all">Tutte</option>
+                          {articleCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="min-w-[9.5rem] flex-1">
+                        <label className={adminFilterLabelClass}>Data (filtro)</label>
+                        <select
+                          value={articleListFilters.dateFilterMode}
+                          onChange={(event) =>
+                            setArticleListFilters((current) => ({
+                              ...current,
+                              dateFilterMode: event.target.value as ArticleListFilters["dateFilterMode"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="created">Creazione</option>
+                          <option value="updated">Ultimo aggiornamento</option>
+                          <option value="published">Pubblicazione</option>
+                          <option value="scheduled">Data programmata</option>
+                        </select>
+                      </div>
+                      <div className="flex min-w-0 flex-[2] flex-wrap items-end gap-x-1.5 gap-y-1">
+                        <div className="min-w-[6.5rem] flex-1">
+                          <label className={adminFilterLabelClass}>Da</label>
+                          <input
+                            type="date"
+                            value={articleListFilters.dateFrom}
+                            onChange={(event) =>
+                              setArticleListFilters((current) => ({ ...current, dateFrom: event.target.value }))
+                            }
+                            className={adminFilterDateInputClass}
+                          />
+                        </div>
+                        <div className="min-w-[6.5rem] flex-1">
+                          <label className={adminFilterLabelClass}>A</label>
+                          <input
+                            type="date"
+                            value={articleListFilters.dateTo}
+                            onChange={(event) =>
+                              setArticleListFilters((current) => ({ ...current, dateTo: event.target.value }))
+                            }
+                            className={adminFilterDateInputClass}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  }
+                  advancedRow={
+                    <>
+                      <div>
+                        <label className={adminFilterLabelClass}>Ordina per</label>
+                        <select
+                          value={articleListSort.field}
+                          onChange={(event) =>
+                            setArticleListSort((current) => ({
+                              ...current,
+                              field: event.target.value as ArticleListSort["field"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="updated_at">Ultimo aggiornamento</option>
+                          <option value="created_at">Creazione</option>
+                          <option value="published_at">Pubblicazione</option>
+                          <option value="status">Stato</option>
+                          <option value="category">Categoria</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={adminFilterLabelClass}>Direzione</label>
+                        <select
+                          value={articleListSort.direction}
+                          onChange={(event) =>
+                            setArticleListSort((current) => ({
+                              ...current,
+                              direction: event.target.value as ArticleListSort["direction"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="desc">Decrescente</option>
+                          <option value="asc">Crescente</option>
+                        </select>
+                      </div>
+                    </>
+                  }
+                />
+
                 {loading ? (
                   <div className="space-y-3 animate-pulse">
                     <div className="glass-panel-soft rounded-[24px] h-24" />
@@ -468,9 +764,20 @@ const AdminDashboard = () => {
                       Crea il primo articolo
                     </Link>
                   </div>
+                ) : visibleArticles.length === 0 ? (
+                  <div className="glass-panel-soft rounded-[28px] p-10 text-center space-y-3">
+                    <p className="text-muted-foreground">Nessun articolo corrisponde ai filtri.</p>
+                    <button
+                      type="button"
+                      onClick={() => setArticleListFilters(emptyArticleListFilters)}
+                      className="text-sm font-sans text-accent hover:text-foreground transition-colors"
+                    >
+                      Reimposta filtri
+                    </button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {articles.map((article) => (
+                    {visibleArticles.map((article) => (
                       <article key={article.id} className="glass-panel-soft rounded-[26px] p-5">
                         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                           <div className="min-w-0">
@@ -549,6 +856,99 @@ const AdminDashboard = () => {
                     Nuova story
                   </button>
                 </div>
+
+                <AdminCollapsibleListFilters
+                  title="Filtri stories"
+                  expanded={storyFiltersExpanded}
+                  onToggleExpanded={() => setStoryFiltersExpanded((open) => !open)}
+                  visibleCount={visibleStories.length}
+                  totalCount={stories.length}
+                  hasActiveFilters={hasActiveStoryFilters}
+                  onResetFilters={() => setStoryListFilters(emptyStoryListFilters)}
+                  advancedOpen={storyFiltersAdvanced}
+                  onToggleAdvanced={() => setStoryFiltersAdvanced((open) => !open)}
+                  minimalRow={
+                    <>
+                      <div className="min-w-[9.5rem] flex-1">
+                        <label className={adminFilterLabelClass}>Data (filtro)</label>
+                        <select
+                          value={storyListFilters.dateFilterMode}
+                          onChange={(event) =>
+                            setStoryListFilters((current) => ({
+                              ...current,
+                              dateFilterMode: event.target.value as StoryListFilters["dateFilterMode"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="created">Creazione</option>
+                          <option value="updated">Ultimo aggiornamento</option>
+                        </select>
+                      </div>
+                      <div className="flex min-w-0 flex-[2] flex-wrap items-end gap-x-1.5 gap-y-1">
+                        <div className="min-w-[6.5rem] flex-1">
+                          <label className={adminFilterLabelClass}>Da</label>
+                          <input
+                            type="date"
+                            value={storyListFilters.dateFrom}
+                            onChange={(event) =>
+                              setStoryListFilters((current) => ({ ...current, dateFrom: event.target.value }))
+                            }
+                            className={adminFilterDateInputClass}
+                          />
+                        </div>
+                        <div className="min-w-[6.5rem] flex-1">
+                          <label className={adminFilterLabelClass}>A</label>
+                          <input
+                            type="date"
+                            value={storyListFilters.dateTo}
+                            onChange={(event) =>
+                              setStoryListFilters((current) => ({ ...current, dateTo: event.target.value }))
+                            }
+                            className={adminFilterDateInputClass}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  }
+                  advancedRow={
+                    <>
+                      <div>
+                        <label className={adminFilterLabelClass}>Ordina per</label>
+                        <select
+                          value={storyListSort.field}
+                          onChange={(event) =>
+                            setStoryListSort((current) => ({
+                              ...current,
+                              field: event.target.value as StoryListSort["field"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="created_at">Creazione</option>
+                          <option value="updated_at">Ultimo aggiornamento</option>
+                          <option value="title">Titolo</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={adminFilterLabelClass}>Direzione</label>
+                        <select
+                          value={storyListSort.direction}
+                          onChange={(event) =>
+                            setStoryListSort((current) => ({
+                              ...current,
+                              direction: event.target.value as StoryListSort["direction"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="desc">Decrescente</option>
+                          <option value="asc">Crescente</option>
+                        </select>
+                      </div>
+                    </>
+                  }
+                />
 
                 {showStoryForm && (
                   <div className="glass-panel-soft rounded-[30px] p-6 md:p-7 space-y-5">
@@ -646,9 +1046,20 @@ const AdminDashboard = () => {
                       Crea la prima story
                     </button>
                   </div>
+                ) : visibleStories.length === 0 && stories.length > 0 ? (
+                  <div className="glass-panel-soft rounded-[28px] p-10 text-center space-y-3">
+                    <p className="text-muted-foreground">Nessuna story corrisponde ai filtri.</p>
+                    <button
+                      type="button"
+                      onClick={() => setStoryListFilters(emptyStoryListFilters)}
+                      className="text-sm font-sans text-accent hover:text-foreground transition-colors"
+                    >
+                      Reimposta filtri
+                    </button>
+                  </div>
                 ) : (
                   <div className="space-y-3">
-                    {stories.map((story) => (
+                    {visibleStories.map((story) => (
                       <article key={story.id} className="glass-panel-soft rounded-[26px] p-5">
                         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                           <div className="min-w-0">
@@ -662,6 +1073,10 @@ const AdminDashboard = () => {
                               {story.title_en || story.title_it}
                             </h3>
                             <p className="text-sm font-sans text-muted-foreground">/{story.slug}</p>
+                            <p className="text-xs font-sans text-muted-foreground mt-1">
+                              Creata {format(new Date(story.created_at), "d MMM yyyy")} · aggiornata{" "}
+                              {format(new Date(story.updated_at), "d MMM yyyy, HH:mm")}
+                            </p>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">

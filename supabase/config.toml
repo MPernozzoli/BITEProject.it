@@ -39,3 +39,5 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.vapid-public-key]
     verify_jwt = false
+  [functions.publish-scheduled-articles]
+    verify_jwt = false
