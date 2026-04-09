@@ -4,6 +4,7 @@ import {
   hasAnyNewsletterNotificationsEnabled,
   normalizeEmailNotificationPreferences,
   type EmailNotificationPreferences,
+  type EngagementNotificationFrequency,
 } from '../_shared/email-preferences.ts'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 

@@ -66,7 +66,7 @@ async function authorizeRequest(
   const { data: isAdmin, error } = await supabase.rpc('has_role', {
     _user_id: userId,
     _role: 'admin',
-  })
+  } as any)
 
   if (error || !isAdmin) {
     return {
@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
-  const authorization = await authorizeRequest(req, supabase)
+  const authorization = await authorizeRequest(req, supabase as any)
   if (!authorization.ok) {
     return authorization.response
   }

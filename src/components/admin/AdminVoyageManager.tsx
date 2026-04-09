@@ -1208,7 +1208,7 @@ const AdminVoyageManager = ({
               description_en: descriptionEnInput?.value ?? "",
             });
             if (!result.ok) {
-              toast.error(result.error);
+              toast.error("error" in result ? result.error : "Errore di traduzione");
               return;
             }
             if (result.skipped) {

@@ -622,7 +622,7 @@ const ArticleEditor = () => {
         content_it: contentIt,
       });
       if (!result.ok) {
-        toast.error(result.error);
+        toast.error("error" in result ? result.error : "Errore di traduzione");
         return;
       }
       if (result.skipped) {
