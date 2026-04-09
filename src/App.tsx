@@ -67,11 +67,8 @@ const App = () => {
   const [queryPersister] = useState(createAppPersister);
 
   const appTree = (
-    <>
-      <Toaster />
-      <Sonner />
-      <I18nProvider>
-        <AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
         <BrowserRouter>
           <Layout>
             <Suspense fallback={<RouteFallback />}>
