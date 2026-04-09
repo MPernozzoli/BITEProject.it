@@ -339,10 +339,11 @@ export function formatVoyageDateRange(
 
 /** Per elenchi: più recente = fine viaggio, altrimenti inizio, poi ultimo aggiornamento. */
 export function getVoyageRecencyMillis(
-  voyage: Pick<Voyage, "end_date" | "start_date" | "updated_at" | "created_at">
+  voyage: Pick<Voyage, "end_date" | "start_date" | "updated_at" | "created_at"> | null | undefined
 ): number {
+  if (!voyage || typeof voyage !== "object") return 0;
   const parse = (s: string | null | undefined): number => {
-    if (!s) return 0;
+    if (s == null || typeof s !== "string" || !s.trim()) return 0;
     const t = Date.parse(s);
     return Number.isFinite(t) ? t : 0;
   };

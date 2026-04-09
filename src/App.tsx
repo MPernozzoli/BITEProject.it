@@ -9,6 +9,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import AdminRoute from "@/components/AdminRoute";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 const createAppQueryClient = () =>
   new QueryClient({
@@ -72,41 +73,43 @@ const App = () => {
       <Sonner />
       <I18nProvider>
         <AuthProvider>
-        <BrowserRouter>
-          <Layout>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/crew" element={<TheCrew />} />
-                <Route path="/about" element={<Navigate to="/crew" replace />} />
-                <Route path="/manifesto" element={<Manifesto />} />
-                <Route path="/logbook" element={<Journal />} />
-                <Route path="/voyages" element={<VoyagesPage />} />
-                <Route path="/voyages/:voyageRef" element={<VoyagePage />} />
-                <Route path="/links" element={<LinksPage />} />
-                <Route path="/linktree" element={<Navigate to="/links" replace />} />
-                <Route path="/route" element={<Navigate to="/logbook" replace />} />
-                <Route path="/collaborations" element={<Collaborations />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/logbook/story/:slug" element={<StoryPage />} />
-                <Route path="/logbook/:slug" element={<ArticlePage />} />
-                <Route path="/profile/:id" element={<PublicProfile />} />
-                <Route path="/login" element={<UserLogin />} />
-                <Route path="/signup" element={<UserLogin />} />
-                <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-                <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
-                <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
-                <Route path="/profile" element={<AdminProfile />} />
-                <Route path="/unsubscribe" element={<Unsubscribe />} />
-                <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/cookie-policy" element={<CookiePolicy />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </Layout>
-        </BrowserRouter>
+          <BrowserRouter>
+            <AppErrorBoundary>
+              <Layout>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/crew" element={<TheCrew />} />
+                    <Route path="/about" element={<Navigate to="/crew" replace />} />
+                    <Route path="/manifesto" element={<Manifesto />} />
+                    <Route path="/logbook" element={<Journal />} />
+                    <Route path="/voyages" element={<VoyagesPage />} />
+                    <Route path="/voyages/:voyageRef" element={<VoyagePage />} />
+                    <Route path="/links" element={<LinksPage />} />
+                    <Route path="/linktree" element={<Navigate to="/links" replace />} />
+                    <Route path="/route" element={<Navigate to="/logbook" replace />} />
+                    <Route path="/collaborations" element={<Collaborations />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/logbook/story/:slug" element={<StoryPage />} />
+                    <Route path="/logbook/:slug" element={<ArticlePage />} />
+                    <Route path="/profile/:id" element={<PublicProfile />} />
+                    <Route path="/login" element={<UserLogin />} />
+                    <Route path="/signup" element={<UserLogin />} />
+                    <Route path="/admin/login" element={<AdminLogin />} />
+                    <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
+                    <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
+                    <Route path="/profile" element={<AdminProfile />} />
+                    <Route path="/unsubscribe" element={<Unsubscribe />} />
+                    <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
+                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/cookie-policy" element={<CookiePolicy />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </Layout>
+            </AppErrorBoundary>
+          </BrowserRouter>
         </AuthProvider>
       </I18nProvider>
     </>
