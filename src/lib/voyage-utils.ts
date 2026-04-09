@@ -254,6 +254,22 @@ export function getWaypointSequenceHeading(index: number, total: number, lang: L
   return lang === "it" ? `Tappa ${String(index + 1).padStart(2, "0")}` : `Waypoint ${String(index + 1).padStart(2, "0")}`;
 }
 
+/**
+ * Etichetta per la legenda mappa: solo le soste pubbliche visibili, numerate 1, 2, 3…
+ * (ignora i waypoint tecnici del percorso completo).
+ */
+export function getVisibleStopsLegendHeading(
+  visibleIndex: number,
+  visibleCount: number,
+  lang: Language
+): string {
+  if (visibleIndex === 0) return lang === "it" ? "Partenza" : "Start";
+  if (visibleCount > 1 && visibleIndex === visibleCount - 1) {
+    return lang === "it" ? "Arrivo" : "Arrival";
+  }
+  return String(visibleIndex);
+}
+
 export function slugifyVoyageName(value: string): string {
   return value
     .toLowerCase()
@@ -513,6 +529,129 @@ export function getAssociatedArticleForWaypoint<
   }
 
   return null;
+}
+
+export function getLocalizedArticleTitle(
+  article: Pick<GeoArticle, "title_en" | "title_it">,
+  lang: Language
+): string {
+  const en = article.title_en?.trim() || "";
+  const it = article.title_it?.trim();
+  if (lang === "it") return it || en;
+  return en || it || "";
+}
+
+/** Punti/segmenti nella legenda mappa per collegare articoli alle tappe visibili. */
+export type VoyageLegendRouteBinding =
+  | { kind: "point"; visibleIndex: number; articles: GeoArticle[] }
+  | { kind: "edge"; edgeIndex: number; articles: GeoArticle[] }
+  | { kind: "span"; fromVisible: number; toVisible: number; articles: GeoArticle[] };
+
+export function buildVoyageLegendArticlePlan(
+  voyageId: string,
+  waypoints: VoyageWaypoint[],
+  visibleWaypoints: VoyageWaypoint[],
+  articles: GeoArticle[]
+): {
+  wholeVoyageArticles: GeoArticle[];
+  routeBindings: VoyageLegendRouteBinding[];
+  storyIds: string[];
+} {
+  const voyageArticles = articles.filter((article) => article.voyage_id === voyageId);
+  const wholeVoyageArticles: GeoArticle[] = [];
+  const pointMap = new Map<number, GeoArticle[]>();
+  const edgeMap = new Map<number, GeoArticle[]>();
+  const spanMap = new Map<string, GeoArticle[]>();
+  const storyIdsSet = new Set<string>();
+
+  const pushToIndexMap = (map: Map<number, GeoArticle[]>, key: number, article: GeoArticle) => {
+    const list = map.get(key);
+    if (list) list.push(article);
+    else map.set(key, [article]);
+  };
+
+  const routeIndexOf = (wp: VoyageWaypoint) => waypoints.findIndex((w) => w.id === wp.id);
+  const visRoutes = visibleWaypoints.map((w) => routeIndexOf(w));
+
+  for (const article of voyageArticles) {
+    if (article.story_id) storyIdsSet.add(article.story_id);
+
+    const range = getArticleWaypointRange(article);
+    if (!range) {
+      wholeVoyageArticles.push(article);
+      continue;
+    }
+
+    const [rawA, rawB] = range;
+    const lo = Math.min(rawA, rawB);
+    const hi = Math.max(rawA, rawB);
+
+    if (lo === hi) {
+      const visIdx = visRoutes.findIndex((r) => r === lo);
+      if (visIdx >= 0) pushToIndexMap(pointMap, visIdx, article);
+      continue;
+    }
+
+    /** Segmento = tra due waypoint consecutivi nella lista visibile (ignora i tecnici nascosti). */
+    let edgeHit = -1;
+    for (let edge = 0; edge < visRoutes.length - 1; edge += 1) {
+      const rA = visRoutes[edge]!;
+      const rB = visRoutes[edge + 1]!;
+      const visLo = Math.min(rA, rB);
+      const visHi = Math.max(rA, rB);
+      if (lo === visLo && hi === visHi) {
+        edgeHit = edge;
+        break;
+      }
+    }
+
+    if (edgeHit >= 0) {
+      pushToIndexMap(edgeMap, edgeHit, article);
+      continue;
+    }
+
+    const inSpanIndexes = visibleWaypoints
+      .map((_, visIdx) => visIdx)
+      .filter((visIdx) => {
+        const r = visRoutes[visIdx];
+        return r >= lo && r <= hi;
+      });
+
+    if (inSpanIndexes.length === 0) continue;
+
+    const vmin = Math.min(...inSpanIndexes);
+    const vmax = Math.max(...inSpanIndexes);
+
+    if (vmin === vmax) {
+      pushToIndexMap(pointMap, vmin, article);
+      continue;
+    }
+
+    const spanKey = `${String(vmin)}:${String(vmax)}`;
+    const spanList = spanMap.get(spanKey);
+    if (spanList) spanList.push(article);
+    else spanMap.set(spanKey, [article]);
+  }
+
+  const routeBindings: VoyageLegendRouteBinding[] = [];
+  for (const [visibleIndex, arts] of pointMap) {
+    routeBindings.push({ kind: "point", visibleIndex, articles: arts });
+  }
+  for (const [edgeIndex, arts] of edgeMap) {
+    routeBindings.push({ kind: "edge", edgeIndex, articles: arts });
+  }
+  for (const [key, arts] of spanMap) {
+    const [fromS, toS] = key.split(":");
+    const fromVisible = Number(fromS);
+    const toVisible = Number(toS);
+    routeBindings.push({ kind: "span", fromVisible, toVisible, articles: arts });
+  }
+
+  return {
+    wholeVoyageArticles,
+    routeBindings,
+    storyIds: [...storyIdsSet],
+  };
 }
 
 const lerpCoordinate = (from: [number, number], to: [number, number], amount: number): [number, number] => [

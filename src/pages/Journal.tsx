@@ -220,6 +220,38 @@ const Journal = () => {
     });
   }, [articles, searchQuery, lang]);
 
+  const voyageLegendStoryIds = useMemo(() => {
+    if (!selectedRouteVoyageId) return [] as string[];
+    const ids = new Set<string>();
+    articles.forEach((article) => {
+      if (article.voyage_id === selectedRouteVoyageId && article.story_id) ids.add(article.story_id);
+    });
+    return [...ids];
+  }, [articles, selectedRouteVoyageId]);
+
+  const voyageLegendStoriesQueryKey = [...voyageLegendStoryIds].sort().join(",");
+
+  const { data: voyageLegendStories = [] } = useQuery({
+    queryKey: ["voyage-legend-stories", voyageLegendStoriesQueryKey],
+    enabled: Boolean(selectedRouteVoyageId && voyageLegendStoryIds.length > 0),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stories")
+        .select("id, title_it, title_en")
+        .in("id", voyageLegendStoryIds);
+      if (error) throw error;
+      return (data || []) as { id: string; title_it: string | null; title_en: string | null }[];
+    },
+  });
+
+  const voyageLegendStoryTitlesById = useMemo(() => {
+    const map: Record<string, { title_it: string | null; title_en: string | null }> = {};
+    voyageLegendStories.forEach((row) => {
+      map[row.id] = { title_it: row.title_it, title_en: row.title_en };
+    });
+    return map;
+  }, [voyageLegendStories]);
+
   // Stats
   const stats = useMemo(() => {
     let seaNM = 0;
@@ -563,9 +595,11 @@ const Journal = () => {
                 <VoyageLegend
                   voyage={legendVoyage}
                   waypoints={waypointsMap[selectedRouteVoyageId] || []}
-                  articles={filtered}
+                  articles={articles}
                   lang={lang}
                   onClose={() => setSelectedRouteVoyageId(null)}
+                  onArticleClick={handleArticleClick}
+                  storyTitlesById={voyageLegendStoryTitlesById}
                   onWaypointClick={(wp) => {
                     const wps = waypointsMap[selectedRouteVoyageId] || [];
                     flyToWaypointRef.current?.(
