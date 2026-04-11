@@ -800,6 +800,10 @@ html {
   }
 }
 
+.maplibregl-popup.voyage-waypoint-popup {
+  z-index: 12000;
+}
+
 .voyage-waypoint-popup .maplibregl-popup-content {
   padding: 0;
   border-radius: 16px;

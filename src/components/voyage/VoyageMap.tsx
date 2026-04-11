@@ -257,6 +257,8 @@ const VoyageMap = ({
       name: string;
       articleTitle: string;
       fillColor: string;
+      /** Colore tratto principale del percorso (come layer `voyage-line-*`). */
+      routeStrokeColor: string;
     };
     const items: Item[] = [];
     for (const voyage of publishedVoyages) {
@@ -285,6 +287,7 @@ const VoyageMap = ({
             ? associatedArticle.title_en
             : associatedArticle.title_it || associatedArticle.title_en
           : "";
+        const routeStrokeColor = getVoyageStrokeColor(voyage, "base");
         items.push({
           key: `${voyage.id}:${w.id}`,
           lng: w.lng,
@@ -295,6 +298,7 @@ const VoyageMap = ({
           name,
           articleTitle,
           fillColor,
+          routeStrokeColor,
         });
       }
     }
@@ -796,13 +800,13 @@ const VoyageMap = ({
       sequenceHeading: string,
       name: string,
       articleTitle: string,
-      accentColor: string
+      routeColor: string
     ) => {
       if (!name && !sequenceHeading) return;
       const L = langRef.current;
       const seqBlock = sequenceHeading
         ? `<div style="margin:0 0 8px;">
-            <span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:${accentColor};background:linear-gradient(135deg,hsla(0,0%,100%,0.95),hsl(210,25%,97%));border:1px solid hsl(220,14%,88%);box-shadow:0 1px 2px rgba(15,23,42,0.05);">${escapePopupHtml(sequenceHeading)}</span>
+            <span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:${routeColor};background:linear-gradient(135deg,hsla(0,0%,100%,0.95),hsl(210,25%,97%));border:1px solid ${routeColor};box-shadow:0 1px 2px rgba(15,23,42,0.05);">${escapePopupHtml(sequenceHeading)}</span>
           </div>`
         : "";
       const articleBlock = articleTitle
@@ -812,7 +816,7 @@ const VoyageMap = ({
           </div>`
         : "";
       const popupHtml = `
-        <div style="font-family:var(--font-sans),ui-sans-serif,system-ui,sans-serif;padding:14px 16px 15px;min-width:172px;max-width:280px;border-radius:16px;background:linear-gradient(165deg,hsl(0,0%,100%) 0%,hsl(210,40%,99.2%) 100%);box-shadow:0 14px 44px rgba(15,23,42,0.13),0 0 0 1px rgba(15,23,42,0.05);border-left:4px solid ${accentColor};">
+        <div style="font-family:var(--font-sans),ui-sans-serif,system-ui,sans-serif;padding:14px 16px 15px;min-width:172px;max-width:280px;border-radius:16px;background:linear-gradient(165deg,hsl(0,0%,100%) 0%,hsl(210,40%,99.2%) 100%);box-shadow:0 14px 44px rgba(15,23,42,0.13),0 0 0 1px rgba(15,23,42,0.05);border-left:4px solid ${routeColor};">
           ${seqBlock}
           <div style="font-size:13px;font-weight:600;line-height:1.38;color:hsl(220,28%,14%);letter-spacing:-0.015em;">${escapePopupHtml(name || "—")}</div>
           ${articleBlock}
@@ -828,7 +832,12 @@ const VoyageMap = ({
           className: "voyage-waypoint-popup",
         });
       }
-      popupRef.current.setLngLat(coords).setHTML(popupHtml).addTo(map);
+      const p = popupRef.current;
+      p.setLngLat(coords).setHTML(popupHtml).addTo(map);
+      const popupRoot = p.getElement();
+      if (popupRoot?.parentElement) {
+        popupRoot.parentElement.appendChild(popupRoot);
+      }
     };
 
     const syncWaypointMarkers = () => {
@@ -908,15 +917,23 @@ const VoyageMap = ({
         el.appendChild(dot);
 
         const coords: [number, number] = [lng, lat];
+        const markerWrap = (): HTMLElement | null => {
+          const w = el.closest(".maplibregl-marker") ?? el.parentElement;
+          return w instanceof HTMLElement ? w : null;
+        };
 
         el.addEventListener("mouseenter", () => {
           dot.style.transform = "scale(1.12)";
           el.style.opacity = "1";
-          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle, meta.fillColor);
+          const wrap = markerWrap();
+          if (wrap) wrap.style.zIndex = "80";
+          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle, meta.routeStrokeColor);
         });
         el.addEventListener("mouseleave", () => {
           dot.style.transform = "scale(1)";
           if (isDimmed) el.style.opacity = "0.38";
+          const wrap = markerWrap();
+          if (wrap) wrap.style.zIndex = "";
           popupRef.current?.remove();
           popupRef.current = null;
         });
