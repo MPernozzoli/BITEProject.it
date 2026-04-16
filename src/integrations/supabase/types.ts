@@ -374,6 +374,78 @@ export type Database = {
           },
         ]
       }
+      editorial_media_assets: {
+        Row: {
+          created_at: string
+          editorial_type: Database["public"]["Enums"]["article_editorial_type"] | null
+          id: string
+          status: string
+          storage_main_path: string | null
+          synopsis: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          id?: string
+          status?: string
+          storage_main_path?: string | null
+          synopsis?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          id?: string
+          status?: string
+          storage_main_path?: string | null
+          synopsis?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      editorial_plan_channels: {
+        Row: {
+          code: string
+          horizon_weeks: number
+          id: string
+          label: string
+          mix_pillar: number
+          mix_support: number
+          mix_utility: number
+          timezone: string
+          updated_at: string
+          weekly_count: number
+        }
+        Insert: {
+          code: string
+          horizon_weeks?: number
+          id?: string
+          label: string
+          mix_pillar?: number
+          mix_support?: number
+          mix_utility?: number
+          timezone?: string
+          updated_at?: string
+          weekly_count?: number
+        }
+        Update: {
+          code?: string
+          horizon_weeks?: number
+          id?: string
+          label?: string
+          mix_pillar?: number
+          mix_support?: number
+          mix_utility?: number
+          timezone?: string
+          updated_at?: string
+          weekly_count?: number
+        }
+        Relationships: []
+      }
       editorial_plan_settings: {
         Row: {
           horizon_weeks: number
@@ -410,6 +482,9 @@ export type Database = {
       editorial_plan_slots: {
         Row: {
           assigned_article_id: string | null
+          channel_id: string
+          content_format: string | null
+          counts_toward_mix: boolean
           created_at: string
           id: string
           notes: string | null
@@ -427,6 +502,9 @@ export type Database = {
         }
         Insert: {
           assigned_article_id?: string | null
+          channel_id: string
+          content_format?: string | null
+          counts_toward_mix?: boolean
           created_at?: string
           id?: string
           notes?: string | null
@@ -444,6 +522,9 @@ export type Database = {
         }
         Update: {
           assigned_article_id?: string | null
+          channel_id?: string
+          content_format?: string | null
+          counts_toward_mix?: boolean
           created_at?: string
           id?: string
           notes?: string | null
@@ -468,6 +549,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "editorial_plan_slots_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "editorial_plan_slots_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -478,6 +566,8 @@ export type Database = {
       }
       editorial_plan_weekly_slots: {
         Row: {
+          channel_id: string
+          content_format: string | null
           created_at: string
           day_of_week: number
           id: string
@@ -485,6 +575,8 @@ export type Database = {
           time_of_day: string
         }
         Insert: {
+          channel_id: string
+          content_format?: string | null
           created_at?: string
           day_of_week: number
           id?: string
@@ -492,13 +584,93 @@ export type Database = {
           time_of_day: string
         }
         Update: {
+          channel_id?: string
+          content_format?: string | null
           created_at?: string
           day_of_week?: number
           id?: string
           sort_order?: number
           time_of_day?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "editorial_plan_weekly_slots_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_publish_targets: {
+        Row: {
+          asset_id: string | null
+          caption: string | null
+          channel_id: string
+          content_format: string
+          created_at: string
+          editorial_plan_slot_id: string | null
+          id: string
+          last_error: string | null
+          publish_at: string | null
+          status: string
+          syndication_batch_id: string | null
+          title_override: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          caption?: string | null
+          channel_id: string
+          content_format: string
+          created_at?: string
+          editorial_plan_slot_id?: string | null
+          id?: string
+          last_error?: string | null
+          publish_at?: string | null
+          status?: string
+          syndication_batch_id?: string | null
+          title_override?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          caption?: string | null
+          channel_id?: string
+          content_format?: string
+          created_at?: string
+          editorial_plan_slot_id?: string | null
+          id?: string
+          last_error?: string | null
+          publish_at?: string | null
+          status?: string
+          syndication_batch_id?: string | null
+          title_override?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_publish_targets_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publish_targets_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publish_targets_editorial_plan_slot_id_fkey"
+            columns: ["editorial_plan_slot_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_slots"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_notification_preferences: {
         Row: {
@@ -1276,6 +1448,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      social_oauth_connections: {
+        Row: {
+          access_token_expires_at: string | null
+          account_label: string | null
+          channel_id: string
+          created_at: string
+          id: string
+          provider: string
+          refresh_token_encrypted: string | null
+          scopes: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_expires_at?: string | null
+          account_label?: string | null
+          channel_id: string
+          created_at?: string
+          id?: string
+          provider: string
+          refresh_token_encrypted?: string | null
+          scopes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_expires_at?: string | null
+          account_label?: string | null
+          channel_id?: string
+          created_at?: string
+          id?: string
+          provider?: string
+          refresh_token_encrypted?: string | null
+          scopes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_oauth_connections_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: true
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       stories: {
         Row: {

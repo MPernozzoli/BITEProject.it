@@ -1,37 +1,55 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { addDays, format, startOfDay, startOfWeek } from "date-fns";
+import { addDays, eachDayOfInterval, endOfWeek, format, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
 import { Plus, Settings2, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import {
-  EDITORIAL_PLAN_SETTINGS_ID,
+  EDITORIAL_CHANNEL_IDS,
+  EDITORIAL_CHANNEL_LABELS,
+  EDITORIAL_CHANNEL_ORDER,
   EDITORIAL_TYPE_LABELS,
-  WEEKDAY_LABELS_IT,
+  computeSocialTypeDistribution,
   computeTypeDistribution,
   ensureSlotsForHorizon,
   recomputeOpenSlotSuggestions,
   effectiveSlotType,
   type ArticleForPlan,
   type EditorialArticleType,
+  type EditorialChannelCode,
   type EditorialMix,
+  type PublishTargetForMix,
   type SlotForPlan,
   type WeeklyTemplate,
 } from "@/lib/editorial-plan";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminEditorialPlanSettingsDialog from "./AdminEditorialPlanSettingsDialog";
 import AdminEditorialPlanSlotDialog from "./AdminEditorialPlanSlotDialog";
 
 type ArticleLite = ArticleForPlan & { title_en: string; title_it: string };
+type ChannelRow = Database["public"]["Tables"]["editorial_plan_channels"]["Row"];
+
+type TargetRow = {
+  id: string;
+  editorial_plan_slot_id: string | null;
+  status: string;
+  content_format: string;
+  caption: string | null;
+  editorial_media_assets: { title: string; editorial_type: EditorialArticleType | null } | null;
+};
 
 export default function AdminEditorialPlan() {
   const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [cursorMonth, setCursorMonth] = useState(() => startOfMonth(new Date()));
+  const [channels, setChannels] = useState<ChannelRow[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>(EDITORIAL_CHANNEL_IDS.site);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotForPlan | null>(null);
@@ -41,6 +59,12 @@ export default function AdminEditorialPlan() {
   const [templates, setTemplates] = useState<WeeklyTemplate[]>([]);
   const [slots, setSlots] = useState<SlotForPlan[]>([]);
   const [articles, setArticles] = useState<ArticleLite[]>([]);
+  const [targetsBySlotId, setTargetsBySlotId] = useState<Record<string, TargetRow[]>>({});
+
+  const selectedChannelCode = useMemo((): EditorialChannelCode => {
+    const c = channels.find((x) => x.id === selectedChannelId);
+    return (c?.code as EditorialChannelCode) ?? "site";
+  }, [channels, selectedChannelId]);
 
   const loadData = useCallback(async () => {
     if (!session?.user) return;
@@ -48,40 +72,51 @@ export default function AdminEditorialPlan() {
     const today = startOfDay(new Date());
     const fromStr = format(addDays(today, -7), "yyyy-MM-dd");
 
-    const settingsRes = await supabase.from("editorial_plan_settings").select("*").eq("id", EDITORIAL_PLAN_SETTINGS_ID).maybeSingle();
-    if (settingsRes.error && isAuthFailureError(settingsRes.error)) {
+    const channelsRes = await supabase.from("editorial_plan_channels").select("*").order("code", { ascending: true });
+    if (channelsRes.error && isAuthFailureError(channelsRes.error)) {
       await supabase.auth.signOut();
       navigate("/login", { state: { from: "/admin" } });
       setLoading(false);
       return;
     }
+    const chRows = (channelsRes.data ?? []) as ChannelRow[];
+    setChannels(chRows);
 
-    const s = settingsRes.data;
-    const horizon = s?.horizon_weeks ?? 8;
-    const toStr = format(addDays(today, horizon * 7), "yyyy-MM-dd");
-    const mixFromSettings: EditorialMix = s
+    const channelRow = chRows.find((c) => c.id === selectedChannelId) ?? chRows.find((c) => c.code === "site");
+    const horizon = channelRow?.horizon_weeks ?? 8;
+    const mixFromChannel: EditorialMix = channelRow
       ? {
-          mix_pillar: Number(s.mix_pillar),
-          mix_support: Number(s.mix_support),
-          mix_utility: Number(s.mix_utility),
+          mix_pillar: Number(channelRow.mix_pillar),
+          mix_support: Number(channelRow.mix_support),
+          mix_utility: Number(channelRow.mix_utility),
         }
       : { mix_pillar: 15, mix_support: 55, mix_utility: 30 };
-    setMix(mixFromSettings);
+    setMix(mixFromChannel);
     setHorizonWeeks(horizon);
+    const toStr = format(addDays(today, horizon * 7), "yyyy-MM-dd");
+
+    const isSite = channelRow?.code === "site";
 
     const [weeklyRes, slotsRes, articlesRes] = await Promise.all([
-      supabase.from("editorial_plan_weekly_slots").select("*").order("sort_order", { ascending: true }),
+      supabase
+        .from("editorial_plan_weekly_slots")
+        .select("*")
+        .eq("channel_id", selectedChannelId)
+        .order("sort_order", { ascending: true }),
       supabase
         .from("editorial_plan_slots")
         .select("*")
+        .eq("channel_id", selectedChannelId)
         .gte("slot_date", fromStr)
         .lte("slot_date", toStr)
         .order("slot_date", { ascending: true })
         .order("slot_time", { ascending: true }),
-      supabase.from("logbook_articles").select("id, title_en, title_it, status, editorial_type"),
+      isSite
+        ? supabase.from("logbook_articles").select("id, title_en, title_it, status, editorial_type")
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    const err = weeklyRes.error || slotsRes.error || articlesRes.error;
+    const err = weeklyRes.error || slotsRes.error || ("error" in articlesRes ? articlesRes.error : null);
     if (err && isAuthFailureError(err)) {
       await supabase.auth.signOut();
       navigate("/login", { state: { from: "/admin" } });
@@ -91,12 +126,12 @@ export default function AdminEditorialPlan() {
 
     const tmpl = (weeklyRes.data ?? []) as WeeklyTemplate[];
     let slotRows = (slotsRes.data ?? []) as SlotForPlan[];
-    const arts = (articlesRes.data ?? []) as unknown as ArticleLite[];
+    const arts = (isSite && "data" in articlesRes ? articlesRes.data : []) as unknown as ArticleLite[];
 
     setTemplates(tmpl);
     setArticles(arts);
 
-    const newRows = ensureSlotsForHorizon(today, horizon, tmpl, slotRows, arts, mixFromSettings);
+    const newRows = ensureSlotsForHorizon(today, horizon, tmpl, slotRows, arts, mixFromChannel, selectedChannelId);
     if (newRows.length > 0) {
       const { error: insErr } = await supabase.from("editorial_plan_slots").insert(newRows);
       if (insErr) {
@@ -106,6 +141,7 @@ export default function AdminEditorialPlan() {
         const { data: refetched } = await supabase
           .from("editorial_plan_slots")
           .select("*")
+          .eq("channel_id", selectedChannelId)
           .gte("slot_date", fromStr)
           .lte("slot_date", toStr)
           .order("slot_date", { ascending: true })
@@ -114,56 +150,124 @@ export default function AdminEditorialPlan() {
       }
     }
 
-    const updates = recomputeOpenSlotSuggestions(slotRows, arts, mixFromSettings);
-    const toPatch = updates.filter((u) => {
-      const row = slotRows.find((r) => r.id === u.id);
-      return row && row.suggested_type !== u.suggested_type;
-    });
-    if (toPatch.length > 0) {
-      await Promise.all(
-        toPatch.map((u) =>
-          supabase.from("editorial_plan_slots").update({ suggested_type: u.suggested_type, updated_at: new Date().toISOString() }).eq("id", u.id)
-        )
-      );
-      const { data: again } = await supabase
-        .from("editorial_plan_slots")
-        .select("*")
-        .gte("slot_date", fromStr)
-        .lte("slot_date", toStr)
-        .order("slot_date", { ascending: true })
-        .order("slot_time", { ascending: true });
-      if (again) slotRows = again as SlotForPlan[];
+    if (isSite) {
+      const updates = recomputeOpenSlotSuggestions(slotRows, arts, mixFromChannel);
+      const toPatch = updates.filter((u) => {
+        const row = slotRows.find((r) => r.id === u.id);
+        return row && row.suggested_type !== u.suggested_type;
+      });
+      if (toPatch.length > 0) {
+        await Promise.all(
+          toPatch.map((u) =>
+            supabase
+              .from("editorial_plan_slots")
+              .update({ suggested_type: u.suggested_type, updated_at: new Date().toISOString() })
+              .eq("id", u.id)
+          )
+        );
+        const { data: again } = await supabase
+          .from("editorial_plan_slots")
+          .select("*")
+          .eq("channel_id", selectedChannelId)
+          .gte("slot_date", fromStr)
+          .lte("slot_date", toStr)
+          .order("slot_date", { ascending: true })
+          .order("slot_time", { ascending: true });
+        if (again) slotRows = again as SlotForPlan[];
+      }
     }
 
     setSlots(slotRows);
+
+    if (!isSite && slotRows.length > 0) {
+      const ids = slotRows.map((s) => s.id);
+      const { data: tdata, error: terr } = await supabase
+        .from("editorial_publish_targets")
+        .select("id, editorial_plan_slot_id, status, content_format, caption, editorial_media_assets(title, editorial_type)")
+        .in("editorial_plan_slot_id", ids);
+      if (!terr && tdata) {
+        const map: Record<string, TargetRow[]> = {};
+        for (const row of tdata as unknown as TargetRow[]) {
+          const sid = row.editorial_plan_slot_id;
+          if (!sid) continue;
+          if (!map[sid]) map[sid] = [];
+          map[sid].push(row);
+        }
+        setTargetsBySlotId(map);
+      } else {
+        setTargetsBySlotId({});
+      }
+    } else {
+      setTargetsBySlotId({});
+    }
+
     setLoading(false);
-  }, [session?.user, navigate]);
+  }, [session?.user, navigate, selectedChannelId]);
 
   useEffect(() => {
     if (authLoading || !session?.user) return;
     void loadData();
   }, [authLoading, session?.user, loadData]);
 
-  const weekStart = useMemo(
-    () => startOfWeek(addDays(startOfDay(new Date()), weekOffset * 7), { weekStartsOn: 1 }),
-    [weekOffset]
-  );
-  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
-  const weekFrom = format(weekStart, "yyyy-MM-dd");
-  const weekTo = format(weekEnd, "yyyy-MM-dd");
+  const monthStart = useMemo(() => startOfMonth(cursorMonth), [cursorMonth]);
+  const monthEnd = useMemo(() => {
+    const sm = startOfMonth(cursorMonth);
+    return new Date(sm.getFullYear(), sm.getMonth() + 1, 0);
+  }, [cursorMonth]);
 
-  const slotsInWeek = useMemo(
-    () => slots.filter((s) => s.slot_date >= weekFrom && s.slot_date <= weekTo),
-    [slots, weekFrom, weekTo]
+  const gridStart = useMemo(() => startOfWeek(monthStart, { weekStartsOn: 1 }), [monthStart]);
+  const gridEnd = useMemo(() => endOfWeek(monthEnd, { weekStartsOn: 1 }), [monthEnd]);
+  const gridDays = useMemo(() => eachDayOfInterval({ start: gridStart, end: gridEnd }), [gridStart, gridEnd]);
+
+  const monthFrom = format(monthStart, "yyyy-MM-dd");
+  const monthTo = format(monthEnd, "yyyy-MM-dd");
+
+  const slotsInMonth = useMemo(
+    () => slots.filter((s) => s.slot_date >= monthFrom && s.slot_date <= monthTo),
+    [slots, monthFrom, monthTo]
   );
 
-  const distribution = useMemo(() => computeTypeDistribution(articles, slots), [articles, slots]);
+  const slotsByDate = useMemo(() => {
+    const m = new Map<string, SlotForPlan[]>();
+    for (const s of slotsInMonth) {
+      const list = m.get(s.slot_date) ?? [];
+      list.push(s);
+      m.set(s.slot_date, list);
+    }
+    for (const [, list] of m) {
+      list.sort((a, b) => a.slot_time.localeCompare(b.slot_time));
+    }
+    return m;
+  }, [slotsInMonth]);
+
+  const slotsById = useMemo(() => new Map(slots.map((s) => [s.id, s])), [slots]);
+
+  const distribution = useMemo(() => {
+    if (selectedChannelCode === "site") {
+      return computeTypeDistribution(articles, slots);
+    }
+    const targetsForMix: PublishTargetForMix[] = [];
+    for (const list of Object.values(targetsBySlotId)) {
+      for (const t of list) {
+        targetsForMix.push({
+          id: t.id,
+          status: t.status,
+          editorial_plan_slot_id: t.editorial_plan_slot_id,
+          editorial_type: (t.editorial_media_assets?.editorial_type as EditorialArticleType | null) ?? null,
+        });
+      }
+    }
+    return computeSocialTypeDistribution(targetsForMix, slotsById);
+  }, [articles, slots, selectedChannelCode, targetsBySlotId, slotsById]);
+
   const distTotal = distribution.pillar + distribution.support + distribution.utility_reflection || 1;
 
   const openSlot = (s: SlotForPlan) => {
     setSelectedSlot(s);
     setSlotDialogOpen(true);
   };
+
+  const goTodayMonth = () => setCursorMonth(startOfMonth(new Date()));
 
   return (
     <div className="space-y-6">
@@ -187,6 +291,24 @@ export default function AdminEditorialPlan() {
         </div>
       </div>
 
+      <Tabs value={selectedChannelId} onValueChange={setSelectedChannelId} className="w-full">
+        <TabsList className="flex flex-wrap h-auto gap-1 justify-start bg-muted/40 p-1 rounded-[16px]">
+          {EDITORIAL_CHANNEL_ORDER.map((code) => {
+            const id = EDITORIAL_CHANNEL_IDS[code];
+            const label = EDITORIAL_CHANNEL_LABELS[code];
+            return (
+              <TabsTrigger
+                key={code}
+                value={id}
+                className="text-xs px-3 py-2 data-[state=active]:bg-background rounded-[12px]"
+              >
+                {label}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+
       <div className="glass-panel-soft rounded-[26px] p-5 space-y-4">
         <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Distribuzione vs target</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -208,10 +330,7 @@ export default function AdminEditorialPlan() {
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-accent/80 transition-all"
-                    style={{ width: `${Math.min(100, curPct)}%` }}
-                  />
+                  <div className="h-full bg-accent/80 transition-all" style={{ width: `${Math.min(100, curPct)}%` }} />
                 </div>
               </div>
             );
@@ -221,16 +340,28 @@ export default function AdminEditorialPlan() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="icon" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Settimana precedente">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setCursorMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+            aria-label="Mese precedente"
+          >
             <ChevronLeft size={18} />
           </Button>
-          <span className="text-sm font-sans text-foreground min-w-[12rem] text-center">
-            {format(weekStart, "d MMM", { locale: it })} – {format(weekEnd, "d MMM yyyy", { locale: it })}
+          <span className="text-sm font-sans text-foreground min-w-[10rem] text-center capitalize">
+            {format(cursorMonth, "MMMM yyyy", { locale: it })}
           </span>
-          <Button type="button" variant="outline" size="icon" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Settimana successiva">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setCursorMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            aria-label="Mese successivo"
+          >
             <ChevronRight size={18} />
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
+          <Button type="button" variant="ghost" size="sm" onClick={goTodayMonth}>
             Oggi
           </Button>
         </div>
@@ -242,53 +373,72 @@ export default function AdminEditorialPlan() {
           <div className="glass-panel-soft rounded-[24px] h-20" />
           <div className="glass-panel-soft rounded-[24px] h-20" />
         </div>
-      ) : slotsInWeek.length === 0 ? (
-        <div className="glass-panel-soft rounded-[28px] p-8 text-center text-muted-foreground text-sm">
-          Nessuno slot in questa settimana. Controlla le impostazioni o la finestra temporale.
-        </div>
       ) : (
-        <div className="space-y-2">
-          {slotsInWeek.map((s) => {
-            const art = articles.find((a) => a.id === s.assigned_article_id);
-            const eff = effectiveSlotType(s, art);
-            const label = eff ? EDITORIAL_TYPE_LABELS[eff] : "—";
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => openSlot(s)}
-                className="w-full text-left glass-panel-soft rounded-[22px] p-4 border border-transparent hover:border-accent/40 transition-colors"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                        {WEEKDAY_LABELS_IT[new Date(s.slot_date + "T12:00:00").getDay()]}{" "}
-                        {format(new Date(s.slot_date + "T12:00:00"), "d MMM", { locale: it })} ·{" "}
-                        {String(s.slot_time).slice(0, 5)}
-                      </span>
-                      <span className="glass-chip text-[10px] px-2 py-0.5 uppercase tracking-wider">{label}</span>
-                      <span className="text-[10px] uppercase text-muted-foreground">{s.status}</span>
-                    </div>
-                    {s.status === "assigned" && art ? (
-                      <p className="font-serif text-lg text-foreground">{art.title_it || art.title_en}</p>
-                    ) : s.status === "skipped" ? (
-                      <p className="text-sm text-muted-foreground">Saltato</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Segnaposto — clic per bozza o assegnazione</p>
-                    )}
+        <div className="glass-panel-soft rounded-[28px] p-4 md:p-5 overflow-x-auto">
+          <div className="grid grid-cols-7 gap-1 min-w-[640px] text-[10px] font-sans uppercase tracking-wider text-muted-foreground mb-2">
+            {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((d) => (
+              <div key={d} className="text-center py-1">
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1 min-w-[640px]">
+            {gridDays.map((day) => {
+              const key = format(day, "yyyy-MM-dd");
+              const inMonth = isSameMonth(day, cursorMonth);
+              const daySlots = slotsByDate.get(key) ?? [];
+              return (
+                <div
+                  key={key}
+                  className={`min-h-[88px] rounded-[14px] border p-1.5 flex flex-col gap-1 ${
+                    inMonth ? "border-border/80 bg-background/40" : "border-transparent bg-muted/20 opacity-60"
+                  }`}
+                >
+                  <span className={`text-xs font-sans ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                    {format(day, "d")}
+                  </span>
+                  <div className="flex flex-col gap-1 overflow-hidden">
+                    {daySlots.map((s) => {
+                      const art = articles.find((a) => a.id === s.assigned_article_id);
+                      const eff = effectiveSlotType(s, art);
+                      const label = eff ? EDITORIAL_TYPE_LABELS[eff] : "—";
+                      const tlist = targetsBySlotId[s.id];
+                      const socialHint =
+                        selectedChannelCode !== "site" && tlist?.length
+                          ? `${tlist.length} uscit${tlist.length === 1 ? "a" : "e"}`
+                          : null;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => openSlot(s)}
+                          className="text-left rounded-[10px] bg-muted/50 hover:bg-muted px-1.5 py-1 border border-transparent hover:border-accent/30 transition-colors"
+                        >
+                          <div className="text-[10px] text-muted-foreground truncate">{String(s.slot_time).slice(0, 5)}</div>
+                          <div className="text-[10px] font-medium truncate">{label}</div>
+                          {s.content_format && (
+                            <div className="text-[9px] text-muted-foreground truncate">{s.content_format}</div>
+                          )}
+                          {socialHint && <div className="text-[9px] text-accent truncate">{socialHint}</div>}
+                          {selectedChannelCode === "site" && s.status === "assigned" && art && (
+                            <div className="text-[9px] text-foreground truncate">{art.title_it || art.title_en}</div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <span className="text-xs text-accent shrink-0">Modifica →</span>
                 </div>
-              </button>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
       <AdminEditorialPlanSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
+        channelId={selectedChannelId}
+        channelCode={selectedChannelCode}
         onSaved={async () => {
           await loadData();
         }}
@@ -303,6 +453,8 @@ export default function AdminEditorialPlan() {
         slot={selectedSlot}
         articles={articles}
         allSlots={slots}
+        channelId={selectedChannelId}
+        channelCode={selectedChannelCode}
         onDone={async () => {
           await loadData();
         }}

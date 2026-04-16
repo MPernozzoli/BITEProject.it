@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { EDITORIAL_PLAN_SETTINGS_ID, WEEKDAY_LABELS_IT } from "@/lib/editorial-plan";
+import { contentFormatsForChannel, type EditorialChannelCode, WEEKDAY_LABELS_IT } from "@/lib/editorial-plan";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useNavigate } from "react-router-dom";
 
@@ -18,11 +18,14 @@ export type WeeklySlotFormRow = {
   localKey: string;
   day_of_week: number;
   time_of_day: string;
+  content_format: string;
 };
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  channelId: string;
+  channelCode: EditorialChannelCode;
   onSaved: () => void | Promise<void>;
 };
 
@@ -31,7 +34,13 @@ const uuid = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, onSaved }: Props) {
+export default function AdminEditorialPlanSettingsDialog({
+  open,
+  onOpenChange,
+  channelId,
+  channelCode,
+  onSaved,
+}: Props) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,31 +51,39 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
   const [mixUtility, setMixUtility] = useState(30);
   const [timezone, setTimezone] = useState("Europe/Rome");
   const [slotRows, setSlotRows] = useState<WeeklySlotFormRow[]>([
-    { localKey: uuid(), day_of_week: 1, time_of_day: "09:00" },
+    { localKey: uuid(), day_of_week: 1, time_of_day: "09:00", content_format: "" },
   ]);
+  const [oauthRow, setOauthRow] = useState<{
+    provider: string;
+    account_label: string | null;
+    updated_at: string;
+  } | null>(null);
+
+  const formatOptions = channelCode === "site" ? [] : contentFormatsForChannel(channelCode);
 
   useEffect(() => {
     if (!open) return;
     void (async () => {
       setLoading(true);
-      const [settingsRes, weeklyRes] = await Promise.all([
-        supabase.from("editorial_plan_settings").select("*").eq("id", EDITORIAL_PLAN_SETTINGS_ID).maybeSingle(),
-        supabase.from("editorial_plan_weekly_slots").select("*").order("sort_order", { ascending: true }),
+      const [channelRes, weeklyRes, oauthRes] = await Promise.all([
+        supabase.from("editorial_plan_channels").select("*").eq("id", channelId).maybeSingle(),
+        supabase.from("editorial_plan_weekly_slots").select("*").eq("channel_id", channelId).order("sort_order", { ascending: true }),
+        supabase.from("social_oauth_connections").select("provider, account_label, updated_at").eq("channel_id", channelId).maybeSingle(),
       ]);
-      if (settingsRes.error && isAuthFailureError(settingsRes.error)) {
+      if (channelRes.error && isAuthFailureError(channelRes.error)) {
         await supabase.auth.signOut();
         navigate("/login", { state: { from: "/admin" } });
         setLoading(false);
         return;
       }
-      const s = settingsRes.data;
-      if (s) {
-        setWeeklyCount(s.weekly_count);
-        setHorizonWeeks(s.horizon_weeks);
-        setMixPillar(Number(s.mix_pillar));
-        setMixSupport(Number(s.mix_support));
-        setMixUtility(Number(s.mix_utility));
-        setTimezone(s.timezone || "Europe/Rome");
+      const ch = channelRes.data;
+      if (ch) {
+        setWeeklyCount(ch.weekly_count);
+        setHorizonWeeks(ch.horizon_weeks);
+        setMixPillar(Number(ch.mix_pillar));
+        setMixSupport(Number(ch.mix_support));
+        setMixUtility(Number(ch.mix_utility));
+        setTimezone(ch.timezone || "Europe/Rome");
       }
       const rows = weeklyRes.data;
       if (rows && rows.length > 0) {
@@ -75,19 +92,21 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
             localKey: r.id,
             day_of_week: r.day_of_week,
             time_of_day: (r.time_of_day as string).slice(0, 5),
+            content_format: (r as { content_format?: string | null }).content_format ?? "",
           }))
         );
         setWeeklyCount(rows.length);
       } else {
-        setSlotRows([{ localKey: uuid(), day_of_week: 1, time_of_day: "09:00" }]);
+        setSlotRows([{ localKey: uuid(), day_of_week: 1, time_of_day: "09:00", content_format: "" }]);
         setWeeklyCount(1);
       }
+      setOauthRow(oauthRes.data ?? null);
       setLoading(false);
     })();
-  }, [open, navigate]);
+  }, [open, navigate, channelId]);
 
   const addRow = () => {
-    setSlotRows((prev) => [...prev, { localKey: uuid(), day_of_week: 1, time_of_day: "09:00" }]);
+    setSlotRows((prev) => [...prev, { localKey: uuid(), day_of_week: 1, time_of_day: "09:00", content_format: "" }]);
     setWeeklyCount((c) => c + 1);
   };
 
@@ -113,9 +132,9 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
     setSaving(true);
     const today = format(new Date(), "yyyy-MM-dd");
 
-    const { error: settingsErr } = await supabase.from("editorial_plan_settings").upsert(
-      {
-        id: EDITORIAL_PLAN_SETTINGS_ID,
+    const { error: channelErr } = await supabase
+      .from("editorial_plan_channels")
+      .update({
         weekly_count: slotRows.length,
         horizon_weeks: horizonWeeks,
         mix_pillar: mixPillar,
@@ -123,19 +142,15 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
         mix_utility: mixUtility,
         timezone,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: "id" }
-    );
-    if (settingsErr) {
-      toast.error(settingsErr.message);
+      })
+      .eq("id", channelId);
+    if (channelErr) {
+      toast.error(channelErr.message);
       setSaving(false);
       return;
     }
 
-    const { error: delWeeklyErr } = await supabase
-      .from("editorial_plan_weekly_slots")
-      .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000");
+    const { error: delWeeklyErr } = await supabase.from("editorial_plan_weekly_slots").delete().eq("channel_id", channelId);
     if (delWeeklyErr) {
       toast.error(delWeeklyErr.message);
       setSaving(false);
@@ -143,9 +158,11 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
     }
 
     const inserts = slotRows.map((row, i) => ({
+      channel_id: channelId,
       day_of_week: row.day_of_week,
       time_of_day: row.time_of_day.length === 5 ? `${row.time_of_day}:00` : row.time_of_day,
       sort_order: i,
+      content_format: channelCode !== "site" && row.content_format ? row.content_format : null,
     }));
     const { error: insWeeklyErr } = await supabase.from("editorial_plan_weekly_slots").insert(inserts);
     if (insWeeklyErr) {
@@ -157,6 +174,7 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
     const { error: delSlotsErr } = await supabase
       .from("editorial_plan_slots")
       .delete()
+      .eq("channel_id", channelId)
       .gte("slot_date", today)
       .eq("status", "open")
       .is("assigned_article_id", null);
@@ -183,6 +201,23 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
           <p className="text-sm text-muted-foreground animate-pulse">Caricamento…</p>
         ) : (
           <div className="space-y-5 text-sm">
+            {channelCode !== "site" && (
+              <div className="rounded-[14px] border border-dashed border-border/80 p-3 space-y-2">
+                <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Account social (OAuth)</p>
+                {oauthRow ? (
+                  <p className="text-xs">
+                    {oauthRow.provider}
+                    {oauthRow.account_label ? ` — ${oauthRow.account_label}` : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nessuna connessione. Il flusso OAuth sarà attivabile da Edge Function dedicata.</p>
+                )}
+                <Button type="button" variant="secondary" size="sm" disabled className="text-xs">
+                  Connetti account (in arrivo)
+                </Button>
+              </div>
+            )}
+
             <div>
               <label className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground block mb-1.5">
                 Pubblicazioni settimanali
@@ -203,6 +238,7 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
                         localKey: uuid(),
                         day_of_week: 1,
                         time_of_day: "09:00",
+                        content_format: "",
                       }));
                       return [...prev, ...extra];
                     }
@@ -287,7 +323,7 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
                   + Slot
                 </Button>
               </div>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
                 {slotRows.map((row) => (
                   <div key={row.localKey} className="flex flex-wrap items-center gap-2">
                     <select
@@ -299,7 +335,7 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
                           )
                         )
                       }
-                      className="flex-1 min-w-[7rem] rounded-[14px] border border-border bg-background/80 px-2 py-1.5 font-sans text-xs"
+                      className="flex-1 min-w-[6rem] rounded-[14px] border border-border bg-background/80 px-2 py-1.5 font-sans text-xs"
                     >
                       {WEEKDAY_LABELS_IT.map((label, dow) => (
                         <option key={dow} value={dow}>
@@ -317,6 +353,26 @@ export default function AdminEditorialPlanSettingsDialog({ open, onOpenChange, o
                       }
                       className="w-[7.5rem] rounded-[14px] border border-border bg-background/80 px-2 py-1.5 font-sans text-xs"
                     />
+                    {formatOptions.length > 0 && (
+                      <select
+                        value={row.content_format}
+                        onChange={(e) =>
+                          setSlotRows((prev) =>
+                            prev.map((r) =>
+                              r.localKey === row.localKey ? { ...r, content_format: e.target.value } : r
+                            )
+                          )
+                        }
+                        className="min-w-[8rem] flex-1 rounded-[14px] border border-border bg-background/80 px-2 py-1.5 font-sans text-xs"
+                      >
+                        <option value="">Formato…</option>
+                        {formatOptions.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
