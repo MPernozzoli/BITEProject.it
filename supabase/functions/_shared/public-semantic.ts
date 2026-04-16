@@ -12,6 +12,16 @@ type Coordinates = {
   longitude: number
 }
 
+type DistanceMetrics = {
+  nautical_miles: number | null
+  kilometers: number | null
+}
+
+type TemporalSpan = {
+  start: string | null
+  end: string | null
+}
+
 type LinkedEntity = {
   id: string
   type: string
@@ -105,6 +115,7 @@ type SemanticVoyage = {
     geometry_points: number
     route_type: string
     status: string
+    distance: DistanceMetrics
     geojson_url: string
     semantic_url: string
   }
@@ -190,7 +201,11 @@ type SemanticArticle = {
     segment_end: number | null
     waypoint_start_id: string | null
     waypoint_end_id: string | null
+    waypoint_start_label: string | null
+    waypoint_end_label: string | null
     location_name: string | null
+    distance: DistanceMetrics
+    temporal_span: TemporalSpan
   }
   tags: string[]
   entities_involved: LinkedEntity[]
@@ -389,6 +404,92 @@ const formatDate = (value?: string | null) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
   return date.toISOString()
+}
+
+const nauticalMilesToKilometers = (value: number) => value * 1.852
+
+const haversineNauticalMiles = (
+  startLatitude: number,
+  startLongitude: number,
+  endLatitude: number,
+  endLongitude: number
+) => {
+  const earthRadiusNm = 3440.065
+  const deltaLatitude = ((endLatitude - startLatitude) * Math.PI) / 180
+  const deltaLongitude = ((endLongitude - startLongitude) * Math.PI) / 180
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos((startLatitude * Math.PI) / 180) *
+      Math.cos((endLatitude * Math.PI) / 180) *
+      Math.sin(deltaLongitude / 2) ** 2
+  return earthRadiusNm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+const buildDistanceMetricsFromWaypointCoordinates = (
+  points: Array<Pick<WaypointRow, 'lat' | 'lng'>>
+): DistanceMetrics => {
+  if (points.length < 2) {
+    return { nautical_miles: points.length === 1 ? 0 : null, kilometers: points.length === 1 ? 0 : null }
+  }
+
+  let nauticalMiles = 0
+  for (let index = 1; index < points.length; index += 1) {
+    nauticalMiles += haversineNauticalMiles(
+      points[index - 1].lat,
+      points[index - 1].lng,
+      points[index].lat,
+      points[index].lng
+    )
+  }
+
+  return {
+    nautical_miles: Number(nauticalMiles.toFixed(2)),
+    kilometers: Number(nauticalMilesToKilometers(nauticalMiles).toFixed(2)),
+  }
+}
+
+const buildDistanceMetricsFromLineCoordinates = (
+  coordinates: [number, number][]
+): DistanceMetrics => {
+  if (coordinates.length < 2) {
+    return { nautical_miles: coordinates.length === 1 ? 0 : null, kilometers: coordinates.length === 1 ? 0 : null }
+  }
+
+  let nauticalMiles = 0
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const [startLongitude, startLatitude] = coordinates[index - 1]
+    const [endLongitude, endLatitude] = coordinates[index]
+    nauticalMiles += haversineNauticalMiles(startLatitude, startLongitude, endLatitude, endLongitude)
+  }
+
+  return {
+    nautical_miles: Number(nauticalMiles.toFixed(2)),
+    kilometers: Number(nauticalMilesToKilometers(nauticalMiles).toFixed(2)),
+  }
+}
+
+const getWaypointEffectiveMoment = (waypoint: Pick<WaypointRow, 'event_date' | 'date_start' | 'date_end'>) =>
+  formatDate(waypoint.event_date) || formatDate(waypoint.date_start) || formatDate(waypoint.date_end)
+
+const compareNullableDates = (left: string | null, right: string | null) => {
+  if (!left && !right) return 0
+  if (!left) return 1
+  if (!right) return -1
+  return left.localeCompare(right)
+}
+
+const buildTemporalSpanFromWaypoints = (
+  points: Array<Pick<WaypointRow, 'event_date' | 'date_start' | 'date_end'>>
+): TemporalSpan => {
+  const timestamps = points
+    .map((point) => getWaypointEffectiveMoment(point))
+    .filter((value): value is string => Boolean(value))
+    .sort(compareNullableDates)
+
+  return {
+    start: timestamps[0] || null,
+    end: timestamps[timestamps.length - 1] || null,
+  }
 }
 
 const trimOrNull = (value: string | null | undefined) => {
@@ -787,6 +888,10 @@ export async function buildPublicSemanticDataset(
       getCachedGeometryCoordinates(voyage.cached_geometry).length >= 2
         ? getCachedGeometryCoordinates(voyage.cached_geometry)
         : voyageWaypoints.map((waypoint) => [waypoint.lng, waypoint.lat] as [number, number])
+    const routeDistance =
+      geometryCoordinates.length >= 2
+        ? buildDistanceMetricsFromLineCoordinates(geometryCoordinates)
+        : buildDistanceMetricsFromWaypointCoordinates(voyageWaypoints)
     const departure = voyageWaypoints[0] || null
     const arrival = voyageWaypoints[voyageWaypoints.length - 1] || null
     const departureLabel = departure ? getWaypointTitle(departure, 0) : 'Unspecified departure'
@@ -838,6 +943,7 @@ export async function buildPublicSemanticDataset(
         geometry_points: geometryCoordinates.length,
         route_type: voyage.type,
         status: voyage.status,
+        distance: routeDistance,
         geojson_url: `${endpoints.geo_routes}&voyage_id=${encodeURIComponent(voyage.id)}`,
         semantic_url: `${endpoints.voyages}&voyage_id=${encodeURIComponent(voyage.id)}`,
       },
@@ -874,6 +980,8 @@ export async function buildPublicSemanticDataset(
           geometry_points: geometryCoordinates.length,
           route_type: voyage.type,
           status: voyage.status,
+          distance_nautical_miles: routeDistance.nautical_miles,
+          distance_kilometers: routeDistance.kilometers,
           departure_label: departureLabel,
           arrival_label: arrivalLabel,
           start_date: formatDate(voyage.start_date),
@@ -1053,6 +1161,40 @@ export async function buildPublicSemanticDataset(
     ]
     const articleScenes = normalizeArticleScenes(article.article_map_scenes)
     const articleMediaIds: string[] = []
+    const articleVoyageWaypoints = article.voyage_id
+      ? (waypointsByVoyageId.get(article.voyage_id) || []).sort((left, right) => left.sort_order - right.sort_order)
+      : []
+    const explicitStartWaypointIndex = article.voyage_waypoint_start_id
+      ? articleVoyageWaypoints.findIndex((waypoint) => waypoint.id === article.voyage_waypoint_start_id)
+      : -1
+    const explicitEndWaypointIndex = article.voyage_waypoint_end_id
+      ? articleVoyageWaypoints.findIndex((waypoint) => waypoint.id === article.voyage_waypoint_end_id)
+      : -1
+    const fallbackSegmentStart = article.voyage_segment_start ?? article.voyage_segment_end
+    const fallbackSegmentEnd = article.voyage_segment_end ?? article.voyage_segment_start
+    const rawSegmentStartIndex = explicitStartWaypointIndex >= 0 ? explicitStartWaypointIndex : fallbackSegmentStart
+    const rawSegmentEndIndex = explicitEndWaypointIndex >= 0 ? explicitEndWaypointIndex : fallbackSegmentEnd
+    const normalizedSegmentStartIndex =
+      rawSegmentStartIndex != null && articleVoyageWaypoints.length > 0
+        ? Math.max(0, Math.min(rawSegmentStartIndex, articleVoyageWaypoints.length - 1))
+        : null
+    const normalizedSegmentEndIndex =
+      rawSegmentEndIndex != null && articleVoyageWaypoints.length > 0
+        ? Math.max(0, Math.min(rawSegmentEndIndex, articleVoyageWaypoints.length - 1))
+        : normalizedSegmentStartIndex
+    const hasSegmentRange = normalizedSegmentStartIndex != null && normalizedSegmentEndIndex != null
+    const segmentStartIndex =
+      hasSegmentRange ? Math.min(normalizedSegmentStartIndex as number, normalizedSegmentEndIndex as number) : null
+    const segmentEndIndex =
+      hasSegmentRange ? Math.max(normalizedSegmentStartIndex as number, normalizedSegmentEndIndex as number) : null
+    const articleSegmentWaypoints =
+      segmentStartIndex != null && segmentEndIndex != null
+        ? articleVoyageWaypoints.slice(segmentStartIndex, segmentEndIndex + 1)
+        : []
+    const segmentDistance = buildDistanceMetricsFromWaypointCoordinates(articleSegmentWaypoints)
+    const segmentTemporalSpan = buildTemporalSpanFromWaypoints(articleSegmentWaypoints)
+    const startWaypoint = articleSegmentWaypoints[0] || null
+    const endWaypoint = articleSegmentWaypoints[articleSegmentWaypoints.length - 1] || null
 
     if (article.story_id) {
       for (const siblingId of articleIdsByStoryId.get(article.story_id) || []) {
@@ -1243,7 +1385,11 @@ export async function buildPublicSemanticDataset(
         segment_end: article.voyage_segment_end,
         waypoint_start_id: article.voyage_waypoint_start_id ? waypointSemanticIdById.get(article.voyage_waypoint_start_id) || `waypoint:${article.voyage_waypoint_start_id}` : null,
         waypoint_end_id: article.voyage_waypoint_end_id ? waypointSemanticIdById.get(article.voyage_waypoint_end_id) || `waypoint:${article.voyage_waypoint_end_id}` : null,
+        waypoint_start_label: startWaypoint ? getWaypointTitle(startWaypoint, segmentStartIndex || 0) : null,
+        waypoint_end_label: endWaypoint ? getWaypointTitle(endWaypoint, segmentEndIndex || 0) : null,
         location_name: trimOrNull(article.location_name),
+        distance: segmentDistance,
+        temporal_span: segmentTemporalSpan,
       },
       tags: articleTags,
       entities_involved: [
@@ -1271,7 +1417,8 @@ export async function buildPublicSemanticDataset(
       linked_media: articleMediaIds,
       related_articles: [...relatedArticles],
       machine_description:
-        `${articleTitle} is a bilingual BITE article${voyageTitle ? ` linked to the voyage ${voyageTitle}` : ''}${article.location_name ? ` near ${article.location_name}` : ''}.`,
+        `${articleTitle} is a bilingual BITE article${voyageTitle ? ` linked to the voyage ${voyageTitle}` : ''}${article.location_name ? ` near ${article.location_name}` : ''}` +
+        `${segmentDistance.kilometers != null ? ` with a linked route segment of ${segmentDistance.kilometers} km` : ''}.`,
       canonical_url: articleUrl,
     })
 
@@ -1387,6 +1534,8 @@ export const buildSemanticIndexResponse = (dataset: SemanticDataset) => ({
       title: article.title,
       summary: article.summary,
       canonical_url: article.canonical_url,
+      distance_kilometers: article.route_association.distance.kilometers,
+      temporal_span: article.route_association.temporal_span,
     })),
     voyages: dataset.voyages.slice(0, 5).map((voyage) => ({
       id: voyage.id,
@@ -1394,6 +1543,8 @@ export const buildSemanticIndexResponse = (dataset: SemanticDataset) => ({
       summary: voyage.summary,
       canonical_url: voyage.canonical_url,
       geojson_url: voyage.route_association.geojson_url,
+      distance_kilometers: voyage.route_association.distance.kilometers,
+      distance_nautical_miles: voyage.route_association.distance.nautical_miles,
     })),
   },
 })

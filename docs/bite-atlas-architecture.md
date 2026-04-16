@@ -84,7 +84,13 @@ Fields:
 - `route_association.segment_end`
 - `route_association.waypoint_start_id`
 - `route_association.waypoint_end_id`
+- `route_association.waypoint_start_label`
+- `route_association.waypoint_end_label`
 - `route_association.location_name`
+- `route_association.distance.nautical_miles`
+- `route_association.distance.kilometers`
+- `route_association.temporal_span.start`
+- `route_association.temporal_span.end`
 - `tags`
 - `entities_involved`
 - `linked_media`
@@ -110,6 +116,8 @@ Fields:
 - `route_association.geometry_points`
 - `route_association.route_type`
 - `route_association.status`
+- `route_association.distance.nautical_miles`
+- `route_association.distance.kilometers`
 - `route_association.geojson_url`
 - `route_association.semantic_url`
 - `entities_involved`
@@ -255,6 +263,8 @@ GeoJSON route properties:
 - `geometry_points`
 - `route_type`
 - `status`
+- `distance_nautical_miles`
+- `distance_kilometers`
 - `departure_label`
 - `arrival_label`
 - `start_date`

@@ -73,8 +73,9 @@ Deno.serve(async (req) => {
       '## Data model',
       '',
       '- Article objects include titles, summaries, canonical URLs, route associations, related entities, linked media, and machine descriptions.',
-      '- Voyage objects include ordered route context, departure and arrival coordinates, waypoint counts, canonical URLs, and GeoJSON links.',
+      '- Voyage objects include ordered route context, departure and arrival coordinates, waypoint counts, route distances, canonical URLs, and GeoJSON links.',
       '- Waypoint objects include coordinates, dates, visibility mode, waypoint type, linked articles, media references, and machine descriptions.',
+      '- Article route associations include linked waypoint bounds, segment distance, and aggregate temporal span when route data is available.',
       '- Observation objects are conservative derived records from waypoint notes and article map scenes or overlays.',
       '- Map objects always point to underlying raw route or waypoint data instead of only a rendered image.',
       '',
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
     dataset.voyages.slice(0, fullMode ? 10 : 6).forEach((voyage) => {
       lines.push(`- ${voyage.title}: ${voyage.canonical_url}`)
       lines.push(
-        `  Summary: ${voyage.summary} | Waypoints: ${voyage.route_association.waypoint_count} | GeoJSON: ${voyage.route_association.geojson_url}`
+        `  Summary: ${voyage.summary} | Waypoints: ${voyage.route_association.waypoint_count} | Distance km: ${voyage.route_association.distance.kilometers ?? 'n/a'} | GeoJSON: ${voyage.route_association.geojson_url}`
       )
     })
 
@@ -96,6 +97,9 @@ Deno.serve(async (req) => {
       lines.push(`  Summary: ${article.summary}`)
       if (article.route_association.voyage_url) {
         lines.push(`  Route: ${article.route_association.voyage_url}`)
+        lines.push(
+          `  Segment: ${article.route_association.waypoint_start_label || 'n/a'} -> ${article.route_association.waypoint_end_label || 'n/a'} | Distance km: ${article.route_association.distance.kilometers ?? 'n/a'} | Dates: ${article.route_association.temporal_span.start || 'n/a'} -> ${article.route_association.temporal_span.end || 'n/a'}`
+        )
       }
     })
 

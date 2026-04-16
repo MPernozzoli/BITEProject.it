@@ -720,6 +720,63 @@ export type Database = {
           },
         ]
       }
+      logbook_map_markers: {
+        Row: {
+          description_en: string | null
+          description_it: string | null
+          id: string
+          is_onboard: boolean
+          is_visible: boolean
+          label_en: string
+          label_it: string
+          latitude: number | null
+          longitude: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          description_en?: string | null
+          description_it?: string | null
+          id: string
+          is_onboard?: boolean
+          is_visible?: boolean
+          label_en?: string
+          label_it?: string
+          latitude?: number | null
+          longitude?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          description_en?: string | null
+          description_it?: string | null
+          id?: string
+          is_onboard?: boolean
+          is_visible?: boolean
+          label_en?: string
+          label_it?: string
+          latitude?: number | null
+          longitude?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logbook_map_markers_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logbook_map_markers_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       newsletter_confirmation_tokens: {
         Row: {
           created_at: string
@@ -1319,6 +1376,7 @@ export type Database = {
           description_en: string | null
           description_it: string | null
           end_date: string | null
+          end_date_flex_days: number | null
           end_time: string | null
           id: string
           is_published: boolean
@@ -1327,6 +1385,7 @@ export type Database = {
           name_it: string | null
           sort_order: number
           start_date: string | null
+          start_date_flex_days: number | null
           start_time: string | null
           status: Database["public"]["Enums"]["voyage_status"]
           type: Database["public"]["Enums"]["voyage_type"]
@@ -1340,6 +1399,7 @@ export type Database = {
           description_en?: string | null
           description_it?: string | null
           end_date?: string | null
+          end_date_flex_days?: number | null
           end_time?: string | null
           id?: string
           is_published?: boolean
@@ -1348,6 +1408,7 @@ export type Database = {
           name_it?: string | null
           sort_order?: number
           start_date?: string | null
+          start_date_flex_days?: number | null
           start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]
@@ -1361,6 +1422,7 @@ export type Database = {
           description_en?: string | null
           description_it?: string | null
           end_date?: string | null
+          end_date_flex_days?: number | null
           end_time?: string | null
           id?: string
           is_published?: boolean
@@ -1369,6 +1431,7 @@ export type Database = {
           name_it?: string | null
           sort_order?: number
           start_date?: string | null
+          start_date_flex_days?: number | null
           start_time?: string | null
           status?: Database["public"]["Enums"]["voyage_status"]
           type?: Database["public"]["Enums"]["voyage_type"]

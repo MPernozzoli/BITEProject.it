@@ -326,13 +326,33 @@ export function formatIsoDate(value?: string | null, locale = "en-US"): string |
   }).format(date);
 }
 
+export function hasVoyageDatesTbd(
+  voyage: Pick<Voyage, "status" | "start_date" | "end_date">
+): boolean {
+  return voyage.status === "planned" && !voyage.start_date && !voyage.end_date;
+}
+
+const formatVoyageDateWindow = (
+  value: string | null,
+  flexDays: number | null | undefined,
+  locale: string
+) => {
+  const formatted = formatIsoDate(value, locale);
+  if (!formatted) return null;
+  const days = Number.isFinite(flexDays) ? Math.max(0, Number(flexDays)) : 0;
+  if (days <= 0) return formatted;
+  return locale.startsWith("it") ? `${formatted} ± ${days} giorni` : `${formatted} ± ${days} days`;
+};
+
 export function formatVoyageDateRange(
-  voyage: Pick<Voyage, "start_date" | "end_date">,
+  voyage: Pick<Voyage, "status" | "start_date" | "end_date" | "start_date_flex_days" | "end_date_flex_days">,
   locale = "en-US"
 ): string | null {
-  const start = formatIsoDate(voyage.start_date, locale);
-  const end = formatIsoDate(voyage.end_date, locale);
-  if (!start && !end) return null;
+  const start = formatVoyageDateWindow(voyage.start_date, voyage.start_date_flex_days, locale);
+  const end = formatVoyageDateWindow(voyage.end_date, voyage.end_date_flex_days, locale);
+  if (!start && !end) {
+    return hasVoyageDatesTbd(voyage) ? (locale.startsWith("it") ? "Da definirsi" : "Dates TBD") : null;
+  }
   if (start && end) return `${start} → ${end}`;
   return start || end;
 }
@@ -1064,8 +1084,10 @@ export interface Voyage {
   cached_geometry: VoyageGeometry;
   start_date: string | null;
   start_time: string | null;
+  start_date_flex_days?: number | null;
   end_date: string | null;
   end_time: string | null;
+  end_date_flex_days?: number | null;
   created_at: string;
   updated_at: string;
 }

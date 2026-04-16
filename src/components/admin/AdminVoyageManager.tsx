@@ -32,11 +32,13 @@ import {
   formatWaypointCoordinateLabel,
   buildVoyageGeometry,
   geocodePlaces,
+  haversineNM,
   getLocalizedWaypointName,
   getLocalizedVoyageName,
   getWaypointEffectiveType,
   getWaypointSequenceHeading,
   getStraightVoyageGeometry,
+  hasVoyageDatesTbd,
   normalizeWaypointMedia,
 } from "@/lib/voyage-utils";
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
@@ -68,10 +70,13 @@ interface VoyageFormState {
   waterway_autoroute: boolean;
   status: "planned" | "active" | "completed";
   is_published: boolean;
+  dates_tbd: boolean;
   start_date: string;
   start_time: string;
+  start_date_flex_days: string;
   end_date: string;
   end_time: string;
+  end_date_flex_days: string;
 }
 
 interface VoyageListFilters {
@@ -97,10 +102,13 @@ const emptyVoyageForm: VoyageFormState = {
   waterway_autoroute: false,
   status: "planned",
   is_published: true,
+  dates_tbd: true,
   start_date: "",
   start_time: "",
+  start_date_flex_days: "0",
   end_date: "",
   end_time: "",
+  end_date_flex_days: "0",
 };
 
 const emptyVoyageListFilters: VoyageListFilters = {
@@ -123,6 +131,7 @@ const popupMetaStyle = "margin:0;font-size:12px;color:hsl(220,15%,30%);";
 const popupSectionStyle = "display:grid;gap:10px;padding:12px;border:1px solid hsl(var(--border));background:hsla(var(--background),0.94);";
 const popupSectionTitleStyle = "margin:0;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:hsl(220,10%,45%);font-family:var(--font-sans);";
 const popupLangTabRowStyle = "display:flex;gap:6px;margin-bottom:10px;";
+const popupHintStyle = "margin:6px 0 0;font-size:11px;color:hsl(220,10%,45%);line-height:1.45;";
 const popupLangTabBaseStyle =
   "flex:1;padding:8px 10px;border:1px solid hsl(var(--border));font-size:11px;font-weight:600;font-family:var(--font-sans);cursor:pointer;transition:background 0.15s,border-color 0.15s,color 0.15s;";
 const popupLangTabInactiveStyle = `${popupLangTabBaseStyle}background:hsl(var(--muted));color:hsl(var(--foreground));`;
@@ -140,6 +149,268 @@ type WaypointEditorPanelHandle = {
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
 
+type WaypointDateSuggestionSource = "estimated" | "voyage-start" | "voyage-end";
+
+interface WaypointDateSuggestions {
+  arrivalDate: string | null;
+  arrivalTime: string | null;
+  arrivalSource: WaypointDateSuggestionSource | null;
+  departureDate: string | null;
+  departureTime: string | null;
+  departureSource: WaypointDateSuggestionSource | null;
+}
+
+interface WaypointLegEstimate {
+  hours: number;
+  label: string;
+}
+
+const createEmptyWaypointDateSuggestion = (): WaypointDateSuggestions => ({
+  arrivalDate: null,
+  arrivalTime: null,
+  arrivalSource: null,
+  departureDate: null,
+  departureTime: null,
+  departureSource: null,
+});
+
+const formatDateInputValue = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+
+const formatTimeInputValue = (value: Date) =>
+  `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+
+const formatDateTimeLocalInputValue = (value: Date) =>
+  `${formatDateInputValue(value)}T${formatTimeInputValue(value)}`;
+
+const parseStoredDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const candidate = new Date(value);
+  if (!Number.isNaN(candidate.getTime())) return candidate;
+  return parseDateTimeInput(value);
+};
+
+const serializeDateTimeLocalInputValue = (value?: string | null) => {
+  if (!value) return null;
+  const [datePart, timePart] = value.split("T");
+  if (!datePart) return null;
+  return timePart ? `${datePart}T${timePart}` : datePart;
+};
+
+const getStoredDateTimeInputValue = (value?: string | null) => {
+  const parsed = parseStoredDateTime(value);
+  return parsed ? formatDateTimeLocalInputValue(parsed) : "";
+};
+
+const parseNonNegativeInteger = (value?: string | null) => {
+  if (!value?.trim()) return 0;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+};
+
+const parseDateTimeInput = (
+  dateValue?: string | null,
+  timeValue?: string | null,
+  options?: { endOfDay?: boolean }
+) => {
+  if (!dateValue) return null;
+
+  const [year, month, day] = dateValue.split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  const fallbackTime = options?.endOfDay ? "23:59" : "00:00";
+  const normalizedTime = (timeValue?.slice(0, 5) || fallbackTime).split(":");
+  const hours = Number(normalizedTime[0] || 0);
+  const minutes = Number(normalizedTime[1] || 0);
+  const candidate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
+};
+
+const clampDateWithinRange = (value: Date, min?: Date | null, max?: Date | null) => {
+  const nextValue = new Date(value.getTime());
+  if (min && nextValue.getTime() < min.getTime()) return new Date(min.getTime());
+  if (max && nextValue.getTime() > max.getTime()) return new Date(max.getTime());
+  return nextValue;
+};
+
+const formatEstimatedLegDuration = (hours: number) => {
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  const normalizedHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (normalizedHours <= 0) return `${minutes} min`;
+  if (minutes === 0) return `${normalizedHours} h`;
+  return `${normalizedHours} h ${String(minutes).padStart(2, "0")} min`;
+};
+
+const deriveWaypointLegEstimates = (waypoints: VoyageWaypoint[]) =>
+  Object.fromEntries(
+    waypoints.map((waypoint, index) => {
+      if (index === 0) return [waypoint.id, null];
+      const previousWaypoint = waypoints[index - 1];
+      const hours = haversineNM(previousWaypoint.lat, previousWaypoint.lng, waypoint.lat, waypoint.lng) / 5;
+      return [
+        waypoint.id,
+        {
+          hours,
+          label: formatEstimatedLegDuration(hours),
+        } satisfies WaypointLegEstimate,
+      ];
+    })
+  ) as Record<string, WaypointLegEstimate | null>;
+
+const formatVoyageDateWindowLabel = (value: string | null, flexDays: number | null | undefined) => {
+  if (!value) return null;
+  const parts = [value];
+  if (Number.isFinite(flexDays) && Number(flexDays) > 0) {
+    parts.push(`± ${Number(flexDays)} giorni`);
+  }
+  return parts.join(" ");
+};
+
+const getWaypointDateSuggestionNote = (
+  dateValue: string | null,
+  timeValue: string | null,
+  source: WaypointDateSuggestionSource | null
+) => {
+  if (!dateValue || !source) return null;
+  const stamp = [dateValue, timeValue].filter(Boolean).join(" · ");
+
+  if (source === "voyage-start") return `Suggerita: ${stamp} dalla partenza della rotta.`;
+  if (source === "voyage-end") return `Suggerita: ${stamp} dalla fine della rotta.`;
+  return `Stimata: ${stamp} calcolando il tratto a 5 kn.`;
+};
+
+const buildWaypointDateTimeLabel = (
+  dateTimeValue?: string | null,
+  fallbackDate?: string | null,
+  fallbackTime?: string | null
+) => {
+  const parsed = parseStoredDateTime(dateTimeValue);
+  if (parsed) {
+    const hasExplicitTime = Boolean(dateTimeValue && /[T\s]\d{2}:\d{2}/.test(dateTimeValue));
+    return hasExplicitTime
+      ? [formatDateInputValue(parsed), formatTimeInputValue(parsed)].join(" · ")
+      : formatDateInputValue(parsed);
+  }
+  if (!fallbackDate) return null;
+  return [fallbackDate, fallbackTime].filter(Boolean).join(" · ");
+};
+
+const buildWaypointAdminDateLabel = (
+  waypoint: VoyageWaypoint,
+  suggestion: WaypointDateSuggestions | undefined,
+  effectiveType: "technical" | "narrative"
+) => {
+  if (effectiveType === "technical") {
+    if (!waypoint.event_date) return null;
+    return `Pass ${[waypoint.event_date, waypoint.event_time?.slice(0, 5)].filter(Boolean).join(" · ")}`;
+  }
+
+  const arrival = buildWaypointDateTimeLabel(waypoint.date_end, suggestion?.arrivalDate, suggestion?.arrivalTime);
+  const departure = buildWaypointDateTimeLabel(waypoint.date_start, suggestion?.departureDate, suggestion?.departureTime);
+  const parts = [
+    arrival ? `Arr ${waypoint.date_end ? arrival : `~${arrival}`}` : null,
+    departure ? `Part ${waypoint.date_start ? departure : `~${departure}`}` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" · ") : null;
+};
+
+const deriveWaypointDateSuggestions = (
+  voyage: Pick<Voyage, "status" | "start_date" | "start_time" | "end_date" | "end_time"> | undefined,
+  waypoints: VoyageWaypoint[]
+) => {
+  const suggestions = Object.fromEntries(
+    waypoints.map((waypoint) => [waypoint.id, createEmptyWaypointDateSuggestion()])
+  ) as Record<string, WaypointDateSuggestions>;
+
+  if (!voyage || !waypoints.length || hasVoyageDatesTbd(voyage)) return suggestions;
+
+  const voyageStart = parseDateTimeInput(voyage.start_date, voyage.start_time);
+  const voyageEnd = parseDateTimeInput(voyage.end_date, voyage.end_time, { endOfDay: !voyage.end_time });
+  const narrativeIndexes = waypoints.flatMap((waypoint, index) =>
+    getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative" ? [index] : []
+  );
+  const firstNarrativeIndex = narrativeIndexes[0] ?? null;
+  const lastNarrativeIndex = narrativeIndexes.length ? narrativeIndexes[narrativeIndexes.length - 1] : null;
+  let anchor: { date: Date; waypoint: VoyageWaypoint } | null = null;
+
+  if (firstNarrativeIndex != null && voyageStart) {
+    const firstWaypoint = waypoints[firstNarrativeIndex];
+    suggestions[firstWaypoint.id] = {
+      ...suggestions[firstWaypoint.id],
+      departureDate: voyage.start_date || formatDateInputValue(voyageStart),
+      departureTime: voyage.start_time?.slice(0, 5) || formatTimeInputValue(voyageStart),
+      departureSource: "voyage-start",
+    };
+    anchor = { date: voyageStart, waypoint: firstWaypoint };
+  }
+
+  for (let index = 0; index < waypoints.length; index += 1) {
+    const waypoint = waypoints[index];
+    const isNarrative = getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative";
+    const current = suggestions[waypoint.id] || createEmptyWaypointDateSuggestion();
+
+    if (isNarrative) {
+      if (index !== firstNarrativeIndex && anchor) {
+        const hours = haversineNM(anchor.waypoint.lat, anchor.waypoint.lng, waypoint.lat, waypoint.lng) / 5;
+        const estimatedDate = clampDateWithinRange(
+          new Date(anchor.date.getTime() + hours * 60 * 60 * 1000),
+          voyageStart,
+          voyageEnd
+        );
+        current.arrivalDate = current.arrivalDate || formatDateInputValue(estimatedDate);
+        current.arrivalTime = current.arrivalTime || formatTimeInputValue(estimatedDate);
+        current.arrivalSource = current.arrivalSource || "estimated";
+      }
+
+      if (index === lastNarrativeIndex && voyage.end_date && !waypoint.date_end) {
+        current.arrivalDate = voyage.end_date;
+        current.arrivalTime = voyage.end_time?.slice(0, 5) || (voyageEnd ? formatTimeInputValue(voyageEnd) : null);
+        current.arrivalSource = "voyage-end";
+      }
+
+      suggestions[waypoint.id] = current;
+
+      const explicitDeparture = parseStoredDateTime(waypoint.date_start);
+      const explicitArrival = parseStoredDateTime(waypoint.date_end);
+      const suggestedDeparture =
+        !explicitDeparture && current.departureDate
+          ? parseDateTimeInput(
+              current.departureDate,
+              current.departureTime || (index === firstNarrativeIndex ? voyage.start_time : null)
+            )
+          : null;
+      const suggestedArrival =
+        !explicitArrival && current.arrivalDate
+          ? parseDateTimeInput(
+              current.arrivalDate,
+              current.arrivalTime || (index === lastNarrativeIndex ? voyage.end_time : null)
+            )
+          : null;
+      const nextAnchor = explicitDeparture || explicitArrival || suggestedDeparture || suggestedArrival;
+      if (nextAnchor) {
+        anchor = {
+          date: clampDateWithinRange(nextAnchor, voyageStart, voyageEnd),
+          waypoint,
+        };
+      }
+      continue;
+    }
+
+    const explicitPassage = parseDateTimeInput(waypoint.event_date, waypoint.event_time);
+    if (explicitPassage) {
+      anchor = {
+        date: clampDateWithinRange(explicitPassage, voyageStart, voyageEnd),
+        waypoint,
+      };
+    }
+  }
+
+  return suggestions;
+};
+
 const WAYPOINT_PERSIST_PATCH_KEYS = [
   "lat",
   "lng",
@@ -150,6 +421,8 @@ const WAYPOINT_PERSIST_PATCH_KEYS = [
   "description_en",
   "event_date",
   "event_time",
+  "date_start",
+  "date_end",
   "waypoint_type",
   "visibility_mode",
   "sort_order",
@@ -195,7 +468,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "end_date", "end_time", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -241,14 +514,18 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   is_published: (voyage?.is_published ?? true) as boolean,
   start_date: (voyage?.start_date ?? null) as string | null,
   start_time: (voyage?.start_time ?? null) as string | null,
+  start_date_flex_days: (voyage?.start_date_flex_days ?? 0) as number | null,
   end_date: (voyage?.end_date ?? null) as string | null,
   end_time: (voyage?.end_time ?? null) as string | null,
+  end_date_flex_days: (voyage?.end_date_flex_days ?? 0) as number | null,
 });
 
 const formatVoyageDateRange = (voyage: Voyage) => {
-  if (!voyage.start_date && !voyage.end_date) return null;
-  const start = [voyage.start_date, voyage.start_time].filter(Boolean).join(" ");
-  const end = [voyage.end_date, voyage.end_time].filter(Boolean).join(" ");
+  if (!voyage.start_date && !voyage.end_date) {
+    return hasVoyageDatesTbd(voyage) ? "Da definirsi" : null;
+  }
+  const start = [formatVoyageDateWindowLabel(voyage.start_date, voyage.start_date_flex_days), voyage.start_time].filter(Boolean).join(" ");
+  const end = [formatVoyageDateWindowLabel(voyage.end_date, voyage.end_date_flex_days), voyage.end_time].filter(Boolean).join(" ");
   if (start && end) return `${start} → ${end}`;
   return start || end;
 };
@@ -376,6 +653,8 @@ const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
     description_en: waypoint.description_en,
     event_date: waypoint.event_date,
     event_time: waypoint.event_time,
+    date_start: waypoint.date_start,
+    date_end: waypoint.date_end,
     waypoint_type: waypoint.waypoint_type,
     visibility_mode: waypoint.visibility_mode,
     media: waypoint.media,
@@ -403,11 +682,20 @@ const loadStoredVoyageFormDraft = () => {
   try {
     const raw = window.sessionStorage.getItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { editingVoyageId?: string | null; voyageForm?: VoyageFormState };
+    const parsed = JSON.parse(raw) as { editingVoyageId?: string | null; voyageForm?: Partial<VoyageFormState> };
     if (!parsed.voyageForm) return null;
+    const voyageForm: VoyageFormState = {
+      ...emptyVoyageForm,
+      ...parsed.voyageForm,
+      dates_tbd:
+        parsed.voyageForm.dates_tbd ??
+        ((parsed.voyageForm.status ?? "planned") === "planned" &&
+          !parsed.voyageForm.start_date &&
+          !parsed.voyageForm.end_date),
+    };
     return {
       editingVoyageId: parsed.editingVoyageId ?? null,
-      voyageForm: parsed.voyageForm,
+      voyageForm,
     };
   } catch {
     return null;
@@ -776,6 +1064,44 @@ const AdminVoyageManager = ({
     }
   }, []);
 
+  const clearVoyageWaypointDates = useCallback(async (voyageId: string) => {
+    const clearPayload: TablesUpdate<"voyage_waypoints"> = {
+      event_date: null,
+      event_time: null,
+      date_start: null,
+      date_end: null,
+    };
+    const { error } = await supabase.from("voyage_waypoints").update(clearPayload).eq("voyage_id", voyageId);
+    if (error) {
+      console.error("[AdminVoyageManager] clearVoyageWaypointDates failed", { voyageId, error });
+      return false;
+    }
+
+    const normalizeClearedWaypoint = (waypoint: VoyageWaypoint) =>
+      normalizeWaypoint({
+        ...waypoint,
+        event_date: null,
+        event_time: null,
+        date_start: null,
+        date_end: null,
+      });
+
+    const localWaypoints = waypointsRef.current[voyageId] || [];
+    if (localWaypoints.length) {
+      commitWaypoints(voyageId, localWaypoints.map(normalizeClearedWaypoint));
+    }
+
+    const persistedWaypoints = persistedWaypointsRef.current[voyageId] || [];
+    if (persistedWaypoints.length) {
+      persistedWaypointsRef.current = {
+        ...persistedWaypointsRef.current,
+        [voyageId]: persistedWaypoints.map(normalizeClearedWaypoint),
+      };
+    }
+
+    return true;
+  }, [commitWaypoints]);
+
   const persistWaypointPatch = useCallback(
     async (
       waypointId: string,
@@ -839,6 +1165,8 @@ const AdminVoyageManager = ({
       description_en: waypoint.description_en,
       event_date: waypoint.event_date,
       event_time: waypoint.event_time,
+      date_start: waypoint.date_start,
+      date_end: waypoint.date_end,
       media: waypoint.media as unknown as import("@/integrations/supabase/types").Json,
     };
     const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
@@ -1130,10 +1458,27 @@ const AdminVoyageManager = ({
     (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
       const effectiveType = getWaypointEffectiveType(waypoint, index, total);
       const defaultNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
+      const dateSuggestions = selectedWaypointDateSuggestions[waypoint.id] || createEmptyWaypointDateSuggestion();
+      const legEstimate = selectedWaypointLegEstimates[waypoint.id];
+      const arrivalSuggestionNote = getWaypointDateSuggestionNote(
+        dateSuggestions.arrivalDate,
+        dateSuggestions.arrivalTime,
+        dateSuggestions.arrivalSource
+      );
+      const departureSuggestionNote = getWaypointDateSuggestionNote(
+        dateSuggestions.departureDate,
+        dateSuggestions.departureTime,
+        dateSuggestions.departureSource
+      );
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
       const statusLabel = waypoint.visibility_mode === "manual"
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
         : effectiveType === "narrative" ? (index === 0 ? "Auto start" : "Auto end") : "Auto hidden";
+      const resolveDetailsType = (value: string) => {
+        if (value === "narrative") return "narrative" as const;
+        if (value === "technical") return "technical" as const;
+        return index === 0 || index === total - 1 ? "narrative" as const : "technical" as const;
+      };
       const wrapper = document.createElement("form");
       wrapper.style.cssText = "width:min(360px,calc(100vw - 40px));max-height:min(72vh,620px);overflow-y:auto;overflow-x:hidden;padding:2px 2px 6px;box-sizing:border-box;font-family:var(--font-sans);display:grid;gap:12px;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;";
       ["mousedown", "mouseup", "click", "dblclick", "pointerdown", "touchstart"].forEach((eventName) => {
@@ -1229,16 +1574,6 @@ const AdminVoyageManager = ({
         </section>
         <section style="${popupSectionStyle}">
           <p style="${popupSectionTitleStyle}">Details</p>
-          <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
-            <div>
-              <label style="${popupLabelStyle}">Date</label>
-              <input name="event_date" type="date" value="${escapeHtml(waypoint.event_date || "")}" style="${popupInputStyle}" />
-            </div>
-            <div>
-              <label style="${popupLabelStyle}">Time</label>
-              <input name="event_time" type="time" value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}" style="${popupInputStyle}" />
-            </div>
-          </div>
           <div>
             <label style="${popupLabelStyle}">Visibility</label>
             <select name="visibility_mode" style="${popupInputStyle}">
@@ -1247,6 +1582,74 @@ const AdminVoyageManager = ({
               <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
             </select>
           </div>
+          ${selectedVoyageDatesTbd ? `
+            <div style="display:grid;gap:8px;">
+              <p style="${popupHintStyle}margin:0;">
+                Viaggio planned con date disattivate: nessuna data viene salvata sui waypoint.
+              </p>
+              <p style="${popupHintStyle}margin:0;">
+                ${escapeHtml(
+                  legEstimate
+                    ? `Tempo stimato dal WPT precedente: ${legEstimate.label} a 5 kn.`
+                    : "Primo waypoint: nessun tempo di percorrenza precedente da stimare."
+                )}
+              </p>
+            </div>
+          ` : `
+          <div data-details-kind="narrative" style="display:${effectiveType === "narrative" ? "grid" : "none"};gap:10px;">
+            <div>
+              <label style="${popupLabelStyle}">Arrival</label>
+              <input
+                name="date_end"
+                type="datetime-local"
+                value="${escapeHtml(getStoredDateTimeInputValue(waypoint.date_end))}"
+                placeholder="${escapeHtml(
+                  dateSuggestions.arrivalDate ? `${dateSuggestions.arrivalDate}T${dateSuggestions.arrivalTime || "00:00"}` : ""
+                )}"
+                style="${popupInputStyle}"
+              />
+              ${arrivalSuggestionNote ? `<p style="${popupHintStyle}">${escapeHtml(arrivalSuggestionNote)}</p>` : ""}
+            </div>
+            <div>
+              <label style="${popupLabelStyle}">Departure</label>
+              <input
+                name="date_start"
+                type="datetime-local"
+                value="${escapeHtml(getStoredDateTimeInputValue(waypoint.date_start))}"
+                placeholder="${escapeHtml(
+                  dateSuggestions.departureDate ? `${dateSuggestions.departureDate}T${dateSuggestions.departureTime || "00:00"}` : ""
+                )}"
+                style="${popupInputStyle}"
+              />
+              <p style="${popupHintStyle}">
+                ${escapeHtml(departureSuggestionNote || "Opzionale. Se valorizzata, verrà usata per stimare le tappe successive.")}
+              </p>
+            </div>
+          </div>
+          <div data-details-kind="technical" style="display:${effectiveType === "technical" ? "grid" : "none"};gap:10px;">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
+              <div>
+              <label style="${popupLabelStyle}">Passage date</label>
+              <input
+                name="event_date"
+                type="date"
+                value="${escapeHtml(waypoint.event_date || "")}"
+                style="${popupInputStyle}"
+              />
+              </div>
+              <div>
+                <label style="${popupLabelStyle}">Time</label>
+                <input
+                  name="event_time"
+                  type="time"
+                  value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}"
+                  style="${popupInputStyle}"
+                />
+              </div>
+              <p style="${popupHintStyle}">Opzionale. Se inserita manualmente, verrà usata per stimare i waypoint successivi.</p>
+            </div>
+          </div>
+          `}
         </section>
         <section style="${popupSectionStyle}">
           <p style="${popupSectionTitleStyle}">Media</p>
@@ -1264,6 +1667,8 @@ const AdminVoyageManager = ({
       const nameEnInput = wrapper.querySelector('input[name="name_en"]') as HTMLInputElement | null;
       const descriptionItInput = wrapper.querySelector('textarea[name="description_it"]') as HTMLTextAreaElement | null;
       const descriptionEnInput = wrapper.querySelector('textarea[name="description_en"]') as HTMLTextAreaElement | null;
+      const arrivalDateInput = wrapper.querySelector('input[name="date_end"]') as HTMLInputElement | null;
+      const departureDateInput = wrapper.querySelector('input[name="date_start"]') as HTMLInputElement | null;
       const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
       const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
       const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
@@ -1274,6 +1679,7 @@ const AdminVoyageManager = ({
       const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
       const langTabButtons = wrapper.querySelectorAll<HTMLButtonElement>("[data-popup-lang]");
       const langPanels = wrapper.querySelectorAll<HTMLElement>("[data-popup-panel]");
+      const detailsPanels = wrapper.querySelectorAll<HTMLElement>("[data-details-kind]");
 
       langTabButtons.forEach((tab) => {
         tab.addEventListener("click", () => {
@@ -1290,6 +1696,16 @@ const AdminVoyageManager = ({
           });
         });
       });
+
+      const syncDetailsPanels = () => {
+        const nextType = resolveDetailsType(visibilitySelect?.value || selectedVisibilityValue);
+        detailsPanels.forEach((panelElement) => {
+          panelElement.style.display = panelElement.getAttribute("data-details-kind") === nextType ? "grid" : "none";
+        });
+      };
+
+      visibilitySelect?.addEventListener("change", syncDetailsPanels);
+      syncDetailsPanels();
 
       aiTranslateButton?.addEventListener("click", () => {
         void (async () => {
@@ -1339,22 +1755,33 @@ const AdminVoyageManager = ({
         const visibility_mode = visibilityValue === "auto" ? "auto" : "manual";
         const waypoint_type = visibilityValue === "narrative" ? "narrative" : "technical";
         const legacyName = (lang === "it" ? name_it : name_en) || name_it || name_en || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
+        const nextChanges: Partial<VoyageWaypoint> = {
+          name: legacyName,
+          name_it,
+          name_en,
+          description_it: descriptionItInput?.value.trim() || null,
+          description_en: descriptionEnInput?.value.trim() || null,
+          visibility_mode,
+          waypoint_type,
+        };
+
+        if (waypoint_type === "narrative") {
+          nextChanges.date_end = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(arrivalDateInput?.value || null);
+          nextChanges.date_start = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(departureDateInput?.value || null);
+          nextChanges.event_date = null;
+          nextChanges.event_time = null;
+        } else {
+          nextChanges.event_date = selectedVoyageDatesTbd ? null : eventDateInput?.value || null;
+          nextChanges.event_time = selectedVoyageDatesTbd ? null : eventTimeInput?.value || null;
+          nextChanges.date_start = null;
+          nextChanges.date_end = null;
+        }
 
         void (async () => {
           const success = await updateWaypoint(
             waypoint.voyage_id,
             waypoint.id,
-            {
-              name: legacyName,
-              name_it,
-              name_en,
-              description_it: descriptionItInput?.value.trim() || null,
-              description_en: descriptionEnInput?.value.trim() || null,
-              event_date: eventDateInput?.value || null,
-              event_time: eventTimeInput?.value || null,
-              visibility_mode,
-              waypoint_type,
-            },
+            nextChanges,
             { successMessage: "Waypoint updated" }
           );
           if (success) refreshPopup();
@@ -1411,7 +1838,17 @@ const AdminVoyageManager = ({
 
       return wrapper;
     },
-    [deleteWaypoint, deleteWaypointMediaAsset, lang, startWaypointRelocation, updateWaypoint, uploadWaypointMediaAsset]
+    [
+      deleteWaypoint,
+      deleteWaypointMediaAsset,
+      lang,
+      selectedWaypointDateSuggestions,
+      selectedWaypointLegEstimates,
+      selectedVoyageDatesTbd,
+      startWaypointRelocation,
+      updateWaypoint,
+      uploadWaypointMediaAsset,
+    ]
   );
 
   useEffect(() => {
@@ -1771,10 +2208,13 @@ const AdminVoyageManager = ({
         waterway_autoroute: voyage.type === "water" ? Boolean(voyage.waterway_autoroute) : false,
         status: voyage.status,
         is_published: voyage.is_published,
+        dates_tbd: hasVoyageDatesTbd(voyage),
         start_date: voyage.start_date || "",
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
+        start_date_flex_days: String(Math.max(0, Number(voyage.start_date_flex_days ?? 0))),
         end_date: voyage.end_date || "",
         end_time: voyage.end_time ? voyage.end_time.slice(0, 5) : "",
+        end_date_flex_days: String(Math.max(0, Number(voyage.end_date_flex_days ?? 0))),
       };
       setEditingVoyage(voyage);
       initialVoyageFormSnapshotRef.current = serializeVoyageForm(nextForm);
@@ -1801,6 +2241,9 @@ const AdminVoyageManager = ({
     const nameEn = voyageForm.name_en.trim();
     const descriptionIt = voyageForm.description_it.trim();
     const descriptionEn = voyageForm.description_en.trim();
+    const datesTbd = voyageForm.status === "planned" && voyageForm.dates_tbd;
+    const startFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.start_date_flex_days);
+    const endFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
     const legacyName = nameEn || nameIt || "Untitled voyage";
     const legacyDescription = descriptionEn || descriptionIt || null;
     const data: TablesInsert<"voyages"> = {
@@ -1813,10 +2256,12 @@ const AdminVoyageManager = ({
       type: voyageForm.type,
       status: voyageForm.status,
       is_published: voyageForm.is_published,
-      start_date: voyageForm.start_date || null,
-      start_time: voyageForm.start_time || null,
-      end_date: voyageForm.end_date || null,
-      end_time: voyageForm.end_time || null,
+      start_date: datesTbd ? null : voyageForm.start_date || null,
+      start_time: datesTbd ? null : voyageForm.start_time || null,
+      start_date_flex_days: datesTbd ? 0 : startFlexDays,
+      end_date: datesTbd ? null : voyageForm.end_date || null,
+      end_time: datesTbd ? null : voyageForm.end_time || null,
+      end_date_flex_days: datesTbd ? 0 : endFlexDays,
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
       waterway_autoroute: voyageForm.type === "water" ? voyageForm.waterway_autoroute : false,
     };
@@ -1845,6 +2290,13 @@ const AdminVoyageManager = ({
         voyage.id === editingVoyage.id ? normalizeVoyage({ ...voyage, ...appliedData }) : voyage
       );
       commitVoyages(nextVoyages);
+      if (datesTbd) {
+        const cleared = await clearVoyageWaypointDates(editingVoyage.id);
+        if (!cleared) {
+          toast.error("Viaggio salvato, ma non sono riuscito a rimuovere le date dai waypoint.");
+          return false;
+        }
+      }
       if ((waypointsRef.current[editingVoyage.id] || []).length >= 2) {
         await syncVoyageGeometry(editingVoyage.id, waypointsRef.current[editingVoyage.id]);
       }
@@ -1868,7 +2320,7 @@ const AdminVoyageManager = ({
     initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
     return true;
-  }, [commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncVoyageGeometry, voyageForm]);
+  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncVoyageGeometry, voyageForm]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -1934,6 +2386,15 @@ const AdminVoyageManager = ({
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
   const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
   const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
+  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
+  const selectedWaypointDateSuggestions = useMemo(
+    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
+    [selectedVoyage, selectedWaypoints]
+  );
+  const selectedWaypointLegEstimates = useMemo(
+    () => deriveWaypointLegEstimates(selectedWaypoints),
+    [selectedWaypoints]
+  );
   const selectedVoyageHasCachedGeometry = getCachedGeometryCoordinates(selectedVoyage).length >= 2;
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
@@ -2568,7 +3029,16 @@ const AdminVoyageManager = ({
                 <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Status</label>
                 <select
                   value={voyageForm.status}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, status: event.target.value as Voyage["status"] }))}
+                  onChange={(event) =>
+                    setVoyageForm((form) => {
+                      const nextStatus = event.target.value as Voyage["status"];
+                      return {
+                        ...form,
+                        status: nextStatus,
+                        dates_tbd: nextStatus === "planned" ? form.dates_tbd : false,
+                      };
+                    })
+                  }
                   className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
                 >
                   <option value="planned">Planned</option>
@@ -2614,12 +3084,47 @@ const AdminVoyageManager = ({
                 </span>
                 <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
                   {voyageForm.is_published
-                    ? "Visible on public maps and included in mileage totals."
-                    : "Hidden from public maps, voyage pages, and mileage counters until published."}
+                    ? "Visible on public maps and route pages."
+                    : "Hidden from public maps and route pages until published."}
                 </span>
               </span>
             </label>
           </div>
+
+          <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
+            <input
+              type="checkbox"
+              checked={voyageForm.dates_tbd}
+              disabled={voyageForm.status !== "planned"}
+              onChange={(event) =>
+                setVoyageForm((form) => ({
+                  ...form,
+                  dates_tbd: event.target.checked,
+                  ...(event.target.checked
+                    ? {
+                        start_date: "",
+                        start_time: "",
+                        start_date_flex_days: "0",
+                        end_date: "",
+                        end_time: "",
+                        end_date_flex_days: "0",
+                      }
+                    : {}),
+                }))
+              }
+              className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))] disabled:opacity-50"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                Date da definirsi
+              </span>
+              <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
+                {voyageForm.status === "planned"
+                  ? "Usalo per viaggi desiderati ma non ancora calendarizzati. Salva il viaggio senza date fissate."
+                  : "Disponibile solo per viaggi con stato Planned."}
+              </span>
+            </span>
+          </label>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -2628,17 +3133,60 @@ const AdminVoyageManager = ({
                 <input
                   type="date"
                   value={voyageForm.start_date}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, start_date: event.target.value }))}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                  disabled={voyageForm.dates_tbd}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({
+                      ...form,
+                      dates_tbd: false,
+                      start_date: event.target.value,
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
                 <input
                   type="time"
                   value={voyageForm.start_time}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, start_time: event.target.value }))}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                  disabled={voyageForm.dates_tbd}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({
+                      ...form,
+                      dates_tbd: false,
+                      start_time: event.target.value,
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground font-sans">Time is optional.</p>
+              {voyageForm.status === "planned" && !voyageForm.dates_tbd && (
+                <div className="grid grid-cols-[1fr_120px] gap-3">
+                  <div className="text-[11px] font-sans text-muted-foreground flex items-center">
+                    Finestra partenza
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">±</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={voyageForm.start_date_flex_days}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({
+                          ...form,
+                          start_date_flex_days: event.target.value,
+                        }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground font-sans">
+                {voyageForm.dates_tbd
+                  ? "Date e orario verranno definiti più avanti."
+                  : voyageForm.status === "planned"
+                    ? "Per i viaggi planned puoi indicare anche una flessibilità di ± giorni."
+                    : "Time is optional."}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -2647,17 +3195,60 @@ const AdminVoyageManager = ({
                 <input
                   type="date"
                   value={voyageForm.end_date}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, end_date: event.target.value }))}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                  disabled={voyageForm.dates_tbd}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({
+                      ...form,
+                      dates_tbd: false,
+                      end_date: event.target.value,
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
                 <input
                   type="time"
                   value={voyageForm.end_time}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, end_time: event.target.value }))}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                  disabled={voyageForm.dates_tbd}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({
+                      ...form,
+                      dates_tbd: false,
+                      end_time: event.target.value,
+                    }))
+                  }
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground font-sans">Leave blank if the arrival is still open.</p>
+              {voyageForm.status === "planned" && !voyageForm.dates_tbd && (
+                <div className="grid grid-cols-[1fr_120px] gap-3">
+                  <div className="text-[11px] font-sans text-muted-foreground flex items-center">
+                    Finestra arrivo
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">±</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={voyageForm.end_date_flex_days}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({
+                          ...form,
+                          end_date_flex_days: event.target.value,
+                        }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground font-sans">
+                {voyageForm.dates_tbd
+                  ? "Anche la finestra di arrivo resta aperta finché non viene pianificata."
+                  : voyageForm.status === "planned"
+                    ? "Usa ± giorni per rappresentare una finestra flessibile."
+                    : "Leave blank if the arrival is still open."}
+              </p>
             </div>
           </div>
 
@@ -3151,7 +3742,15 @@ const AdminVoyageManager = ({
                     : effectiveType === "narrative"
                       ? "Auto public end waypoint"
                       : "Auto technical waypoint";
-                  const eventLabel = [waypoint.event_date, waypoint.event_time?.slice(0, 5)].filter(Boolean).join(" · ");
+                  const eventLabel = selectedVoyageDatesTbd
+                    ? selectedWaypointLegEstimates[waypoint.id]?.label
+                      ? `Dal WPT prec.: ${selectedWaypointLegEstimates[waypoint.id]?.label}`
+                      : null
+                    : buildWaypointAdminDateLabel(
+                        waypoint,
+                        selectedWaypointDateSuggestions[waypoint.id],
+                        effectiveType
+                      );
 
                   return (
                     <div

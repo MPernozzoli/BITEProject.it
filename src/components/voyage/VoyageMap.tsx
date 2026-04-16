@@ -13,6 +13,7 @@ import {
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import type { MapPresenceMarker } from "@/lib/map-presence";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
@@ -23,6 +24,7 @@ interface VoyageMapProps {
   selectedArticleId?: string | null;
   hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
+  presenceMarkers?: MapPresenceMarker[];
   onArticleClick?: (article: GeoArticle) => void;
   onVoyageSelect?: (voyageId: string | null) => void;
   selectedRouteVoyageId?: string | null;
@@ -42,6 +44,69 @@ const escapePopupHtml = (value: string) =>
     .replace(/'/g, "&#39;");
 
 const clampWaypointIndex = (value: number, max: number) => Math.max(0, Math.min(value, max));
+
+const buildMapPresenceTooltipTimestamp = (value: string, locale: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+};
+
+const createBoatPresenceSvg = (variant: "boat" | "boat-aboard") => {
+  if (variant === "boat-aboard") {
+    return `
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M14 39h8l9-18 8 11h11l-5 7H20l-6 9-4-4z" fill="currentColor" opacity="0.96" />
+        <path d="M31 21v18" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+        <path d="M31 23l10 9H31z" fill="currentColor" />
+        <circle cx="22" cy="28" r="3.2" fill="currentColor" />
+        <circle cx="29" cy="25.5" r="3.2" fill="currentColor" />
+        <circle cx="36" cy="28" r="3.2" fill="currentColor" />
+      </svg>
+    `;
+  }
+
+  return `
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M14 41h10l11-19 9 12h9l-6 8H19l-5 8-4-5z" fill="currentColor" opacity="0.96" />
+      <path d="M35 22v20" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+      <path d="M35 24l11 10H35z" fill="currentColor" />
+    </svg>
+  `;
+};
+
+const createCrewPresenceSvg = () => `
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="24" cy="24" r="7" fill="currentColor" />
+    <circle cx="40" cy="24" r="7" fill="currentColor" opacity="0.92" />
+    <path d="M16 46c0-6 5-11 11-11h10c6 0 11 5 11 11v2H16z" fill="currentColor" />
+  </svg>
+`;
+
+const createPresenceMarkerElement = (marker: MapPresenceMarker) => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `map-presence-marker map-presence-marker--${marker.kind}`;
+  button.setAttribute("aria-label", marker.title);
+  button.title = marker.title;
+
+  const iconMarkup =
+    marker.kind === "crew"
+      ? createCrewPresenceSvg()
+      : createBoatPresenceSvg(marker.kind === "boat-aboard" ? "boat-aboard" : "boat");
+
+  button.innerHTML = `
+    <span class="map-presence-marker__halo" aria-hidden="true"></span>
+    <span class="map-presence-marker__chip" aria-hidden="true">
+      <span class="map-presence-marker__icon">${iconMarkup}</span>
+    </span>
+  `;
+
+  return button;
+};
 
 type PositionedArticle = GeoArticle & { displayLat: number; displayLng: number };
 
@@ -189,6 +254,7 @@ const VoyageMap = ({
   selectedArticleId,
   hoveredArticleId,
   highlightedVoyageId,
+  presenceMarkers = [],
   onArticleClick,
   onVoyageSelect,
   selectedRouteVoyageId: controlledRouteVoyageId,
@@ -202,6 +268,8 @@ const VoyageMap = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const presenceMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const presencePopupRef = useRef<maplibregl.Popup | null>(null);
   const lineLayerHandlersRef = useRef<Record<string, {
     click: (e: maplibregl.MapLayerMouseEvent) => void;
     mouseenter: () => void;
@@ -334,6 +402,13 @@ const VoyageMap = ({
     popupRef.current = null;
   }, []);
 
+  const clearPresenceMarkers = useCallback(() => {
+    presencePopupRef.current?.remove();
+    presencePopupRef.current = null;
+    presenceMarkersRef.current.forEach((marker) => marker.remove());
+    presenceMarkersRef.current = [];
+  }, []);
+
   // Keep refs in sync
   onArticleClickRef.current = onArticleClick;
   onVoyageSelectRef.current = onVoyageSelect;
@@ -394,6 +469,7 @@ const VoyageMap = ({
       console.error("Failed to initialize voyage map", error);
       popupRef.current?.remove();
       popupRef.current = null;
+      clearPresenceMarkers();
       if (mapRef.current) {
         clearInteractiveLayerHandlers(mapRef.current);
       }
@@ -417,6 +493,7 @@ const VoyageMap = ({
       }
       popupRef.current?.remove();
       popupRef.current = null;
+      clearPresenceMarkers();
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       waypointMarkersRef.current.forEach((marker) => marker.remove());
@@ -424,7 +501,7 @@ const VoyageMap = ({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [clearInteractiveLayerHandlers, mapUnavailable]);
+  }, [clearInteractiveLayerHandlers, clearPresenceMarkers, mapUnavailable]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -497,6 +574,68 @@ const VoyageMap = ({
       containerRef.current.style.touchAction = disableInteractions ? "none" : "auto";
     }
   }, [disableInteractions]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    clearPresenceMarkers();
+
+    const locale = lang === "it" ? "it-IT" : "en-US";
+    const updatedLabel = lang === "it" ? "Aggiornato" : "Updated";
+
+    presenceMarkers.forEach((marker) => {
+      const element = createPresenceMarkerElement(marker);
+      const markerInstance = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([marker.longitude, marker.latitude])
+        .addTo(map);
+
+      const showPopup = () => {
+        presencePopupRef.current?.remove();
+        presencePopupRef.current = null;
+
+        const updatedAtLabel = buildMapPresenceTooltipTimestamp(marker.updatedAt, locale);
+        const popupHtml = `
+          <div style="display:grid;gap:6px;min-width:170px;max-width:240px;font-family:var(--font-sans);">
+            <strong style="font-size:12px;line-height:1.35;color:hsl(220,40%,15%);">${escapePopupHtml(marker.title)}</strong>
+            ${
+              marker.description
+                ? `<p style="margin:0;font-size:12px;line-height:1.5;color:hsl(220,18%,28%);">${escapePopupHtml(marker.description)}</p>`
+                : ""
+            }
+            ${
+              updatedAtLabel
+                ? `<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);">${escapePopupHtml(updatedLabel)} ${escapePopupHtml(updatedAtLabel)}</span>`
+                : ""
+            }
+          </div>
+        `;
+
+        const popup = new maplibregl.Popup({
+          offset: 18,
+          closeButton: false,
+          closeOnClick: true,
+          maxWidth: "260px",
+        });
+
+        popup.setLngLat([marker.longitude, marker.latitude]).setHTML(popupHtml).addTo(map);
+        presencePopupRef.current = popup;
+      };
+
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showPopup();
+      });
+
+      element.addEventListener("focus", showPopup);
+      presenceMarkersRef.current.push(markerInstance);
+    });
+
+    return () => {
+      clearPresenceMarkers();
+    };
+  }, [clearPresenceMarkers, lang, presenceMarkers]);
 
   // Draw voyage routes
   useEffect(() => {

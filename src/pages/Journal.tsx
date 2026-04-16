@@ -15,6 +15,7 @@ import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
   getArticleVoyageFocus,
   getLocalizedVoyageName,
@@ -41,6 +42,12 @@ const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
 
   return "border border-slate-300/75 bg-white/70 text-slate-700";
 };
+
+function isMissingMapPresenceRelationError(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const message = (error.message ?? "").toLowerCase();
+  return error.code === "PGRST205" || (message.includes("relation") && message.includes("does not exist"));
+}
 
 const Journal = () => {
   const EXPANDED_READER_MS = 480;
@@ -75,6 +82,32 @@ const Journal = () => {
   const lastScrollYRef = useRef(0);
   const mobileSidebarTouchStartRef = useRef<number | null>(null);
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
+
+  const { data: mapPresenceRows = [] } = useQuery({
+    queryKey: ["logbook-map-presence"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("logbook_map_markers")
+        .select("*")
+        .order("id", { ascending: true });
+
+      if (error) {
+        if (isMissingMapPresenceRelationError(error)) {
+          return [] as MapPresenceTrackerRow[];
+        }
+        throw error;
+      }
+
+      return (data || []) as MapPresenceTrackerRow[];
+    },
+    staleTime: 1000 * 60,
+    retry: 1,
+  });
+
+  const mapPresenceMarkers = useMemo(
+    () => buildMapPresenceMarkers(mapPresenceRows, lang),
+    [lang, mapPresenceRows]
+  );
 
   const buildFallbackPanelRect = useCallback((): ExpandedArticleOrigin => {
     const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -600,6 +633,7 @@ const Journal = () => {
             onArticleClick={handleArticleClick}
             onVoyageSelect={setSelectedRouteVoyageId}
             selectedRouteVoyageId={selectedRouteVoyageId}
+            presenceMarkers={mapPresenceMarkers}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}
             disableInteractions={isMapInteractionLocked}

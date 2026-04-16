@@ -35,6 +35,7 @@ import {
 } from "@/components/admin/AdminCollapsibleListFilters";
 
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
+const AdminMapPresenceManager = lazy(() => import("@/components/admin/AdminMapPresenceManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
 const ADMIN_DASHBOARD_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
@@ -1116,6 +1117,9 @@ const AdminDashboard = () => {
                   <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Voyage map</p>
                   <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
                 </div>
+                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading marker manager...</div>}>
+                  <AdminMapPresenceManager />
+                </Suspense>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
                   <AdminVoyageManager
                     onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)}
