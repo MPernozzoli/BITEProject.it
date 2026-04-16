@@ -1454,18 +1454,6 @@ const AdminVoyageManager = ({
     );
   }, [updateWaypoint]);
 
-  const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
-  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
-  const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
-  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
-  const selectedWaypointDateSuggestions = useMemo(
-    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
-    [selectedVoyage, selectedWaypoints]
-  );
-  const selectedWaypointLegEstimates = useMemo(
-    () => deriveWaypointLegEstimates(selectedWaypoints),
-    [selectedWaypoints]
-  );
 
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
