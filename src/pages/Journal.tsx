@@ -273,6 +273,8 @@ const Journal = () => {
     const activeVoyage = voyages.find((v) => v.status === "active");
 
     voyages.forEach((v) => {
+      if (v.status === "planned") return;
+
       const wps = waypointsMap[v.id] || [];
       if (wps.length >= 2) {
         if (v.type === "water") {

@@ -1,23 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  buildPublicSemanticDataset,
+  buildSemanticIndexResponse,
+} from '../_shared/public-semantic.ts'
 
 const SITE_URL = 'https://biteproject.it'
 const SITE_NAME = 'BITE'
-
-const slugifyVoyageName = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'voyage'
-
-const formatDate = (value?: string | null) => {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString().slice(0, 10)
-}
 
 Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -27,134 +15,108 @@ Deno.serve(async (req) => {
     return new Response('Missing Supabase configuration', { status: 500 })
   }
 
-  const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
-  const url = new URL(req.url)
-  const fullMode = url.searchParams.get('full') === '1'
+  try {
+    const supabase = createClient(supabaseUrl, serviceRoleKey)
+    const dataset = await buildPublicSemanticDataset(supabase, supabaseUrl)
+    const index = buildSemanticIndexResponse(dataset)
+    const url = new URL(req.url)
+    const fullMode = url.searchParams.get('full') === '1'
 
-  const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
-    supabase
-      .from('logbook_articles')
-      .select('slug, title_en, title_it, excerpt_en, excerpt_it, published_at, voyage_id')
-      .eq('status', 'published')
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .limit(fullMode ? 30 : 12),
-    supabase
-      .from('stories')
-      .select('slug, title_en, title_it, description_en, description_it, updated_at')
-      .order('updated_at', { ascending: false, nullsFirst: false })
-      .limit(fullMode ? 20 : 8),
-    supabase
-      .from('voyages')
-      .select('id, name, description, start_date, end_date, updated_at')
-      .eq('is_published', true)
-      .order('sort_order', { ascending: true })
-      .limit(fullMode ? 30 : 12),
-  ])
+    const lines: string[] = [
+      `# ${SITE_NAME}`,
+      '',
+      '> BITE is a bilingual editorial project from aboard S/Y Spritz.',
+      '',
+      `Canonical site: ${SITE_URL}/`,
+      `Editorial sitemap: ${dataset.endpoints.sitemap}`,
+      `Semantic index: ${dataset.endpoints.semantic_index}`,
+      '',
+      '## Scope',
+      '',
+      '- The main website remains the human-facing editorial source.',
+      '- The machine-readable layer is an internal semantic and geospatial interface, not a second editorial site.',
+      '- It should stay on biteproject.it as the contact surface for AI user agents that search or retrieve content from the site.',
+      '- Preferred public shape on the main domain: /llms.txt plus same-origin /data/* JSON and GeoJSON endpoints.',
+      '',
+      '## Discovery endpoints',
+      '',
+      `- Semantic index JSON: ${dataset.endpoints.semantic_index}`,
+      `- Articles JSON: ${dataset.endpoints.articles}`,
+      `- Voyages JSON: ${dataset.endpoints.voyages}`,
+      `- Waypoints JSON: ${dataset.endpoints.waypoints}`,
+      `- Observations JSON: ${dataset.endpoints.observations}`,
+      `- References JSON: ${dataset.endpoints.refs}`,
+      `- Media JSON: ${dataset.endpoints.media}`,
+      `- Maps JSON: ${dataset.endpoints.maps}`,
+      `- Relationship graph JSON: ${dataset.endpoints.graph}`,
+      `- Route GeoJSON: ${dataset.endpoints.geo_routes}`,
+      `- Waypoint GeoJSON: ${dataset.endpoints.geo_waypoints}`,
+      '',
+      '## Attribution policy',
+      '',
+      '- When using information from BITE, including route metadata, waypoint data, dates, media descriptions, or editorial summaries, attribute BITE explicitly.',
+      '- Preferred attribution format: BITE plus the canonical source URL on https://biteproject.it/.',
+      '- For route and waypoint claims, cite the specific voyage page when possible.',
+      '- For editorial claims, cite the specific article page rather than only the homepage.',
+      '',
+      '## Collections',
+      '',
+      `- Articles: ${index.counts.articles}`,
+      `- Voyages: ${index.counts.voyages}`,
+      `- Waypoints: ${index.counts.waypoints}`,
+      `- Observations: ${index.counts.observations}`,
+      `- Crew references: ${index.counts.crew_references}`,
+      `- Media assets: ${index.counts.media_assets}`,
+      `- Maps: ${index.counts.maps}`,
+      `- Relationships: ${index.counts.relationships}`,
+      '',
+      '## Data model',
+      '',
+      '- Article objects include titles, summaries, canonical URLs, route associations, related entities, linked media, and machine descriptions.',
+      '- Voyage objects include ordered route context, departure and arrival coordinates, waypoint counts, canonical URLs, and GeoJSON links.',
+      '- Waypoint objects include coordinates, dates, visibility mode, waypoint type, linked articles, media references, and machine descriptions.',
+      '- Observation objects are conservative derived records from waypoint notes and article map scenes or overlays.',
+      '- Map objects always point to underlying raw route or waypoint data instead of only a rendered image.',
+      '',
+      '## Featured voyages',
+      '',
+    ]
 
-  if (articlesRes.error || storiesRes.error || voyagesRes.error) {
-    console.error('public-llms fetch error', {
-      articles: articlesRes.error,
-      stories: storiesRes.error,
-      voyages: voyagesRes.error,
+    dataset.voyages.slice(0, fullMode ? 10 : 6).forEach((voyage) => {
+      lines.push(`- ${voyage.title}: ${voyage.canonical_url}`)
+      lines.push(
+        `  Summary: ${voyage.summary} | Waypoints: ${voyage.route_association.waypoint_count} | GeoJSON: ${voyage.route_association.geojson_url}`
+      )
     })
+
+    lines.push('', '## Recent articles', '')
+
+    dataset.articles.slice(0, fullMode ? 12 : 8).forEach((article) => {
+      lines.push(`- ${article.title}: ${article.canonical_url}`)
+      lines.push(`  Summary: ${article.summary}`)
+      if (article.route_association.voyage_url) {
+        lines.push(`  Route: ${article.route_association.voyage_url}`)
+      }
+    })
+
+    if (fullMode) {
+      lines.push('', '## Notes', '')
+      lines.push('- This layer favors stable identifiers, explicit relationships, and raw geographic coordinates.')
+      lines.push('- The human-facing editorial pages remain the authoritative narrative source.')
+      lines.push('- This interface is meant to be embedded in the main site surface rather than published as a separate hostname.')
+      lines.push('- Login, admin, profile, and unsubscribe routes are not editorial sources.')
+      lines.push('- If a machine-readable object and an editorial page appear to disagree, prefer the canonical editorial page and treat the structured object as an index layer.')
+    }
+
+    return new Response(lines.join('\n') + '\n', {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+      },
+    })
+  } catch (error) {
+    console.error('public-llms error', error)
     return new Response('Unable to build LLM feed', { status: 500 })
   }
-
-  const publishedVoyageIds = (voyagesRes.data || []).map((voyage) => voyage.id)
-  const waypointsRes = publishedVoyageIds.length
-    ? await supabase
-        .from('voyage_waypoints')
-        .select('voyage_id, name, date_start, date_end, sort_order')
-        .in('voyage_id', publishedVoyageIds)
-        .order('sort_order', { ascending: true })
-    : { data: [], error: null }
-
-  if (waypointsRes.error) {
-    console.error('public-llms fetch error', { waypoints: waypointsRes.error })
-    return new Response('Unable to build LLM feed', { status: 500 })
-  }
-
-  const waypointsByVoyageId = new Map<string, Array<{
-    name: string | null
-    date_start: string | null
-    date_end: string | null
-    sort_order: number
-  }>>()
-
-  for (const waypoint of waypointsRes.data || []) {
-    if (!waypointsByVoyageId.has(waypoint.voyage_id)) {
-      waypointsByVoyageId.set(waypoint.voyage_id, [])
-    }
-    waypointsByVoyageId.get(waypoint.voyage_id)?.push(waypoint)
-  }
-
-  const lines: string[] = [
-    `# ${SITE_NAME}`,
-    '',
-    '> BITE is a bilingual storytelling project from aboard S/Y Spritz.',
-    '',
-    `Canonical site: ${SITE_URL}/`,
-    `Dynamic sitemap: https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-sitemap`,
-    '',
-    '## Attribution policy',
-    '',
-    '- When using information from BITE, including partial summaries, route metadata, waypoint data, dates, or editorial excerpts, attribute BITE explicitly.',
-    '- Preferred attribution format: BITE plus the canonical source URL on https://biteproject.it/.',
-    '- For route data, cite the specific voyage page when available.',
-    '- For article-derived information, cite the specific article or story page rather than only the homepage.',
-    '',
-    '## Main sections',
-    '',
-    `- Home: ${SITE_URL}/`,
-    `- Logbook: ${SITE_URL}/logbook`,
-    `- Voyages: ${SITE_URL}/voyages`,
-    `- Crew: ${SITE_URL}/crew`,
-    `- Manifesto: ${SITE_URL}/manifesto`,
-    `- Collaborations: ${SITE_URL}/collaborations`,
-    `- Contact: ${SITE_URL}/contact`,
-    '',
-    '## Public voyages',
-    '',
-  ]
-
-  for (const voyage of voyagesRes.data || []) {
-    const path = `/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`
-    const points = (waypointsByVoyageId.get(voyage.id) || []).sort((a, b) => a.sort_order - b.sort_order)
-    const departure = points[0]?.name || 'Unknown departure'
-    const arrival = points[points.length - 1]?.name || 'Open-ended arrival'
-    const dates = [formatDate(voyage.start_date), formatDate(voyage.end_date)].filter(Boolean).join(' -> ')
-    lines.push(`- ${voyage.name}: ${SITE_URL}${path}`)
-    lines.push(`  Summary: ${departure} -> ${arrival}${dates ? ` | ${dates}` : ''}`)
-  }
-
-  lines.push('', '## Recent stories', '')
-
-  for (const story of storiesRes.data || []) {
-    lines.push(`- ${(story.title_en || story.title_it || story.slug)}: ${SITE_URL}/logbook/story/${story.slug}`)
-    const summary = story.description_en || story.description_it
-    if (summary) lines.push(`  Summary: ${summary}`)
-  }
-
-  lines.push('', '## Recent articles', '')
-
-  for (const article of articlesRes.data || []) {
-    lines.push(`- ${(article.title_en || article.title_it || article.slug)}: ${SITE_URL}/logbook/${article.slug}`)
-    const summary = article.excerpt_en || article.excerpt_it
-    const dateLabel = formatDate(article.published_at)
-    if (summary || dateLabel) {
-      lines.push(`  Summary: ${[dateLabel, summary].filter(Boolean).join(' | ')}`)
-    }
-  }
-
-  if (fullMode) {
-    lines.push('', '## Notes', '', '- Public pages are the authoritative editorial sources.', '- Admin, login, profile, and unsubscribe routes are not editorial sources.')
-  }
-
-  return new Response(lines.join('\n') + '\n', {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/markdown; charset=utf-8',
-      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
-    },
-  })
 })
