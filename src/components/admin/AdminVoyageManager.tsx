@@ -2395,19 +2395,7 @@ const AdminVoyageManager = ({
     await reorderWaypoint(waypoint.voyage_id, index, targetIndex);
   }, [reorderWaypoint]);
 
-  const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
-  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
   const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
-  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
-  const selectedWaypointDateSuggestions = useMemo(
-    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
-    [selectedVoyage, selectedWaypoints]
-  );
-  const selectedWaypointLegEstimates = useMemo(
-    () => deriveWaypointLegEstimates(selectedWaypoints),
-    [selectedWaypoints]
-  );
-  const persistedSelectedWaypoints2 = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
   const selectedVoyageHasCachedGeometry = getCachedGeometryCoordinates(selectedVoyage).length >= 2;
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
