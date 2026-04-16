@@ -374,6 +374,132 @@ export type Database = {
           },
         ]
       }
+      editorial_plan_settings: {
+        Row: {
+          horizon_weeks: number
+          id: string
+          mix_pillar: number
+          mix_support: number
+          mix_utility: number
+          timezone: string
+          updated_at: string
+          weekly_count: number
+        }
+        Insert: {
+          horizon_weeks?: number
+          id?: string
+          mix_pillar?: number
+          mix_support?: number
+          mix_utility?: number
+          timezone?: string
+          updated_at?: string
+          weekly_count?: number
+        }
+        Update: {
+          horizon_weeks?: number
+          id?: string
+          mix_pillar?: number
+          mix_support?: number
+          mix_utility?: number
+          timezone?: string
+          updated_at?: string
+          weekly_count?: number
+        }
+        Relationships: []
+      }
+      editorial_plan_slots: {
+        Row: {
+          assigned_article_id: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          override_type:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          slot_date: string
+          slot_time: string
+          status: string
+          suggested_type:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          template_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_article_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          override_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          slot_date: string
+          slot_time: string
+          status?: string
+          suggested_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          template_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_article_id?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          override_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          slot_date?: string
+          slot_time?: string
+          status?: string
+          suggested_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
+          template_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_plan_slots_assigned_article_id_fkey"
+            columns: ["assigned_article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_plan_slots_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_weekly_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_plan_weekly_slots: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          id: string
+          sort_order: number
+          time_of_day: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          id?: string
+          sort_order?: number
+          time_of_day: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          sort_order?: number
+          time_of_day?: string
+        }
+        Relationships: []
+      }
       email_notification_preferences: {
         Row: {
           article_notifications_enabled: boolean
@@ -608,7 +734,9 @@ export type Database = {
           cover_image: string | null
           cover_zoom: number
           created_at: string
-          editorial_type: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           excerpt_en: string | null
           excerpt_it: string | null
           id: string
@@ -644,7 +772,9 @@ export type Database = {
           cover_image?: string | null
           cover_zoom?: number
           created_at?: string
-          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
@@ -680,7 +810,9 @@ export type Database = {
           cover_image?: string | null
           cover_zoom?: number
           created_at?: string
-          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           excerpt_en?: string | null
           excerpt_it?: string | null
           id?: string
@@ -721,121 +853,21 @@ export type Database = {
             referencedRelation: "voyages"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      editorial_plan_settings: {
-        Row: {
-          horizon_weeks: number
-          id: string
-          mix_pillar: number
-          mix_support: number
-          mix_utility: number
-          timezone: string
-          updated_at: string
-          weekly_count: number
-        }
-        Insert: {
-          horizon_weeks?: number
-          id?: string
-          mix_pillar?: number
-          mix_support?: number
-          mix_utility?: number
-          timezone?: string
-          updated_at?: string
-          weekly_count?: number
-        }
-        Update: {
-          horizon_weeks?: number
-          id?: string
-          mix_pillar?: number
-          mix_support?: number
-          mix_utility?: number
-          timezone?: string
-          updated_at?: string
-          weekly_count?: number
-        }
-        Relationships: []
-      }
-      editorial_plan_slots: {
-        Row: {
-          assigned_article_id: string | null
-          created_at: string
-          id: string
-          notes: string | null
-          override_type: Database["public"]["Enums"]["article_editorial_type"] | null
-          slot_date: string
-          slot_time: string
-          status: string
-          suggested_type: Database["public"]["Enums"]["article_editorial_type"] | null
-          template_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          assigned_article_id?: string | null
-          created_at?: string
-          id?: string
-          notes?: string | null
-          override_type?: Database["public"]["Enums"]["article_editorial_type"] | null
-          slot_date: string
-          slot_time: string
-          status?: string
-          suggested_type?: Database["public"]["Enums"]["article_editorial_type"] | null
-          template_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          assigned_article_id?: string | null
-          created_at?: string
-          id?: string
-          notes?: string | null
-          override_type?: Database["public"]["Enums"]["article_editorial_type"] | null
-          slot_date?: string
-          slot_time?: string
-          status?: string
-          suggested_type?: Database["public"]["Enums"]["article_editorial_type"] | null
-          template_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "editorial_plan_slots_assigned_article_id_fkey"
-            columns: ["assigned_article_id"]
+            foreignKeyName: "logbook_articles_voyage_waypoint_end_id_fkey"
+            columns: ["voyage_waypoint_end_id"]
             isOneToOne: false
-            referencedRelation: "logbook_articles"
+            referencedRelation: "voyage_waypoints"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "editorial_plan_slots_template_id_fkey"
-            columns: ["template_id"]
+            foreignKeyName: "logbook_articles_voyage_waypoint_start_id_fkey"
+            columns: ["voyage_waypoint_start_id"]
             isOneToOne: false
-            referencedRelation: "editorial_plan_weekly_slots"
+            referencedRelation: "voyage_waypoints"
             referencedColumns: ["id"]
           },
         ]
-      }
-      editorial_plan_weekly_slots: {
-        Row: {
-          created_at: string
-          day_of_week: number
-          id: string
-          sort_order: number
-          time_of_day: string
-        }
-        Insert: {
-          created_at?: string
-          day_of_week: number
-          id?: string
-          sort_order?: number
-          time_of_day: string
-        }
-        Update: {
-          created_at?: string
-          day_of_week?: number
-          id?: string
-          sort_order?: number
-          time_of_day?: string
-        }
-        Relationships: []
       }
       logbook_map_markers: {
         Row: {
@@ -857,8 +889,8 @@ export type Database = {
           id: string
           is_onboard?: boolean
           is_visible?: boolean
-          label_en?: string
-          label_it?: string
+          label_en: string
+          label_it: string
           latitude?: number | null
           longitude?: number | null
           updated_at?: string

@@ -1454,6 +1454,18 @@ const AdminVoyageManager = ({
     );
   }, [updateWaypoint]);
 
+  const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
+  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
+  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
+  const selectedWaypointDateSuggestions = useMemo(
+    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
+    [selectedVoyage, selectedWaypoints]
+  );
+  const selectedWaypointLegEstimates = useMemo(
+    () => deriveWaypointLegEstimates(selectedWaypoints),
+    [selectedWaypoints]
+  );
+
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
       const effectiveType = getWaypointEffectiveType(waypoint, index, total);
@@ -2383,18 +2395,7 @@ const AdminVoyageManager = ({
     await reorderWaypoint(waypoint.voyage_id, index, targetIndex);
   }, [reorderWaypoint]);
 
-  const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
-  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
   const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
-  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
-  const selectedWaypointDateSuggestions = useMemo(
-    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
-    [selectedVoyage, selectedWaypoints]
-  );
-  const selectedWaypointLegEstimates = useMemo(
-    () => deriveWaypointLegEstimates(selectedWaypoints),
-    [selectedWaypoints]
-  );
   const selectedVoyageHasCachedGeometry = getCachedGeometryCoordinates(selectedVoyage).length >= 2;
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)

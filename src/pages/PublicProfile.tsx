@@ -282,7 +282,7 @@ const PublicProfile = () => {
         .in("voyage_id", ids)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data || []) as VoyageWaypoint[];
+      return (data || []) as unknown as VoyageWaypoint[];
     },
   });
 
