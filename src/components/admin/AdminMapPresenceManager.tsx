@@ -257,7 +257,7 @@ const AdminMapPresenceManager = () => {
   const trackerPreviews = useMemo<TrackerPreview[]>(() => {
     if (!forms) return [];
 
-    return mapPresenceTrackerIds.flatMap((id) => {
+    return mapPresenceTrackerIds.flatMap((id): TrackerPreview[] => {
       const form = forms[id];
       const coordinates = getTrackerCoordinates(form);
       if (!coordinates) return [];
