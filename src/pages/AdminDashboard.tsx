@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect, useCallback, useMemo } from "react";
+import { Suspense, lazy, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
+  MapPinned,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -36,7 +37,6 @@ import {
 } from "@/components/admin/AdminCollapsibleListFilters";
 
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
-const AdminMapPresenceManager = lazy(() => import("@/components/admin/AdminMapPresenceManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
 const AdminEditorialPlan = lazy(() => import("@/components/admin/AdminEditorialPlan"));
@@ -203,6 +203,7 @@ const AdminDashboard = () => {
   const [storyFiltersExpanded, setStoryFiltersExpanded] = useState(false);
   const [storyFiltersAdvanced, setStoryFiltersAdvanced] = useState(false);
   const navigate = useNavigate();
+  const socialOAuthReturnHandled = useRef(false);
 
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
@@ -246,6 +247,27 @@ const AdminDashboard = () => {
     if (typeof window === "undefined") return;
     window.sessionStorage.setItem(ADMIN_DASHBOARD_SECTION_STORAGE_KEY, activeSection);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const social = params.get("social_oauth");
+    if (!social) return;
+    if (socialOAuthReturnHandled.current) return;
+    socialOAuthReturnHandled.current = true;
+    if (social === "success") {
+      toast.success("Collegamento social completato.");
+    } else {
+      const reason = params.get("reason")?.trim();
+      toast.error(reason ? `Collegamento social non riuscito: ${reason}` : "Collegamento social non riuscito.");
+    }
+    setActiveSection("editorial");
+    params.delete("social_oauth");
+    params.delete("reason");
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", next);
+  }, []);
 
   const runRouteLeaveGuard = useCallback(async () => {
     if (!routeLeaveGuard) return true;
@@ -442,6 +464,21 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex items-center gap-3 self-start">
+              <Link
+                to="/admin/trackers"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/trackers");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Tracker mappa"
+              >
+                <MapPinned size={16} />
+                Tracker
+              </Link>
               <Link
                 to="/profile"
                 onClick={(event) => {
@@ -1167,13 +1204,26 @@ const AdminDashboard = () => {
 
             {activeSection === "route" && (
               <div className="space-y-5">
-                <div>
-                  <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Voyage map</p>
-                  <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Voyage map</p>
+                    <h2 className="editorial-heading text-3xl md:text-4xl">Rotte</h2>
+                  </div>
+                  <Link
+                    to="/admin/trackers"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void (async () => {
+                        if (!(await runRouteLeaveGuard())) return;
+                        navigate("/admin/trackers");
+                      })();
+                    }}
+                    className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent transition-colors"
+                  >
+                    <MapPinned size={16} />
+                    Apri tracker mappa
+                  </Link>
                 </div>
-                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading marker manager...</div>}>
-                  <AdminMapPresenceManager />
-                </Suspense>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading route manager...</div>}>
                   <AdminVoyageManager
                     onRegisterLeaveGuard={(guard) => setRouteLeaveGuard(() => guard)}

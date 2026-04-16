@@ -13,7 +13,7 @@ import {
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
-import type { MapPresenceMarker } from "@/lib/map-presence";
+import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
@@ -55,37 +55,6 @@ const buildMapPresenceTooltipTimestamp = (value: string, locale: string) => {
   }).format(parsed);
 };
 
-const createBoatPresenceSvg = (variant: "boat" | "boat-aboard") => {
-  if (variant === "boat-aboard") {
-    return `
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M14 39h8l9-18 8 11h11l-5 7H20l-6 9-4-4z" fill="currentColor" opacity="0.96" />
-        <path d="M31 21v18" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
-        <path d="M31 23l10 9H31z" fill="currentColor" />
-        <circle cx="22" cy="28" r="3.2" fill="currentColor" />
-        <circle cx="29" cy="25.5" r="3.2" fill="currentColor" />
-        <circle cx="36" cy="28" r="3.2" fill="currentColor" />
-      </svg>
-    `;
-  }
-
-  return `
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M14 41h10l11-19 9 12h9l-6 8H19l-5 8-4-5z" fill="currentColor" opacity="0.96" />
-      <path d="M35 22v20" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
-      <path d="M35 24l11 10H35z" fill="currentColor" />
-    </svg>
-  `;
-};
-
-const createCrewPresenceSvg = () => `
-  <svg viewBox="0 0 64 64" aria-hidden="true">
-    <circle cx="24" cy="24" r="7" fill="currentColor" />
-    <circle cx="40" cy="24" r="7" fill="currentColor" opacity="0.92" />
-    <path d="M16 46c0-6 5-11 11-11h10c6 0 11 5 11 11v2H16z" fill="currentColor" />
-  </svg>
-`;
-
 const createPresenceMarkerElement = (marker: MapPresenceMarker) => {
   const button = document.createElement("button");
   button.type = "button";
@@ -93,10 +62,7 @@ const createPresenceMarkerElement = (marker: MapPresenceMarker) => {
   button.setAttribute("aria-label", marker.title);
   button.title = marker.title;
 
-  const iconMarkup =
-    marker.kind === "crew"
-      ? createCrewPresenceSvg()
-      : createBoatPresenceSvg(marker.kind === "boat-aboard" ? "boat-aboard" : "boat");
+  const iconMarkup = getMapPresenceIconMarkup(marker.kind);
 
   button.innerHTML = `
     <span class="map-presence-marker__halo" aria-hidden="true"></span>

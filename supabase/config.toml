@@ -45,3 +45,7 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.publish-scheduled-articles]
     verify_jwt = false
+  [functions.social-oauth-start]
+    verify_jwt = true
+  [functions.social-oauth-callback]
+    verify_jwt = false

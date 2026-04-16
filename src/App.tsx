@@ -43,6 +43,7 @@ const Contact = lazy(() => import("./pages/Contact"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
@@ -97,6 +98,7 @@ const App = () => {
                     <Route path="/signup" element={<UserLogin />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                     <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
                     <Route path="/profile" element={<AdminProfile />} />

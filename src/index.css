@@ -226,6 +226,21 @@
     background: linear-gradient(180deg, hsl(19 82% 62%), hsl(19 74% 44%));
   }
 
+  .map-presence-marker--selected {
+    transform: scale(1.08);
+  }
+
+  .map-presence-marker--selected .map-presence-marker__chip {
+    box-shadow:
+      0 14px 30px rgba(15, 23, 42, 0.26),
+      0 0 0 3px rgba(255, 255, 255, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  }
+
+  .map-presence-marker--dimmed {
+    opacity: 0.48;
+  }
+
   .editorial-heading {
     font-family: var(--font-serif);
     @apply tracking-tight leading-tight;

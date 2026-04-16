@@ -25,7 +25,7 @@ import {
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Link2, Trash2 } from "lucide-react";
+import { Link2, LogIn, Trash2 } from "lucide-react";
 
 export type WeeklySlotFormRow = {
   localKey: string;
@@ -37,6 +37,10 @@ export type WeeklySlotFormRow = {
 type ChannelRow = Database["public"]["Tables"]["editorial_plan_channels"]["Row"];
 type WeeklyRow = Database["public"]["Tables"]["editorial_plan_weekly_slots"]["Row"];
 type OauthRow = Database["public"]["Tables"]["social_oauth_connections"]["Row"];
+type OauthRowLoaded = Pick<
+  OauthRow,
+  "id" | "channel_id" | "provider" | "account_label" | "scopes" | "access_token_expires_at" | "updated_at"
+> & { refresh_token_encrypted?: string | null };
 
 type ChannelDraft = {
   channelId: string;
@@ -50,6 +54,8 @@ type ChannelDraft = {
   oauthProvider: string;
   oauthAccountLabel: string;
   oauthScopes: string;
+  /** Presenza token lato server (non memorizziamo il segreto in stato React). */
+  oauthHasToken: boolean;
 };
 
 type Props = {
@@ -89,7 +95,29 @@ export default function AdminEditorialPlanSettingsDialog({
   const [drafts, setDrafts] = useState<Partial<Record<EditorialChannelCode, ChannelDraft>>>({});
   const [savingCode, setSavingCode] = useState<EditorialChannelCode | null>(null);
   const [savingOAuthCode, setSavingOAuthCode] = useState<EditorialChannelCode | null>(null);
+  const [oauthRedirecting, setOauthRedirecting] = useState<EditorialChannelCode | null>(null);
   const openGeneration = useRef(0);
+
+  const oauthLoginButtonLabel = (code: EditorialChannelCode): string => {
+    if (code === "instagram_bite" || code === "instagram_dogs") return "Accedi con Instagram";
+    if (code === "youtube") return "Accedi con YouTube";
+    if (code === "tiktok") return "Accedi con TikTok";
+    return "Accedi con OAuth";
+  };
+
+  /** Cosa vede l’utente dopo il tap (login ufficiale del provider). */
+  const oauthLoginSubhint = (code: EditorialChannelCode): string => {
+    if (code === "instagram_bite" || code === "instagram_dogs") {
+      return "Si apre il login Meta (Facebook): non esiste un OAuth “solo Instagram” per la pubblicazione API; autorizzi Meta e colleghi l’Instagram Business legato a una Pagina.";
+    }
+    if (code === "youtube") {
+      return "Si apre Google: accedi con l’account che possiede il canale YouTube da usare per questo canale editoriale.";
+    }
+    if (code === "tiktok") {
+      return "Si apre TikTok: confermi l’accesso per l’account che pubblicherà da questo canale.";
+    }
+    return "";
+  };
 
   const updateDraft = useCallback((code: EditorialChannelCode, patch: Partial<ChannelDraft>) => {
     setDrafts((prev) => {
@@ -129,8 +157,11 @@ export default function AdminEditorialPlanSettingsDialog({
         ? supabase.from("editorial_plan_weekly_slots").select("*").in("channel_id", ids).order("sort_order", { ascending: true })
         : Promise.resolve({ data: [] as WeeklyRow[], error: null }),
       ids.length
-        ? supabase.from("social_oauth_connections").select("*").in("channel_id", ids)
-        : Promise.resolve({ data: [] as OauthRow[], error: null }),
+        ? supabase
+            .from("social_oauth_connections")
+            .select("id, channel_id, provider, account_label, scopes, access_token_expires_at, updated_at, refresh_token_encrypted")
+            .in("channel_id", ids)
+        : Promise.resolve({ data: [] as OauthRowLoaded[], error: null }),
     ]);
 
     const weeklyByChannel = new Map<string, WeeklyRow[]>();
@@ -144,9 +175,9 @@ export default function AdminEditorialPlanSettingsDialog({
       weeklyByChannel.set(cid, list);
     }
 
-    const oauthByChannel = new Map<string, OauthRow>();
+    const oauthByChannel = new Map<string, OauthRowLoaded>();
     for (const row of oRes.data ?? []) {
-      oauthByChannel.set(row.channel_id, row);
+      oauthByChannel.set(row.channel_id, row as OauthRowLoaded);
     }
 
     const byCode = new Map(channels.map((c) => [c.code as EditorialChannelCode, c]));
@@ -177,6 +208,7 @@ export default function AdminEditorialPlanSettingsDialog({
         oauthProvider: oauth?.provider ?? oauthProviderForChannel(code),
         oauthAccountLabel: oauth?.account_label ?? "",
         oauthScopes: oauth?.scopes ?? "",
+        oauthHasToken: Boolean(oauth?.refresh_token_encrypted && oauth.refresh_token_encrypted.length > 0),
       };
     }
 
@@ -311,11 +343,67 @@ export default function AdminEditorialPlanSettingsDialog({
       oauthProvider: oauthProviderForChannel(code),
       oauthAccountLabel: "",
       oauthScopes: "",
+      oauthHasToken: false,
     });
     toast.success("Collegamento social rimosso.");
     setSavingOAuthCode(null);
     await loadAll();
     await onSaved();
+  };
+
+  const startPlatformOAuth = async (code: EditorialChannelCode, channelId: string) => {
+    if (code === "site") return;
+    const baseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+    if (!baseUrl || !anon) {
+      toast.error("Manca VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY.");
+      return;
+    }
+
+    setOauthRedirecting(code);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        toast.error("Sessione non valida: effettua di nuovo l’accesso.");
+        setOauthRedirecting(null);
+        return;
+      }
+
+      const fnUrl = `${baseUrl.replace(/\/$/, "")}/functions/v1/social-oauth-start?channel_id=${encodeURIComponent(channelId)}`;
+      const res = await fetch(fnUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: anon,
+        },
+      });
+
+      const payload = (await res.json().catch(() => ({}))) as {
+        authorization_url?: string;
+        error?: string;
+        hint?: string;
+        reason?: string;
+      };
+
+      if (!res.ok) {
+        const msg = payload.error || payload.reason || res.statusText;
+        const hint = payload.hint;
+        toast.error(hint ? `${msg}: ${hint}` : msg);
+        setOauthRedirecting(null);
+        return;
+      }
+
+      if (!payload.authorization_url) {
+        toast.error("Risposta OAuth senza authorization_url.");
+        setOauthRedirecting(null);
+        return;
+      }
+
+      window.location.assign(payload.authorization_url);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore di rete.");
+      setOauthRedirecting(null);
+    }
   };
 
   const accordionDefault = useMemo(() => [initialChannelCode], [initialChannelCode]);
@@ -326,8 +414,8 @@ export default function AdminEditorialPlanSettingsDialog({
         <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
           <DialogTitle className="font-serif text-xl pr-8">Impostazioni piano editoriale</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-            Una sezione per ogni canale: mix, orizzonte, timezone e slot ricorrenti. Per i social gestisci anche il collegamento al profilo
-            (metadati ora; token OAuth da completare con Edge Function dedicata).
+            Una sezione per ogni canale: mix, orizzonte, timezone e slot ricorrenti. Per i social puoi collegare l’account con OAuth (redirect
+            sicuro) oppure salvare solo metadati (etichetta / provider).
           </DialogDescription>
         </DialogHeader>
 
@@ -345,7 +433,12 @@ export default function AdminEditorialPlanSettingsDialog({
                 const d = drafts[code];
                 const label = EDITORIAL_CHANNEL_LABELS[code];
                 const formatOptions = code === "site" ? [] : contentFormatsForChannel(code);
-                const oauthLinked = Boolean(d?.oauthId || (d?.oauthAccountLabel && d.oauthAccountLabel.trim()));
+                const oauthActive = Boolean(d?.oauthHasToken);
+                const oauthMetaOnly = Boolean(
+                  d && !d.oauthHasToken && (d.oauthId || (d.oauthAccountLabel && d.oauthAccountLabel.trim())),
+                );
+                const oauthLinked = oauthActive || oauthMetaOnly;
+                const oauthSubhint = oauthLoginSubhint(code);
 
                 if (!d) {
                   return (
@@ -367,10 +460,14 @@ export default function AdminEditorialPlanSettingsDialog({
                           <span
                             className={cn(
                               "text-[10px] font-sans uppercase tracking-wider px-2 py-0.5 rounded-full",
-                              oauthLinked ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+                              oauthActive
+                                ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                                : oauthMetaOnly
+                                  ? "bg-accent/20 text-accent"
+                                  : "bg-muted text-muted-foreground",
                             )}
                           >
-                            {oauthLinked ? "Profilo registrato" : "Nessun profilo"}
+                            {oauthActive ? "OAuth attivo" : oauthMetaOnly ? "Solo metadati" : "Nessun profilo"}
                           </span>
                         )}
                       </span>
@@ -384,9 +481,27 @@ export default function AdminEditorialPlanSettingsDialog({
                               Accesso al profilo social
                             </div>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                              Salva qui etichetta e provider per sapere quale account è legato a questo canale. I refresh token vanno
-                              impostati solo lato server (OAuth callback / secret), non in chiaro nel browser.
+                              Per ogni canale social c’è un pulsante dedicato (es. «Accedi con Instagram»): ti porta sul sito del provider,
+                              torni qui dopo l’autorizzazione e il token viene salvato solo lato server. Sotto puoi aggiungere o correggere
+                              metadati (etichetta, note scope) se ti serve in admin.
                             </p>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="gap-1"
+                                  disabled={savingOAuthCode !== null || oauthRedirecting !== null}
+                                  onClick={() => void startPlatformOAuth(code, d.channelId)}
+                                >
+                                  <LogIn size={14} />
+                                  {oauthRedirecting === code ? "Reindirizzamento…" : oauthLoginButtonLabel(code)}
+                                </Button>
+                              </div>
+                              {oauthSubhint ? (
+                                <p className="text-[10px] text-muted-foreground leading-relaxed max-w-prose">{oauthSubhint}</p>
+                              ) : null}
+                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                 <label className="text-[10px] uppercase text-muted-foreground block mb-1">Provider API</label>
@@ -427,7 +542,7 @@ export default function AdminEditorialPlanSettingsDialog({
                                 type="button"
                                 size="sm"
                                 variant="secondary"
-                                disabled={savingOAuthCode !== null}
+                                disabled={savingOAuthCode !== null || oauthRedirecting !== null}
                                 onClick={() => void saveOAuthMetadata(code)}
                               >
                                 {savingOAuthCode === code ? "Salvataggio…" : "Salva profilo social"}
@@ -437,7 +552,7 @@ export default function AdminEditorialPlanSettingsDialog({
                                 size="sm"
                                 variant="outline"
                                 className="gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
-                                disabled={savingOAuthCode !== null || !oauthLinked}
+                                disabled={savingOAuthCode !== null || oauthRedirecting !== null || !oauthLinked}
                                 onClick={() => void removeOAuth(code)}
                               >
                                 <Trash2 size={14} />
@@ -445,8 +560,8 @@ export default function AdminEditorialPlanSettingsDialog({
                               </Button>
                             </div>
                             <p className="text-[10px] text-muted-foreground">
-                              Flusso &quot;Connetti con OAuth&quot; (redirect ufficiale) da aggiungere in Edge Function; qui resta la
-                              configurazione amministrativa del legame canale ↔ account.
+                              Dopo il login del provider tornerai alla dashboard admin; assicurati che le Edge Function e i secret OAuth siano
+                              configurati su Supabase.
                             </p>
                           </div>
                           <Separator />
@@ -649,7 +764,7 @@ export default function AdminEditorialPlanSettingsDialog({
 
                       <Button
                         type="button"
-                        disabled={savingCode !== null || savingOAuthCode !== null}
+                        disabled={savingCode !== null || savingOAuthCode !== null || oauthRedirecting !== null}
                         onClick={() => void saveChannel(code)}
                         className="w-full sm:w-auto"
                       >
