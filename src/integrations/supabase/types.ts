@@ -377,7 +377,9 @@ export type Database = {
       editorial_media_assets: {
         Row: {
           created_at: string
-          editorial_type: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           id: string
           status: string
           storage_main_path: string | null
@@ -387,7 +389,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           id?: string
           status?: string
           storage_main_path?: string | null
@@ -397,7 +401,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          editorial_type?: Database["public"]["Enums"]["article_editorial_type"] | null
+          editorial_type?:
+            | Database["public"]["Enums"]["article_editorial_type"]
+            | null
           id?: string
           status?: string
           storage_main_path?: string | null
@@ -423,7 +429,7 @@ export type Database = {
         Insert: {
           code: string
           horizon_weeks?: number
-          id?: string
+          id: string
           label: string
           mix_pillar?: number
           mix_support?: number
