@@ -907,8 +907,6 @@ const ArticleEditor = () => {
       voyage_id: selectedVoyageId || null,
       voyage_segment_start: normalizedVoyageSegStart,
       voyage_segment_end: normalizedVoyageSegEnd,
-      voyage_waypoint_start_id,
-      voyage_waypoint_end_id,
       cover_focal_x: coverFocal.focalX,
       cover_focal_y: coverFocal.focalY,
       cover_zoom: coverFocal.zoom,

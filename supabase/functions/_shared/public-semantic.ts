@@ -1564,11 +1564,13 @@ export const filterSemanticItems = <T extends Record<string, unknown>>(
   const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || items.length, 200)) : null
 
   if (slug && options?.slugKey) {
-    filtered = filtered.filter((item) => item[options.slugKey] === slug)
+    const sk = options.slugKey as string
+    filtered = filtered.filter((item) => (item as Record<string, unknown>)[sk] === slug)
   }
 
   if (voyageId && options?.voyageKey) {
-    filtered = filtered.filter((item) => item[options.voyageKey] === voyageId || item[options.voyageKey] === `voyage:${voyageId}`)
+    const vk = options.voyageKey as string
+    filtered = filtered.filter((item) => (item as Record<string, unknown>)[vk] === voyageId || (item as Record<string, unknown>)[vk] === `voyage:${voyageId}`)
   }
 
   return limit ? filtered.slice(0, limit) : filtered

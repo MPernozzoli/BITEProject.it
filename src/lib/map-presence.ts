@@ -99,7 +99,7 @@ export const createDefaultMapPresenceTracker = (id: MapPresenceTrackerId): MapPr
   label_en: trackerDefaults[id].label_en ?? "",
   updated_at: new Date().toISOString(),
   updated_by: null,
-});
+} as MapPresenceTrackerRow);
 
 export const mergeMapPresenceTrackers = (rows: MapPresenceTrackerRow[]) => {
   const trackerMap = {
