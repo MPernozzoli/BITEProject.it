@@ -759,6 +759,8 @@ export type Database = {
           voyage_id: string | null
           voyage_segment_end: number | null
           voyage_segment_start: number | null
+          voyage_waypoint_end_id: string | null
+          voyage_waypoint_start_id: string | null
         }
         Insert: {
           article_map_scenes?: Json | null
@@ -795,6 +797,8 @@ export type Database = {
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
+          voyage_waypoint_end_id?: string | null
+          voyage_waypoint_start_id?: string | null
         }
         Update: {
           article_map_scenes?: Json | null
@@ -831,6 +835,8 @@ export type Database = {
           voyage_id?: string | null
           voyage_segment_end?: number | null
           voyage_segment_start?: number | null
+          voyage_waypoint_end_id?: string | null
+          voyage_waypoint_start_id?: string | null
         }
         Relationships: [
           {
@@ -845,6 +851,20 @@ export type Database = {
             columns: ["voyage_id"]
             isOneToOne: false
             referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logbook_articles_voyage_waypoint_end_id_fkey"
+            columns: ["voyage_waypoint_end_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logbook_articles_voyage_waypoint_start_id_fkey"
+            columns: ["voyage_waypoint_start_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
             referencedColumns: ["id"]
           },
         ]
