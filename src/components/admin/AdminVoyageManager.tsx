@@ -1454,16 +1454,16 @@ const AdminVoyageManager = ({
     );
   }, [updateWaypoint]);
 
-  const selectedVoyage_early = voyages.find((voyage) => voyage.id === selectedVoyageId);
-  const selectedWaypoints_early = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
-  const selectedVoyageDatesTbd_early = Boolean(selectedVoyage_early && hasVoyageDatesTbd(selectedVoyage_early));
-  const selectedWaypointDateSuggestions_early = useMemo(
-    () => deriveWaypointDateSuggestions(selectedVoyage_early, selectedWaypoints_early),
-    [selectedVoyage_early, selectedWaypoints_early]
+  const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
+  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
+  const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
+  const selectedWaypointDateSuggestions = useMemo(
+    () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
+    [selectedVoyage, selectedWaypoints]
   );
-  const selectedWaypointLegEstimates_early = useMemo(
-    () => deriveWaypointLegEstimates(selectedWaypoints_early),
-    [selectedWaypoints_early]
+  const selectedWaypointLegEstimates = useMemo(
+    () => deriveWaypointLegEstimates(selectedWaypoints),
+    [selectedWaypoints]
   );
 
   const createWaypointPopupContent = useCallback(
