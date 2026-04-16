@@ -29,6 +29,14 @@ export const EDITORIAL_CHANNEL_LABELS: Record<EditorialChannelCode, string> = {
   instagram_dogs: "Instagram cani",
 };
 
+/** Valore `provider` consigliato per `social_oauth_connections` (allineato alla UI impostazioni). */
+export function oauthProviderForChannel(code: EditorialChannelCode): string {
+  if (code === "youtube") return "google_youtube";
+  if (code === "tiktok") return "tiktok";
+  if (code === "instagram_bite" || code === "instagram_dogs") return "meta_instagram";
+  return "site";
+}
+
 export const EDITORIAL_PLAN_SETTINGS_ID = "a0000000-0000-4000-8000-000000000001";
 
 export const EDITORIAL_TYPE_ORDER: EditorialArticleType[] = ["pillar", "support", "utility_reflection"];
