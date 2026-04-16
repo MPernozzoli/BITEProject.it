@@ -1,6 +1,25 @@
-const STATIC_CACHE = "bite-static-v1";
-const RUNTIME_CACHE = "bite-runtime-v1";
+const STATIC_CACHE = "bite-static-v2";
+const RUNTIME_CACHE = "bite-runtime-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/favicon.ico", "/icons/icon-192.png"];
+
+function isCacheableAsset(request, url) {
+  if (url.pathname.startsWith("/node_modules/") || url.pathname.startsWith("/src/") || url.pathname.includes("/@vite")) {
+    return false;
+  }
+
+  if (["script", "style"].includes(request.destination)) {
+    return false;
+  }
+
+  return ["image", "font"].includes(request.destination)
+    || url.pathname.endsWith(".webmanifest")
+    || url.pathname.endsWith(".svg")
+    || url.pathname.endsWith(".png")
+    || url.pathname.endsWith(".jpg")
+    || url.pathname.endsWith(".jpeg")
+    || url.pathname.endsWith(".webp")
+    || url.pathname.endsWith(".woff2");
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -35,6 +54,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request).catch(() => caches.match("/")).then((response) => response || Response.error()),
     );
+    return;
+  }
+
+  if (!isCacheableAsset(request, url)) {
     return;
   }
 

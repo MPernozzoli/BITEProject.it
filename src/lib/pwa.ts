@@ -1,14 +1,52 @@
 export type MobileOs = "ios" | "android" | "other";
 
+const APP_CACHE_PREFIX = "bite-";
+
 function hasWindow() {
   return typeof window !== "undefined";
+}
+
+async function clearAppCaches() {
+  if (!hasWindow() || !("caches" in window)) return;
+
+  const cacheKeys = await window.caches.keys();
+  await Promise.all(
+    cacheKeys
+      .filter((cacheKey) => cacheKey.startsWith(APP_CACHE_PREFIX))
+      .map((cacheKey) => window.caches.delete(cacheKey)),
+  );
+}
+
+async function unregisterAppServiceWorkers() {
+  if (!hasWindow() || !("serviceWorker" in navigator)) return false;
+
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  if (!registrations.length) return false;
+
+  const results = await Promise.all(registrations.map((registration) => registration.unregister()));
+  await clearAppCaches();
+
+  return results.some(Boolean);
 }
 
 export async function registerServiceWorker() {
   if (!hasWindow() || !("serviceWorker" in navigator)) return;
 
   try {
-    await navigator.serviceWorker.register("/sw.js");
+    if (import.meta.env.DEV) {
+      const removed = await unregisterAppServiceWorkers();
+
+      if (removed && !window.sessionStorage.getItem("bite-sw-dev-cleanup")) {
+        window.sessionStorage.setItem("bite-sw-dev-cleanup", "1");
+        window.location.reload();
+        return;
+      }
+
+      window.sessionStorage.removeItem("bite-sw-dev-cleanup");
+      return;
+    }
+
+    await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
   } catch (error) {
     console.error("Service worker registration failed:", error);
   }
