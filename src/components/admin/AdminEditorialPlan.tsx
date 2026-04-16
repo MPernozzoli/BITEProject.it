@@ -403,10 +403,7 @@ export default function AdminEditorialPlan() {
             </span>
             <Select value={kpiChannelCode} onValueChange={(v) => setKpiChannelCode(v as EditorialChannelCode)}>
               <SelectTrigger className="h-9 rounded-[14px] text-xs font-sans w-full sm:w-[min(100%,280px)]">
-                <span className="flex items-center gap-2 min-w-0">
-                  <EditorialChannelLogo code={kpiChannelCode} />
-                  <SelectValue placeholder="Canale" />
-                </span>
+                <SelectValue placeholder="Seleziona canale..." />
               </SelectTrigger>
               <SelectContent>
                 {EDITORIAL_CHANNEL_ORDER.map((code) => (
