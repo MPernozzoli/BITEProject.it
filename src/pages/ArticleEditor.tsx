@@ -28,10 +28,12 @@ import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal 
 import { normalizeArticleMapScenes } from "@/lib/article-map";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 import { getArticleTranslationGaps } from "@/lib/article-translation-gaps";
+import { EDITORIAL_TYPE_LABELS, type EditorialArticleType } from "@/lib/editorial-plan";
 
 type ArticleLanguage = "en" | "it";
 
 const ARTICLE_DRAFT_STORAGE_PREFIX = "bite_article_editor_draft";
+const ADMIN_DASH_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
 
 type ArticleEditorDraft = {
   titleEn: string;
@@ -49,7 +51,8 @@ type ArticleEditorDraft = {
   instagramStoryUseCoverIt: boolean;
   coverFocal: CoverFocal;
   category: string;
-  publishDate: string;
+  /** Tipo editoriale interno (vuoto = non classificato) */
+  editorialType: "" | EditorialArticleType;
   authorIds: string[];
   selectedTagIds: string[];
   selectedStoryId: string | null;
@@ -130,9 +133,14 @@ const ArticleEditor = () => {
   const [instagramStoryUseCoverIt, setInstagramStoryUseCoverIt] = useState(true);
   const [coverFocal, setCoverFocal] = useState<CoverFocal>({ ...DEFAULT_COVER_FOCAL });
   const [category, setCategory] = useState("Notes from the Boat");
-  const [publishDate, setPublishDate] = useState("");
+  const [editorialType, setEditorialType] = useState<"" | EditorialArticleType>("");
   /** Stato ultimo persistito sul server (per etichette tipo "Applica modifiche"). */
   const [persistedArticleStatus, setPersistedArticleStatus] = useState<"draft" | "scheduled" | "published" | null>(null);
+  /** `published_at` originale quando l'articolo è già pubblicato (per non sovrascriverlo su "Applica modifiche"). */
+  const [initialPublishedAt, setInitialPublishedAt] = useState<string | null>(null);
+  /** Data programmata lato server (solo informativa: la modifica avviene dal Piano editoriale). */
+  const [serverScheduledAt, setServerScheduledAt] = useState<string | null>(null);
+  const [publishChoiceOpen, setPublishChoiceOpen] = useState(false);
   const [authorIds, setAuthorIds] = useState<string[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -176,6 +184,9 @@ const ArticleEditor = () => {
 
   useEffect(() => {
     setPersistedArticleStatus(null);
+    setInitialPublishedAt(null);
+    setServerScheduledAt(null);
+    setPublishChoiceOpen(false);
   }, [id]);
 
   useEffect(() => { init(); }, [id]);
@@ -214,7 +225,7 @@ const ArticleEditor = () => {
       )
     );
     setCategory(draft.category || "Notes from the Boat");
-    setPublishDate(draft.publishDate || "");
+    setEditorialType(draft.editorialType === undefined ? "" : draft.editorialType || "");
     setAuthorIds(Array.isArray(draft.authorIds) ? draft.authorIds : []);
     setSelectedTagIds(Array.isArray(draft.selectedTagIds) ? draft.selectedTagIds : []);
     setSelectedStoryId(draft.selectedStoryId || null);
@@ -288,7 +299,8 @@ const ArticleEditor = () => {
 
     if (isNew) {
       setAuthorIds([session.user.id]);
-      setPublishDate(new Date().toISOString().slice(0, 16));
+      setInitialPublishedAt(null);
+      setServerScheduledAt(null);
       restoreDraftFromStorage();
     } else {
       loadArticle(session.user.id);
@@ -333,7 +345,9 @@ const ArticleEditor = () => {
       )
     );
     setCategory(data.category || "Notes from the Boat");
-    setPublishDate(data.published_at ? new Date(data.published_at).toISOString().slice(0, 16) : data.scheduled_at ? new Date(data.scheduled_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
+    setEditorialType(((data as { editorial_type?: EditorialArticleType | null }).editorial_type ?? "") as "" | EditorialArticleType);
+    setInitialPublishedAt(data.published_at || null);
+    setServerScheduledAt(data.status === "scheduled" && data.scheduled_at ? data.scheduled_at : null);
     setSelectedStoryId((data as any).story_id || null);
     setLatitude((data as any).latitude || null);
     setLongitude((data as any).longitude || null);
@@ -507,7 +521,7 @@ const ArticleEditor = () => {
       instagramStoryUseCoverIt,
       coverFocal,
       category,
-      publishDate,
+      editorialType,
       authorIds,
       selectedTagIds,
       selectedStoryId,
@@ -525,6 +539,7 @@ const ArticleEditor = () => {
     articleMapScenes,
     authorIds,
     category,
+    editorialType,
     contentEn,
     contentIt,
     coverFocal,
@@ -539,7 +554,6 @@ const ArticleEditor = () => {
     latitude,
     locationName,
     longitude,
-    publishDate,
     selectedStoryId,
     selectedTagIds,
     selectedVoyageId,
@@ -738,10 +752,6 @@ const ArticleEditor = () => {
       navigate("/login", { state: { from: `/admin/article/${id}` } });
       return false;
     }
-    const selectedDate = publishDate ? new Date(publishDate) : new Date();
-    const now = new Date();
-    const isFuture = selectedDate > now;
-
     let finalStatus: "draft" | "scheduled" | "published";
     let publishedAt: string | null = null;
     let scheduledAt: string | null = null;
@@ -830,12 +840,14 @@ const ArticleEditor = () => {
 
     if (action === "draft") {
       finalStatus = "draft";
-    } else if (isFuture) {
-      finalStatus = "scheduled";
-      scheduledAt = selectedDate.toISOString();
+      scheduledAt = null;
     } else {
       finalStatus = "published";
-      publishedAt = selectedDate.toISOString();
+      scheduledAt = null;
+      publishedAt =
+        persistedArticleStatus === "published" && initialPublishedAt
+          ? initialPublishedAt
+          : new Date().toISOString();
     }
 
     if (action === "publish" && articleMapScenes.length > 0) {
@@ -857,11 +869,9 @@ const ArticleEditor = () => {
         });
 
         const sceneMapConfirmLead =
-          isFuture
-            ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi programmare comunque l'articolo?"
-            : persistedArticleStatus === "published"
-              ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi applicare comunque le modifiche?"
-              : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?";
+          persistedArticleStatus === "published"
+            ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi applicare comunque le modifiche?"
+            : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?";
         const shouldContinue = window.confirm([sceneMapConfirmLead, "", ...warningLines].join("\n"));
 
         if (!shouldContinue) {
@@ -886,6 +896,7 @@ const ArticleEditor = () => {
       instagram_story_use_cover_en: instagramStoryUseCoverEn,
       instagram_story_use_cover_it: instagramStoryUseCoverIt,
       category,
+      editorial_type: editorialType === "" ? null : editorialType,
       status: finalStatus,
       published_at: publishedAt,
       scheduled_at: scheduledAt,
@@ -1014,11 +1025,7 @@ const ArticleEditor = () => {
     window.localStorage.removeItem(draftStorageKey);
     hasLocalChangesRef.current = false;
     setPersistedArticleStatus(finalStatus);
-
-    if (action === "publish" && finalStatus === "scheduled" && articleId) {
-      const label = new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(selectedDate);
-      toast.success(`Articolo programmato per il ${label}. Verrà pubblicato automaticamente all’orario impostato.`);
-    }
+    setServerScheduledAt(null);
 
     if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
       window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
@@ -1033,7 +1040,42 @@ const ArticleEditor = () => {
 
     setSaving(false);
     return true;
-  }, [titleEn, titleIt, slug, excerptEn, excerptIt, contentEn, contentIt, articleMapScenes, coverImage, instagramStoryImageEn, instagramStoryImageIt, instagramStoryUseCoverEn, instagramStoryUseCoverIt, coverFocal, category, publishDate, authorIds, selectedTagIds, selectedStoryId, latitude, longitude, locationName, selectedVoyageId, associationMode, voyageSegStart, voyageSegEnd, voyageWaypoints, id, isNew, navigate, allStories, draftStorageKey, persistedArticleStatus]);
+  }, [
+    titleEn,
+    titleIt,
+    slug,
+    excerptEn,
+    excerptIt,
+    contentEn,
+    contentIt,
+    articleMapScenes,
+    coverImage,
+    instagramStoryImageEn,
+    instagramStoryImageIt,
+    instagramStoryUseCoverEn,
+    instagramStoryUseCoverIt,
+    coverFocal,
+    category,
+    editorialType,
+    authorIds,
+    selectedTagIds,
+    selectedStoryId,
+    latitude,
+    longitude,
+    locationName,
+    selectedVoyageId,
+    associationMode,
+    voyageSegStart,
+    voyageSegEnd,
+    voyageWaypoints,
+    id,
+    isNew,
+    navigate,
+    allStories,
+    draftStorageKey,
+    persistedArticleStatus,
+    initialPublishedAt,
+  ]);
 
   const translationOfferLabels = useMemo(() => {
     if (!translationOfferOpen) return [] as string[];
@@ -1185,6 +1227,26 @@ const ArticleEditor = () => {
       setLeaveBusy(false);
     }
   };
+
+  const handlePublishChoicePlanning = useCallback(async () => {
+    const ok = await saveArticle("draft");
+    if (!ok) return;
+    setPublishChoiceOpen(false);
+    try {
+      window.sessionStorage.setItem(ADMIN_DASH_SECTION_STORAGE_KEY, "editorial");
+    } catch {
+      /* ignore */
+    }
+    toast.success("Bozza salvata. Imposta data e slot dal Piano editoriale in dashboard.");
+    navigate("/admin");
+  }, [navigate, saveArticle]);
+
+  const handlePublishChoicePublishNow = useCallback(() => {
+    void (async () => {
+      setPublishChoiceOpen(false);
+      await saveArticle("publish");
+    })();
+  }, [saveArticle]);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
@@ -1621,26 +1683,14 @@ const ArticleEditor = () => {
     }
   };
 
-  const selectedDate = publishDate ? new Date(publishDate) : new Date();
-  const isFuture = selectedDate > new Date();
   const primaryPublishActionLabel = useMemo(() => {
-    if (persistedArticleStatus === "published") {
-      return isFuture ? "Programma" : "Applica modifiche";
-    }
-    if (persistedArticleStatus === "scheduled") {
-      return isFuture ? "Aggiorna programmazione" : "Pubblica ora";
-    }
-    return isFuture ? "Programma" : "Pubblica";
-  }, [persistedArticleStatus, isFuture]);
+    if (persistedArticleStatus === "published") return "Applica modifiche";
+    return "Pubblica";
+  }, [persistedArticleStatus]);
   const translationOfferPublishSkipLabel = useMemo(() => {
-    if (persistedArticleStatus === "published") {
-      return isFuture ? "Programma senza tradurre" : "Applica modifiche senza tradurre";
-    }
-    if (persistedArticleStatus === "scheduled") {
-      return isFuture ? "Aggiorna programmazione senza tradurre" : "Pubblica ora senza tradurre";
-    }
-    return isFuture ? "Programma senza tradurre" : "Pubblica senza tradurre";
-  }, [persistedArticleStatus, isFuture]);
+    if (persistedArticleStatus === "published") return "Applica modifiche senza tradurre";
+    return "Pubblica senza tradurre";
+  }, [persistedArticleStatus]);
   const sceneOptionsEn = useMemo(
     () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_en || scene.title_it || `Scene ${index + 1}` })),
     [articleMapScenes]
@@ -1809,7 +1859,18 @@ const ArticleEditor = () => {
             <button onClick={() => saveArticle("draft")} disabled={saving} className="inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans hover:bg-muted transition-colors disabled:opacity-50">
               <Save size={14} /> Save Draft
             </button>
-            <button onClick={() => saveArticle("publish")} disabled={saving} className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50">
+            <button
+              type="button"
+              onClick={() => {
+                if (persistedArticleStatus === "published") {
+                  void saveArticle("publish");
+                } else {
+                  setPublishChoiceOpen(true);
+                }
+              }}
+              disabled={saving}
+              className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50"
+            >
               <Send size={14} /> {primaryPublishActionLabel}
             </button>
           </div>
@@ -1955,6 +2016,29 @@ const ArticleEditor = () => {
               })}
             </div>
 
+            {/* Tipo editoriale (interno) */}
+            <div>
+              <label
+                className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block"
+                title="Classificazione per il piano editoriale in dashboard; non è visibile come categoria pubblica."
+              >
+                Tipo editoriale
+              </label>
+              <select
+                value={editorialType}
+                onChange={(e) => setEditorialType((e.target.value || "") as "" | EditorialArticleType)}
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              >
+                <option value="">Non classificato</option>
+                {(Object.keys(EDITORIAL_TYPE_LABELS) as EditorialArticleType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {EDITORIAL_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">Uso interno admin — non sostituisce la categoria pubblica.</p>
+            </div>
+
             {/* Slug */}
             <div>
               <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug</label>
@@ -2014,14 +2098,13 @@ const ArticleEditor = () => {
               </select>
             </div>
 
-            {/* Publish date */}
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                {isFuture ? "Schedule for" : "Publish date"}
-              </label>
-              <input type="datetime-local" value={publishDate} onChange={(e) => setPublishDate(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
-              {isFuture && <p className="text-xs text-amber-600 mt-1">This article will be scheduled for future publication.</p>}
-            </div>
+            {serverScheduledAt && persistedArticleStatus === "scheduled" && (
+              <div className="rounded-[14px] border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs font-sans text-foreground/90 leading-relaxed">
+                <span className="font-medium text-amber-900 dark:text-amber-100">Programmato sul server</span> per{" "}
+                {new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(new Date(serverScheduledAt))}.
+                Per cambiare data e ora usa il <span className="font-medium">Piano editoriale</span> in dashboard (non più da qui).
+              </div>
+            )}
 
             {/* Location & Voyage */}
             <div>
@@ -2206,6 +2289,48 @@ const ArticleEditor = () => {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={publishChoiceOpen} onOpenChange={setPublishChoiceOpen}>
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Pubblicazione sul logbook</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="font-sans text-sm leading-relaxed text-foreground/72 space-y-3">
+                <p>
+                  La programmazione in calendario (data e ora di uscita) avviene solo dal <strong>Piano editoriale</strong> in
+                  dashboard, non più da questo editor.
+                </p>
+                <p>
+                  <strong>Pubblica subito</strong> rende l&apos;articolo visibile sul logbook immediatamente. Sei sicuro di voler
+                  pubblicare adesso, senza passare dal piano?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
+            <Button
+              type="button"
+              className="w-full rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+              disabled={saving}
+              onClick={() => void handlePublishChoicePlanning()}
+            >
+              Manda in pianificazione
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={saving}
+              onClick={() => void handlePublishChoicePublishNow()}
+            >
+              Pubblica subito
+            </Button>
+            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
+              Annulla
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={leaveDialogOpen}>
         <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">

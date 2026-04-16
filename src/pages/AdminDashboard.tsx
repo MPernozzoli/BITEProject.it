@@ -20,6 +20,7 @@ import {
   Award,
   PanelLeftClose,
   PanelLeftOpen,
+  CalendarDays,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -38,8 +39,9 @@ const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageMana
 const AdminMapPresenceManager = lazy(() => import("@/components/admin/AdminMapPresenceManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
+const AdminEditorialPlan = lazy(() => import("@/components/admin/AdminEditorialPlan"));
 const ADMIN_DASHBOARD_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
-type AdminSection = "articles" | "stories" | "route" | "newsletter" | "badges";
+type AdminSection = "articles" | "editorial" | "stories" | "route" | "newsletter" | "badges";
 
 interface Article {
   id: string;
@@ -47,6 +49,7 @@ interface Article {
   title_it: string;
   slug: string;
   category: string;
+  editorial_type?: "pillar" | "support" | "utility_reflection" | null;
   status: string;
   published_at: string | null;
   scheduled_at: string | null;
@@ -69,6 +72,7 @@ interface Story {
 type ArticleListFilters = {
   status: "all" | "draft" | "scheduled" | "published";
   category: string;
+  editorialType: "all" | "pillar" | "support" | "utility_reflection" | "unset";
   dateFilterMode: "created" | "updated" | "published" | "scheduled";
   dateFrom: string;
   dateTo: string;
@@ -93,6 +97,7 @@ type StoryListSort = {
 const emptyArticleListFilters: ArticleListFilters = {
   status: "all",
   category: "all",
+  editorialType: "all",
   dateFilterMode: "updated",
   dateFrom: "",
   dateTo: "",
@@ -173,7 +178,12 @@ const AdminDashboard = () => {
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
     if (typeof window === "undefined") return "articles";
     const storedValue = window.sessionStorage.getItem(ADMIN_DASHBOARD_SECTION_STORAGE_KEY);
-    return storedValue === "articles" || storedValue === "stories" || storedValue === "route" || storedValue === "newsletter" || storedValue === "badges"
+    return storedValue === "articles" ||
+      storedValue === "editorial" ||
+      storedValue === "stories" ||
+      storedValue === "route" ||
+      storedValue === "newsletter" ||
+      storedValue === "badges"
       ? storedValue
       : "articles";
   });
@@ -210,7 +220,7 @@ const AdminDashboard = () => {
       setLoading(false);
       return;
     }
-    if (articlesRes.data) setArticles(articlesRes.data as Article[]);
+    if (articlesRes.data) setArticles(articlesRes.data as unknown as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     if (voyagesRes.data) setVoyages(voyagesRes.data as VoyageSummary[]);
     setLoading(false);
@@ -328,6 +338,7 @@ const AdminDashboard = () => {
   const hasActiveArticleFilters =
     articleListFilters.status !== "all" ||
     articleListFilters.category !== "all" ||
+    articleListFilters.editorialType !== "all" ||
     Boolean(articleListFilters.dateFrom) ||
     Boolean(articleListFilters.dateTo);
 
@@ -336,6 +347,13 @@ const AdminDashboard = () => {
       articles.filter((article) => {
         if (articleListFilters.status !== "all" && article.status !== articleListFilters.status) return false;
         if (articleListFilters.category !== "all" && article.category !== articleListFilters.category) return false;
+        if (articleListFilters.editorialType === "unset" && article.editorial_type) return false;
+        if (
+          articleListFilters.editorialType !== "all" &&
+          articleListFilters.editorialType !== "unset" &&
+          article.editorial_type !== articleListFilters.editorialType
+        )
+          return false;
         const d = articleFilterDate(article, articleListFilters.dateFilterMode);
         return isDateWithinRange(d, articleListFilters.dateFrom, articleListFilters.dateTo);
       }),
@@ -400,6 +418,7 @@ const AdminDashboard = () => {
 
   const sectionTabs = [
     { id: "articles" as const, label: "Articoli", icon: FileText },
+    { id: "editorial" as const, label: "Piano editoriale", icon: CalendarDays },
     { id: "stories" as const, label: "Stories", icon: BookOpen },
     { id: "badges" as const, label: "Badge", icon: Award },
     { id: "route" as const, label: "Rotte", icon: Navigation },
@@ -510,6 +529,7 @@ const AdminDashboard = () => {
                           <span className="block font-sans text-sm text-foreground">{tab.label}</span>
                           <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
                             {tab.id === "articles" && "Publishing"}
+                            {tab.id === "editorial" && "Calendario interno"}
                             {tab.id === "stories" && "Narrative arcs"}
                             {tab.id === "badges" && "Profile rewards"}
                             {tab.id === "route" && "Voyage map"}
@@ -663,6 +683,25 @@ const AdminDashboard = () => {
                           ))}
                         </select>
                       </div>
+                      <div className="min-w-[8.5rem] flex-1">
+                        <label className={adminFilterLabelClass}>Tipo editoriale</label>
+                        <select
+                          value={articleListFilters.editorialType}
+                          onChange={(event) =>
+                            setArticleListFilters((current) => ({
+                              ...current,
+                              editorialType: event.target.value as ArticleListFilters["editorialType"],
+                            }))
+                          }
+                          className={adminFilterSelectClass}
+                        >
+                          <option value="all">Tutti</option>
+                          <option value="pillar">Pillar</option>
+                          <option value="support">Support</option>
+                          <option value="utility_reflection">Utility / Reflection</option>
+                          <option value="unset">Non classificato</option>
+                        </select>
+                      </div>
                       <div className="min-w-[9.5rem] flex-1">
                         <label className={adminFilterLabelClass}>Data (filtro)</label>
                         <select
@@ -790,6 +829,13 @@ const AdminDashboard = () => {
                               <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
                                 {article.category}
                               </span>
+                              {article.editorial_type && (
+                                <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-accent/90">
+                                  {article.editorial_type === "utility_reflection"
+                                    ? "Utility"
+                                    : article.editorial_type}
+                                </span>
+                              )}
                             </div>
                             <h3 className="editorial-heading text-2xl leading-tight mb-2">
                               {article.title_en || article.title_it || "Untitled"}
@@ -840,6 +886,14 @@ const AdminDashboard = () => {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeSection === "editorial" && (
+              <Suspense
+                fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Caricamento piano editoriale…</div>}
+              >
+                <AdminEditorialPlan />
+              </Suspense>
             )}
 
             {activeSection === "stories" && (
