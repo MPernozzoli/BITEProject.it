@@ -50,6 +50,12 @@ export const getMapPresenceIconMarkup = (kind: MapPresenceMarkerKind) => {
   `;
 };
 
+export const isMissingMapPresenceRelationError = (error: { code?: string; message?: string } | null | undefined) => {
+  if (!error) return false;
+  const message = (error.message ?? "").toLowerCase();
+  return error.code === "PGRST205" || (message.includes("relation") && message.includes("does not exist"));
+};
+
 const trackerDefaults: Record<MapPresenceTrackerId, Omit<MapPresenceTrackerInsert, "updated_at" | "updated_by">> = {
   boat: {
     id: "boat",

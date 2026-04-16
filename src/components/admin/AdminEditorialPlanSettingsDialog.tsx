@@ -137,83 +137,93 @@ export default function AdminEditorialPlanSettingsDialog({
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const chRes = await supabase.from("editorial_plan_channels").select("*").order("code", { ascending: true });
-    if (chRes.error && isAuthFailureError(chRes.error)) {
-      await supabase.auth.signOut();
-      navigate("/login", { state: { from: "/admin" } });
+    try {
+      const chRes = await supabase.from("editorial_plan_channels").select("*").order("code", { ascending: true });
+      if (chRes.error && isAuthFailureError(chRes.error)) {
+        await supabase.auth.signOut();
+        navigate("/login", { state: { from: "/admin" } });
+        return;
+      }
+      if (chRes.error) {
+        toast.error(chRes.error.message);
+        return;
+      }
+
+      const channels = (chRes.data ?? []) as ChannelRow[];
+      const ids = channels.map((c) => c.id);
+      const [wRes, oRes] = await Promise.all([
+        ids.length
+          ? supabase.from("editorial_plan_weekly_slots").select("*").in("channel_id", ids).order("sort_order", { ascending: true })
+          : Promise.resolve({ data: [] as WeeklyRow[], error: null }),
+        ids.length
+          ? supabase
+              .from("social_oauth_connections")
+              .select("id, channel_id, provider, account_label, scopes, access_token_expires_at, updated_at, refresh_token_encrypted")
+              .in("channel_id", ids)
+          : Promise.resolve({ data: [] as OauthRowLoaded[], error: null }),
+      ]);
+
+      if (wRes.error) {
+        toast.error(wRes.error.message);
+        return;
+      }
+      if (oRes.error) {
+        toast.error(oRes.error.message);
+        return;
+      }
+
+      const weeklyByChannel = new Map<string, WeeklyRow[]>();
+      for (const row of wRes.data ?? []) {
+        const list = weeklyByChannel.get(row.channel_id) ?? [];
+        list.push(row);
+        weeklyByChannel.set(row.channel_id, list);
+      }
+      for (const [cid, list] of weeklyByChannel) {
+        list.sort((a, b) => a.sort_order - b.sort_order);
+        weeklyByChannel.set(cid, list);
+      }
+
+      const oauthByChannel = new Map<string, OauthRowLoaded>();
+      for (const row of oRes.data ?? []) {
+        oauthByChannel.set(row.channel_id, row as OauthRowLoaded);
+      }
+
+      const byCode = new Map(channels.map((c) => [c.code as EditorialChannelCode, c]));
+      const next: Partial<Record<EditorialChannelCode, ChannelDraft>> = {};
+
+      for (const code of EDITORIAL_CHANNEL_ORDER) {
+        const ch = byCode.get(code);
+        if (!ch) continue;
+        const rows = weeklyByChannel.get(ch.id) ?? [];
+        const oauth = oauthByChannel.get(ch.id);
+        next[code] = {
+          channelId: ch.id,
+          horizonWeeks: ch.horizon_weeks,
+          mixPillar: Number(ch.mix_pillar),
+          mixSupport: Number(ch.mix_support),
+          mixUtility: Number(ch.mix_utility),
+          timezone: ch.timezone || "Europe/Rome",
+          slotRows:
+            rows.length > 0
+              ? rows.map((r) => ({
+                  localKey: r.id,
+                  day_of_week: r.day_of_week,
+                  time_of_day: (r.time_of_day as string).slice(0, 5),
+                  content_format: r.content_format ?? "",
+                }))
+              : [emptySlotRow()],
+          oauthId: oauth?.id ?? null,
+          oauthProvider: oauth?.provider ?? oauthProviderForChannel(code),
+          oauthAccountLabel: oauth?.account_label ?? "",
+          oauthScopes: oauth?.scopes ?? "",
+          oauthHasToken: Boolean(oauth?.refresh_token_encrypted && oauth.refresh_token_encrypted.length > 0),
+        };
+      }
+
+      setDrafts(next);
+    } finally {
       setLoading(false);
-      return;
     }
-    if (chRes.error) {
-      toast.error(chRes.error.message);
-      setLoading(false);
-      return;
-    }
-
-    const channels = (chRes.data ?? []) as ChannelRow[];
-    const ids = channels.map((c) => c.id);
-    const [wRes, oRes] = await Promise.all([
-      ids.length
-        ? supabase.from("editorial_plan_weekly_slots").select("*").in("channel_id", ids).order("sort_order", { ascending: true })
-        : Promise.resolve({ data: [] as WeeklyRow[], error: null }),
-      ids.length
-        ? supabase
-            .from("social_oauth_connections")
-            .select("id, channel_id, provider, account_label, scopes, access_token_expires_at, updated_at, refresh_token_encrypted")
-            .in("channel_id", ids)
-        : Promise.resolve({ data: [] as OauthRowLoaded[], error: null }),
-    ]);
-
-    const weeklyByChannel = new Map<string, WeeklyRow[]>();
-    for (const row of wRes.data ?? []) {
-      const list = weeklyByChannel.get(row.channel_id) ?? [];
-      list.push(row);
-      weeklyByChannel.set(row.channel_id, list);
-    }
-    for (const [cid, list] of weeklyByChannel) {
-      list.sort((a, b) => a.sort_order - b.sort_order);
-      weeklyByChannel.set(cid, list);
-    }
-
-    const oauthByChannel = new Map<string, OauthRowLoaded>();
-    for (const row of oRes.data ?? []) {
-      oauthByChannel.set(row.channel_id, row as OauthRowLoaded);
-    }
-
-    const byCode = new Map(channels.map((c) => [c.code as EditorialChannelCode, c]));
-    const next: Partial<Record<EditorialChannelCode, ChannelDraft>> = {};
-
-    for (const code of EDITORIAL_CHANNEL_ORDER) {
-      const ch = byCode.get(code);
-      if (!ch) continue;
-      const rows = weeklyByChannel.get(ch.id) ?? [];
-      const oauth = oauthByChannel.get(ch.id);
-      next[code] = {
-        channelId: ch.id,
-        horizonWeeks: ch.horizon_weeks,
-        mixPillar: Number(ch.mix_pillar),
-        mixSupport: Number(ch.mix_support),
-        mixUtility: Number(ch.mix_utility),
-        timezone: ch.timezone || "Europe/Rome",
-        slotRows:
-          rows.length > 0
-            ? rows.map((r) => ({
-                localKey: r.id,
-                day_of_week: r.day_of_week,
-                time_of_day: (r.time_of_day as string).slice(0, 5),
-                content_format: r.content_format ?? "",
-              }))
-            : [emptySlotRow()],
-        oauthId: oauth?.id ?? null,
-        oauthProvider: oauth?.provider ?? oauthProviderForChannel(code),
-        oauthAccountLabel: oauth?.account_label ?? "",
-        oauthScopes: oauth?.scopes ?? "",
-        oauthHasToken: Boolean(oauth?.refresh_token_encrypted && oauth.refresh_token_encrypted.length > 0),
-      };
-    }
-
-    setDrafts(next);
-    setLoading(false);
   }, [navigate]);
 
   useEffect(() => {
@@ -378,23 +388,41 @@ export default function AdminEditorialPlanSettingsDialog({
         },
       });
 
-      const payload = (await res.json().catch(() => ({}))) as {
+      const raw = await res.text();
+      let payload: {
         authorization_url?: string;
         error?: string;
         hint?: string;
         reason?: string;
-      };
+        msg?: string;
+      } = {};
+      if (raw) {
+        try {
+          payload = JSON.parse(raw) as typeof payload;
+        } catch {
+          payload = {};
+        }
+      }
 
       if (!res.ok) {
-        const msg = payload.error || payload.reason || res.statusText;
+        const msg =
+          payload.error ||
+          payload.reason ||
+          payload.msg ||
+          (raw && !raw.trim().startsWith("{") ? raw.trim().slice(0, 240) : "") ||
+          res.statusText;
         const hint = payload.hint;
-        toast.error(hint ? `${msg}: ${hint}` : msg);
+        toast.error(hint ? `${msg}: ${hint}` : msg || `Errore HTTP ${res.status}`);
         setOauthRedirecting(null);
         return;
       }
 
       if (!payload.authorization_url) {
-        toast.error("Risposta OAuth senza authorization_url.");
+        toast.error(
+          raw && raw.length < 400
+            ? `Risposta OAuth non valida: ${raw}`
+            : "Risposta OAuth senza authorization_url (controlla che la function social-oauth-start sia deployata).",
+        );
         setOauthRedirecting(null);
         return;
       }
@@ -419,7 +447,7 @@ export default function AdminEditorialPlanSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4">
+        <div className="min-h-[220px] max-h-[calc(92vh-9.5rem)] overflow-y-auto overscroll-contain px-6 pb-4">
           {loading ? (
             <p className="text-sm text-muted-foreground animate-pulse py-6">Caricamento canali…</p>
           ) : (

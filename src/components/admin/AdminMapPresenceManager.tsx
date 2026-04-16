@@ -19,6 +19,7 @@ import {
 import {
   buildMapPresenceUpsertPayload,
   getMapPresenceIconMarkup,
+  isMissingMapPresenceRelationError,
   mapPresenceTrackerIds,
   mergeMapPresenceTrackers,
   type MapPresenceMarkerKind,
@@ -177,7 +178,18 @@ const AdminMapPresenceManager = () => {
         .in("id", [...mapPresenceTrackerIds])
         .order("id", { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        if (isMissingMapPresenceRelationError(error)) {
+          const trackerMap = mergeMapPresenceTrackers([]);
+          setForms({
+            boat: createTrackerFormState(trackerMap.boat),
+            crew: createTrackerFormState(trackerMap.crew),
+          });
+          toast.error("La tabella dei tracker non e ancora disponibile sul database. La mappa e visibile, ma prima applica la migration.");
+          return;
+        }
+        throw error;
+      }
 
       const trackerMap = mergeMapPresenceTrackers((data || []) as MapPresenceTrackerRow[]);
       setForms({
@@ -186,7 +198,12 @@ const AdminMapPresenceManager = () => {
       });
     } catch (error) {
       console.error("Failed to load logbook map markers", error);
-      toast.error("Impossibile caricare i tracker della mappa.");
+      const trackerMap = mergeMapPresenceTrackers([]);
+      setForms({
+        boat: createTrackerFormState(trackerMap.boat),
+        crew: createTrackerFormState(trackerMap.crew),
+      });
+      toast.error("Impossibile caricare i tracker dal database. Ho aperto comunque l'editor locale.");
     } finally {
       setLoading(false);
     }
