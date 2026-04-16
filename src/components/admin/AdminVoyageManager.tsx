@@ -2384,6 +2384,7 @@ const AdminVoyageManager = ({
     await reorderWaypoint(waypoint.voyage_id, index, targetIndex);
   }, [reorderWaypoint]);
 
+  const persistedSelectedWaypoints = selectedVoyageId ? (persistedWaypointsRef.current[selectedVoyageId] || []) : [];
   const selectedVoyageHasCachedGeometry = getCachedGeometryCoordinates(selectedVoyage).length >= 2;
   const isRouteDraftDirty = Boolean(
     selectedVoyageId && serializeWaypointDrafts(selectedWaypoints) !== serializeWaypointDrafts(persistedSelectedWaypoints)
