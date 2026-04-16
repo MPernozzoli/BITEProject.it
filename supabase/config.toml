@@ -45,7 +45,8 @@ project_id = "vdflrzcmlipvtardannd"
     verify_jwt = false
   [functions.publish-scheduled-articles]
     verify_jwt = false
+  # false: il gateway non deve rifiutare il JWT prima del codice; l’auth è in requireAdmin() nella function.
   [functions.social-oauth-start]
-    verify_jwt = true
+    verify_jwt = false
   [functions.social-oauth-callback]
     verify_jwt = false

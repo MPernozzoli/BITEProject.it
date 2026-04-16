@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import {
   bindMapToContainerResize,
   createCartoRasterStyle,
+  isMapLibreSupported,
   requestMapResize,
 } from "@/lib/maplibre";
 import {
@@ -157,6 +159,8 @@ const AdminMapPresenceManager = () => {
   const [savingId, setSavingId] = useState<MapPresenceTrackerId | null>(null);
   const [activeTrackerId, setActiveTrackerId] = useState<MapPresenceTrackerId>("boat");
   const [placingTrackerId, setPlacingTrackerId] = useState<MapPresenceTrackerId | null>(null);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -332,42 +336,60 @@ const AdminMapPresenceManager = () => {
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
+    if (mapUnavailable) return;
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: createCartoRasterStyle(),
-      center: [15, 40],
-      zoom: 5,
-      attributionControl: false,
-    });
+    if (!isMapLibreSupported()) {
+      setMapUnavailable(true);
+      return;
+    }
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on("load", () => requestMapResize(map));
+    let map: maplibregl.Map | null = null;
 
-    map.on("click", (event) => {
-      const target = event.originalEvent.target as HTMLElement | null;
-      if (target?.closest(".map-presence-marker")) return;
+    try {
+      map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: createCartoRasterStyle(),
+        center: [15, 40],
+        zoom: 5,
+        attributionControl: false,
+      });
 
-      const trackerId = placingTrackerIdRef.current;
-      if (!trackerId) return;
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      map.on("load", () => {
+        setMapLoaded(true);
+        requestMapResize(map);
+      });
 
-      updateTrackerCoordinates(trackerId, event.lngLat.lat, event.lngLat.lng);
-      setActiveTrackerId(trackerId);
-      setPlacingTrackerId(null);
-      toast.success(trackerId === "boat" ? "Nuova posizione barca impostata." : "Nuova posizione crew impostata.");
-    });
+      map.on("click", (event) => {
+        const target = event.originalEvent.target as HTMLElement | null;
+        if (target?.closest(".map-presence-marker")) return;
 
-    mapResizeCleanupRef.current = bindMapToContainerResize(map, mapContainerRef.current);
-    mapRef.current = map;
+        const trackerId = placingTrackerIdRef.current;
+        if (!trackerId) return;
+
+        updateTrackerCoordinates(trackerId, event.lngLat.lat, event.lngLat.lng);
+        setActiveTrackerId(trackerId);
+        setPlacingTrackerId(null);
+        toast.success(trackerId === "boat" ? "Nuova posizione barca impostata." : "Nuova posizione crew impostata.");
+      });
+
+      mapResizeCleanupRef.current = bindMapToContainerResize(map, mapContainerRef.current);
+      mapRef.current = map;
+    } catch (error) {
+      console.error("Failed to initialize admin map presence map", error);
+      setMapUnavailable(true);
+      setMapLoaded(false);
+    }
 
     return () => {
       clearPreviewMarkers();
       mapResizeCleanupRef.current?.();
       mapResizeCleanupRef.current = null;
-      map.remove();
+      map?.remove();
       mapRef.current = null;
+      setMapLoaded(false);
     };
-  }, [clearPreviewMarkers, updateTrackerCoordinates]);
+  }, [clearPreviewMarkers, mapUnavailable, updateTrackerCoordinates]);
 
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas();
@@ -485,6 +507,19 @@ const AdminMapPresenceManager = () => {
 
         <div className="relative h-[30rem] overflow-hidden rounded-[26px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(243,246,247,0.7))]">
           <div ref={mapContainerRef} className="absolute inset-0" />
+          {mapUnavailable ? (
+            <div className="absolute inset-0 flex items-center justify-center p-6">
+              <div className="pointer-events-none w-[min(26rem,100%)] rounded-[24px] border border-white/70 bg-white/82 px-5 py-5 text-center shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-sm">
+                <p className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-3">Mappa non disponibile</p>
+                <p className="text-sm font-sans text-foreground/72 leading-relaxed">
+                  Questo browser o dispositivo non riesce a inizializzare MapLibre in questa pagina admin. Puoi comunque inserire latitudine e
+                  longitudine manualmente nei pannelli a destra.
+                </p>
+              </div>
+            </div>
+          ) : !mapLoaded ? (
+            <MapLoadingPlaceholder label="Caricamento mappa tracker" />
+          ) : null}
         </div>
       </section>
 
