@@ -77,6 +77,14 @@ const createTrackerFormState = (row: MapPresenceTrackerRow): TrackerFormState =>
   updated_at: row.updated_at,
 });
 
+const createDefaultTrackerForms = (): Record<MapPresenceTrackerId, TrackerFormState> => {
+  const trackerMap = mergeMapPresenceTrackers([]);
+  return {
+    boat: createTrackerFormState(trackerMap.boat),
+    crew: createTrackerFormState(trackerMap.crew),
+  };
+};
+
 const parseCoordinate = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -154,7 +162,7 @@ const buildTrackerPayload = (
 
 const AdminMapPresenceManager = () => {
   const { session } = useAuth();
-  const [forms, setForms] = useState<Record<MapPresenceTrackerId, TrackerFormState> | null>(null);
+  const [forms, setForms] = useState<Record<MapPresenceTrackerId, TrackerFormState>>(createDefaultTrackerForms);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<MapPresenceTrackerId | null>(null);
   const [activeTrackerId, setActiveTrackerId] = useState<MapPresenceTrackerId>("boat");
@@ -184,11 +192,7 @@ const AdminMapPresenceManager = () => {
 
       if (error) {
         if (isMissingMapPresenceRelationError(error)) {
-          const trackerMap = mergeMapPresenceTrackers([]);
-          setForms({
-            boat: createTrackerFormState(trackerMap.boat),
-            crew: createTrackerFormState(trackerMap.crew),
-          });
+          setForms(createDefaultTrackerForms());
           toast.error("La tabella dei tracker non e ancora disponibile sul database. La mappa e visibile, ma prima applica la migration.");
           return;
         }
@@ -202,11 +206,7 @@ const AdminMapPresenceManager = () => {
       });
     } catch (error) {
       console.error("Failed to load logbook map markers", error);
-      const trackerMap = mergeMapPresenceTrackers([]);
-      setForms({
-        boat: createTrackerFormState(trackerMap.boat),
-        crew: createTrackerFormState(trackerMap.crew),
-      });
+      setForms(createDefaultTrackerForms());
       toast.error("Impossibile caricare i tracker dal database. Ho aperto comunque l'editor locale.");
     } finally {
       setLoading(false);
@@ -219,16 +219,13 @@ const AdminMapPresenceManager = () => {
 
   const setTrackerForm = useCallback(
     (id: MapPresenceTrackerId, patch: Partial<TrackerFormState>) => {
-      setForms((current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          [id]: {
-            ...current[id],
-            ...patch,
-          },
-        };
-      });
+      setForms((current) => ({
+        ...current,
+        [id]: {
+          ...current[id],
+          ...patch,
+        },
+      }));
     },
     []
   );
@@ -249,8 +246,6 @@ const AdminMapPresenceManager = () => {
 
   const saveTracker = useCallback(
     async (id: MapPresenceTrackerId) => {
-      if (!forms) return;
-
       setSavingId(id);
       try {
         const payload = buildTrackerPayload(id, forms[id], session?.user.id);
@@ -276,8 +271,6 @@ const AdminMapPresenceManager = () => {
   );
 
   const trackerPreviews = useMemo<TrackerPreview[]>(() => {
-    if (!forms) return [];
-
     return mapPresenceTrackerIds.flatMap((id): TrackerPreview[] => {
       const form = forms[id];
       const coordinates = getTrackerCoordinates(form);
@@ -318,8 +311,6 @@ const AdminMapPresenceManager = () => {
 
   const focusTrackerOnMap = useCallback(
     (id: MapPresenceTrackerId) => {
-      if (!forms) return;
-
       const map = mapRef.current;
       const coordinates = getTrackerCoordinates(forms[id]);
       if (!map || !coordinates) return;
@@ -470,19 +461,6 @@ const AdminMapPresenceManager = () => {
     [forms]
   );
 
-  if (loading || !forms) {
-    return (
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
-        <div className="glass-panel-soft rounded-[30px] min-h-[32rem] animate-pulse" />
-        <div className="grid gap-4">
-          {[0, 1].map((item) => (
-            <div key={item} className="glass-panel-soft rounded-[28px] h-[24rem] animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
       <section className="glass-panel rounded-[30px] p-4 md:p-5 space-y-4">
@@ -499,7 +477,9 @@ const AdminMapPresenceManager = () => {
             </p>
           </div>
           <div className="glass-panel-soft rounded-[22px] px-4 py-3 text-sm font-sans text-muted-foreground">
-            {placingTrackerId
+            {loading
+              ? "Caricamento tracker dal database in corso."
+              : placingTrackerId
               ? `Click sulla mappa per aggiornare ${placingTrackerId === "boat" ? "la barca" : "la crew"}.`
               : "Drag dei marker attivo. Nessun piazzamento in attesa."}
           </div>
