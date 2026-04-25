@@ -366,9 +366,20 @@ const AdminNewsletterManager = () => {
     ] =
       await Promise.all([
         (supabase as any).from("newsletter_messages").select("*").order("updated_at", { ascending: false }),
-        (supabase as any).from("newsletter_deliveries").select("*").order("queued_at", { ascending: false }).limit(800),
-        supabase.from("newsletter_subscribers").select("*").order("updated_at", { ascending: false }),
-        (supabase as any).from("newsletter_events").select("*").order("occurred_at", { ascending: false }).limit(100),
+        (supabase as any)
+          .from("newsletter_deliveries")
+          .select("id, newsletter_message_id, status, open_count, click_count, queued_at")
+          .order("queued_at", { ascending: false })
+          .limit(300),
+        supabase
+          .from("newsletter_subscribers")
+          .select("id, email, subscribed, profile_id, created_at, updated_at")
+          .order("updated_at", { ascending: false }),
+        (supabase as any)
+          .from("newsletter_events")
+          .select("id, email, event_type, occurred_at, processed_at")
+          .order("occurred_at", { ascending: false })
+          .limit(100),
         (supabase as any)
           .from("newsletter_unsubscribe_feedback")
           .select("*")
