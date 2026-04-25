@@ -264,14 +264,15 @@ async function authorizeRequest(
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (claims?.role === 'service_role') {
+  if (serviceRoleKey && token === serviceRoleKey) {
     return { ok: true }
   }
 
-  const userId = typeof claims?.sub === 'string' ? claims.sub : null
-  if (!userId) {
+  const { data: userData, error: userError } = await supabase.auth.getUser(token)
+  const userId = userData?.user?.id
+  if (userError || !userId) {
     return {
       ok: false,
       response: jsonResponse({ error: 'Unauthorized' }, 401),
