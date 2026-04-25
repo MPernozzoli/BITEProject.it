@@ -802,7 +802,7 @@ const ArticlePage = () => {
 
             <aside className="min-w-0 space-y-8">
               {shouldShowMapWidget && (
-                <div className="lg:sticky lg:top-24 space-y-8">
+                <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1 space-y-8">
                   <LazyArticleMapAside
                     latitude={fallbackSceneCoordinates?.latitude ?? article.latitude ?? 0}
                     longitude={fallbackSceneCoordinates?.longitude ?? article.longitude ?? 0}
@@ -827,7 +827,7 @@ const ArticlePage = () => {
                 </div>
               )}
               {!shouldShowMapWidget && (
-                <div className="lg:sticky lg:top-24">
+                <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
                   {articleVoyageMediaItems.length > 0 && (
                     <div className="mb-8">
                       <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
