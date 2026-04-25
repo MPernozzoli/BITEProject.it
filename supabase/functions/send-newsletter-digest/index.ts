@@ -47,24 +47,6 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   })
 }
 
-function parseJwtClaims(token: string): Claims {
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return null
-  }
-
-  try {
-    const payload = parts[1]
-      .replaceAll('-', '+')
-      .replaceAll('_', '/')
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
-
-    return JSON.parse(atob(payload)) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
 async function authorizeRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>
@@ -78,14 +60,15 @@ async function authorizeRequest(
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (claims?.role === 'service_role') {
+  if (serviceRoleKey && token === serviceRoleKey) {
     return { ok: true }
   }
 
-  const userId = typeof claims?.sub === 'string' ? claims.sub : null
-  if (!userId) {
+  const { data: userData, error: userError } = await supabase.auth.getUser(token)
+  const userId = userData?.user?.id
+  if (userError || !userId) {
     return {
       ok: false,
       response: jsonResponse({ error: 'Unauthorized' }, 401),
