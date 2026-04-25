@@ -140,11 +140,33 @@ const ProfileNotificationsMenu = ({
   useEffect(() => {
     if (!sessionUserId) return;
 
-    const intervalId = window.setInterval(() => {
-      void loadNotifications();
-    }, 60000);
+    const channel = supabase
+      .channel(`engagement-notifications:${sessionUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "engagement_notifications",
+          filter: `recipient_profile_id=eq.${sessionUserId}`,
+        },
+        () => {
+          void loadNotifications();
+        },
+      )
+      .subscribe();
 
-    return () => window.clearInterval(intervalId);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void supabase.removeChannel(channel);
+    };
   }, [loadNotifications, sessionUserId]);
 
   const unreadCount = useMemo(
