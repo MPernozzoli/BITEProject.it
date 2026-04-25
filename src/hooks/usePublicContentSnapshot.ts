@@ -10,8 +10,8 @@ import {
 
 const PUBLIC_CONTENT_STALE_MS = 1000 * 60 * 15;
 const PUBLIC_CONTENT_CACHE_MS = 1000 * 60 * 60 * 24;
-const PUBLIC_CONTENT_VERSION_STALE_MS = 1000 * 60;
-const PUBLIC_CONTENT_VERSION_POLL_MS = 1000 * 60 * 2;
+const PUBLIC_CONTENT_VERSION_STALE_MS = 1000 * 60 * 5;
+const PUBLIC_CONTENT_VERSION_POLL_MS = 1000 * 60 * 10;
 
 export function usePublicContentSnapshot() {
   const queryClient = useQueryClient();

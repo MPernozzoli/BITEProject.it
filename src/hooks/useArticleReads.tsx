@@ -184,30 +184,32 @@ export function useSyncArticleViewCount(articleId?: string | null, articleSlug?:
   useEffect(() => {
     if (!articleId) return;
 
-    const channel = supabase
-      .channel(`article-live-reads:${articleId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "logbook_articles",
-          filter: `id=eq.${articleId}`,
-        },
-        (payload) => {
-          const nextViewCount =
-            typeof payload.new === "object" && payload.new !== null && "view_count" in payload.new
-              ? Number(payload.new.view_count ?? 0)
-              : null;
+    // Polling lazy on visibility change (sostituisce il canale realtime persistente
+    // per ridurre i consumi di Lovable Cloud). Il view count si aggiorna quando
+    // l'utente torna alla tab.
+    const refreshViewCount = async () => {
+      const { data, error } = await supabase
+        .from("logbook_articles")
+        .select("view_count")
+        .eq("id", articleId)
+        .maybeSingle();
 
-          if (nextViewCount === null || Number.isNaN(nextViewCount)) return;
-          patchArticleViewCountInCache(queryClient, articleId, nextViewCount, articleSlug);
-        }
-      )
-      .subscribe();
+      if (error || !data) return;
+      const nextViewCount = Number(data.view_count ?? 0);
+      if (Number.isNaN(nextViewCount)) return;
+      patchArticleViewCountInCache(queryClient, articleId, nextViewCount, articleSlug);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshViewCount();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      void supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [articleId, articleSlug, queryClient]);
 }

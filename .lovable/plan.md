@@ -1,85 +1,81 @@
-# Piano di implementazione — 7 punti
+## Analisi attuale dei consumi
 
-## 1. Centrare "Scroll to discover" nella home
+Dopo aver esaminato il codice, i principali driver di consumo Lovable Cloud sono:
 
-In `src/pages/Index.tsx` (riga 79), il div con il testo "scroll to discover" e la freccia usa `left-1/2 -translate-x-1/2` ma è wrappato in `flex flex-col items-center` — basta verificare che non ci siano offset. Il fix è assicurarsi che il container sia centrato con `text-center` e che il contenuto sia allineato.
+### 🔴 Polling costanti (egress + DB requests)
+1. **`usePublicContentSnapshot`** — fa polling della "version" pubblica **ogni 2 minuti** per ogni utente attivo, per tutta la durata della sessione. Con anche solo 50 visitatori in pagina = ~1.500 query/h solo per il version-check.
+2. **`ProfileNotificationsMenu`** — ricarica le notifiche **ogni 60 secondi** anche con dropdown chiuso, per ogni utente loggato.
+3. **`useArticleReads` realtime channel** — apre un canale Postgres realtime su `logbook_articles` per ogni articolo aperto, solo per sincronizzare il `view_count`. Realtime ha costo per connessione persistente.
 
-## 2. Rimuovere "Home" dalla navbar
+### 🟡 Query inefficienti
+4. Diverse `select("*")` su tabelle grandi (`voyages`, `logbook_articles`, `newsletter_deliveries` con `.limit(800)` — quest'ultima molto pesante).
+5. `AdminNewsletterManager` carica fino a 800 deliveries + tutti i subscribers in una volta.
 
-In `src/components/Navbar.tsx`, rimuovere `{ to: "/", label: t("nav.home") }` dall'array `links` (riga 90). Il logo BITE già linka a `/`.
+### 🟡 Edge functions sempre attive
+6. 28 edge function deployate. Quelle "public-*" (sitemap, llms, semantic, geo) probabilmente vengono richieste da bot/crawler frequentemente senza caching aggressivo.
 
-## 3. Editor rotte con mappa interattiva (Admin Voyage Manager)
-
-Creare `src/components/admin/AdminVoyageManager.tsx` — sostituisce il vecchio `AdminRouteManager`:
-
-- Lista voyages con CRUD (nome, tipo acqua/terra, status)
-- Mappa MapLibre interattiva per piazzare waypoint con click
-- Il primo click è l'inizio, i successivi sono waypoint intermedi, l'ultimo è la fine
-- I waypoint sono di due tipi, uno solo tecnico (ad esempio, per evitare che il percorso passi attraverso la terra ferma, il secondo invece sono waypoint narrativi. Il primo non lo mostriamo in mappa, facciamo solo curvare il percorso, il seocndo lo indichiamo come punto e può avere info come: Nome, data (singola o doppia - da, a -) e può essere abbinato ad un articolo. 
-- Drag & drop per riordinare waypoint nella lista laterale
-- Calcolo automatico distanza (haversine NM per acqua, OSRM km per terra)
-- Preview rotta in real-time sulla mappa
-- nella pagina logbook al tasto + assoceremo una tendina con opzioni: rotta, articolo, storia. 
-
-## 4. Associazione articoli/storie ai viaggi
-
-Aggiungere sezione "Posizione & Viaggio" in `ArticleEditor.tsx`:
-
-- Mini-mappa MapLibre per selezionare lat/lng con click
-- Geocoding con Nominatim per cercare un luogo
-- Dropdown per selezionare un voyage
-- Tre modalità di associazione:
-  - **"Tutto"**: assegna `voyage_id` senza segment start/end
-  - **1 click sul percorso**: assegna un punto specifico (lat/lng del click, `voyage_segment_start` = indice waypoint più vicino)
-  - **2 click sul percorso**: seleziona una leg (segment_start e segment_end = indici waypoint più vicini ai click)
-- Per il punto singolo: si può cliccare anche in prossimità (non per forza sul percorso), registrando lat/lng reale e associandolo al voyage
-- Per la leg: snap ai waypoint più vicini lungo il percorso
-
-## 5. Articoli mostrati sulla mappa dinamicamente
-
-Già parzialmente implementato in `VoyageMap.tsx`. Estendere:
-
-- Per articoli associati a un segmento: posizionare il marker al punto medio del segmento
-- Per articoli associati a tutto il viaggio: posizionare al punto medio della rotta
-- Per articoli con solo lat/lng: usare quelle coordinate
-- Click su marker → apre `ArticleSlidePanel`
-
-## 6. Pan automatico mappa su selezione articolo
-
-Già parzialmente implementato (flyTo su selectedArticleId). Estendere:
-
-- Se l'articolo è associato a un segmento → fitBounds sui waypoint del segmento
-- Se associato a tutto il viaggio → fitBounds su tutti i waypoint del voyage
-- Se punto singolo → flyTo su lat/lng
-- Se l'articolo ha un "successivo" nella stessa storia → mostrare link nel pannello
-
-## 7. Associazione visuale sulla mappa nell'editor
-
-Nell'editor articoli, quando un voyage è selezionato:
-
-- Mostrare la rotta sulla mini-mappa
-- Tasto "Tutto" per assegnare tutto il viaggio
-- Click su un punto → assegna punto singolo (lat/lng del click, associato al voyage)
-- Click su due punti → seleziona la leg tra i waypoint più vicini (snap al waypoint più prossimo sul percorso)
-- Evidenziare visivamente il segmento selezionato
+### 🟢 Storage/auth
+Sembrano già ottimizzati (no upload massivi, sessioni 30gg).
 
 ---
 
-## File coinvolti
+## Piano di ottimizzazione (zero impatto utente)
 
+### 1. Allungare il polling del version-check pubblico
+**File:** `src/hooks/usePublicContentSnapshot.ts`
+- Portare `PUBLIC_CONTENT_VERSION_POLL_MS` da **2 min → 10 min**.
+- Disattivare polling automatico se la tab è in background (già parzialmente fatto con `refetchIntervalInBackground:false`).
+- Aumentare `PUBLIC_CONTENT_VERSION_STALE_MS` da 1 min → 5 min.
+- **Risparmio stimato: ~80% di query version-check.** L'utente non se ne accorge: il refetch su window focus garantisce comunque freschezza quando torna attivo.
 
-| File                                          | Azione                                                            |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `src/pages/Index.tsx`                         | Fix centering scroll indicator                                    |
-| `src/components/Navbar.tsx`                   | Rimuovere link "Home"                                             |
-| `src/components/admin/AdminVoyageManager.tsx` | **Nuovo** — editor rotte con mappa                                |
-| `src/pages/AdminDashboard.tsx`                | Sostituire AdminRouteManager con AdminVoyageManager               |
-| `src/pages/ArticleEditor.tsx`                 | Aggiungere sezione geo/voyage con mappa interattiva               |
-| `src/components/voyage/VoyageMap.tsx`         | Estendere logica posizionamento marker per segmenti/viaggi interi |
-| `src/pages/Journal.tsx`                       | Estendere logica pan/fitBounds per segmenti                       |
-| `src/components/voyage/ArticleSlidePanel.tsx` | Aggiungere link "articolo successivo" se in una storia            |
+### 2. Notifiche: realtime invece di polling 60s
+**File:** `src/components/ProfileNotificationsMenu.tsx`
+- Sostituire `setInterval(60000)` con un canale realtime sulla tabella `notifications` filtrato per `user_id`. Una sola connessione persistente costa molto meno di un poll/min, e le notifiche arrivano istantaneamente (UX migliore).
+- Fallback: refetch su window focus + apertura dropdown (già presente).
+- **Risparmio: ~60 query/utente/h → praticamente 0.**
 
+### 3. View count realtime → debounce/lazy
+**File:** `src/hooks/useArticleReads.tsx`
+- Il canale realtime su `logbook_articles` per il view_count è "lusso". Sostituirlo con: refetch del count solo quando l'utente torna alla tab (`visibilitychange`) o ogni 5 min se la pagina resta aperta a lungo.
+- In alternativa, eliminare del tutto l'aggiornamento live: il view_count si aggiorna comunque al prossimo caricamento.
+- **Risparmio: 1 connessione realtime persistente per ogni lettore.**
 
-## Nota tecnica
+### 4. Sostituire `select("*")` con colonne esplicite
+**File:** `src/lib/public-content.ts`, `src/pages/Voyages.tsx`, `src/pages/StoryPage.tsx`, `src/pages/PublicProfile.tsx`, `src/components/voyage/ExpandedArticleModal.tsx`
+- Selezionare solo le colonne effettivamente usate dalle UI (escludere campi pesanti tipo `content_html_it`, `content_html_en` quando non servono in liste).
+- **Risparmio: riduzione egress 30-60% su queste pagine** (in particolare le liste articoli/voyages).
 
-Le colonne DB necessarie (`latitude`, `longitude`, `voyage_id`, `voyage_segment_start`, `voyage_segment_end`, `location_name`) sono già presenti nella tabella `logbook_articles`. Le tabelle `voyages` e `voyage_waypoints` esistono già. Non servono migrazioni DB.
+### 5. Admin Newsletter: paginazione/lazy
+**File:** `src/components/admin/AdminNewsletterManager.tsx`
+- Caricare i 800 deliveries solo quando si apre la tab "Deliveries" (non all'apertura del manager).
+- Selezionare solo colonne necessarie per la lista (no `*`).
+- **Risparmio: query admin più leggera, meno load DB.**
+
+### 6. Cache HTTP aggressiva sulle edge functions pubbliche
+**File:** `supabase/functions/public-sitemap/index.ts`, `public-llms/index.ts`, `public-semantic/index.ts`, `public-geo/index.ts`
+- Aggiungere header `Cache-Control: public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400`.
+- Bot/crawler e CDN edge cachano la risposta → meno invocazioni della function.
+- **Risparmio: -70-90% invocazioni edge da crawler.**
+
+### 7. Pulizia edge functions inutilizzate (verifica)
+Verificare se ci sono function deployate ma mai chiamate (es. `preview-transactional-email` solo per dev?). Se sì, eliminarle riduce la superficie billable.
+
+---
+
+## Impatto stimato totale
+- **Database requests: -60/70%** (soprattutto da polling)
+- **Realtime connections: -90%** (eliminato canale view_count)
+- **Egress: -30/40%** (select mirate + cache HTTP)
+- **Edge function invocations: -50%** (cache pubblica)
+
+**Zero impatto sull'esperienza utente percepita.** Anzi, le notifiche realtime miglioreranno la UX rispetto al polling 60s.
+
+---
+
+## Cosa NON tocco
+- Auth/sessioni (già ottimali).
+- TanStack Query cache strategies generali (già buone con `gcTime` lunghi).
+- Schema DB / RLS (cambiamenti rischiosi, non necessari per ottimizzare costi).
+- AI Gateway (consumi separati, già su modelli economici Gemini Flash).
+
+Procedo step-by-step in modalità build dopo la tua approvazione, oppure dimmi se vuoi prioritizzare solo alcuni punti (es. solo 1-2-3 che sono quelli a impatto maggiore).

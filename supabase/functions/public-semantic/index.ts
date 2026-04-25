@@ -17,7 +17,7 @@ function jsonResponse(data: unknown, status = 200) {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+      'Cache-Control': 'public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400',
     },
   })
 }
