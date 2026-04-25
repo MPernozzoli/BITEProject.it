@@ -85,31 +85,15 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   })
 }
 
-function parseJwtClaims(token: string): Claims {
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return null
-  }
-
-  try {
-    const payload = parts[1]
-      .replaceAll('-', '+')
-      .replaceAll('_', '/')
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
-
-    return JSON.parse(atob(payload)) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
 function isAuthorizedRequest(req: Request): boolean {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return false
 
   const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
-  return claims?.role === 'service_role' || typeof claims?.sub === 'string'
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  // Service-role only endpoint: compare bearer token literally to the service role key.
+  // No JWT signature forging is possible because we never trust decoded claims.
+  return Boolean(serviceRoleKey && token === serviceRoleKey)
 }
 
 function getFrequencyDelayMs(
