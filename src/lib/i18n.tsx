@@ -34,11 +34,6 @@ const translations: Translations = {
   "hero.subtitle": { en: "A sailboat. Two humans. Two dogs. Open water.\nStories from a life that moves slowly, breaks often, and means something.", it: "Una barca a vela. Due umani. Due cani. Mare aperto.\nStorie da una vita che si muove piano, si rompe spesso, e ha un senso." },
   "hero.cta.journey": { en: "Follow the Journey", it: "Segui il viaggio" },
   "hero.cta.collaborate": { en: "Collaborate With Us", it: "Collabora con noi" },
-  "hero.kicker": { en: "S/Y Spritz · Logbook & voyages", it: "S/Y Spritz · Diario e rotte" },
-  "home.marquee": {
-    en: "Refit notes · Passage weather · Dog crew · Baltic mist · Tool rolls · Night watches · Duodji to Spritz · ",
-    it: "Note di refit · Meteo di traversata · Ciurma a quattro zampe · Nebbie baltiche · Cassetti attrezzi · Turni di notte · Da Duodji a Spritz · ",
-  },
 
   // Intro
   "intro.label": { en: "What is BITE", it: "Cos'è BITE" },

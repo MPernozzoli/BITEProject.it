@@ -28,7 +28,6 @@ import {
   topicsContainerVariants,
   topicItemVariants,
 } from "@/components/home/HomeAnimatedSection";
-import { HomeMarquee } from "@/components/home/HomeMarquee";
 
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
@@ -893,16 +892,8 @@ const Index = () => {
 
   const journalFeaturedLayout = latestArticles.length >= 3;
 
-  const titleEase: [number, number, number, number] = [0.16, 1, 0.3, 1];
-  const topicBentoSpans = [
-    "md:col-span-4 md:min-h-[168px]",
-    "md:col-span-2 md:min-h-[168px]",
-    "md:col-span-2 md:row-start-2 md:min-h-[168px]",
-    "md:col-span-4 md:row-start-2 md:min-h-[168px]",
-  ] as const;
-
   return (
-    <>
+    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <StructuredData
         id="homepage"
         data={[
@@ -924,48 +915,22 @@ const Index = () => {
           },
         ]}
       />
-      <div className="flex flex-col">
-      <section className="home-hero relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
-        <div className="absolute inset-0 z-0">
+      <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
+        <div className="absolute inset-0">
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
         </div>
-        <div className="pointer-events-none absolute inset-0 z-[1] home-hero__veil" aria-hidden />
-        <div className="pointer-events-none absolute inset-0 z-[1] home-hero__mesh" aria-hidden />
-        <div className="pointer-events-none absolute inset-0 z-[1] home-hero__gridlines" aria-hidden />
-        <div className="home-hero__orb home-hero__orb--a" aria-hidden />
-        <div className="home-hero__orb home-hero__orb--b" aria-hidden />
 
         <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-8rem)] max-w-6xl items-center justify-center md:justify-start">
-          <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center md:max-w-[min(34rem,92vw)] md:px-10 md:py-10 md:text-left">
-            <p className="home-hero-kicker text-center md:text-left">{t("hero.kicker")}</p>
-            <h1 className="editorial-heading hero-copy-text text-4xl md:text-[2.65rem] lg:text-7xl mb-6 tracking-tight md:leading-[1.04]">
-              {t("hero.title").split("\n").map((line, i) => (
-                <motion.span
-                  key={i}
-                  className="block"
-                  initial={{ opacity: 0, y: 32 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.06 + i * 0.12, duration: 0.72, ease: titleEase }}
-                >
-                  {line}
-                </motion.span>
-              ))}
+          <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center slide-up md:max-w-2xl md:px-10 md:py-10 md:text-left">
+            <h1 className="editorial-heading hero-copy-text text-4xl md:text-6xl lg:text-7xl mb-6 whitespace-pre-line tracking-tight md:leading-[1.05]">
+              {t("hero.title")}
             </h1>
-            <motion.p
-              className="editorial-body hero-copy-text text-base md:text-lg max-w-2xl mx-auto md:mx-0 mb-10 whitespace-pre-line leading-relaxed text-white/[0.93]"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.38, duration: 0.62, ease: titleEase }}
-            >
+            <p className="editorial-body hero-copy-text text-base md:text-lg max-w-2xl mx-auto md:mx-0 mb-10 whitespace-pre-line leading-relaxed text-white/92">
               {t("hero.subtitle")}
-            </motion.p>
-            <motion.div
-              className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start"
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.55, ease: titleEase }}
-            >
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
               <Link
                 to="/logbook"
                 className="group glass-button hero-cta inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
@@ -984,11 +949,11 @@ const Index = () => {
                   <ArrowRight size={16} aria-hidden />
                 </span>
               </Link>
-            </motion.div>
+            </div>
           </div>
         </div>
 
-        <div className="absolute bottom-10 left-1/2 z-10 flex -translate-x-1/2 md:left-auto md:right-6 md:translate-x-0 lg:right-10">
+        <div className="absolute bottom-10 left-1/2 z-10 flex -translate-x-1/2">
           <div className="hero-scroll-cue">
             <span className="hero-scroll-cue__label">{t("crew.scroll")}</span>
             <span className="hero-scroll-cue__line" aria-hidden="true">
@@ -997,28 +962,13 @@ const Index = () => {
           </div>
         </div>
       </section>
-      <HomeMarquee text={t("home.marquee")} />
-      </div>
 
-      <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <HomeAnimatedSection className="page-section pt-4 md:pt-6">
-        <div className="page-section-narrow glass-panel rounded-[34px] px-6 py-10 md:px-12 md:py-14 lg:px-16">
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,auto)_minmax(0,1fr)] md:gap-12 lg:gap-16 md:items-start">
-            <div className="hidden md:flex flex-col items-center gap-4 pt-1" aria-hidden>
-              <span className="select-none font-serif text-7xl font-semibold leading-none text-teal/[0.18] lg:text-8xl">
-                01
-              </span>
-              <span className="h-28 w-px shrink-0 bg-gradient-to-b from-teal/45 via-teal/15 to-transparent" />
-            </div>
-            <div>
-              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-6 md:mb-8">
-                {t("intro.label")}
-              </p>
-              <p className="home-intro-dropcap editorial-body text-lg md:text-xl text-foreground/[0.84] leading-[1.75] md:max-w-[62ch]">
-                {t("intro.text")}
-              </p>
-            </div>
-          </div>
+        <div className="page-section-narrow glass-panel rounded-[34px] px-8 py-10 md:px-12 md:py-14">
+          <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
+            {t("intro.label")}
+          </p>
+          <p className="editorial-body text-lg md:text-xl text-foreground/82 leading-relaxed">{t("intro.text")}</p>
         </div>
       </HomeAnimatedSection>
 
@@ -1029,45 +979,33 @@ const Index = () => {
               {t("values.label")}
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-12 md:gap-5 md:auto-rows-min">
-            {[1, 2, 3, 4].map((i) => {
-              const bento =
-                i === 1
-                  ? "md:col-span-7"
-                  : i === 2
-                    ? "md:col-span-5"
-                    : i === 3
-                      ? "md:col-span-5 md:row-start-2"
-                      : "md:col-span-7 md:row-start-2";
-              const tone =
-                i === 1
-                  ? "md:border-l-[3px] md:border-l-teal/40 md:pl-8"
-                  : i === 4
-                    ? "md:border-t md:border-t-white/50 md:pt-8"
-                    : "";
-              return (
-                <div
-                  key={i}
-                  className={`glass-panel-soft rounded-[28px] p-6 md:p-8 transition-transform duration-reveal ease-out-expo md:hover:-translate-y-1 ${bento} ${tone}`}
-                >
-                  <p className="mb-3 font-sans text-[10px] font-medium uppercase tracking-[0.28em] text-muted-foreground/80">
-                    {String(i).padStart(2, "0")}
-                  </p>
-                  <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
-                  <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className={`glass-panel-soft rounded-[28px] p-6 md:p-8 transition-transform duration-reveal ease-out-expo md:hover:-translate-y-0.5 ${i >= 3 ? "md:mt-8" : ""}`}
+              >
+                <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
+                <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
+              </div>
+            ))}
           </div>
         </div>
       </HomeAnimatedSection>
 
       <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
-          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
-            <div className="relative order-2 grid grid-cols-2 gap-4 lg:order-1 lg:gap-5">
-              <div className="glass-frame relative z-[1] aspect-[3/4] rounded-[28px] p-2 md:-translate-x-1 md:-rotate-[1.4deg] md:shadow-[0_28px_70px_rgba(15,23,42,0.18)]">
-                <div className="h-full overflow-hidden rounded-[22px]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div>
+              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
+                {t("life.label")}
+              </p>
+              <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line">{t("life.title")}</h2>
+              <p className="editorial-body text-muted-foreground leading-relaxed text-lg">{t("life.text")}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="glass-frame rounded-[28px] p-2 aspect-[3/4]">
+                <div className="overflow-hidden rounded-[22px] h-full">
                   <img
                     src={boatSunset}
                     alt="Spritz at sunset"
@@ -1077,8 +1015,8 @@ const Index = () => {
                   />
                 </div>
               </div>
-              <div className="glass-frame relative z-[2] mt-8 aspect-[3/4] rounded-[28px] p-2 md:translate-x-1 md:translate-y-2 md:rotate-[2deg] md:shadow-[0_32px_80px_rgba(15,23,42,0.2)]">
-                <div className="h-full overflow-hidden rounded-[22px]">
+              <div className="glass-frame rounded-[28px] p-2 aspect-[3/4] mt-8">
+                <div className="overflow-hidden rounded-[22px] h-full">
                   <img
                     src={dogsMarina}
                     alt="Dogs at the marina"
@@ -1088,15 +1026,6 @@ const Index = () => {
                   />
                 </div>
               </div>
-            </div>
-            <div className="order-1 lg:order-2">
-              <p className="glass-chip mb-8 inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
-                {t("life.label")}
-              </p>
-              <h2 className="editorial-heading mb-8 whitespace-pre-line text-3xl md:text-5xl lg:text-[2.85rem] lg:leading-[1.08]">
-                {t("life.title")}
-              </h2>
-              <p className="editorial-body text-lg leading-relaxed text-muted-foreground">{t("life.text")}</p>
             </div>
           </div>
         </div>
@@ -1110,7 +1039,7 @@ const Index = () => {
             </p>
           </div>
           <motion.div
-            className="grid grid-cols-1 gap-4 md:grid-cols-6 md:gap-3"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5"
             variants={topicsContainerVariants}
             initial="hidden"
             whileInView="visible"
@@ -1121,17 +1050,13 @@ const Index = () => {
               { key: "navigation", icon: Compass },
               { key: "remote", icon: Wifi },
               { key: "storytelling", icon: Pen },
-            ].map(({ key, icon: Icon }, topicIndex) => (
-              <motion.div
-                key={key}
-                variants={topicItemVariants}
-                className={`home-topic-bento group relative isolate flex flex-col overflow-hidden rounded-[26px] border border-white/55 bg-gradient-to-br from-white/80 to-white/45 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] active:scale-[0.99] transition-shadow duration-reveal ease-out-expo hover:shadow-[0_20px_50px_rgba(15,23,42,0.1)] ${topicBentoSpans[topicIndex]}`}
-              >
-                <div className="relative z-[1] mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/70 bg-white/55 text-slate-800 shadow-sm">
-                  <Icon size={20} strokeWidth={1.5} />
+            ].map(({ key, icon: Icon }) => (
+              <motion.div key={key} variants={topicItemVariants} className="glass-chip-light rounded-[28px] p-6 active:scale-[0.99] transition-transform duration-glass ease-out-expo">
+                <div className="glass-chip-light inline-flex h-12 w-12 items-center justify-center mb-5 text-slate-800">
+                  <Icon size={20} />
                 </div>
-                <h3 className="relative z-[1] editorial-heading mb-2 text-xl text-slate-950 md:text-[1.35rem]">{t(`topics.${key}`)}</h3>
-                <p className="relative z-[1] text-sm leading-relaxed text-muted-foreground">{t(`topics.${key}.text`)}</p>
+                <h3 className="editorial-heading text-xl mb-3 text-slate-950">{t(`topics.${key}`)}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{t(`topics.${key}.text`)}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -1356,8 +1281,7 @@ const Index = () => {
           </div>
         </HomeAnimatedSection>
       ) : null}
-      </div>
-    </>
+    </div>
   );
 };
 
