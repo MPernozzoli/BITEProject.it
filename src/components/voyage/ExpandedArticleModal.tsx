@@ -501,7 +501,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
   if (!slug) return null;
 
-  return (
+  const modalContent = (
     <>
       <div
         className="fixed inset-0 z-[70] bg-black/28 backdrop-blur-xl"
