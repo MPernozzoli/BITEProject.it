@@ -650,7 +650,7 @@ const Journal = () => {
             const sidebarVisible = !isMobile && sidebarOpen && !isSidebarAutoHidden;
             return (
               <div
-                className={`fixed bottom-6 z-30 min-w-0 pointer-events-none transition-all duration-300 ease-out ${
+                className={`fixed bottom-6 z-30 min-w-0 pointer-events-none transition-[left,right,max-width,transform,opacity] duration-300 ease-out-expo ${
                   isMobile
                     ? "left-3 right-3 max-w-none"
                     : sidebarVisible
@@ -681,13 +681,13 @@ const Journal = () => {
 
           {/* Floating controls — top right */}
           <div
-            className={`fixed top-24 z-30 flex flex-col gap-2 transition-all duration-300 ${
+            className={`fixed top-24 z-30 flex flex-col gap-2 transition-[right,transform] duration-300 ease-out-expo ${
               shouldOffsetControlsForDetail ? "right-4 lg:right-[29rem] xl:right-[30.5rem]" : "right-4"
             }`}
           >
             <button
               onClick={toggleSidebar}
-              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
+              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
               title={isMobile ? (mobileSidebarMode === "expanded" ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
             >
               {isMobile ? (
@@ -698,7 +698,7 @@ const Journal = () => {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors"
+              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
               title="Grid view"
             >
               <List size={16} />
@@ -706,7 +706,7 @@ const Journal = () => {
             {isAdmin && (
               <Link
                 to="/admin/article/new"
-                className="rounded-full bg-primary text-primary-foreground shadow-lg p-2.5 hover:opacity-90 transition-opacity flex items-center justify-center"
+                className="rounded-full bg-primary text-primary-foreground shadow-lg p-2.5 hover:opacity-90 transition-opacity duration-interaction ease-out-expo flex items-center justify-center active:scale-[0.96]"
               >
                 <Plus size={16} />
               </Link>
@@ -732,13 +732,13 @@ const Journal = () => {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-sans tracking-wider uppercase transition-colors ${
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-sans tracking-wider uppercase transition-colors duration-interaction ease-out-expo ${
                       focusedVoyageId ? "bg-accent/12 text-accent" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Navigation size={10} />
                     {stats.voyageCount} {lang === "it" ? "viaggi" : "voyages"}
-                    <ChevronDown size={10} className={`transition-transform ${voyageFilterOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown size={10} className={`transition-transform duration-200 ease-out-expo ${voyageFilterOpen ? "rotate-180" : ""}`} />
                   </button>
                 </PopoverTrigger>
                 <PopoverContent
@@ -755,7 +755,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => setVoyageTypeFilter("all")}
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                         voyageTypeFilter === "all"
                           ? "bg-foreground text-background"
                           : "bg-white/60 text-muted-foreground hover:text-foreground"
@@ -766,7 +766,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => setVoyageTypeFilter("water")}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                         voyageTypeFilter === "water"
                           ? "bg-sky-100 text-sky-800"
                           : "bg-sky-50/70 text-sky-700 hover:bg-sky-100"
@@ -778,7 +778,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => setVoyageTypeFilter("land")}
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors ${
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                         voyageTypeFilter === "land"
                           ? "bg-orange-100 text-orange-800"
                           : "bg-orange-50/70 text-orange-700 hover:bg-orange-100"
@@ -792,7 +792,7 @@ const Journal = () => {
                     <button
                       type="button"
                       onClick={() => handleVoyageFilterSelect(null)}
-                      className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors ${
+                      className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors duration-interaction ease-out-expo ${
                         !focusedVoyageId ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
                       }`}
                     >
@@ -818,7 +818,7 @@ const Journal = () => {
                           key={voyage.id}
                           type="button"
                           onClick={() => handleVoyageFilterSelect(voyage.id)}
-                          className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors ${
+                          className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors duration-interaction ease-out-expo ${
                             isSelected ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
                           }`}
                         >
@@ -860,7 +860,7 @@ const Journal = () => {
 
           {/* Floating sidebar — article list */}
           <div
-            className={`fixed z-30 overflow-hidden bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] flex flex-col transition-all duration-300 ease-out ${
+            className={`fixed z-30 overflow-hidden bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] flex flex-col transition-[transform,opacity,height] duration-300 ease-out-expo ${
               isMobile
                 ? "left-3 right-3 bottom-3 top-auto rounded-[28px]"
                 : "top-24 left-4 bottom-4 w-[340px] xl:w-[390px] rounded-[32px]"
@@ -979,7 +979,7 @@ const Journal = () => {
                     setMapFallbackActive(false);
                     setViewMode("map");
                   }}
-                  className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                  className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo"
                 >
                   <Map size={14} />
                 </button>
@@ -1026,7 +1026,7 @@ const Journal = () => {
                       );
                   return (
                     <Link to={`/logbook/${article.slug}`} key={article.id} className="block group">
-                        <article className="glass-panel-soft rounded-[30px] p-3 h-full transition-transform duration-300 group-hover:-translate-y-1">
+                        <article className="glass-panel-soft rounded-[30px] p-3 h-full transition-transform duration-reveal ease-out-expo group-hover:-translate-y-1 active:scale-[0.99]">
                           <div className="glass-frame rounded-[24px] p-1.5 mb-4">
                             <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
                             {article.cover_image ? (
@@ -1051,7 +1051,7 @@ const Journal = () => {
                               <span key={tag.id} className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans text-accent">#{tag.name}</span>
                             ))}
                           </div>
-                          <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
+                          <h3 className="editorial-heading text-lg md:text-xl mb-2 group-hover:text-accent transition-colors duration-interaction ease-out-expo line-clamp-2">
                             {title}
                           </h3>
                           <p className="text-sm text-muted-foreground font-sans line-clamp-2">{excerpt}</p>

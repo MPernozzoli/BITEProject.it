@@ -17,6 +17,8 @@ import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-pres
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
+const MAP_MARKER_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+
 interface VoyageMapProps {
   voyages: Voyage[];
   waypointsMap: Record<string, VoyageWaypoint[]>;
@@ -1009,7 +1011,7 @@ const VoyageMap = ({
         );
         const size = 17;
         const el = document.createElement("div");
-        el.style.cssText = `cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ease;`;
+        el.style.cssText = `cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ${MAP_MARKER_EASE};`;
 
         const dot = document.createElement("div");
         dot.style.cssText = `
@@ -1017,7 +1019,7 @@ const VoyageMap = ({
           border:1.5px solid hsl(0,0%,100%);
           background:${meta.fillColor};
           box-shadow:0 1px 5px rgba(15,23,42,0.14);
-          transition:transform 0.2s ease;
+          transition:transform 0.2s ${MAP_MARKER_EASE};
         `;
         el.appendChild(dot);
 
@@ -1182,7 +1184,7 @@ const VoyageMap = ({
 
         const el = document.createElement("div");
         el.className = "voyage-marker-wrap";
-        el.style.cssText = `cursor:pointer;z-index:6;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ease;`;
+        el.style.cssText = `cursor:pointer;z-index:6;display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${isDimmed ? "0.32" : "1"};transition:opacity 0.25s ${MAP_MARKER_EASE};`;
 
         const circle = document.createElement("div");
         circle.style.cssText = `
@@ -1190,7 +1192,7 @@ const VoyageMap = ({
           border:3px solid ${isFocused ? "hsl(180,20%,35%)" : "#fff"};
           background:${article.cover_image ? `url(${article.cover_image}) center/cover` : "hsl(220,40%,15%)"};
           box-shadow:${isFocused ? "0 0 0 3px hsla(180,20%,35%,0.3),0 4px 12px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.25)"};
-          transition:all 0.3s ease;
+          transition:opacity 0.3s ${MAP_MARKER_EASE}, transform 0.3s ${MAP_MARKER_EASE}, box-shadow 0.3s ${MAP_MARKER_EASE};
         `;
 
         const label = document.createElement("div");
@@ -1203,7 +1205,7 @@ const VoyageMap = ({
           box-shadow:0 2px 10px rgba(0,0,0,0.12);
           max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
           text-align:center;pointer-events:none;
-          opacity:${isFocused ? "1" : "0"};transition:opacity 0.2s,max-width 0.2s ease,box-shadow 0.2s;
+          opacity:${isFocused ? "1" : "0"};transition:opacity 0.2s ${MAP_MARKER_EASE}, max-width 0.2s ${MAP_MARKER_EASE}, box-shadow 0.2s ${MAP_MARKER_EASE};
         `;
         label.style.cssText = labelBase;
         if (isFocused) {
@@ -1418,7 +1420,7 @@ const VoyageMap = ({
             <button
               type="button"
               onClick={onMapUnavailable}
-              className="inline-flex items-center justify-center rounded-full border border-white/60 bg-background/80 px-4 py-2 text-xs font-sans text-foreground shadow-lg transition-colors hover:bg-background"
+              className="inline-flex items-center justify-center rounded-full border border-white/60 bg-background/80 px-4 py-2 text-xs font-sans text-foreground shadow-lg transition-colors duration-interaction ease-out-expo hover:bg-background active:scale-[0.98]"
             >
               {lang === "it" ? "Apri vista lista" : "Open list view"}
             </button>

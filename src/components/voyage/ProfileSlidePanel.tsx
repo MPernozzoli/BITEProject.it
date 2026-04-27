@@ -260,7 +260,7 @@ const ProfileSlidePanel = ({
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 lg:hidden ${
+        className={`fixed inset-0 bg-black/20 backdrop-blur-sm z-40 transition-opacity duration-300 ease-out-expo lg:hidden ${
           isAutoHidden ? "opacity-0 pointer-events-none" : "opacity-100"
         }`}
         onClick={onClose}
@@ -268,7 +268,7 @@ const ProfileSlidePanel = ({
       />
 
       <div
-        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col transition-[opacity,transform] duration-300 ${
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col transition-[opacity,transform] duration-300 ease-out-expo ${
           isAutoHidden ? "translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
         }`}
       >
@@ -276,7 +276,7 @@ const ProfileSlidePanel = ({
           <button
             type="button"
             onClick={onBackToArticle}
-            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors"
+            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors duration-interaction ease-out-expo active:scale-[0.98]"
           >
             <ArrowLeft size={14} />
             {lang === "it" ? "Torna all'articolo" : "Back to article"}
@@ -285,7 +285,7 @@ const ProfileSlidePanel = ({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/60 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/60 text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo shrink-0 active:scale-[0.96]"
             aria-label={lang === "it" ? "Chiudi" : "Close"}
           >
             <X size={18} />
@@ -373,7 +373,7 @@ const ProfileSlidePanel = ({
                           href={social.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-[22px] border border-stone-200/90 bg-white/78 px-4 py-3 hover:bg-white/92 transition-colors"
+                          className="rounded-[22px] border border-stone-200/90 bg-white/78 px-4 py-3 hover:bg-white/92 transition-colors duration-interaction ease-out-expo"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>

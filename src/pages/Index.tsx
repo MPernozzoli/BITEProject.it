@@ -22,6 +22,12 @@ import {
   type HomepageHeroVideoPool,
 } from "@/lib/public-content";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
+import { motion } from "framer-motion";
+import {
+  HomeAnimatedSection,
+  topicsContainerVariants,
+  topicItemVariants,
+} from "@/components/home/HomeAnimatedSection";
 
 import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
@@ -864,6 +870,28 @@ const Index = () => {
     );
   };
 
+  const journalGridClass =
+    latestArticles.length < 2
+      ? "grid grid-cols-1 gap-6"
+      : latestArticles.length === 2
+        ? "grid grid-cols-1 gap-6 md:grid-cols-5 md:gap-8"
+        : "grid grid-cols-1 gap-6 md:grid-cols-3 md:grid-rows-2 md:gap-6 md:auto-rows-min";
+
+  const getJournalItemClass = (index: number) => {
+    const n = latestArticles.length;
+    if (n === 2) {
+      return index === 0 ? "md:col-span-3" : "md:col-span-2";
+    }
+    if (n >= 3) {
+      if (index === 0) return "md:col-span-2 md:row-span-2";
+      if (index === 1) return "md:col-span-1 md:row-start-1 md:col-start-3";
+      if (index === 2) return "md:col-span-1 md:row-start-2 md:col-start-3";
+    }
+    return "";
+  };
+
+  const journalFeaturedLayout = latestArticles.length >= 3;
+
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <StructuredData
@@ -887,34 +915,39 @@ const Index = () => {
           },
         ]}
       />
-      <section className="relative min-h-screen overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
+      <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
         </div>
 
-        <div className="relative z-10 mx-auto flex min-h-[calc(100vh-8rem)] max-w-6xl items-center justify-center">
-          <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center slide-up md:px-10 md:py-10">
-            <h1 className="editorial-heading hero-copy-text text-4xl md:text-6xl lg:text-7xl mb-6 whitespace-pre-line">
+        <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-8rem)] max-w-6xl items-center justify-center md:justify-start">
+          <div className="hero-copy-shell w-full max-w-4xl px-4 py-8 text-center slide-up md:max-w-2xl md:px-10 md:py-10 md:text-left">
+            <h1 className="editorial-heading hero-copy-text text-4xl md:text-6xl lg:text-7xl mb-6 whitespace-pre-line tracking-tight md:leading-[1.05]">
               {t("hero.title")}
             </h1>
-            <p className="editorial-body hero-copy-text text-base md:text-lg max-w-2xl mx-auto mb-10 whitespace-pre-line">
+            <p className="editorial-body hero-copy-text text-base md:text-lg max-w-2xl mx-auto md:mx-0 mb-10 whitespace-pre-line leading-relaxed text-white/92">
               {t("hero.subtitle")}
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
               <Link
                 to="/logbook"
-                className="glass-button hero-cta inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+                className="group glass-button hero-cta inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
               >
-                {t("hero.cta.journey")}
-                <ArrowRight size={16} />
+                <span className="pr-1">{t("hero.cta.journey")}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/14 ring-1 ring-white/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                  <ArrowRight size={16} aria-hidden />
+                </span>
               </Link>
               <Link
                 to="/collaborations"
-                className="glass-button-dark hero-cta hero-cta-dark inline-flex items-center justify-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+                className="group glass-button-dark hero-cta hero-cta-dark inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
               >
-                {t("hero.cta.collaborate")}
+                <span className="pr-1">{t("hero.cta.collaborate")}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                  <ArrowRight size={16} aria-hidden />
+                </span>
               </Link>
             </div>
           </div>
@@ -930,34 +963,37 @@ const Index = () => {
         </div>
       </section>
 
-      <section className="page-section pt-4 md:pt-6">
+      <HomeAnimatedSection className="page-section pt-4 md:pt-6">
         <div className="page-section-narrow glass-panel rounded-[34px] px-8 py-10 md:px-12 md:py-14">
           <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
             {t("intro.label")}
           </p>
           <p className="editorial-body text-lg md:text-xl text-foreground/82 leading-relaxed">{t("intro.text")}</p>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="flex items-center justify-center mb-12">
             <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
               {t("values.label")}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="glass-panel-soft rounded-[28px] p-6 md:p-8">
+              <div
+                key={i}
+                className={`glass-panel-soft rounded-[28px] p-6 md:p-8 transition-transform duration-reveal ease-out-expo md:hover:-translate-y-0.5 ${i >= 3 ? "md:mt-8" : ""}`}
+              >
                 <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
                 <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
               </div>
             ))}
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div>
@@ -973,7 +1009,7 @@ const Index = () => {
                   <img
                     src={boatSunset}
                     alt="Spritz at sunset"
-                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    className="img-cover hover:scale-105 transition-transform duration-reveal ease-out-expo"
                     loading="lazy"
                     decoding="async"
                   />
@@ -984,7 +1020,7 @@ const Index = () => {
                   <img
                     src={dogsMarina}
                     alt="Dogs at the marina"
-                    className="img-cover hover:scale-105 transition-transform duration-700"
+                    className="img-cover hover:scale-105 transition-transform duration-reveal ease-out-expo"
                     loading="lazy"
                     decoding="async"
                   />
@@ -993,35 +1029,41 @@ const Index = () => {
             </div>
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="flex items-center justify-center mb-12">
             <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
               {t("topics.label")}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5"
+            variants={topicsContainerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-40px", amount: 0.15 }}
+          >
             {[
               { key: "refit", icon: Wrench },
               { key: "navigation", icon: Compass },
               { key: "remote", icon: Wifi },
               { key: "storytelling", icon: Pen },
             ].map(({ key, icon: Icon }) => (
-              <div key={key} className="glass-chip-light rounded-[28px] p-6">
+              <motion.div key={key} variants={topicItemVariants} className="glass-chip-light rounded-[28px] p-6 active:scale-[0.99] transition-transform duration-glass ease-out-expo">
                 <div className="glass-chip-light inline-flex h-12 w-12 items-center justify-center mb-5 text-slate-800">
                   <Icon size={20} />
                 </div>
                 <h3 className="editorial-heading text-xl mb-3 text-slate-950">{t(`topics.${key}`)}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{t(`topics.${key}.text`)}</p>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="flex items-end justify-between mb-12 gap-6">
             <div>
@@ -1032,56 +1074,63 @@ const Index = () => {
             </div>
             <Link
               to="/logbook"
-              className="hidden md:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="hidden md:inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo"
             >
               {t("journal.viewall")} <ArrowRight size={14} />
             </Link>
           </div>
 
           {latestArticles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {latestArticles.map((entry) => {
+            <div className={journalGridClass}>
+              {latestArticles.map((entry, index) => {
                 const title = lang === "en" ? entry.title_en : (entry.title_it || entry.title_en);
                 const excerpt = lang === "en" ? entry.excerpt_en : (entry.excerpt_it || entry.excerpt_en);
+                const featured = journalFeaturedLayout && index === 0;
                 return (
-                  <Link to={`/logbook/${entry.slug}`} key={entry.id} className="group block">
-                    <article className="glass-panel-soft rounded-[30px] p-3 h-full transition-transform duration-300 group-hover:-translate-y-1">
-                      <div className="glass-frame rounded-[24px] p-1.5 mb-5">
-                        <div className="aspect-[4/3] overflow-hidden rounded-[19px] bg-muted relative">
-                          {entry.cover_image ? (
-                            <img
-                              src={entry.cover_image}
-                              alt={title}
-                              className="img-cover group-hover:scale-105 transition-transform duration-700"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-2xl">BITE</div>
-                          )}
-                          {isRead(entry.id) && (
-                            <span className="glass-chip absolute top-2 left-2 inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
-                              <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
+                  <div key={entry.id} className={getJournalItemClass(index)}>
+                    <Link to={`/logbook/${entry.slug}`} className="group block h-full">
+                      <article className="glass-panel-soft rounded-[30px] p-3 h-full min-h-0 transition-transform duration-reveal ease-out-expo group-hover:-translate-y-1 active:scale-[0.99]">
+                        <div className={`glass-frame rounded-[24px] p-1.5 mb-5 ${featured ? "md:p-2" : ""}`}>
+                          <div className={`aspect-[4/3] overflow-hidden rounded-[19px] bg-muted relative ${featured ? "md:aspect-[16/10]" : ""}`}>
+                            {entry.cover_image ? (
+                              <img
+                                src={entry.cover_image}
+                                alt={title}
+                                className="img-cover group-hover:scale-105 transition-transform duration-reveal ease-out-expo"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-2xl">BITE</div>
+                            )}
+                            {isRead(entry.id) && (
+                              <span className="glass-chip absolute top-2 left-2 inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-sans text-muted-foreground">
+                                <Eye size={10} /> {lang === "it" ? "Letto" : "Read"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 mb-3 flex-wrap">
+                          {entry.tags?.slice(0, 2).map((tag) => (
+                            <span key={tag.id} className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans text-accent">#{tag.name}</span>
+                          ))}
+                          {entry.published_at && (
+                            <span className="text-[11px] text-muted-foreground">
+                              {format(new Date(entry.published_at), "MMM d, yyyy")}
                             </span>
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 mb-3 flex-wrap">
-                        {entry.tags?.slice(0, 2).map((tag) => (
-                          <span key={tag.id} className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans text-accent">#{tag.name}</span>
-                        ))}
-                        {entry.published_at && (
-                          <span className="text-[11px] text-muted-foreground">
-                            {format(new Date(entry.published_at), "MMM d, yyyy")}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="editorial-heading text-xl md:text-2xl mb-2 group-hover:text-accent transition-colors line-clamp-2">
-                        {title}
-                      </h3>
-                      <p className="editorial-body text-sm text-muted-foreground line-clamp-3">{excerpt}</p>
-                    </article>
-                  </Link>
+                        <h3
+                          className={`editorial-heading mb-2 group-hover:text-accent transition-colors duration-interaction ease-out-expo line-clamp-2 ${
+                            featured ? "text-xl md:text-3xl lg:text-4xl" : "text-xl md:text-2xl"
+                          }`}
+                        >
+                          {title}
+                        </h3>
+                        <p className={`editorial-body text-muted-foreground line-clamp-3 ${featured ? "text-sm md:text-base line-clamp-4 md:line-clamp-5" : "text-sm"}`}>{excerpt}</p>
+                      </article>
+                    </Link>
+                  </div>
                 );
               })}
             </div>
@@ -1092,14 +1141,14 @@ const Index = () => {
           )}
 
           <div className="mt-8 md:hidden text-center">
-            <Link to="/logbook" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/logbook" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo">
               {t("journal.viewall")} <ArrowRight size={14} />
             </Link>
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="glass-frame rounded-[30px] p-2">
@@ -1127,37 +1176,49 @@ const Index = () => {
               <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("route.label")}</p>
               <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line">{t("route.title")}</h2>
               <p className="editorial-body text-muted-foreground leading-relaxed mb-8">{t("route.text")}</p>
-              <Link to="/route" className="glass-button-secondary inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium">
-                {t("route.explore")} <ArrowRight size={14} />
+              <Link
+                to="/route"
+                className="group glass-button-secondary inline-flex items-center justify-between gap-3 rounded-full pl-6 pr-2 py-2 text-sm font-sans font-medium active:scale-[0.98] transition-transform duration-glass ease-out-expo"
+              >
+                <span className="px-1">{t("route.explore")}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/5 ring-1 ring-stone-900/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                  <ArrowRight size={14} aria-hidden />
+                </span>
               </Link>
             </div>
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="page-section pt-0">
+      <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="max-w-3xl">
             <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("collab.label")}</p>
             <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-slate-950">{t("collab.title")}</h2>
             <p className="editorial-body text-muted-foreground leading-relaxed text-lg mb-10">{t("collab.text")}</p>
-            <Link to="/collaborations" className="glass-button-secondary inline-flex items-center gap-2 px-8 py-3.5 text-sm font-sans font-medium tracking-wide">
-              {t("collab.cta")} <ArrowRight size={16} />
+            <Link
+              to="/collaborations"
+              className="group glass-button-secondary inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
+            >
+              <span className="px-1">{t("collab.cta")}</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/5 ring-1 ring-stone-900/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                <ArrowRight size={16} aria-hidden />
+              </span>
             </Link>
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
-      <section className="px-4 md:px-6">
-        <div className="glass-frame rounded-[34px] p-2 h-[50vh] md:h-[60vh] overflow-hidden">
+      <HomeAnimatedSection className="px-4 md:px-6">
+        <div className="glass-frame rounded-[34px] p-2 h-[50dvh] md:h-[60dvh] overflow-hidden">
           <div className="overflow-hidden rounded-[28px] h-full">
             <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" loading="lazy" decoding="async" />
           </div>
         </div>
-      </section>
+      </HomeAnimatedSection>
 
       {shouldShowNewsletterSection ? (
-        <section className="page-section pt-0">
+        <HomeAnimatedSection className="page-section pt-0">
           <div className="page-section-narrow glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
             <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
             <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
@@ -1218,7 +1279,7 @@ const Index = () => {
               </label>
             </form>
           </div>
-        </section>
+        </HomeAnimatedSection>
       ) : null}
     </div>
   );

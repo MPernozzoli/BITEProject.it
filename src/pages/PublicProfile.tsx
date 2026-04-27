@@ -459,7 +459,7 @@ const PublicProfile = () => {
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group rounded-[26px] border border-stone-200/90 bg-white/76 p-4 md:p-5 hover:translate-y-[-2px] hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-all"
+                    className="group rounded-[26px] border border-stone-200/90 bg-white/76 p-4 md:p-5 hover:translate-y-[-2px] hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -469,7 +469,7 @@ const PublicProfile = () => {
                         <p className="font-sans font-medium text-foreground">{social.label}</p>
                         <p className="text-sm font-sans text-muted-foreground mt-1 break-all">{social.displayValue}</p>
                       </div>
-                      <ArrowUpRight size={16} className="text-muted-foreground group-hover:text-accent transition-colors" />
+                      <ArrowUpRight size={16} className="text-muted-foreground group-hover:text-accent transition-colors duration-interaction ease-out-expo" />
                     </div>
                   </a>
                 );
@@ -534,14 +534,14 @@ const PublicProfile = () => {
                   {featuredArticle && (
                     <Link
                       to={`/logbook/${featuredArticle.slug}`}
-                      className="group grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] overflow-hidden rounded-[30px] border border-stone-200/90 bg-white/78 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] transition-all"
+                      className="group grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] overflow-hidden rounded-[30px] border border-stone-200/90 bg-white/78 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.995]"
                     >
                       <div className="relative min-h-[260px] overflow-hidden bg-muted">
                         {featuredArticle.cover_image ? (
                           <img
                             src={featuredArticle.cover_image}
                             alt=""
-                            className="absolute inset-0 max-w-none transition-transform duration-700 group-hover:scale-[1.04]"
+                            className="absolute inset-0 max-w-none transition-transform duration-reveal ease-out-expo group-hover:scale-[1.04]"
                             style={coverImageStyle(
                               featuredArticle.cover_image,
                               clampCoverFocal(
@@ -576,7 +576,7 @@ const PublicProfile = () => {
                           </span>
                         </div>
 
-                        <h3 className="editorial-heading text-2xl leading-tight mb-3 group-hover:text-accent transition-colors">
+                        <h3 className="editorial-heading text-2xl leading-tight mb-3 group-hover:text-accent transition-colors duration-interaction ease-out-expo">
                           {lang === "en" ? featuredArticle.title_en : featuredArticle.title_it || featuredArticle.title_en}
                         </h3>
                         <p className="text-sm font-sans text-muted-foreground leading-relaxed line-clamp-4">
@@ -606,14 +606,14 @@ const PublicProfile = () => {
                         <Link
                           key={article.id}
                           to={`/logbook/${article.slug}`}
-                          className="group rounded-[28px] border border-stone-200/90 bg-white/76 overflow-hidden hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-all"
+                          className="group rounded-[28px] border border-stone-200/90 bg-white/76 overflow-hidden hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
                         >
                           <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                             {article.cover_image ? (
                               <img
                                 src={article.cover_image}
                                 alt=""
-                                className="absolute inset-0 max-w-none transition-transform duration-700 group-hover:scale-[1.04]"
+                                className="absolute inset-0 max-w-none transition-transform duration-reveal ease-out-expo group-hover:scale-[1.04]"
                                 style={coverImageStyle(
                                   article.cover_image,
                                   clampCoverFocal(
@@ -640,7 +640,7 @@ const PublicProfile = () => {
                                 {formatNumber(article.like_count)}
                               </span>
                             </div>
-                            <h3 className="font-serif text-lg leading-tight mb-2 group-hover:text-accent transition-colors line-clamp-2">
+                            <h3 className="font-serif text-lg leading-tight mb-2 group-hover:text-accent transition-colors duration-interaction ease-out-expo line-clamp-2">
                               {lang === "en" ? article.title_en : article.title_it || article.title_en}
                             </h3>
                             <p className="text-xs font-sans text-muted-foreground line-clamp-3">

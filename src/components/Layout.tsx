@@ -25,7 +25,7 @@ const Layout = ({ children }: { children: ReactNode }) => {
   return (
     <div
       className={cn(
-        "site-shell min-h-screen flex flex-col",
+        "site-shell min-h-[100dvh] flex flex-col",
         hideFooterMobileLogbook && "max-md:min-h-0",
       )}
     >

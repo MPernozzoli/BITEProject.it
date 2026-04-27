@@ -115,14 +115,14 @@ const ArticleRelatedSection = ({
           const covStyle = item.cover_image ? coverImageStyle(item.cover_image, focal) : undefined;
           return (
             <Link key={item.id} to={`/logbook/${item.slug}`} className="group block">
-              <article className="glass-panel-soft rounded-[28px] p-3 transition-transform duration-300 group-hover:-translate-y-1">
+              <article className="glass-panel-soft rounded-[28px] p-3 transition-transform duration-reveal ease-out-expo group-hover:-translate-y-1 active:scale-[0.99]">
                 <div className="glass-frame rounded-[24px] p-1.5 mb-4">
                   <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
                     {item.cover_image && covStyle ? (
                       <img
                         src={item.cover_image}
                         alt=""
-                        className="absolute inset-0 max-w-none transition-opacity group-hover:opacity-90"
+                        className="absolute inset-0 max-w-none transition-opacity duration-reveal ease-out-expo group-hover:opacity-90"
                         style={covStyle}
                       />
                     ) : (
@@ -132,7 +132,7 @@ const ArticleRelatedSection = ({
                     )}
                   </div>
                 </div>
-                <h3 className="editorial-heading text-base leading-snug group-hover:text-accent transition-colors line-clamp-2 mb-1">
+                <h3 className="editorial-heading text-base leading-snug group-hover:text-accent transition-colors duration-interaction ease-out-expo line-clamp-2 mb-1">
                   {t}
                 </h3>
                 {ex && (

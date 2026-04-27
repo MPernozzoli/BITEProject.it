@@ -524,7 +524,7 @@ const AdminDashboard = () => {
         </section>
 
         <section className={`grid grid-cols-1 gap-6 ${sidebarCollapsed ? "xl:grid-cols-[96px_minmax(0,1fr)]" : "xl:grid-cols-[0.92fr_2.08fr]"}`}>
-          <aside className={`glass-panel rounded-[34px] p-5 md:p-6 h-fit transition-all ${sidebarCollapsed ? "xl:px-3" : ""}`}>
+          <aside className={`glass-panel rounded-[34px] p-5 md:p-6 h-fit transition-[padding,width] duration-reveal ease-out-expo ${sidebarCollapsed ? "xl:px-3" : ""}`}>
             <div className={`mb-4 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between gap-3"}`}>
               {!sidebarCollapsed && (
                 <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground">Sezioni</p>
@@ -547,7 +547,7 @@ const AdminDashboard = () => {
                   <button
                     key={tab.id}
                     onClick={() => void handleSectionChange(tab.id)}
-                    className={`w-full rounded-[22px] py-3 text-left transition-all ${
+                    className={`w-full rounded-[22px] py-3 text-left transition-[color,background-color,border-color,box-shadow,transform] duration-reveal ease-out-expo active:scale-[0.99] ${
                       active
                         ? "bg-white/82 border border-stone-200/90 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
                         : "glass-panel-soft hover:border-accent"

@@ -80,6 +80,14 @@
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Motion tokens (design-taste / high-end-visual) */
+    --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-reveal: 520ms;
+    --duration-interaction: 220ms;
+    --duration-hero-crossfade: 2000ms;
+    --duration-glass: 220ms;
   }
 }
 
@@ -97,7 +105,7 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     position: relative;
-    min-height: 100vh;
+    min-height: 100dvh;
     background-color: hsl(var(--background));
     background-image:
       radial-gradient(circle at 12% 16%, rgba(173, 214, 220, 0.28), transparent 24%),
@@ -139,7 +147,7 @@
   }
 
   #root {
-    min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
     isolation: isolate;
   }
@@ -147,7 +155,7 @@
 
 @layer components {
   .mobile-sheet-handle-hint {
-    animation: mobile-sheet-handle-nudge 1.8s ease-in-out infinite;
+    animation: mobile-sheet-handle-nudge 1.8s var(--ease-fluid) infinite;
   }
 
   .map-presence-marker {
@@ -170,7 +178,7 @@
     background: currentColor;
     opacity: 0.14;
     transform: scale(1);
-    animation: map-presence-pulse 2.8s ease-in-out infinite;
+    animation: map-presence-pulse 2.8s var(--ease-fluid) infinite;
   }
 
   .map-presence-marker__chip {
@@ -262,7 +270,7 @@
   }
 
   .page-section {
-    @apply py-20 md:py-32 px-6 md:px-12 lg:px-20;
+    @apply py-24 md:py-40 px-6 md:px-12 lg:px-20;
   }
 
   .page-section-narrow {
@@ -450,7 +458,10 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.6);
     backdrop-filter: blur(20px) saturate(175%);
     -webkit-backdrop-filter: blur(20px) saturate(175%);
-    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    transition:
+      border-color var(--duration-interaction) var(--ease-out-expo),
+      box-shadow var(--duration-interaction) var(--ease-out-expo),
+      transform var(--duration-interaction) var(--ease-out-expo);
   }
 
   .glass-input:focus-within {
@@ -464,13 +475,24 @@
   .glass-button-secondary,
   .glass-button-dark {
     border-radius: 9999px;
-    transition: transform 220ms ease, box-shadow 220ms ease, opacity 220ms ease, border-color 220ms ease, background 220ms ease;
+    transition:
+      transform var(--duration-glass) var(--ease-out-expo),
+      box-shadow var(--duration-glass) var(--ease-out-expo),
+      opacity var(--duration-glass) var(--ease-out-expo),
+      border-color var(--duration-glass) var(--ease-out-expo),
+      background var(--duration-glass) var(--ease-out-expo);
   }
 
   .glass-button:hover,
   .glass-button-secondary:hover,
   .glass-button-dark:hover {
     transform: translateY(-1px);
+  }
+
+  .glass-button:active,
+  .glass-button-secondary:active,
+  .glass-button-dark:active {
+    transform: translateY(0) scale(0.98);
   }
 
   .glass-button {
@@ -649,7 +671,7 @@
     position: absolute;
     inset: 0;
     opacity: 0;
-    transition: opacity 420ms ease;
+    transition: opacity var(--duration-hero-crossfade) var(--ease-out-expo);
   }
 
   .hero-layer--active {
@@ -819,15 +841,30 @@
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.22));
     transform: translateX(-50%);
     box-shadow: 0 0 12px rgba(255, 255, 255, 0.28);
-    animation: heroScrollFlow 2.35s ease-in-out infinite;
+    animation: heroScrollFlow 2.35s var(--ease-fluid) infinite;
   }
 
   .fade-in {
-    animation: fadeIn 0.8s ease-out forwards;
+    animation: fadeIn 0.85s var(--ease-out-expo) forwards;
   }
 
   .slide-up {
-    animation: slideUp 0.8s ease-out forwards;
+    animation: slideUp 0.85s var(--ease-out-expo) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide-up,
+    .fade-in {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+
+    .hero-scroll-cue__dot {
+      animation: none;
+      opacity: 0.85;
+      transform: translate(-50%, 1.5rem);
+    }
   }
 
   /* Righe vuote dall’editor TipTap (<p></p>) visibili anche nel reader */

@@ -3494,7 +3494,7 @@ const AdminVoyageManager = ({
             </div>
             <aside
               data-waypoint-editor-panel
-              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-all duration-300 ease-out overflow-hidden ${
+              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[transform,opacity,width] duration-300 ease-out-expo overflow-hidden ${
                 waypointEditorPanelId
                   ? "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
                   : "max-h-0 lg:max-h-none lg:w-0 lg:opacity-0 lg:pointer-events-none border-t-0 lg:border-l-0"

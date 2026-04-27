@@ -41,7 +41,7 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-all duration-300 ${
+        className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-[transform,box-shadow,border-color,background-color] duration-reveal ease-out-expo active:scale-[0.99] ${
           isActive
             ? "border-accent/50 bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
             : "border-white/55 bg-white/48 hover:bg-white/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
@@ -93,7 +93,7 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                 {likes}
               </span>
             </div>
-            <h3 className={`text-sm font-serif font-medium leading-tight line-clamp-2 mb-1 transition-colors ${
+            <h3 className={`text-sm font-serif font-medium leading-tight line-clamp-2 mb-1 transition-colors duration-interaction ease-out-expo ${
               isActive ? "text-accent" : "text-foreground group-hover:text-accent"
             }`}>
               {title}

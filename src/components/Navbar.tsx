@@ -171,7 +171,7 @@ const Navbar = () => {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 px-4 pt-3 transition-all duration-500 md:px-6 md:pt-4",
+        "fixed top-0 left-0 right-0 z-50 px-4 pt-3 transition-[padding] duration-500 ease-out-expo md:px-6 md:pt-4",
       )}
     >
       <div
@@ -193,7 +193,7 @@ const Navbar = () => {
           <span className="inline-flex items-baseline whitespace-nowrap">
             <span>B</span>
             <span
-              className={`inline-block overflow-hidden transition-all duration-500 ease-out ${
+              className={`inline-block overflow-hidden transition-[max-width,opacity] duration-500 ease-out-expo ${
                 logoHovered ? "max-w-[4em] opacity-100" : "max-w-0 opacity-0"
               }`}
             >
@@ -201,7 +201,7 @@ const Navbar = () => {
             </span>
             <span>I</span>
             <span
-              className={`inline-block overflow-hidden transition-all duration-500 ease-out delay-75 ${
+              className={`inline-block overflow-hidden transition-[max-width,opacity] duration-500 ease-out-expo delay-75 ${
                 logoHovered ? "max-w-[2em] opacity-100" : "max-w-0 opacity-0"
               }`}
             >
@@ -209,7 +209,7 @@ const Navbar = () => {
             </span>
             <span>T</span>
             <span
-              className={`inline-block overflow-hidden transition-all duration-500 ease-out delay-100 ${
+              className={`inline-block overflow-hidden transition-[max-width,opacity] duration-500 ease-out-expo delay-100 ${
                 logoHovered ? "max-w-[3em] opacity-100" : "max-w-0 opacity-0"
               }`}
             >
@@ -217,14 +217,14 @@ const Navbar = () => {
             </span>
             <span>E</span>
             <span
-              className={`inline-block overflow-hidden transition-all duration-500 ease-out delay-150 ${
+              className={`inline-block overflow-hidden transition-[max-width,opacity] duration-500 ease-out-expo delay-150 ${
                 logoHovered ? "max-w-[3em] opacity-100" : "max-w-0 opacity-0"
               }`}
             >
               nd
             </span>
             <span
-              className={`inline-block overflow-hidden transition-all duration-300 delay-500 ${
+              className={`inline-block overflow-hidden transition-[max-width,opacity,transform] duration-300 ease-out-expo delay-500 ${
                 logoHovered
                   ? "max-w-[0.7em] opacity-100 translate-y-0 scale-110 text-current"
                   : "max-w-0 opacity-0 -translate-y-2 scale-75"
@@ -236,7 +236,7 @@ const Navbar = () => {
           {/* Dynamic page subtitle — hidden during hover expand */}
           {pageSubtitle && (
             <span
-              className={`inline-block font-sans font-normal text-[0.55em] tracking-wider transition-all duration-400 ease-out ${
+              className={`inline-block font-sans font-normal text-[0.55em] tracking-wider transition-[max-width,opacity,transform] duration-500 ease-out-expo ${
                 logoHovered
                   ? "max-w-0 opacity-0 scale-95"
                   : "max-w-[12em] opacity-70 scale-100"
@@ -254,7 +254,7 @@ const Navbar = () => {
               key={link.to}
               to={link.to}
               className={cn(
-                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-all duration-300",
+                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
                 navTextClass,
                 isLinkActive(link.to)
                   ? "nav-chip-light font-medium"
@@ -371,7 +371,7 @@ const Navbar = () => {
               onClick={toggleLanguage}
               aria-label={languageToggleAriaLabel}
               className={cn(
-                "inline-flex h-9 items-center rounded-full border px-3 text-[11px] font-semibold tracking-[0.24em] uppercase transition-all duration-300",
+                "inline-flex h-9 items-center rounded-full border px-3 text-[11px] font-semibold tracking-[0.24em] uppercase transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
                 mobileButtonClass,
               )}
             >
@@ -385,7 +385,7 @@ const Navbar = () => {
                 <button
                   type="button"
                   className={cn(
-                    "relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[10px] font-sans font-medium transition-all duration-300",
+                    "relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[10px] font-sans font-medium transition-[color,background-color,border-color,transform,opacity] duration-300 ease-out-expo active:scale-[0.98]",
                     mobileButtonClass,
                   )}
                 >
@@ -458,7 +458,7 @@ const Navbar = () => {
             }
             onClick={() => setMobileOpen(!mobileOpen)}
             className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-full border transition-all duration-300",
+              "inline-flex h-11 w-11 items-center justify-center rounded-full border transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
               mobileButtonClass,
             )}
           >
@@ -495,7 +495,7 @@ const Navbar = () => {
                       key={link.to}
                       to={link.to}
                         className={cn(
-                        "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-all duration-300",
+                        "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
                         active
                           ? "glass-chip border-white/0 text-navy shadow-[0_24px_60px_-36px_rgba(255,255,255,0.65)]"
                           : "glass-chip-dark border-white/12 text-white hover:border-white/22",
@@ -522,7 +522,7 @@ const Navbar = () => {
 
                       <span
                         className={cn(
-                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-all duration-300 group-hover:translate-x-0.5",
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-[transform,color,background-color] duration-300 ease-out-expo group-hover:translate-x-0.5",
                           active
                             ? "border-navy/10 bg-navy text-white"
                             : "border-white/10 bg-white/[0.06] text-white/82 group-hover:border-white/20 group-hover:bg-white/[0.1]",
