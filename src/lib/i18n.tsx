@@ -37,6 +37,7 @@ const translations: Translations = {
 
   // Intro
   "intro.label": { en: "What is BITE", it: "Cos'è BITE" },
+  "intro.rail": { en: "Asphalt first, then salt water.", it: "Prima asfalto, poi acqua salata." },
   "intro.text": { en: "BITE was born in 2023 when we bought our first travel vehicle: Duodji, a 1990 FIAT Ducato camper that carried us from Lecce to Oslo. When the engine gave out for good, we decided to try something different — a boat. A few months later we found Spritz, a 1975 Deerberg Beryll 32\", and sailed her from Greece to Italy. Now we document the reality of building a life on the water — two humans, two dogs, and all the beauty and friction that comes with it.", it: "BITE è nato nel 2023 quando abbiamo acquistato il nostro primo mezzo di viaggio: Duodji, un camper FIAT Ducato del 1990 che ci ha portati da Lecce a Oslo. Quando il motore ci ha abbandonati definitivamente, abbiamo deciso di provare qualcosa di diverso — una barca. Pochi mesi dopo abbiamo trovato Spritz, una Deerberg Beryll del 1975 di 32 piedi, e l'abbiamo portata dalla Grecia all'Italia. Ora documentiamo la realtà di costruire una vita sull'acqua — due umani, due cani, e tutta la bellezza e l'attrito che ne derivano." },
 
   // Values

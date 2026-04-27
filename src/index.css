@@ -281,6 +281,18 @@
     @apply max-w-7xl mx-auto;
   }
 
+  /* Homepage — blocco origine BITE: capolettera + colonna laterale */
+  .home-origin-body p::first-letter {
+    float: left;
+    font-family: var(--font-serif);
+    font-size: clamp(2.5rem, 4.5vw, 3.5rem);
+    line-height: 0.82;
+    padding-right: 0.45rem;
+    padding-top: 0.12rem;
+    font-weight: 500;
+    color: hsl(var(--foreground) / 0.9);
+  }
+
   .site-shell {
     position: relative;
     isolation: isolate;

@@ -964,11 +964,25 @@ const Index = () => {
       </section>
 
       <HomeAnimatedSection className="page-section pt-4 md:pt-6">
-        <div className="page-section-narrow glass-panel rounded-[34px] px-8 py-10 md:px-12 md:py-14">
-          <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">
-            {t("intro.label")}
-          </p>
-          <p className="editorial-body text-lg md:text-xl text-foreground/82 leading-relaxed">{t("intro.text")}</p>
+        <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
+          <div className="flex flex-col gap-8 md:grid md:grid-cols-12 md:items-start md:gap-10 lg:gap-14">
+            <aside className="flex flex-wrap items-baseline gap-x-4 gap-y-3 border-l-2 border-accent/45 pl-5 md:col-span-3 md:flex-col md:gap-6 md:pl-8 lg:pl-10">
+              <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent">
+                {t("intro.label")}
+              </p>
+              <span className="editorial-heading block text-4xl tabular-nums tracking-tighter text-foreground/90 sm:text-5xl md:text-6xl">
+                2023
+              </span>
+              <p className="w-full max-w-[16rem] font-sans text-[11px] uppercase leading-relaxed tracking-[0.22em] text-muted-foreground md:max-w-none">
+                {t("intro.rail")}
+              </p>
+            </aside>
+            <div className="home-origin-body md:col-span-9">
+              <p className="editorial-body text-lg leading-[1.65] text-foreground/82 md:text-xl md:leading-relaxed">
+                {t("intro.text")}
+              </p>
+            </div>
+          </div>
         </div>
       </HomeAnimatedSection>
 
@@ -1192,7 +1206,7 @@ const Index = () => {
 
       <HomeAnimatedSection className="page-section pt-0">
         <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
-          <div className="max-w-3xl">
+          <div className="w-full">
             <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("collab.label")}</p>
             <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-slate-950">{t("collab.title")}</h2>
             <p className="editorial-body text-muted-foreground leading-relaxed text-lg mb-10">{t("collab.text")}</p>
@@ -1209,8 +1223,8 @@ const Index = () => {
         </div>
       </HomeAnimatedSection>
 
-      <HomeAnimatedSection className="px-4 md:px-6">
-        <div className="glass-frame rounded-[34px] p-2 h-[50dvh] md:h-[60dvh] overflow-hidden">
+      <HomeAnimatedSection className="px-6 md:px-12 lg:px-20">
+        <div className="page-section-wide glass-frame rounded-[38px] p-2 h-[50dvh] md:h-[60dvh] overflow-hidden">
           <div className="overflow-hidden rounded-[28px] h-full">
             <img src={dinghyCrew} alt="Crew on the dinghy" className="img-cover" loading="lazy" decoding="async" />
           </div>
@@ -1219,7 +1233,7 @@ const Index = () => {
 
       {shouldShowNewsletterSection ? (
         <HomeAnimatedSection className="page-section pt-0">
-          <div className="page-section-narrow glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
+          <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
             <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
             <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
             <p className="editorial-body text-white/84 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
