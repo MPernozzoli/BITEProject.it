@@ -169,9 +169,9 @@ const TheCrew = () => {
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="order-2 lg:order-1">
-              <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.freya.title")}</h3>
+              <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.freyja.title")}</h3>
               <p className="editorial-body text-muted-foreground leading-relaxed">
-                {t("crew.freya.text")}
+                {t("crew.freyja.text")}
               </p>
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3] order-1 lg:order-2">
