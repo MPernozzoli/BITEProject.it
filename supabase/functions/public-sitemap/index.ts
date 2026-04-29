@@ -5,7 +5,6 @@ const SITE_URL = 'https://biteproject.it'
 const STATIC_ROUTES = [
   '/',
   '/crew',
-  '/manifesto',
   '/logbook',
   '/voyages',
   '/collaborations',

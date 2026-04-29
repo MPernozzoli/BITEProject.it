@@ -66,7 +66,6 @@ const Footer = () => {
           <div className="flex flex-col gap-8 md:items-end">
             <nav className="flex flex-wrap gap-2 md:justify-end">
               <Link to="/crew" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.about")}</Link>
-              <Link to="/manifesto" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.manifesto")}</Link>
               <Link to="/logbook" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.journal")}</Link>
               <Link to="/route" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.route")}</Link>
               <Link to="/collaborations" className="glass-chip px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors">{t("nav.collaborations")}</Link>

@@ -18,7 +18,6 @@ import {
 const PAGE_SUBTITLES: Record<string, string> = {
   "/logbook": "'s logbook",
   "/crew": "'s crew",
-  "/manifesto": "'s manifesto",
   "/collaborations": "'s collabs",
   "/contact": "'s contact",
 };
@@ -123,14 +122,6 @@ const Navbar = () => {
         lang === "it"
           ? "Chi siamo, come viviamo e cosa stiamo costruendo."
           : "Who we are, how we live, and what we are building.",
-    },
-    {
-      to: "/manifesto",
-      label: t("nav.manifesto"),
-      description:
-        lang === "it"
-          ? "Principi, metodo e scelte che guidano il progetto."
-          : "Principles, methods, and choices that guide the project.",
     },
     {
       to: "/logbook",
