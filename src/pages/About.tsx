@@ -203,24 +203,24 @@ const TheCrew = () => {
               {t("crew.snow.text")}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
-              <div className="overflow-hidden rounded-[24px] h-full">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+            <div className="glass-frame mx-auto w-full rounded-[30px] p-2">
+              <div className="flex aspect-[3/4] h-full items-center justify-center overflow-hidden rounded-[24px] bg-white/45 md:aspect-[4/3]">
                 <img
                   src={snowDaisyGarden}
                   alt="Snow Daisy smiling behind garden plants"
-                  className="img-cover object-[50%_38%] md:object-[50%_40%]"
+                  className="h-full w-full object-contain object-center"
                   loading="lazy"
                   decoding="async"
                 />
               </div>
             </div>
-            <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
-              <div className="overflow-hidden rounded-[24px] h-full">
+            <div className="glass-frame mx-auto w-full rounded-[30px] p-2">
+              <div className="flex aspect-[3/4] h-full items-center justify-center overflow-hidden rounded-[24px] bg-white/45 md:aspect-[4/3]">
                 <img
                   src={snowDaisyAntlers}
                   alt="Snow Daisy wearing antlers"
-                  className="img-cover object-[50%_18%] md:object-[50%_20%]"
+                  className="h-full w-full object-contain object-center"
                   loading="lazy"
                   decoding="async"
                 />
