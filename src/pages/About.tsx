@@ -5,8 +5,8 @@ import boatSunset from "@/assets/boat-sunset.webp";
 import sailingCockpit from "@/assets/sailing-cockpit.webp";
 import boatHarbor from "@/assets/boat-harbor.webp";
 import godot from "@/assets/godot.webp";
-import snowDaisyAntlers from "@/assets/snow-daisy-antlers.webp";
-import snowDaisyGarden from "@/assets/snow-daisy-garden.webp";
+import snowDaisyAntlers from "@/assets/snow-daisy-antlers-square.webp";
+import snowDaisyGarden from "@/assets/snow-daisy-garden-square.webp";
 import duodji from "@/assets/duodji.webp";
 import freyjaVedetta from "@/assets/freyja-vedetta.webp";
 
@@ -203,24 +203,24 @@ const TheCrew = () => {
               {t("crew.snow.text")}
             </p>
           </div>
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-            <div className="glass-frame mx-auto w-full rounded-[30px] p-2">
-              <div className="flex aspect-[3/4] h-full items-center justify-center overflow-hidden rounded-[24px] bg-white/45 md:aspect-[4/3]">
+          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="glass-frame w-full rounded-[30px] p-2">
+              <div className="aspect-square overflow-hidden rounded-[24px] bg-white/45">
                 <img
                   src={snowDaisyGarden}
                   alt="Snow Daisy smiling behind garden plants"
-                  className="h-full w-full object-contain object-center"
+                  className="img-cover object-center"
                   loading="lazy"
                   decoding="async"
                 />
               </div>
             </div>
-            <div className="glass-frame mx-auto w-full rounded-[30px] p-2">
-              <div className="flex aspect-[3/4] h-full items-center justify-center overflow-hidden rounded-[24px] bg-white/45 md:aspect-[4/3]">
+            <div className="glass-frame w-full rounded-[30px] p-2">
+              <div className="aspect-square overflow-hidden rounded-[24px] bg-white/45">
                 <img
                   src={snowDaisyAntlers}
                   alt="Snow Daisy wearing antlers"
-                  className="h-full w-full object-contain object-center"
+                  className="img-cover object-center"
                   loading="lazy"
                   decoding="async"
                 />
