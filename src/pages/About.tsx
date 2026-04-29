@@ -5,10 +5,10 @@ import boatSunset from "@/assets/boat-sunset.webp";
 import sailingCockpit from "@/assets/sailing-cockpit.webp";
 import boatHarbor from "@/assets/boat-harbor.webp";
 import godot from "@/assets/godot.webp";
-import godotSnow from "@/assets/godot-snow.webp";
-import snowSami from "@/assets/snow-sami.webp";
+import snowDaisyAntlers from "@/assets/snow-daisy-antlers.webp";
+import snowDaisyGarden from "@/assets/snow-daisy-garden.webp";
 import duodji from "@/assets/duodji.webp";
-import freya from "@/assets/freya.webp";
+import freyjaVedetta from "@/assets/freyja-vedetta.webp";
 
 const calculateAge = (birthDate: string) => {
   const today = new Date();
@@ -177,8 +177,8 @@ const TheCrew = () => {
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3] order-1 lg:order-2">
               <div className="overflow-hidden rounded-[24px] h-full">
                 <img
-                  src={freya}
-                  alt="Freya aboard"
+                  src={freyjaVedetta}
+                  alt="Freyja, Alaskan Malamute, on watch aboard Spritz"
                   className="img-cover hover:scale-105 transition-transform duration-700"
                   loading="lazy"
                   decoding="async"
@@ -206,12 +206,24 @@ const TheCrew = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={snowSami} alt="Snow Daisy and Sami" className="img-cover" loading="lazy" decoding="async" />
+                <img
+                  src={snowDaisyGarden}
+                  alt="Snow Daisy smiling behind garden plants"
+                  className="img-cover object-[50%_38%] md:object-[50%_40%]"
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[3/4] max-h-[520px] mx-auto w-full">
               <div className="overflow-hidden rounded-[24px] h-full">
-                <img src={godotSnow} alt="Godot and Snow Daisy" className="img-cover" loading="lazy" decoding="async" />
+                <img
+                  src={snowDaisyAntlers}
+                  alt="Snow Daisy wearing antlers"
+                  className="img-cover object-[50%_18%] md:object-[50%_20%]"
+                  loading="lazy"
+                  decoding="async"
+                />
               </div>
             </div>
           </div>

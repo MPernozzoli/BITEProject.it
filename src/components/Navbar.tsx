@@ -480,11 +480,11 @@ const Navbar = () => {
                 ? "Chiudi il pannello di navigazione"
                 : "Close navigation panel"
             }
-            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-slate-900/18 backdrop-blur-[2px]"
             onClick={() => setMobileOpen(false)}
           />
 
-          <div className="relative h-full overflow-y-auto border-t border-white/10 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16),_transparent_38%),linear-gradient(180deg,rgba(25,37,58,0.98)_0%,rgba(17,27,42,0.98)_55%,rgba(12,21,34,1)_100%)] px-5 pb-6 pt-5 text-white shadow-2xl">
+          <div className="nav-menu-light relative h-full overflow-y-auto border-t border-white/70 px-5 pb-6 pt-5 text-slate-900 shadow-2xl">
             <div className="mx-auto flex w-full max-w-md flex-col gap-4">
               <div className="flex flex-col gap-3">
                 {links.map((link) => {
@@ -494,18 +494,18 @@ const Navbar = () => {
                     <Link
                       key={link.to}
                       to={link.to}
-                        className={cn(
+                      className={cn(
                         "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
                         active
-                          ? "glass-chip border-white/0 text-navy shadow-[0_24px_60px_-36px_rgba(255,255,255,0.65)]"
-                          : "glass-chip-dark border-white/12 text-white hover:border-white/22",
+                          ? "nav-chip-light border-white/80 text-slate-950 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.34)]"
+                          : "border-white/70 bg-white/48 text-slate-800 hover:border-white hover:bg-white/70",
                       )}
                     >
                       <div className="min-w-0">
                         <p
                           className={cn(
                             "font-serif text-[1.85rem] leading-none",
-                            active ? "text-navy" : "text-white",
+                            active ? "text-slate-950" : "text-slate-900",
                           )}
                         >
                           {link.label}
@@ -513,7 +513,7 @@ const Navbar = () => {
                         <p
                           className={cn(
                             "mt-2 max-w-[18rem] text-sm leading-relaxed",
-                            active ? "text-navy/70" : "text-white/65",
+                            active ? "text-slate-700" : "text-slate-600",
                           )}
                         >
                           {link.description}
@@ -524,8 +524,8 @@ const Navbar = () => {
                         className={cn(
                           "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-[transform,color,background-color] duration-300 ease-out-expo group-hover:translate-x-0.5",
                           active
-                            ? "border-navy/10 bg-navy text-white"
-                            : "border-white/10 bg-white/[0.06] text-white/82 group-hover:border-white/20 group-hover:bg-white/[0.1]",
+                            ? "border-slate-900/10 bg-slate-900 text-white"
+                            : "border-slate-900/10 bg-white/58 text-slate-700 group-hover:border-slate-900/16 group-hover:bg-white/78",
                         )}
                       >
                         <ArrowRight size={18} />
@@ -535,17 +535,17 @@ const Navbar = () => {
                 })}
               </div>
 
-              <div className="glass-panel-dark rounded-[1.75rem] border-white/12 p-4 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.95)]">
-                <p className="text-[0.65rem] font-sans uppercase tracking-[0.32em] text-white/55">
+              <div className="nav-chip-light rounded-[1.75rem] p-4 shadow-[0_20px_54px_-38px_rgba(15,23,42,0.4)]">
+                <p className="text-[0.65rem] font-sans uppercase tracking-[0.32em] text-slate-500">
                   Account
                 </p>
 
                 {authLoading ? (
-                  <div className="mt-4 h-24 animate-pulse rounded-2xl bg-white/10" />
+                  <div className="mt-4 h-24 animate-pulse rounded-2xl bg-slate-200/60" />
                 ) : session ? (
                   <>
                     <div className="mt-4 flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/10">
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/80 bg-white/70">
                         <ProfileAvatar
                           name={displayName}
                           avatarUrl={displayAvatarUrl}
@@ -554,10 +554,10 @@ const Navbar = () => {
                         />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate font-sans text-sm font-medium tracking-wide text-white">
+                        <p className="truncate font-sans text-sm font-medium tracking-wide text-slate-900">
                           {displayName}
                         </p>
-                        <p className="truncate text-sm text-white/58">
+                        <p className="truncate text-sm text-slate-500">
                           {session.user.email}
                         </p>
                       </div>
@@ -566,25 +566,25 @@ const Navbar = () => {
                     <div className="mt-4 flex flex-col gap-2">
                       <Link
                         to="/profile"
-                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                        className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
                       >
                         <span className="flex items-center gap-3">
                           <User size={16} />
                           {lang === "it" ? "Profilo" : "Profile"}
                         </span>
-                        <ArrowRight size={16} className="text-white/55" />
+                        <ArrowRight size={16} className="text-slate-500" />
                       </Link>
 
                       {isAdmin && (
                         <Link
                           to="/admin"
-                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                          className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
                         >
                           <span className="flex items-center gap-3">
                             <Shield size={16} />
                             Dashboard
                           </span>
-                          <ArrowRight size={16} className="text-white/55" />
+                          <ArrowRight size={16} className="text-slate-500" />
                         </Link>
                       )}
 
@@ -592,10 +592,10 @@ const Navbar = () => {
                         type="button"
                         onClick={toggleLanguage}
                         aria-label={languageToggleAriaLabel}
-                        className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-left font-sans text-sm text-white/88 transition-colors hover:bg-white/[0.09]"
+                        className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 text-left font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
                       >
                         <span>{languageToggleMenuLabel}</span>
-                        <ArrowRight size={16} className="text-white/55" />
+                        <ArrowRight size={16} className="text-slate-500" />
                       </button>
 
                       <button
@@ -613,12 +613,12 @@ const Navbar = () => {
                   </>
                 ) : (
                   <>
-                    <p className="mt-3 text-sm leading-relaxed text-white/68">
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">
                       {authCardText}
                     </p>
                     <Link
                       to="/login"
-                      className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white px-4 py-3 font-sans text-sm font-medium text-navy transition-colors hover:bg-white/90"
+                      className="mt-4 flex items-center justify-between rounded-2xl border border-slate-900/10 bg-slate-900 px-4 py-3 font-sans text-sm font-medium text-white transition-colors hover:bg-slate-800"
                     >
                       <span className="flex items-center gap-3">
                         <LogIn size={16} />

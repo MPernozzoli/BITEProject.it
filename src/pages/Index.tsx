@@ -372,6 +372,12 @@ const Index = () => {
     let cancelled = false;
     const prioritizedSources = new Set(heroPriorityMedia.map((media) => media.src));
 
+    if (isMobile) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     heroPriorityMedia.forEach((media) => {
       void cacheHeroVideoLocally(media);
     });
@@ -424,7 +430,7 @@ const Index = () => {
       cancelled = true;
       cancelScheduledWarmup?.();
     };
-  }, [cacheHeroVideoLocally, currentHeroPool, heroPriorityMedia, shouldAggressivelyWarmHeroCache]);
+  }, [cacheHeroVideoLocally, currentHeroPool, heroPriorityMedia, isMobile, shouldAggressivelyWarmHeroCache]);
 
   const pendingHeroPlaybackSrc = pendingHeroTransition
     ? getHeroPlaybackSrc(pendingHeroTransition.media)
@@ -432,10 +438,10 @@ const Index = () => {
 
   useEffect(() => {
     const pendingVideo = pendingHeroVideoRef.current;
-    if (!pendingVideo || !pendingHeroTransition) return;
+    if (!pendingVideo || !pendingHeroTransition || isMobile) return;
 
     pendingVideo.load();
-  }, [pendingHeroPlaybackSrc, pendingHeroTransition]);
+  }, [isMobile, pendingHeroPlaybackSrc, pendingHeroTransition]);
 
   const finalizeHeroCrossfade = () => {
     if (!pendingHeroTransition) return;
@@ -520,9 +526,12 @@ const Index = () => {
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
     const playbackSrc = getHeroPlaybackSrc(media);
     const shouldEagerPreload =
-      mode === "pending"
-      || playbackSrc !== media.src
-      || media.src === heroMedia?.src;
+      !isMobile
+      && (
+        mode === "pending"
+        || playbackSrc !== media.src
+        || media.src === heroMedia?.src
+      );
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -542,7 +551,7 @@ const Index = () => {
         autoPlay={mode === "active"}
         muted
         playsInline
-        preload={shouldEagerPreload ? "auto" : "metadata"}
+        preload={shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
@@ -1233,10 +1242,10 @@ const Index = () => {
 
       {shouldShowNewsletterSection ? (
         <HomeAnimatedSection className="page-section pt-0">
-          <div className="page-section-wide glass-panel-dark rounded-[38px] px-6 py-10 text-center text-white md:px-10 md:py-12">
-            <p className="glass-chip-dark inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-white/76 mb-8">{t("newsletter.label")}</p>
-            <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-white">{t("newsletter.title")}</h2>
-            <p className="editorial-body text-white/84 mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
+          <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 text-center md:px-10 md:py-12">
+            <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("newsletter.label")}</p>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-slate-950">{t("newsletter.title")}</h2>
+            <p className="editorial-body text-muted-foreground mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
             <form onSubmit={handleNewsletterSubscribe} className="max-w-xl mx-auto space-y-4">
               <input
                 type="text"
@@ -1250,42 +1259,42 @@ const Index = () => {
               />
               <div className="flex flex-col sm:flex-row gap-3">
                 {session?.user.email ? (
-                  <div className="glass-chip-dark flex-1 px-5 py-3 text-sm text-white/88 text-left">
+                  <div className="glass-chip-light flex-1 px-5 py-3 text-sm text-slate-800 text-left">
                     {lang === "it"
                       ? `Ti iscriveremo con ${session.user.email}`
                       : `We'll subscribe you with ${session.user.email}`}
                   </div>
                 ) : (
-                  <div className="glass-input flex-1 rounded-full px-1.5">
+                  <div className="glass-chip-light flex-1 rounded-full px-1.5">
                     <input
                       type="email"
                       value={newsletterEmail}
                       onChange={(event) => setNewsletterEmail(event.target.value)}
                       placeholder={t("newsletter.placeholder")}
-                      className="w-full bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
+                      className="w-full bg-transparent px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none"
                     />
                   </div>
                 )}
                 <button
                   type="submit"
                   disabled={newsletterLoading}
-                  className="glass-button px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
+                  className="glass-button-secondary px-8 py-3 text-sm font-sans font-medium tracking-wide disabled:opacity-60 rounded-full"
                 >
                   {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
                 </button>
               </div>
-              <label className="flex items-start gap-3 text-left text-sm text-white/82">
+              <label className="flex items-start gap-3 text-left text-sm text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={newsletterConsent}
                   onChange={(event) => setNewsletterConsent(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-white/40 bg-transparent accent-white"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 bg-transparent accent-slate-900"
                 />
                 <span>
                   {lang === "it"
                     ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
                     : "I agree to receive the BITE newsletter and confirm that I have read the "}
-                  <Link to="/privacy-policy" className="underline decoration-white/50 underline-offset-4 hover:text-white">
+                  <Link to="/privacy-policy" className="underline decoration-slate-400 underline-offset-4 hover:text-slate-950">
                     {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
                   </Link>
                   .
