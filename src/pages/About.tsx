@@ -149,7 +149,7 @@ const TheCrew = () => {
                 <img
                   src={godot}
                   alt="Godot aboard"
-                  className="img-cover hover:scale-105 transition-transform duration-700"
+                  className="img-cover object-[50%_30%] hover:scale-105 transition-transform duration-700"
                   loading="lazy"
                   decoding="async"
                 />
@@ -179,7 +179,7 @@ const TheCrew = () => {
                 <img
                   src={freyjaVedetta}
                   alt="Freyja, Alaskan Malamute, on watch aboard Spritz"
-                  className="img-cover hover:scale-105 transition-transform duration-700"
+                  className="img-cover object-[35%_25%] hover:scale-105 transition-transform duration-700"
                   loading="lazy"
                   decoding="async"
                 />
