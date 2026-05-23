@@ -196,8 +196,23 @@ function resolveLanguageFromLocation(): Language | null {
   return urlLang === "it" || urlLang === "en" ? urlLang : null;
 }
 
+function resolveLanguageFromBrowser(): Language {
+  if (typeof navigator === "undefined") return "en";
+  const candidates: string[] = [];
+  if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
+  if (navigator.language) candidates.push(navigator.language);
+  for (const raw of candidates) {
+    const code = raw?.toLowerCase().split("-")[0];
+    if (code === "it") return "it";
+    if (code === "en") return "en";
+  }
+  return "en";
+}
+
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
-  const [lang, setLang] = useState<Language>(() => resolveLanguageFromLocation() ?? "en");
+  const [lang, setLang] = useState<Language>(
+    () => resolveLanguageFromLocation() ?? resolveLanguageFromBrowser()
+  );
 
   useEffect(() => {
     let cancelled = false;
