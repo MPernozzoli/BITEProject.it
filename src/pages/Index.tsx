@@ -264,6 +264,19 @@ const Index = () => {
   );
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
+  const heroPosterUrl = heroMedia?.poster ?? null;
+  useEffect(() => {
+    if (!heroPosterUrl) return;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = heroPosterUrl;
+    link.setAttribute("fetchpriority", "high");
+    document.head.appendChild(link);
+    return () => {
+      document.head.removeChild(link);
+    };
+  }, [heroPosterUrl]);
   const heroPriorityMedia = useMemo(() => {
     const candidates = [
       heroMedia,
@@ -551,7 +564,7 @@ const Index = () => {
         autoPlay={mode === "active"}
         muted
         playsInline
-        preload={shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
+        preload={mode === "active" || shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
