@@ -551,7 +551,7 @@ const Index = () => {
         autoPlay={mode === "active"}
         muted
         playsInline
-        preload={shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
+        preload={mode === "active" || shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
