@@ -22,7 +22,7 @@ const TikTokIcon = ({ size = 16, className }: { size?: number; className?: strin
 
 const socialLinks = [
   {
-    href: "https://www.instagram.com/better_is_the_end",
+    href: "https://www.instagram.com/biteproject.it",
     label: "Instagram",
     icon: Instagram,
   },
