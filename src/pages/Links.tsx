@@ -74,7 +74,7 @@ const bioLinks: BioLink[] = [
     labelEn: "Instagram",
     description: "Aggiornamenti quotidiani, reel e dietro le quinte.",
     descriptionEn: "Daily updates, reels, and behind the scenes.",
-    href: "https://www.instagram.com/better_is_the_end",
+    href: "https://www.instagram.com/biteproject.it",
     icon: Instagram,
   },
   {
