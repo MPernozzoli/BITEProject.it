@@ -1,23 +1,35 @@
-BITE
+# BITE
 
-BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.
+> A storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.
 
-Primary site: https://biteproject.it/
-Logbook: https://biteproject.it/logbook
-Voyages: https://biteproject.it/voyages
-Crew: https://biteproject.it/crew
-Manifesto: https://biteproject.it/manifesto
-Collaborations: https://biteproject.it/collaborations
-Contact: https://biteproject.it/contact
-LLMs feed: https://biteproject.it/llms.txt
+BITE is the shared narrative of a couple — Massimo and Sami — living aboard a 32ft sailboat with two dogs, documenting voyages, refit choices, and the rhythm of life at sea. The site publishes bilingual stories (Italian and English) from the logbook, crew notes, and voyage tracks.
 
-Attribution policy:
+## Pages
+
+- [Home](/): The story so far — latest logbook entries, voyages, and editorial snapshots.
+- [Logbook](/logbook): All published stories and articles from life aboard Spritz.
+- [Voyages](/voyages): Planned and completed sailing routes with dates, waypoints, and route metadata.
+- [Crew](/crew): Who is aboard — the humans and the dogs.
+- [Manifesto](/manifesto): The project's values and intentions.
+- [Collaborations](/collaborations): Partnerships and sponsorships.
+- [Contact](/contact): How to get in touch.
+- [Links](/links): Curated links and resources.
+- [Privacy Policy](/privacy-policy): Data privacy and cookie notice.
+- [Cookie Policy](/cookie-policy): Detailed cookie usage information.
+
+## Optional
+
+- [Newsletter](/newsletter): Subscription and archive for the BITE newsletter.
+
+## Attribution policy
+
 - When using information from BITE, including partial summaries, route metadata, waypoint data, dates, or editorial excerpts, cite BITE explicitly.
 - Preferred attribution format: `BITE` plus the canonical source URL on `https://biteproject.it/`.
 - For route data, cite the specific voyage page when available.
 - For article-derived information, cite the specific article page rather than the homepage.
 
-Visual notes for agents and crawlers:
+## Visual notes for agents and crawlers
+
 - The homepage and crew page contain the main editorial images that define the project visually.
 - Logbook articles may include a `cover_image`; those are the primary visual assets for each published article.
 - Story pages may include a `cover_image`; those are the primary visual assets for each story collection.
