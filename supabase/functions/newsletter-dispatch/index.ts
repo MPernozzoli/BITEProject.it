@@ -7,6 +7,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   buildFromAddress,
   PUBLIC_SITE_URL,
+  localizedUrl,
   SENDER_DOMAIN,
 } from '../_shared/email-config.ts'
 import {
