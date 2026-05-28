@@ -435,7 +435,7 @@ async function queueNewsletterDelivery(
     userEmail: normalizedEmail,
     preferredLanguage: params.recipientLanguage,
     profileId: params.profileId,
-    siteUrl: PUBLIC_SITE_URL,
+    siteUrl: localizedUrl(params.recipientLanguage, '/'),
     unsubscribeUrl,
     messageName: params.message.name,
     deliveryType: params.deliveryType,
