@@ -9,17 +9,25 @@ const publicDir = path.join(projectRoot, "public");
 const outputPath = path.join(publicDir, "sitemap.xml");
 
 const SITE_URL = "https://biteproject.it";
-const STATIC_ROUTES = [
+
+/** Routes that exist under both /it and /en prefixes (bilingual). */
+const LOCALIZED_ROUTES = [
   "/",
   "/crew",
+  "/manifesto",
   "/logbook",
   "/voyages",
   "/links",
   "/collaborations",
   "/contact",
-  "/privacy-policy",
-  "/cookie-policy",
 ];
+
+/** Single-language routes (legal). No hreflang alternates. */
+const SINGLE_ROUTES = ["/privacy-policy", "/cookie-policy"];
+
+const LANGS = ["it", "en"];
+const DEFAULT_LANG = "en";
+const withLang = (lang, path) => (path === "/" ? `/${lang}` : `/${lang}${path}`);
 
 const xmlEscape = (value) =>
   value
@@ -129,19 +137,40 @@ const imageTag = (image) => {
 
 const buildSitemapXml = (urls) => {
   const rows = urls
-    .map(({ loc, lastmod, images }) => {
+    .map(({ loc, lastmod, images, alternates }) => {
       const lastmodTag = lastmod ? `\n    <lastmod>${xmlEscape(lastmod)}</lastmod>` : "";
       const imageTags = (images || []).map(imageTag).join("");
-      return `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}${imageTags}\n  </url>`;
+      const alternateTags = (alternates || [])
+        .map(
+          (alt) =>
+            `\n    <xhtml:link rel="alternate" hreflang="${alt.hreflang}" href="${xmlEscape(alt.href)}" />`
+        )
+        .join("");
+      return `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}${alternateTags}${imageTags}\n  </url>`;
     })
     .join("\n");
 
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${rows}\n</urlset>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${rows}\n</urlset>\n`;
+};
+
+/** Expand one logical bilingual entry into one <url> per language with hreflang alternates. */
+const expandBilingual = (path, lastmod, images = []) => {
+  const alternates = [
+    ...LANGS.map((l) => ({ hreflang: l, href: `${SITE_URL}${withLang(l, path)}` })),
+    { hreflang: "x-default", href: `${SITE_URL}${withLang(DEFAULT_LANG, path)}` },
+  ];
+  return LANGS.map((lang) => ({
+    loc: `${SITE_URL}${withLang(lang, path)}`,
+    lastmod,
+    images,
+    alternates,
+  }));
 };
 
 const generateSitemap = async () => {
-  const staticUrls = STATIC_ROUTES.map((route) => ({
-    loc: new URL(route, SITE_URL).toString(),
+  const staticUrls = LOCALIZED_ROUTES.flatMap((route) => expandBilingual(route, null));
+  const singleUrls = SINGLE_ROUTES.map((route) => ({
+    loc: `${SITE_URL}${route}`,
     lastmod: null,
   }));
 
@@ -193,15 +222,15 @@ const generateSitemap = async () => {
 
             return [
               article.slug,
-              {
-                loc: `${SITE_URL}/logbook/${article.slug}`,
-                lastmod: toIsoDate(article.updated_at || article.published_at),
-                images,
-              },
+              expandBilingual(
+                `/logbook/${article.slug}`,
+                toIsoDate(article.updated_at || article.published_at),
+                images
+              ),
             ];
           })
       ).values()
-    );
+    ).flat();
 
     storyUrls = Array.from(
       new Map(
@@ -209,10 +238,10 @@ const generateSitemap = async () => {
           .filter((story) => typeof story.slug === "string" && story.slug)
           .map((story) => [
             story.slug,
-            {
-              loc: `${SITE_URL}/logbook/story/${story.slug}`,
-              lastmod: toIsoDate(story.updated_at),
-              images: story.cover_image
+            expandBilingual(
+              `/logbook/story/${story.slug}`,
+              toIsoDate(story.updated_at),
+              story.cover_image
                 ? [
                     {
                       loc: story.cover_image,
@@ -220,11 +249,11 @@ const generateSitemap = async () => {
                       caption: story.title_en || story.title_it || "Story cover image",
                     },
                   ]
-                : [],
-            },
+                : []
+            ),
           ])
       ).values()
-    );
+    ).flat();
 
     const slugifyVoyageName = (value) =>
       value
@@ -241,25 +270,30 @@ const generateSitemap = async () => {
           .filter((voyage) => typeof voyage.id === "string" && voyage.id && typeof voyage.name === "string" && voyage.name)
           .map((voyage) => [
             voyage.id,
-            {
-              loc: `${SITE_URL}/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`,
-              lastmod: toIsoDate(voyage.updated_at),
-              images: [],
-            },
+            expandBilingual(
+              `/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`,
+              toIsoDate(voyage.updated_at)
+            ),
           ])
       ).values()
-    );
+    ).flat();
   } catch (error) {
     console.warn("[sitemap] Dynamic URL fetch failed, falling back to static routes only.");
     console.warn(error instanceof Error ? error.message : error);
   }
 
-  const sitemapXml = buildSitemapXml([...staticUrls, ...voyageUrls, ...storyUrls, ...articleUrls]);
+  const sitemapXml = buildSitemapXml([
+    ...staticUrls,
+    ...voyageUrls,
+    ...storyUrls,
+    ...articleUrls,
+    ...singleUrls,
+  ]);
   await mkdir(publicDir, { recursive: true });
   await writeFile(outputPath, sitemapXml, "utf8");
 
   console.log(
-    `[sitemap] Wrote ${staticUrls.length + voyageUrls.length + storyUrls.length + articleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
+    `[sitemap] Wrote ${staticUrls.length + voyageUrls.length + storyUrls.length + articleUrls.length + singleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
   );
 };
 
