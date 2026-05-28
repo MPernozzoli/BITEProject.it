@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
           actor?.name?.trim() ||
           (recipientLanguage === 'en' ? 'Someone' : 'Qualcuno'),
         articleTitle: resolveArticleTitle(article, recipientLanguage),
-        articleUrl: buildNotificationUrl(article, notification),
+        articleUrl: buildNotificationUrl(article, notification, recipientLanguage),
         articleImageUrl: article?.cover_image ?? null,
         createdAtLabel: formatTimestamp(notification.created_at, recipientLanguage),
         kind: notification.event_type,
