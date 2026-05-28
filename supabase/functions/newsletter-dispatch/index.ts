@@ -7,6 +7,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   buildFromAddress,
   PUBLIC_SITE_URL,
+  localizedUrl,
   SENDER_DOMAIN,
 } from '../_shared/email-config.ts'
 import {
@@ -434,7 +435,7 @@ async function queueNewsletterDelivery(
     userEmail: normalizedEmail,
     preferredLanguage: params.recipientLanguage,
     profileId: params.profileId,
-    siteUrl: PUBLIC_SITE_URL,
+    siteUrl: localizedUrl(params.recipientLanguage, '/'),
     unsubscribeUrl,
     messageName: params.message.name,
     deliveryType: params.deliveryType,

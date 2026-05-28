@@ -1,5 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { PUBLIC_SITE_URL, localizedUrl } from '../_shared/email-config.ts'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 
 const corsHeaders = {
@@ -316,7 +316,7 @@ Deno.serve(async (req) => {
           article.excerpt_en,
           ''
         ),
-        url: `${PUBLIC_SITE_URL}/logbook/${article.slug}`,
+        url: localizedUrl(normalizedLanguage, `/logbook/${article.slug}`),
         coverImageUrl: article.cover_image,
         storyTitle: article.stories
           ? localizeValue(
@@ -327,7 +327,7 @@ Deno.serve(async (req) => {
             )
           : null,
         storyUrl: article.stories?.slug
-          ? `${PUBLIC_SITE_URL}/logbook/story/${article.stories.slug}`
+          ? localizedUrl(normalizedLanguage, `/logbook/story/${article.stories.slug}`)
           : null,
         publishedLabel: article.published_at
           ? new Intl.DateTimeFormat(

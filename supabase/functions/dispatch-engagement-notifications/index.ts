@@ -4,7 +4,7 @@ import {
   normalizeEmailNotificationPreferences,
   type EngagementNotificationFrequency,
 } from '../_shared/email-preferences.ts'
-import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { PUBLIC_SITE_URL, localizedUrl } from '../_shared/email-config.ts'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 
 const corsHeaders = {
@@ -148,9 +148,10 @@ function formatTimestamp(value: string, language: string | null): string {
 
 function buildNotificationUrl(
   article: ArticleRow | null | undefined,
-  notification: PendingNotification
+  notification: PendingNotification,
+  lang: string | null = null
 ): string {
-  const articlePath = article ? `/logbook/${article.slug}` : '/journal'
+  const articlePath = article ? `/logbook/${article.slug}` : '/logbook'
   const params = new URLSearchParams({
     notification: notification.id,
     focus: notification.comment_id ? 'comment' : 'likes',
@@ -160,7 +161,7 @@ function buildNotificationUrl(
     params.set('comment', notification.comment_id)
   }
 
-  return `${PUBLIC_SITE_URL}${articlePath}?${params.toString()}`
+  return `${localizedUrl(lang, articlePath)}?${params.toString()}`
 }
 
 function buildPushMessage(params: {
@@ -459,7 +460,7 @@ Deno.serve(async (req) => {
           actor?.name?.trim() ||
           (recipientLanguage === 'en' ? 'Someone' : 'Qualcuno'),
         articleTitle: resolveArticleTitle(article, recipientLanguage),
-        articleUrl: buildNotificationUrl(article, notification),
+        articleUrl: buildNotificationUrl(article, notification, recipientLanguage),
         articleImageUrl: article?.cover_image ?? null,
         createdAtLabel: formatTimestamp(notification.created_at, recipientLanguage),
         kind: notification.event_type,
