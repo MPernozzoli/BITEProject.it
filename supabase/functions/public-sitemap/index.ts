@@ -2,7 +2,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const SITE_URL = 'https://biteproject.it'
 
-const STATIC_ROUTES = [
+/** Routes that exist under both /it and /en prefixes (bilingual). */
+const LOCALIZED_ROUTES = [
   '/',
   '/crew',
   '/manifesto',
@@ -11,9 +12,20 @@ const STATIC_ROUTES = [
   '/collaborations',
   '/contact',
   '/links',
+]
+
+/** Single-language routes (legal, profile). No hreflang alternates. */
+const SINGLE_ROUTES = [
   '/privacy-policy',
   '/cookie-policy',
 ]
+
+const LANGS = ['it', 'en'] as const
+const DEFAULT_LANG = 'en'
+type Lang = typeof LANGS[number]
+
+const withLang = (lang: Lang, path: string) =>
+  path === '/' ? `/${lang}` : `/${lang}${path}`
 
 const xmlEscape = (value: string) =>
   value
@@ -39,17 +51,49 @@ const slugifyVoyageName = (value: string) =>
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'voyage'
 
-const buildSitemapXml = (
-  urls: Array<{ loc: string; lastmod?: string | null }>
-) => {
-  const rows = urls
-    .map(({ loc, lastmod }) => {
-      const lastmodTag = lastmod ? `\n    <lastmod>${xmlEscape(lastmod)}</lastmod>` : ''
-      return `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}\n  </url>`
-    })
-    .join('\n')
+type SitemapEntry = {
+  /** Path WITHOUT lang prefix for bilingual routes, full path for single routes. */
+  path: string
+  lastmod?: string | null
+  /** If true, emits one <url> per language with xhtml:link alternates. */
+  bilingual: boolean
+}
 
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows}\n</urlset>\n`
+const buildSitemapXml = (entries: SitemapEntry[]) => {
+  const rows: string[] = []
+
+  for (const entry of entries) {
+    const lastmodTag = entry.lastmod
+      ? `\n    <lastmod>${xmlEscape(entry.lastmod)}</lastmod>`
+      : ''
+
+    if (!entry.bilingual) {
+      const loc = `${SITE_URL}${entry.path}`
+      rows.push(`  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}\n  </url>`)
+      continue
+    }
+
+    // Emit one <url> per language, with xhtml:link alternates pointing to every
+    // language version + x-default. This is the SEO-correct hreflang pattern.
+    const alternates = LANGS.map(
+      (l) =>
+        `    <xhtml:link rel="alternate" hreflang="${l}" href="${xmlEscape(
+          `${SITE_URL}${withLang(l, entry.path)}`
+        )}" />`
+    ).join('\n')
+    const xDefault = `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(
+      `${SITE_URL}${withLang(DEFAULT_LANG, entry.path)}`
+    )}" />`
+
+    for (const lang of LANGS) {
+      const loc = `${SITE_URL}${withLang(lang, entry.path)}`
+      rows.push(
+        `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}\n${alternates}\n${xDefault}\n  </url>`
+      )
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${rows.join('\n')}\n</urlset>\n`
 }
 
 Deno.serve(async () => {
@@ -92,41 +136,59 @@ Deno.serve(async () => {
     return new Response('Unable to build sitemap', { status: 500 })
   }
 
-  const staticUrls = STATIC_ROUTES.map((route) => ({
-    loc: new URL(route, SITE_URL).toString(),
+  const staticEntries: SitemapEntry[] = LOCALIZED_ROUTES.map((path) => ({
+    path,
     lastmod: null,
+    bilingual: true,
   }))
 
-  const articleUrls = (articlesRes.data || [])
-    .filter((article) => article.slug)
-    .map((article) => ({
-      loc: `${SITE_URL}/logbook/${article.slug}`,
-      lastmod: toIsoDate(article.updated_at || article.published_at),
+  const singleEntries: SitemapEntry[] = SINGLE_ROUTES.map((path) => ({
+    path,
+    lastmod: null,
+    bilingual: false,
+  }))
+
+  const articleEntries: SitemapEntry[] = (articlesRes.data || [])
+    .filter((a) => a.slug)
+    .map((a) => ({
+      path: `/logbook/${a.slug}`,
+      lastmod: toIsoDate(a.updated_at || a.published_at),
+      bilingual: true,
     }))
 
-  const storyUrls = (storiesRes.data || [])
-    .filter((story) => story.slug)
-    .map((story) => ({
-      loc: `${SITE_URL}/logbook/story/${story.slug}`,
-      lastmod: toIsoDate(story.updated_at),
+  const storyEntries: SitemapEntry[] = (storiesRes.data || [])
+    .filter((s) => s.slug)
+    .map((s) => ({
+      path: `/logbook/story/${s.slug}`,
+      lastmod: toIsoDate(s.updated_at),
+      bilingual: true,
     }))
 
-  const voyageUrls = (voyagesRes.data || [])
-    .filter((voyage) => voyage.id && voyage.name)
-    .map((voyage) => ({
-      loc: `${SITE_URL}/voyages/${voyage.id}--${slugifyVoyageName(voyage.name)}`,
-      lastmod: toIsoDate(voyage.updated_at),
+  const voyageEntries: SitemapEntry[] = (voyagesRes.data || [])
+    .filter((v) => v.id && v.name)
+    .map((v) => ({
+      path: `/voyages/${v.id}--${slugifyVoyageName(v.name)}`,
+      lastmod: toIsoDate(v.updated_at),
+      bilingual: true,
     }))
 
-  const profileUrls = (profilesRes.data || [])
-    .filter((profile) => profile.id)
-    .map((profile) => ({
-      loc: `${SITE_URL}/profile/${profile.id}`,
-      lastmod: toIsoDate(profile.created_at),
+  const profileEntries: SitemapEntry[] = (profilesRes.data || [])
+    .filter((p) => p.id)
+    .map((p) => ({
+      path: `/profile/${p.id}`,
+      lastmod: toIsoDate(p.created_at),
+      bilingual: false,
     }))
 
   return new Response(
-    buildSitemapXml([...staticUrls, ...voyageUrls, ...storyUrls, ...articleUrls, ...profileUrls]),
+    buildSitemapXml([
+      ...staticEntries,
+      ...voyageEntries,
+      ...storyEntries,
+      ...articleEntries,
+      ...singleEntries,
+      ...profileEntries,
+    ]),
     {
       status: 200,
       headers: {
