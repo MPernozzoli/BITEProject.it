@@ -30,3 +30,42 @@ export function LegacyLangRedirectFromPath() {
 }
 
 export default LegacyLangRedirect;
+
+/** Legacy redirect that preserves a single dynamic param. */
+import { useParams } from "react-router-dom";
+
+export function LegacyVoyageRedirect() {
+  const { voyageRef } = useParams();
+  const location = useLocation();
+  const lang = detectPreferredLang();
+  return (
+    <Navigate
+      to={withLang(lang, `/voyages/${voyageRef ?? ""}`) + location.search + location.hash}
+      replace
+    />
+  );
+}
+
+export function LegacyArticleRedirect() {
+  const { slug } = useParams();
+  const location = useLocation();
+  const lang = detectPreferredLang();
+  return (
+    <Navigate
+      to={withLang(lang, `/logbook/${slug ?? ""}`) + location.search + location.hash}
+      replace
+    />
+  );
+}
+
+export function LegacyStoryRedirect() {
+  const { slug } = useParams();
+  const location = useLocation();
+  const lang = detectPreferredLang();
+  return (
+    <Navigate
+      to={withLang(lang, `/logbook/story/${slug ?? ""}`) + location.search + location.hash}
+      replace
+    />
+  );
+}
