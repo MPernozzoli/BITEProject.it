@@ -29,7 +29,7 @@ export function LegacyLangRedirectFromPath() {
   );
 }
 
-export default LegacyLangRedirect;
+export function LegacyVoyageRedirect() {
   const { voyageRef } = useParams();
   const location = useLocation();
   const lang = detectPreferredLang();
@@ -64,3 +64,5 @@ export function LegacyStoryRedirect() {
     />
   );
 }
+
+export default LegacyLangRedirect;
