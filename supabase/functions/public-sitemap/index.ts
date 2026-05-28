@@ -5,10 +5,12 @@ const SITE_URL = 'https://biteproject.it'
 const STATIC_ROUTES = [
   '/',
   '/crew',
+  '/manifesto',
   '/logbook',
   '/voyages',
   '/collaborations',
   '/contact',
+  '/links',
   '/privacy-policy',
   '/cookie-policy',
 ]
@@ -60,7 +62,7 @@ Deno.serve(async () => {
 
   const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
 
-  const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
+  const [articlesRes, storiesRes, voyagesRes, profilesRes] = await Promise.all([
     supabase
       .from('logbook_articles')
       .select('slug, published_at, updated_at')
@@ -75,13 +77,17 @@ Deno.serve(async () => {
       .select('id, name, updated_at')
       .eq('is_published', true)
       .order('sort_order', { ascending: true }),
+    supabase
+      .from('public_profiles')
+      .select('id, created_at'),
   ])
 
-  if (articlesRes.error || storiesRes.error || voyagesRes.error) {
+  if (articlesRes.error || storiesRes.error || voyagesRes.error || profilesRes.error) {
     console.error('public-sitemap fetch error', {
       articles: articlesRes.error,
       stories: storiesRes.error,
       voyages: voyagesRes.error,
+      profiles: profilesRes.error,
     })
     return new Response('Unable to build sitemap', { status: 500 })
   }
@@ -112,8 +118,15 @@ Deno.serve(async () => {
       lastmod: toIsoDate(voyage.updated_at),
     }))
 
+  const profileUrls = (profilesRes.data || [])
+    .filter((profile) => profile.id)
+    .map((profile) => ({
+      loc: `${SITE_URL}/profile/${profile.id}`,
+      lastmod: toIsoDate(profile.created_at),
+    }))
+
   return new Response(
-    buildSitemapXml([...staticUrls, ...voyageUrls, ...storyUrls, ...articleUrls]),
+    buildSitemapXml([...staticUrls, ...voyageUrls, ...storyUrls, ...articleUrls, ...profileUrls]),
     {
       status: 200,
       headers: {
