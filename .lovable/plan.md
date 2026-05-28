@@ -1,81 +1,97 @@
-## Analisi attuale dei consumi
+## Obiettivo
+Rendere il sito SEO-ottimizzato per il mercato italiano e inglese servendo ogni pagina su URL dedicati per lingua (`/it/...` e `/en/...`), con `hreflang`, canonical, `<html lang>` dinamici e sitemap bilingue.
 
-Dopo aver esaminato il codice, i principali driver di consumo Lovable Cloud sono:
+## URL design
 
-### 🔴 Polling costanti (egress + DB requests)
-1. **`usePublicContentSnapshot`** — fa polling della "version" pubblica **ogni 2 minuti** per ogni utente attivo, per tutta la durata della sessione. Con anche solo 50 visitatori in pagina = ~1.500 query/h solo per il version-check.
-2. **`ProfileNotificationsMenu`** — ricarica le notifiche **ogni 60 secondi** anche con dropdown chiuso, per ogni utente loggato.
-3. **`useArticleReads` realtime channel** — apre un canale Postgres realtime su `logbook_articles` per ogni articolo aperto, solo per sincronizzare il `view_count`. Realtime ha costo per connessione persistente.
+Struttura finale (esempi):
+```text
+/                              → redirect → /it/ o /en/ (in base a browser/cookie)
+/it/                           → home IT
+/en/                           → home EN
+/it/diario-di-bordo            → Logbook IT
+/en/logbook                    → Logbook EN
+/it/diario-di-bordo/:slug      → articolo IT
+/en/logbook/:slug              → articolo EN
+/it/ciurma · /en/crew
+/it/manifesto · /en/manifesto
+/it/rotte · /en/voyages
+/it/rotte/:ref · /en/voyages/:ref
+/it/collaborazioni · /en/collaborations
+/it/contatti · /en/contact
+/it/links · /en/links
+```
 
-### 🟡 Query inefficienti
-4. Diverse `select("*")` su tabelle grandi (`voyages`, `logbook_articles`, `newsletter_deliveries` con `.limit(800)` — quest'ultima molto pesante).
-5. `AdminNewsletterManager` carica fino a 800 deliveries + tutti i subscribers in una volta.
+Le route admin, auth, profile, legal (`/admin/*`, `/login`, `/profile/*`, `/privacy-policy`, ecc.) restano **fuori dal prefisso lingua** (non sono contenuto SEO da indicizzare in due lingue).
 
-### 🟡 Edge functions sempre attive
-6. 28 edge function deployate. Quelle "public-*" (sitemap, llms, semantic, geo) probabilmente vengono richieste da bot/crawler frequentemente senza caching aggressivo.
+I vecchi URL (`/logbook`, `/crew`, `/voyages/:ref`, ecc.) restano attivi come **301 redirect** verso `/en/...` o `/it/...` in base a browser/cookie → zero broken link, link esterni esistenti preservati.
 
-### 🟢 Storage/auth
-Sembrano già ottimizzati (no upload massivi, sessioni 30gg).
+## Cosa cambia
 
----
+### 1. Routing (`src/App.tsx`)
+- Wrappare le route pubbliche in due gruppi `<Route path="/it/*">` e `<Route path="/en/*">` con un componente `<LocalizedRoutes lang="it|en" />` che monta le stesse pagine.
+- Aggiungere `<Route path="/" element={<LanguageRedirect />} />` che fa redirect a `/it/` o `/en/` in base a `localStorage.bite-lang` → cookie → `navigator.language` → default `en`.
+- Per ogni vecchio URL pubblico aggiungere un redirect (`<Navigate to="/en/logbook" replace />` ecc.) calcolato dalla lingua preferita.
 
-## Piano di ottimizzazione (zero impatto utente)
+### 2. I18n driven by URL (`src/lib/i18n.tsx`)
+- Il provider legge `lang` dal **path** invece che da query param/localStorage:
+  - `pathname.startsWith("/it/")` → `it`
+  - `pathname.startsWith("/en/")` → `en`
+- `setLang(next)` fa `navigate(swapLangInPath(current, next))` invece di solo `setLang` interno → cambia URL.
+- Si mantiene il fallback su browser/profilo utente **solo** sul redirect iniziale (`/` → `/xx/`).
 
-### 1. Allungare il polling del version-check pubblico
-**File:** `src/hooks/usePublicContentSnapshot.ts`
-- Portare `PUBLIC_CONTENT_VERSION_POLL_MS` da **2 min → 10 min**.
-- Disattivare polling automatico se la tab è in background (già parzialmente fatto con `refetchIntervalInBackground:false`).
-- Aumentare `PUBLIC_CONTENT_VERSION_STALE_MS` da 1 min → 5 min.
-- **Risparmio stimato: ~80% di query version-check.** L'utente non se ne accorge: il refetch su window focus garantisce comunque freschezza quando torna attivo.
+### 3. Slug bilingui per articoli e voyages
+- Articoli: i record hanno già `title_it` / `title_en`. Aggiungere colonne `slug_it` e `slug_en` (migration) generate da slugify del titolo; mantenere lo slug attuale come fallback finché non popolate.
+- Lookup nel componente: `slug_it` se in IT, `slug_en` se in EN. Canonical sempre allo slug della lingua corrente.
+- Voyages: stessa logica con `slug_it`/`slug_en` sulla tabella voyages.
 
-### 2. Notifiche: realtime invece di polling 60s
-**File:** `src/components/ProfileNotificationsMenu.tsx`
-- Sostituire `setInterval(60000)` con un canale realtime sulla tabella `notifications` filtrato per `user_id`. Una sola connessione persistente costa molto meno di un poll/min, e le notifiche arrivano istantaneamente (UX migliore).
-- Fallback: refetch su window focus + apertura dropdown (già presente).
-- **Risparmio: ~60 query/utente/h → praticamente 0.**
+### 4. Per-route head con `react-helmet-async`
+- Installare `react-helmet-async`, montare `<HelmetProvider>` in `App.tsx`.
+- Creare `<SeoHead>` riusabile che emette:
+  - `<title>`, `<meta description>`
+  - `<link rel="canonical" href="https://biteproject.it/{lang}/path">`
+  - `<link rel="alternate" hreflang="it" href=".../it/path">`
+  - `<link rel="alternate" hreflang="en" href=".../en/path">`
+  - `<link rel="alternate" hreflang="x-default" href=".../en/path">`
+  - `<meta property="og:locale" content="it_IT|en_US">`
+  - `<meta property="og:locale:alternate" content="...">`
+  - `<html lang>` aggiornato via `<Helmet htmlAttributes>`
+- Inserire `<SeoHead>` in: Index, About, Manifesto, Journal, Voyages, VoyagePage, ArticlePage, Collaborations, Contact, Links, StoryPage.
+- Per Article/Voyage aggiungere JSON-LD `Article` con `inLanguage`, `headline`, `datePublished`, `author`.
+- Rimuovere `<link rel="canonical">` statico da `index.html` (sarà sempre per-route).
 
-### 3. View count realtime → debounce/lazy
-**File:** `src/hooks/useArticleReads.tsx`
-- Il canale realtime su `logbook_articles` per il view_count è "lusso". Sostituirlo con: refetch del count solo quando l'utente torna alla tab (`visibilitychange`) o ogni 5 min se la pagina resta aperta a lungo.
-- In alternativa, eliminare del tutto l'aggiornamento live: il view_count si aggiorna comunque al prossimo caricamento.
-- **Risparmio: 1 connessione realtime persistente per ogni lettore.**
+### 5. Sitemap bilingue
+- Aggiornare `supabase/functions/public-sitemap/index.ts` per emettere, per ogni URL pubblico, **due entry** (`/it/...` e `/en/...`) con namespace `xhtml` e `<xhtml:link rel="alternate" hreflang="it|en|x-default">`.
+- Stesso per `public/sitemap.xml` statico (mantenere allineato).
 
-### 4. Sostituire `select("*")` con colonne esplicite
-**File:** `src/lib/public-content.ts`, `src/pages/Voyages.tsx`, `src/pages/StoryPage.tsx`, `src/pages/PublicProfile.tsx`, `src/components/voyage/ExpandedArticleModal.tsx`
-- Selezionare solo le colonne effettivamente usate dalle UI (escludere campi pesanti tipo `content_html_it`, `content_html_en` quando non servono in liste).
-- **Risparmio: riduzione egress 30-60% su queste pagine** (in particolare le liste articoli/voyages).
+### 6. Cleanup `index.html`
+- Lasciare `<html lang="en">` come fallback iniziale (verrà overridden da Helmet).
+- Rimuovere `<link rel="canonical">` statico.
+- `og:locale` resta `en_US` come default per crawler social senza JS.
+- Aggiornare `noscript` per linkare `/en/...` espliciti.
 
-### 5. Admin Newsletter: paginazione/lazy
-**File:** `src/components/admin/AdminNewsletterManager.tsx`
-- Caricare i 800 deliveries solo quando si apre la tab "Deliveries" (non all'apertura del manager).
-- Selezionare solo colonne necessarie per la lista (no `*`).
-- **Risparmio: query admin più leggera, meno load DB.**
+### 7. Newsletter / email link
+- Aggiornare i link generati nelle edge function email per usare il prefisso lingua corretto in base alla `preferred_language` del destinatario.
 
-### 6. Cache HTTP aggressiva sulle edge functions pubbliche
-**File:** `supabase/functions/public-sitemap/index.ts`, `public-llms/index.ts`, `public-semantic/index.ts`, `public-geo/index.ts`
-- Aggiungere header `Cache-Control: public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400`.
-- Bot/crawler e CDN edge cachano la risposta → meno invocazioni della function.
-- **Risparmio: -70-90% invocazioni edge da crawler.**
+## Cosa NON cambia
+- Database CMS, RLS, auth, admin panel, mappa MapLibre — tutto invariato.
+- Le traduzioni esistenti in `i18n.tsx` (chiavi UI) restano identiche.
+- Il selector di lingua nella navbar funziona già — cambierà solo l'implementazione di `setLang` (naviga invece di solo settare stato).
 
-### 7. Pulizia edge functions inutilizzate (verifica)
-Verificare se ci sono function deployate ma mai chiamate (es. `preview-transactional-email` solo per dev?). Se sì, eliminarle riduce la superficie billable.
+## Migration plan / rollout
+1. Migration DB: aggiungere `slug_it`, `slug_en` (nullable) ad `articles` e `voyages` + backfill da titoli.
+2. Refactor routing + i18n + helmet (un solo commit grosso).
+3. Aggiornare sitemap edge function.
+4. Smoke test: ogni route in IT ed EN, redirect dal vecchio URL, canonical corretto, hreflang corretto, language switcher cambia URL.
+5. Dopo deploy: chiedere a Google Search Console "Inspect URL" su 2-3 URL IT per forzare reindex.
 
----
+## Rischi / trade-off
+- **Refactor invasivo**: tocca 12+ pagine, routing, i18n provider, sitemap.
+- **Link esistenti**: i 301 redirect preservano tutto, ma social cards già scrappate (FB/LinkedIn) mostreranno vecchia URL finché non riscrapate.
+- **Slug bilingui**: nuova UX per CMS — l'editor articolo dovrà permettere di editarli (UI minima: input read-only generati dal titolo, override opzionale). Posso lasciarlo per uno step successivo se vuoi che parta semplice (stesso slug per entrambe le lingue inizialmente).
 
-## Impatto stimato totale
-- **Database requests: -60/70%** (soprattutto da polling)
-- **Realtime connections: -90%** (eliminato canale view_count)
-- **Egress: -30/40%** (select mirate + cache HTTP)
-- **Edge function invocations: -50%** (cache pubblica)
+## Domanda prima di partire
+Per gli slug degli articoli vuoi:
+- **(A)** Slug uguali in entrambe le lingue (es. `/it/diario-di-bordo/first-time-sailors` e `/en/logbook/first-time-sailors`) → più semplice, meno SEO-power IT
+- **(B)** Slug diversi per lingua (es. `/it/diario-di-bordo/primi-velisti` vs `/en/logbook/first-time-sailors`) → SEO ottimale, richiede campo extra editabile nel CMS
 
-**Zero impatto sull'esperienza utente percepita.** Anzi, le notifiche realtime miglioreranno la UX rispetto al polling 60s.
-
----
-
-## Cosa NON tocco
-- Auth/sessioni (già ottimali).
-- TanStack Query cache strategies generali (già buone con `gcTime` lunghi).
-- Schema DB / RLS (cambiamenti rischiosi, non necessari per ottimizzare costi).
-- AI Gateway (consumi separati, già su modelli economici Gemini Flash).
-
-Procedo step-by-step in modalità build dopo la tua approvazione, oppure dimmi se vuoi prioritizzare solo alcuni punti (es. solo 1-2-3 che sono quelli a impatto maggiore).
+Consiglio **(B)** ma se preferisci partire snello, **(A)** è fine.
