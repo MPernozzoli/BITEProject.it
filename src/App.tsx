@@ -2,7 +2,7 @@ import { Suspense, lazy, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { I18nProvider } from "@/lib/i18n";
@@ -10,6 +10,13 @@ import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import AdminRoute from "@/components/AdminRoute";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { LegacyLangRedirect } from "@/components/LegacyLangRedirect";
+import {
+  LegacyVoyageRedirect,
+  LegacyArticleRedirect,
+  LegacyStoryRedirect,
+} from "@/components/LegacyLangRedirect";
+import { detectPreferredLang, withLang } from "@/lib/seo";
 
 const createAppQueryClient = () =>
   new QueryClient({
@@ -64,6 +71,31 @@ const RouteFallback = () => (
   </div>
 );
 
+/** Root redirect: / → /it or /en based on persisted preference / browser. */
+const RootLangRedirect = () => {
+  const location = useLocation();
+  const lang = detectPreferredLang();
+  return <Navigate to={withLang(lang, "/") + location.search + location.hash} replace />;
+};
+
+/** Localized routes used identically under /it and /en prefixes. */
+const LocalizedRoutes = () => (
+  <Routes>
+    <Route index element={<Index />} />
+    <Route path="crew" element={<TheCrew />} />
+    <Route path="manifesto" element={<Manifesto />} />
+    <Route path="logbook" element={<Journal />} />
+    <Route path="voyages" element={<VoyagesPage />} />
+    <Route path="voyages/:voyageRef" element={<VoyagePage />} />
+    <Route path="links" element={<LinksPage />} />
+    <Route path="collaborations" element={<Collaborations />} />
+    <Route path="contact" element={<Contact />} />
+    <Route path="logbook/story/:slug" element={<StoryPage />} />
+    <Route path="logbook/:slug" element={<ArticlePage />} />
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
+
 const App = () => {
   const [queryClient] = useState(createAppQueryClient);
   const [queryPersister] = useState(createAppPersister);
@@ -72,27 +104,36 @@ const App = () => {
     <>
       <Toaster />
       <Sonner />
-      <I18nProvider>
-        <AuthProvider>
-          <BrowserRouter>
+      <BrowserRouter>
+        <I18nProvider>
+          <AuthProvider>
             <AppErrorBoundary>
               <Layout>
                 <Suspense fallback={<RouteFallback />}>
                   <Routes>
-                    <Route path="/" element={<Index />} />
-                    <Route path="/crew" element={<TheCrew />} />
-                    <Route path="/about" element={<Navigate to="/crew" replace />} />
-                    <Route path="/manifesto" element={<Manifesto />} />
-                    <Route path="/logbook" element={<Journal />} />
-                    <Route path="/voyages" element={<VoyagesPage />} />
-                    <Route path="/voyages/:voyageRef" element={<VoyagePage />} />
-                    <Route path="/links" element={<LinksPage />} />
-                    <Route path="/linktree" element={<Navigate to="/links" replace />} />
-                    <Route path="/route" element={<Navigate to="/logbook" replace />} />
-                    <Route path="/collaborations" element={<Collaborations />} />
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/logbook/story/:slug" element={<StoryPage />} />
-                    <Route path="/logbook/:slug" element={<ArticlePage />} />
+                    {/* Root → redirect to /it or /en based on user preference */}
+                    <Route path="/" element={<RootLangRedirect />} />
+
+                    {/* Localized public routes under /it and /en */}
+                    <Route path="/it/*" element={<LocalizedRoutes />} />
+                    <Route path="/en/*" element={<LocalizedRoutes />} />
+
+                    {/* Legacy URL redirects → preserve external/social links */}
+                    <Route path="/about" element={<LegacyLangRedirect to="/crew" />} />
+                    <Route path="/crew" element={<LegacyLangRedirect to="/crew" />} />
+                    <Route path="/manifesto" element={<LegacyLangRedirect to="/manifesto" />} />
+                    <Route path="/logbook" element={<LegacyLangRedirect to="/logbook" />} />
+                    <Route path="/voyages" element={<LegacyLangRedirect to="/voyages" />} />
+                    <Route path="/voyages/:voyageRef" element={<LegacyVoyageRedirect />} />
+                    <Route path="/logbook/story/:slug" element={<LegacyStoryRedirect />} />
+                    <Route path="/logbook/:slug" element={<LegacyArticleRedirect />} />
+                    <Route path="/links" element={<LegacyLangRedirect to="/links" />} />
+                    <Route path="/linktree" element={<LegacyLangRedirect to="/links" />} />
+                    <Route path="/route" element={<LegacyLangRedirect to="/logbook" />} />
+                    <Route path="/collaborations" element={<LegacyLangRedirect to="/collaborations" />} />
+                    <Route path="/contact" element={<LegacyLangRedirect to="/contact" />} />
+
+                    {/* Non-localized routes (auth, profile, admin, legal, system) */}
                     <Route path="/profile/:id" element={<PublicProfile />} />
                     <Route path="/login" element={<UserLogin />} />
                     <Route path="/signup" element={<UserLogin />} />
@@ -111,9 +152,9 @@ const App = () => {
                 </Suspense>
               </Layout>
             </AppErrorBoundary>
-          </BrowserRouter>
-        </AuthProvider>
-      </I18nProvider>
+          </AuthProvider>
+        </I18nProvider>
+      </BrowserRouter>
     </>
   );
 

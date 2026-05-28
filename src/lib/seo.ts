@@ -1,184 +1,280 @@
-export const SITE_NAME = "BITE";
+import type { Language } from "@/lib/i18n";
+
 export const SITE_URL = "https://biteproject.it";
-export const DEFAULT_IMAGE_URL = `${SITE_URL}/og-image.jpeg`;
-export const LLMS_URL = `${SITE_URL}/llms.txt`;
-export const SITEMAP_URL = `${SITE_URL}/sitemap.xml`;
+export const SUPPORTED_LANGS: Language[] = ["it", "en"];
+export const DEFAULT_LANG: Language = "en";
+
+// ---------------------------------------------------------------------------
+// Legacy constants (used across pages and SeoManager)
+// ---------------------------------------------------------------------------
+
 export const DEFAULT_DESCRIPTION =
   "BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.";
+
+export const DEFAULT_DESCRIPTION_IT =
+  "BITE è un progetto editoriale a bordo di S/Y Spritz: vita in mare, refit, lavoro remoto, viaggio lento e scelte intenzionali.";
+
 export const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 export const WEBSITE_ID = `${SITE_URL}/#website`;
 
-type StructuredData = Record<string, unknown>;
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 
-type ApplySeoOptions = {
-  title: string;
-  description: string;
-  pathname: string;
-  image?: string | null;
-  robots?: string;
-  type?: "website" | "article" | "collection";
-  structuredData?: StructuredData | StructuredData[];
+/**
+ * Public routes that exist under both /it and /en prefixes.
+ * Admin, auth, profile and legal routes live outside the lang prefix
+ * and don't need bilingual indexing.
+ */
+export const LOCALIZED_ROUTES = [
+  "",            // home → /it or /en
+  "crew",
+  "manifesto",
+  "logbook",
+  "voyages",
+  "links",
+  "collaborations",
+  "contact",
+] as const;
+
+const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;
+
+export function getLangFromPath(pathname: string): Language | null {
+  const match = pathname.match(LANG_PREFIX_RE);
+  if (!match) return null;
+  const code = match[1].toLowerCase();
+  return code === "it" || code === "en" ? (code as Language) : null;
+}
+
+/** Strip the /it or /en prefix from the path. Returns path WITHOUT leading lang. */
+export function stripLangPrefix(pathname: string): string {
+  const match = pathname.match(LANG_PREFIX_RE);
+  if (!match) return pathname;
+  const stripped = pathname.slice(match[0].length - (match[2] === "/" ? 1 : 0));
+  return stripped || "/";
+}
+
+/** Build a localized path: prepends /{lang} to a path that does NOT include the lang prefix. */
+export function withLang(lang: Language, path: string): string {
+  const clean = path.startsWith("/") ? path : `/${path}`;
+  if (clean === "/") return `/${lang}`;
+  return `/${lang}${clean}`;
+}
+
+/** Swap the lang prefix of the current path to another language. */
+export function swapLangInPath(pathname: string, nextLang: Language, search = ""): string {
+  const stripped = stripLangPrefix(pathname);
+  return withLang(nextLang, stripped) + search;
+}
+
+/**
+ * Detect the preferred language for a first-time visitor.
+ * Priority: localStorage > cookie > browser language > default.
+ */
+export function detectPreferredLang(): Language {
+  if (typeof window === "undefined") return DEFAULT_LANG;
+  try {
+    const stored = window.localStorage.getItem("bite-lang");
+    if (stored === "it" || stored === "en") return stored;
+  } catch {
+    // ignore
+  }
+  if (typeof document !== "undefined") {
+    const cookie = document.cookie.split("; ").find((c) => c.startsWith("bite-lang="));
+    if (cookie) {
+      const value = cookie.split("=")[1];
+      if (value === "it" || value === "en") return value;
+    }
+  }
+  if (typeof navigator !== "undefined") {
+    const candidates: string[] = [];
+    if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
+    if (navigator.language) candidates.push(navigator.language);
+    for (const raw of candidates) {
+      const code = raw?.toLowerCase().split("-")[0];
+      if (code === "it") return "it";
+      if (code === "en") return "en";
+    }
+  }
+  return DEFAULT_LANG;
+}
+
+export function persistLangPreference(lang: Language) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem("bite-lang", lang);
+  } catch {
+    // ignore
+  }
+  if (typeof document !== "undefined") {
+    document.cookie = `bite-lang=${lang}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+  }
+}
+
+export const OG_LOCALE: Record<Language, string> = {
+  it: "it_IT",
+  en: "en_US",
 };
 
-const setOrCreateMeta = (selector: string, attributes: Record<string, string>) => {
-  let element = document.head.querySelector(selector) as HTMLMetaElement | null;
+export const HREFLANG_DEFAULT: Language = "en";
 
-  if (!element) {
-    element = document.createElement("meta");
-    document.head.appendChild(element);
-  }
-
-  Object.entries(attributes).forEach(([key, value]) => {
-    element?.setAttribute(key, value);
-  });
-};
-
-const setOrCreateLink = (selector: string, attributes: Record<string, string>) => {
-  let element = document.head.querySelector(selector) as HTMLLinkElement | null;
-
-  if (!element) {
-    element = document.createElement("link");
-    document.head.appendChild(element);
-  }
-
-  Object.entries(attributes).forEach(([key, value]) => {
-    element?.setAttribute(key, value);
-  });
-};
-
-const setOrCreateJsonLd = (id: string, value: StructuredData | StructuredData[]) => {
-  let element = document.head.querySelector(`#${id}`) as HTMLScriptElement | null;
-
-  if (!element) {
-    element = document.createElement("script");
-    element.type = "application/ld+json";
-    element.id = id;
-    document.head.appendChild(element);
-  }
-
-  element.textContent = JSON.stringify(value);
-};
-
-const getBaseStructuredData = ({
-  canonicalUrl,
-  title,
-  description,
-  imageUrl,
-  type,
-}: {
-  canonicalUrl: string;
-  title: string;
-  description: string;
-  imageUrl: string;
-  type: "website" | "article" | "collection";
-}) => {
-  if (type === "article") {
-    return {
-      "@context": "https://schema.org",
-      "@type": "Article",
-      mainEntityOfPage: canonicalUrl,
-      headline: title,
-      description,
-      image: [imageUrl],
-      isPartOf: { "@id": WEBSITE_ID },
-      publisher: { "@id": ORGANIZATION_ID },
-      url: canonicalUrl,
-      inLanguage: "en",
-    } satisfies StructuredData;
-  }
-
-  if (type === "collection") {
-    return {
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      name: title,
-      description,
-      url: canonicalUrl,
-      isPartOf: { "@id": WEBSITE_ID },
-      publisher: { "@id": ORGANIZATION_ID },
-      primaryImageOfPage: imageUrl,
-      inLanguage: "en",
-    } satisfies StructuredData;
-  }
-
-  return {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: title,
-    description,
-    url: canonicalUrl,
-    isPartOf: { "@id": WEBSITE_ID },
-    primaryImageOfPage: imageUrl,
-    inLanguage: "en",
-  } satisfies StructuredData;
-};
-
-export const applySeo = ({
-  title,
-  description,
-  pathname,
-  image,
-  robots = "index, follow",
-  type = "website",
-  structuredData,
-}: ApplySeoOptions) => {
-  const canonicalUrl = new URL(pathname, SITE_URL).toString();
-  const imageUrl = image || DEFAULT_IMAGE_URL;
-
-  document.title = title;
-
-  setOrCreateMeta('meta[name="author"]', { name: "author", content: SITE_NAME });
-  setOrCreateMeta('meta[name="application-name"]', { name: "application-name", content: SITE_NAME });
-  setOrCreateMeta('meta[name="description"]', { name: "description", content: description });
-  setOrCreateMeta('meta[name="robots"]', { name: "robots", content: robots });
-  setOrCreateMeta('meta[name="googlebot"]', {
-    name: "googlebot",
-    content: `${robots}, max-image-preview:large, max-snippet:-1, max-video-preview:-1`,
-  });
-  setOrCreateMeta('meta[name="bingbot"]', {
-    name: "bingbot",
-    content: `${robots}, max-image-preview:large, max-snippet:-1, max-video-preview:-1`,
-  });
-  setOrCreateMeta('meta[property="og:type"]', {
-    property: "og:type",
-    content: type === "article" ? "article" : "website",
-  });
-  setOrCreateMeta('meta[property="og:site_name"]', { property: "og:site_name", content: SITE_NAME });
-  setOrCreateMeta('meta[property="og:locale"]', { property: "og:locale", content: "en_US" });
-  setOrCreateMeta('meta[property="og:title"]', { property: "og:title", content: title });
-  setOrCreateMeta('meta[property="og:description"]', { property: "og:description", content: description });
-  setOrCreateMeta('meta[property="og:url"]', { property: "og:url", content: canonicalUrl });
-  setOrCreateMeta('meta[property="og:image"]', { property: "og:image", content: imageUrl });
-  setOrCreateMeta('meta[property="og:image:alt"]', {
-    property: "og:image:alt",
-    content: "BITE, stories and voyages aboard S/Y Spritz.",
-  });
-  setOrCreateMeta('meta[name="twitter:card"]', { name: "twitter:card", content: "summary_large_image" });
-  setOrCreateMeta('meta[name="twitter:url"]', { name: "twitter:url", content: canonicalUrl });
-  setOrCreateMeta('meta[name="twitter:title"]', { name: "twitter:title", content: title });
-  setOrCreateMeta('meta[name="twitter:description"]', { name: "twitter:description", content: description });
-  setOrCreateMeta('meta[name="twitter:image"]', { name: "twitter:image", content: imageUrl });
-  setOrCreateLink('link[rel="canonical"]', { rel: "canonical", href: canonicalUrl });
-  setOrCreateLink('link[rel="alternate"][type="text/markdown"]', {
-    rel: "alternate",
-    type: "text/markdown",
-    href: LLMS_URL,
-    title: "LLMs feed for AI agents",
-  });
-
-  setOrCreateJsonLd("bite-page-structured-data", getBaseStructuredData({
-    canonicalUrl,
-    title,
-    description,
-    imageUrl,
-    type,
+/**
+ * Build the canonical URL and full hreflang alternates for a localized path.
+ * @param lang current language
+ * @param pathWithoutLang path WITHOUT the /it or /en prefix (e.g. "/logbook")
+ */
+export function buildAlternates(lang: Language, pathWithoutLang: string) {
+  const clean = pathWithoutLang.startsWith("/") ? pathWithoutLang : `/${pathWithoutLang}`;
+  const canonical = `${SITE_URL}${withLang(lang, clean)}`;
+  const alternates = SUPPORTED_LANGS.map((l) => ({
+    hreflang: l,
+    href: `${SITE_URL}${withLang(l, clean)}`,
   }));
+  const xDefault = `${SITE_URL}${withLang(HREFLANG_DEFAULT, clean)}`;
+  return { canonical, alternates, xDefault };
+}
 
-  if (structuredData) {
-    setOrCreateJsonLd("bite-route-structured-data", structuredData);
-    return;
+// ---------------------------------------------------------------------------
+// applySeo — imperative DOM-mutation system used across the app.
+// Bilingual-aware: emits canonical with /it or /en prefix and full hreflang.
+// ---------------------------------------------------------------------------
+
+export type SeoStructuredData = Record<string, unknown> | Record<string, unknown>[];
+
+export interface ApplySeoOptions {
+  /** Final <title> string (we don't add a suffix here). */
+  title: string;
+  description: string;
+  /** Path WITHOUT lang prefix (e.g. "/logbook" or "/logbook/my-slug"). */
+  pathname: string;
+  /** Override language; defaults to language read from current URL or `<html lang>`. */
+  lang?: Language;
+  /** og:image and twitter:image. Defaults to site OG image. */
+  image?: string | null;
+  /** og:type. Defaults to "website". Use "article" for articles. */
+  type?: "website" | "article" | "collection" | "profile";
+  /** robots meta value. Defaults to "index, follow". */
+  robots?: string;
+  /** Optional JSON-LD blocks. Replaces any previously-managed ones. */
+  structuredData?: SeoStructuredData;
+}
+
+const MANAGED_ATTR = "data-bite-seo-managed";
+
+function clearManagedTags() {
+  if (typeof document === "undefined") return;
+  document.head.querySelectorAll(`[${MANAGED_ATTR}]`).forEach((el) => el.remove());
+}
+
+function setManagedMeta(attr: "name" | "property", key: string, value: string) {
+  const tag = document.createElement("meta");
+  tag.setAttribute(attr, key);
+  tag.setAttribute("content", value);
+  tag.setAttribute(MANAGED_ATTR, "1");
+  document.head.appendChild(tag);
+}
+
+function setManagedLink(rel: string, href: string, extra?: Record<string, string>) {
+  const tag = document.createElement("link");
+  tag.setAttribute("rel", rel);
+  tag.setAttribute("href", href);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) tag.setAttribute(k, v);
   }
+  tag.setAttribute(MANAGED_ATTR, "1");
+  document.head.appendChild(tag);
+}
 
-  const routeStructuredData = document.head.querySelector("#bite-route-structured-data");
-  routeStructuredData?.remove();
-};
+function setManagedJsonLd(data: SeoStructuredData) {
+  const items = Array.isArray(data) ? data : [data];
+  items.forEach((item) => {
+    const tag = document.createElement("script");
+    tag.setAttribute("type", "application/ld+json");
+    tag.setAttribute(MANAGED_ATTR, "1");
+    tag.textContent = JSON.stringify(item);
+    document.head.appendChild(tag);
+  });
+}
+
+function removeStaticCanonical() {
+  // Drop the canonical baked into index.html — only the per-route one is correct.
+  if (typeof document === "undefined") return;
+  document.head
+    .querySelectorAll('link[rel="canonical"]:not([data-bite-seo-managed])')
+    .forEach((el) => el.remove());
+}
+
+function detectCurrentLang(override?: Language): Language {
+  if (override === "it" || override === "en") return override;
+  if (typeof window !== "undefined") {
+    const fromPath = getLangFromPath(window.location.pathname);
+    if (fromPath) return fromPath;
+  }
+  if (typeof document !== "undefined") {
+    const htmlLang = document.documentElement.getAttribute("lang");
+    if (htmlLang === "it" || htmlLang === "en") return htmlLang;
+  }
+  return DEFAULT_LANG;
+}
+
+export function applySeo(options: ApplySeoOptions): void {
+  if (typeof document === "undefined") return;
+
+  const lang = detectCurrentLang(options.lang);
+  const pathWithoutLang = stripLangPrefix(options.pathname);
+  const { canonical, alternates, xDefault } = buildAlternates(lang, pathWithoutLang);
+  const image = options.image || DEFAULT_OG_IMAGE;
+  const ogType = options.type === "article" ? "article" : "website";
+  const robots = options.robots ?? "index, follow";
+
+  // Title + html lang
+  document.title = options.title;
+  document.documentElement.setAttribute("lang", lang);
+
+  // Robots meta (mutate existing or create)
+  let robotsEl = document.head.querySelector('meta[name="robots"]');
+  if (!robotsEl) {
+    robotsEl = document.createElement("meta");
+    robotsEl.setAttribute("name", "robots");
+    document.head.appendChild(robotsEl);
+  }
+  robotsEl.setAttribute("content", robots);
+
+  // Description meta (mutate existing or create)
+  let descEl = document.head.querySelector('meta[name="description"]');
+  if (!descEl) {
+    descEl = document.createElement("meta");
+    descEl.setAttribute("name", "description");
+    document.head.appendChild(descEl);
+  }
+  descEl.setAttribute("content", options.description);
+
+  // Clear previously-managed tags then re-emit
+  removeStaticCanonical();
+  clearManagedTags();
+
+  setManagedLink("canonical", canonical);
+  alternates.forEach((alt) => {
+    setManagedLink("alternate", alt.href, { hreflang: alt.hreflang });
+  });
+  setManagedLink("alternate", xDefault, { hreflang: "x-default" });
+
+  setManagedMeta("property", "og:type", ogType);
+  setManagedMeta("property", "og:title", options.title);
+  setManagedMeta("property", "og:description", options.description);
+  setManagedMeta("property", "og:url", canonical);
+  setManagedMeta("property", "og:site_name", "BITE");
+  setManagedMeta("property", "og:locale", OG_LOCALE[lang]);
+  SUPPORTED_LANGS.filter((l) => l !== lang).forEach((l) =>
+    setManagedMeta("property", "og:locale:alternate", OG_LOCALE[l])
+  );
+  setManagedMeta("property", "og:image", image);
+
+  setManagedMeta("name", "twitter:card", "summary_large_image");
+  setManagedMeta("name", "twitter:title", options.title);
+  setManagedMeta("name", "twitter:description", options.description);
+  setManagedMeta("name", "twitter:url", canonical);
+  setManagedMeta("name", "twitter:image", image);
+
+  if (options.structuredData) {
+    setManagedJsonLd(options.structuredData);
+  }
+}

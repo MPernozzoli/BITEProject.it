@@ -1,6 +1,15 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useCallback, useEffect, useMemo, ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { deferSupabaseAuthWork } from "@/lib/supabase-auth";
+import {
+  DEFAULT_LANG,
+  detectPreferredLang,
+  getLangFromPath,
+  persistLangPreference,
+  swapLangInPath,
+  withLang,
+} from "@/lib/seo";
 
 export type Language = "en" | "it";
 export type ExtendedLanguage = "en" | "it" | "fr" | "de" | "es" | "pt";
@@ -190,41 +199,55 @@ function resolveToSiteLanguage(preferred: string, secondary?: string | null): La
   return "en";
 }
 
-function resolveLanguageFromLocation(): Language | null {
-  if (typeof window === "undefined") return null;
-  const urlLang = new URLSearchParams(window.location.search).get("lang");
-  return urlLang === "it" || urlLang === "en" ? urlLang : null;
-}
-
-function resolveLanguageFromBrowser(): Language {
-  if (typeof navigator === "undefined") return "en";
-  const candidates: string[] = [];
-  if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
-  if (navigator.language) candidates.push(navigator.language);
-  for (const raw of candidates) {
-    const code = raw?.toLowerCase().split("-")[0];
-    if (code === "it") return "it";
-    if (code === "en") return "en";
-  }
-  return "en";
-}
-
+/**
+ * I18nProvider — language is now driven by the URL prefix (/it/... or /en/...).
+ * Calling setLang(next) navigates to the same path under the other language prefix,
+ * which keeps the URL canonical for bilingual SEO (hreflang).
+ *
+ * NOTE: this provider must live INSIDE the BrowserRouter so that
+ * useLocation/useNavigate are available.
+ */
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
-  const [lang, setLang] = useState<Language>(
-    () => resolveLanguageFromLocation() ?? resolveLanguageFromBrowser()
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Derive lang strictly from the URL path. For paths outside the lang prefix
+  // (admin/auth/profile/legal), fall back to the user's persisted preference
+  // so UI strings remain stable while they're on those routes.
+  const lang: Language = useMemo(() => {
+    const fromPath = getLangFromPath(location.pathname);
+    if (fromPath) return fromPath;
+    return detectPreferredLang();
+  }, [location.pathname]);
+
+  const setLang = useCallback(
+    (next: Language) => {
+      persistLangPreference(next);
+      const fromPath = getLangFromPath(location.pathname);
+      if (fromPath) {
+        // Localized route: navigate to the same content in the other lang.
+        navigate(swapLangInPath(location.pathname, next, location.search), { replace: false });
+      } else {
+        // Non-localized route (admin, profile, etc.): just persist, no navigation.
+      }
+    },
+    [location.pathname, location.search, navigate]
   );
 
+  // Sync <html lang> on every change so screen readers and CSS pick it up.
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("lang", lang);
+    }
+  }, [lang]);
+
+  // When the user logs in, optionally redirect to their preferred profile language
+  // if they're currently on a localized route in the other language and have not
+  // explicitly chosen one yet.
   useEffect(() => {
     let cancelled = false;
-    const forcedLang = resolveLanguageFromLocation();
-
-    if (forcedLang) {
-      setLang(forcedLang);
-    }
-
     const loadUserLanguage = async (userId?: string | null) => {
       try {
-        if (forcedLang || cancelled) return;
         let nextUserId = userId;
         if (!nextUserId) {
           const { data: { session } } = await supabase.auth.getSession();
@@ -239,7 +262,14 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
           .single();
         if (cancelled || error || !data?.preferred_language) return;
 
-        setLang(resolveToSiteLanguage(data.preferred_language, data.secondary_language));
+        const preferred = resolveToSiteLanguage(data.preferred_language, data.secondary_language);
+        persistLangPreference(preferred);
+        const fromPath = getLangFromPath(window.location.pathname);
+        if (fromPath && fromPath !== preferred) {
+          navigate(swapLangInPath(window.location.pathname, preferred, window.location.search), {
+            replace: true,
+          });
+        }
       } catch (error) {
         if (!cancelled) {
           console.error("Failed to load user language", error);
@@ -260,7 +290,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   const t = useCallback(
     (key: string, params?: TranslationParams) => {
@@ -280,5 +310,10 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
     </I18nContext.Provider>
   );
 };
+
+// Convenience helper for components that need to build localized links.
+export function localizedHref(lang: Language, path: string): string {
+  return withLang(lang, path);
+}
 
 export const useI18n = () => useContext(I18nContext);
