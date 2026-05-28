@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import { detectPreferredLang, withLang } from "@/lib/seo";
 
 /**
@@ -30,11 +30,6 @@ export function LegacyLangRedirectFromPath() {
 }
 
 export default LegacyLangRedirect;
-
-/** Legacy redirect that preserves a single dynamic param. */
-import { useParams } from "react-router-dom";
-
-export function LegacyVoyageRedirect() {
   const { voyageRef } = useParams();
   const location = useLocation();
   const lang = detectPreferredLang();
