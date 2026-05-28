@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
-import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { PUBLIC_SITE_URL, localizedUrl } from '../_shared/email-config.ts'
 import { normalizeSystemEmailAutomation } from '../_shared/system-email-automation.ts'
 
 const corsHeaders = {
@@ -295,9 +295,11 @@ Deno.serve(async (req) => {
         ''
       )
       const articleUrl =
-        fallbackArticleUrl || `${PUBLIC_SITE_URL}/logbook/${article.slug}`
+        fallbackArticleUrl ||
+        localizedUrl(profile.preferred_language, `/logbook/${article.slug}`)
       const storyUrl =
-        fallbackStoryUrl || `${PUBLIC_SITE_URL}/logbook/story/${story.slug}`
+        fallbackStoryUrl ||
+        localizedUrl(profile.preferred_language, `/logbook/story/${story.slug}`)
       const publishedLabel = article.published_at
         ? new Intl.DateTimeFormat(
             normalizeLanguage(profile.preferred_language) === 'en'
