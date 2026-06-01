@@ -250,14 +250,14 @@ const StoryPage = () => {
                 <article key={chapter.id} className="group">
                   <div className="flex gap-6 items-start">
                     <Link
-                      to={`/logbook/${chapter.slug}`}
+                      to={articlePathForLang(chapter as any, lang)}
                       className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border text-sm font-sans text-muted-foreground group-hover:border-accent group-hover:text-accent transition-colors"
                       aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
                     >
                       {idx + 1}
                     </Link>
                     <div className="flex-1 min-w-0">
-                      <Link to={`/logbook/${chapter.slug}`} className="block">
+                      <Link to={articlePathForLang(chapter as any, lang)} className="block">
                         <h3 className="editorial-heading text-xl md:text-2xl mb-1 group-hover:text-accent transition-colors">
                           {chTitle}
                         </h3>
@@ -284,7 +284,7 @@ const StoryPage = () => {
                     </div>
                     {chapter.cover_image && (
                       <Link
-                        to={`/logbook/${chapter.slug}`}
+                        to={articlePathForLang(chapter as any, lang)}
                         className="hidden sm:block flex-shrink-0 w-24 h-16 overflow-hidden bg-muted"
                         aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
                       >
