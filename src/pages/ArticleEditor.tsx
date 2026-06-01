@@ -591,6 +591,7 @@ const ArticleEditor = () => {
   const handleTitleEnChange = (val: string) => {
     setTitleEn(val);
     if (isNew || !slug) setSlug(generateSlug(val));
+    if (isNew || !slugEn) setSlugEn(generateSlug(val));
   };
 
   const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
