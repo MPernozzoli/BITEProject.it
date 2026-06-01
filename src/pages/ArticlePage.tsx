@@ -478,7 +478,8 @@ const ArticlePage = () => {
     applySeo({
       title: `${title} | BITE`,
       description: seoDescription,
-      pathname: `/logbook/${article.slug}`,
+      pathname: articlePathForLang(article as any, lang),
+      localizedPaths: articleLocalizedPaths(article as any),
       image: article.cover_image,
       type: "article",
       structuredData: [
@@ -487,8 +488,8 @@ const ArticlePage = () => {
           "@type": "Article",
           headline: title,
           description: seoDescription,
-          url: `${window.location.origin}/logbook/${article.slug}`,
-          mainEntityOfPage: `${window.location.origin}/logbook/${article.slug}`,
+          url: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
+          mainEntityOfPage: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
           image: imageUrls.length ? imageUrls : undefined,
           datePublished: article.published_at || undefined,
           dateModified: article.updated_at || article.published_at || undefined,
