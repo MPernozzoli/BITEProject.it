@@ -1055,6 +1055,8 @@ const ArticleEditor = () => {
     titleEn,
     titleIt,
     slug,
+    slugIt,
+    slugEn,
     excerptEn,
     excerptIt,
     contentEn,
