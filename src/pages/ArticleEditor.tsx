@@ -568,6 +568,8 @@ const ArticleEditor = () => {
     selectedTagIds,
     selectedVoyageId,
     slug,
+    slugIt,
+    slugEn,
     titleEn,
     titleIt,
     voyageSegEnd,
