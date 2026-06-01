@@ -2056,8 +2056,41 @@ const ArticleEditor = () => {
 
             {/* Slug */}
             <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug</label>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug (canonico / fallback)</label>
               <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL legacy / fallback. Resta usato come default se manca lo slug per la lingua.
+              </p>
+            </div>
+
+            {/* Slug EN */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug EN</label>
+              <input
+                type="text"
+                value={slugEn}
+                onChange={(e) => setSlugEn(e.target.value)}
+                placeholder="es. first-time-sailors"
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL pubblico in /en/logbook/. Lascia vuoto per usare lo slug canonico.
+              </p>
+            </div>
+
+            {/* Slug IT */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug IT</label>
+              <input
+                type="text"
+                value={slugIt}
+                onChange={(e) => setSlugIt(e.target.value)}
+                placeholder="es. primi-velisti"
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL pubblico in /it/logbook/ — chiave SEO per il mercato italiano.
+              </p>
             </div>
 
             {/* Tags */}
