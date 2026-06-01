@@ -122,6 +122,8 @@ const ArticleEditor = () => {
   const [titleEn, setTitleEn] = useState("");
   const [titleIt, setTitleIt] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugIt, setSlugIt] = useState("");
+  const [slugEn, setSlugEn] = useState("");
   const [excerptEn, setExcerptEn] = useState("");
   const [excerptIt, setExcerptIt] = useState("");
   const [contentEn, setContentEn] = useState<object>({});
@@ -209,6 +211,8 @@ const ArticleEditor = () => {
     setTitleEn(draft.titleEn || "");
     setTitleIt(draft.titleIt || "");
     setSlug(draft.slug || "");
+    setSlugIt(draft.slugIt || "");
+    setSlugEn(draft.slugEn || "");
     setExcerptEn(draft.excerptEn || "");
     setExcerptIt(draft.excerptIt || "");
     setContentEn(draft.contentEn || {});
@@ -329,6 +333,8 @@ const ArticleEditor = () => {
     setTitleEn(data.title_en || "");
     setTitleIt(data.title_it || "");
     setSlug(data.slug || "");
+    setSlugIt(((data as any).slug_it as string | null) || "");
+    setSlugEn(((data as any).slug_en as string | null) || "");
     setExcerptEn(data.excerpt_en || "");
     setExcerptIt(data.excerpt_it || "");
     setContentEn(data.content_en as object || {});
@@ -511,6 +517,8 @@ const ArticleEditor = () => {
       titleEn,
       titleIt,
       slug,
+      slugIt,
+      slugEn,
       excerptEn,
       excerptIt,
       contentEn: contentEn as object,
