@@ -898,6 +898,8 @@ const ArticleEditor = () => {
       title_en: saveTitleEn,
       title_it: saveTitleIt,
       slug: trimmedSlug,
+      slug_it: (slugIt || "").trim() || null,
+      slug_en: (slugEn || "").trim() || null,
       excerpt_en: saveExcerptEn,
       excerpt_it: saveExcerptIt,
       content_en: saveContentEn as Json,
