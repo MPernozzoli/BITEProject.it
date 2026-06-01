@@ -671,7 +671,7 @@ const ArticlePage = () => {
 
               {story && (
                 <Link
-                  to={`/logbook/story/${story.slug}`}
+                  to={storyPathForLang(story as any, lang)}
                   className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group"
                 >
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
@@ -693,7 +693,7 @@ const ArticlePage = () => {
                 >
                   {chapterPrevNext.prev ? (
                     <Link
-                      to={`/logbook/${chapterPrevNext.prev.slug}`}
+                      to={articlePathForLang(chapterPrevNext.prev as any, lang)}
                       title={prevTitle}
                       className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors"
                     >
@@ -710,7 +710,7 @@ const ArticlePage = () => {
                   )}
                   {chapterPrevNext.next ? (
                     <Link
-                      to={`/logbook/${chapterPrevNext.next.slug}`}
+                      to={articlePathForLang(chapterPrevNext.next as any, lang)}
                       title={nextTitle}
                       className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center justify-end gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors sm:text-right"
                     >
