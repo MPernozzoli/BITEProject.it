@@ -928,6 +928,8 @@ export type Database = {
           published_at: string | null
           scheduled_at: string | null
           slug: string
+          slug_en: string | null
+          slug_it: string | null
           status: Database["public"]["Enums"]["article_status"]
           story_id: string | null
           title_en: string
@@ -966,6 +968,8 @@ export type Database = {
           published_at?: string | null
           scheduled_at?: string | null
           slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
           title_en?: string
@@ -1004,6 +1008,8 @@ export type Database = {
           published_at?: string | null
           scheduled_at?: string | null
           slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
           title_en?: string
@@ -1507,6 +1513,8 @@ export type Database = {
           description_it: string | null
           id: string
           slug: string
+          slug_en: string | null
+          slug_it: string | null
           title_en: string
           title_it: string
           updated_at: string
@@ -1518,6 +1526,8 @@ export type Database = {
           description_it?: string | null
           id?: string
           slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string
@@ -1529,6 +1539,8 @@ export type Database = {
           description_it?: string | null
           id?: string
           slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string

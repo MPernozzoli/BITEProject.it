@@ -120,15 +120,29 @@ export const HREFLANG_DEFAULT: Language = "en";
  * Build the canonical URL and full hreflang alternates for a localized path.
  * @param lang current language
  * @param pathWithoutLang path WITHOUT the /it or /en prefix (e.g. "/logbook")
+ * @param localizedPaths optional per-language path overrides (e.g. for articles
+ *        with different IT vs EN slugs). When provided, alternates use the
+ *        per-language path; the current-lang canonical uses the matching entry.
  */
-export function buildAlternates(lang: Language, pathWithoutLang: string) {
+export function buildAlternates(
+  lang: Language,
+  pathWithoutLang: string,
+  localizedPaths?: Partial<Record<Language, string>>
+) {
   const clean = pathWithoutLang.startsWith("/") ? pathWithoutLang : `/${pathWithoutLang}`;
-  const canonical = `${SITE_URL}${withLang(lang, clean)}`;
+  const pathFor = (l: Language) => {
+    const candidate = localizedPaths?.[l];
+    if (candidate && candidate.trim()) {
+      return candidate.startsWith("/") ? candidate : `/${candidate}`;
+    }
+    return clean;
+  };
+  const canonical = `${SITE_URL}${withLang(lang, pathFor(lang))}`;
   const alternates = SUPPORTED_LANGS.map((l) => ({
     hreflang: l,
-    href: `${SITE_URL}${withLang(l, clean)}`,
+    href: `${SITE_URL}${withLang(l, pathFor(l))}`,
   }));
-  const xDefault = `${SITE_URL}${withLang(HREFLANG_DEFAULT, clean)}`;
+  const xDefault = `${SITE_URL}${withLang(HREFLANG_DEFAULT, pathFor(HREFLANG_DEFAULT))}`;
   return { canonical, alternates, xDefault };
 }
 
@@ -145,6 +159,12 @@ export interface ApplySeoOptions {
   description: string;
   /** Path WITHOUT lang prefix (e.g. "/logbook" or "/logbook/my-slug"). */
   pathname: string;
+  /**
+   * Optional per-language path overrides. Use for content with different
+   * slugs per language (articles, stories). Each value is the path WITHOUT
+   * the /it or /en prefix.
+   */
+  localizedPaths?: Partial<Record<Language, string>>;
   /** Override language; defaults to language read from current URL or `<html lang>`. */
   lang?: Language;
   /** og:image and twitter:image. Defaults to site OG image. */
@@ -220,7 +240,11 @@ export function applySeo(options: ApplySeoOptions): void {
 
   const lang = detectCurrentLang(options.lang);
   const pathWithoutLang = stripLangPrefix(options.pathname);
-  const { canonical, alternates, xDefault } = buildAlternates(lang, pathWithoutLang);
+  const { canonical, alternates, xDefault } = buildAlternates(
+    lang,
+    pathWithoutLang,
+    options.localizedPaths
+  );
   const image = options.image || DEFAULT_OG_IMAGE;
   const ogType = options.type === "article" ? "article" : "website";
   const robots = options.robots ?? "index, follow";

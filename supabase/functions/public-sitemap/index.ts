@@ -54,6 +54,12 @@ const slugifyVoyageName = (value: string) =>
 type SitemapEntry = {
   /** Path WITHOUT lang prefix for bilingual routes, full path for single routes. */
   path: string
+  /**
+   * Optional per-language path override. When present, each lang's <url> uses
+   * its own path (for articles/stories with different IT vs EN slugs).
+   * Keys must include both 'it' and 'en' when set.
+   */
+  localizedPaths?: { it: string; en: string }
   lastmod?: string | null
   /** If true, emits one <url> per language with xhtml:link alternates. */
   bilingual: boolean
@@ -73,20 +79,22 @@ const buildSitemapXml = (entries: SitemapEntry[]) => {
       continue
     }
 
+    const pathFor = (l: Lang) => entry.localizedPaths?.[l] ?? entry.path
+
     // Emit one <url> per language, with xhtml:link alternates pointing to every
     // language version + x-default. This is the SEO-correct hreflang pattern.
     const alternates = LANGS.map(
       (l) =>
         `    <xhtml:link rel="alternate" hreflang="${l}" href="${xmlEscape(
-          `${SITE_URL}${withLang(l, entry.path)}`
+          `${SITE_URL}${withLang(l, pathFor(l))}`
         )}" />`
     ).join('\n')
     const xDefault = `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(
-      `${SITE_URL}${withLang(DEFAULT_LANG, entry.path)}`
+      `${SITE_URL}${withLang(DEFAULT_LANG, pathFor(DEFAULT_LANG))}`
     )}" />`
 
     for (const lang of LANGS) {
-      const loc = `${SITE_URL}${withLang(lang, entry.path)}`
+      const loc = `${SITE_URL}${withLang(lang, pathFor(lang))}`
       rows.push(
         `  <url>\n    <loc>${xmlEscape(loc)}</loc>${lastmodTag}\n${alternates}\n${xDefault}\n  </url>`
       )
@@ -109,12 +117,12 @@ Deno.serve(async () => {
   const [articlesRes, storiesRes, voyagesRes, profilesRes] = await Promise.all([
     supabase
       .from('logbook_articles')
-      .select('slug, published_at, updated_at')
+      .select('slug, slug_it, slug_en, published_at, updated_at')
       .eq('status', 'published')
       .order('published_at', { ascending: false, nullsFirst: false }),
     supabase
       .from('stories')
-      .select('slug, updated_at')
+      .select('slug, slug_it, slug_en, updated_at')
       .order('updated_at', { ascending: false, nullsFirst: false }),
     supabase
       .from('voyages')
@@ -148,10 +156,24 @@ Deno.serve(async () => {
     bilingual: false,
   }))
 
+  const articlePathFor = (row: any, l: Lang) => {
+    const own = l === 'it' ? row.slug_it : row.slug_en
+    const other = l === 'it' ? row.slug_en : row.slug_it
+    const s = (own && String(own).trim()) || (other && String(other).trim()) || row.slug
+    return `/logbook/${s}`
+  }
+  const storyPathFor = (row: any, l: Lang) => {
+    const own = l === 'it' ? row.slug_it : row.slug_en
+    const other = l === 'it' ? row.slug_en : row.slug_it
+    const s = (own && String(own).trim()) || (other && String(other).trim()) || row.slug
+    return `/logbook/story/${s}`
+  }
+
   const articleEntries: SitemapEntry[] = (articlesRes.data || [])
     .filter((a) => a.slug)
     .map((a) => ({
       path: `/logbook/${a.slug}`,
+      localizedPaths: { it: articlePathFor(a, 'it'), en: articlePathFor(a, 'en') },
       lastmod: toIsoDate(a.updated_at || a.published_at),
       bilingual: true,
     }))
@@ -160,6 +182,7 @@ Deno.serve(async () => {
     .filter((s) => s.slug)
     .map((s) => ({
       path: `/logbook/story/${s.slug}`,
+      localizedPaths: { it: storyPathFor(s, 'it'), en: storyPathFor(s, 'en') },
       lastmod: toIsoDate(s.updated_at),
       bilingual: true,
     }))

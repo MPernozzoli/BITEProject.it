@@ -1,4 +1,4 @@
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -18,6 +18,13 @@ import LiveReadCounter from "@/components/LiveReadCounter";
 import { articleContentExtensions } from "@/lib/article-content";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import {
+  articleLocalizedPaths,
+  articlePathForLang,
+  bilingualSlugOrFilter,
+  slugForLang,
+  storyPathForLang,
+} from "@/lib/article-slug";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
@@ -51,6 +58,8 @@ import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 type StoryChapter = {
   id: string;
   slug: string;
+  slug_it?: string | null;
+  slug_en?: string | null;
   title_en: string;
   title_it: string;
   published_at: string | null;
@@ -60,6 +69,7 @@ const ArticlePage = () => {
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { lang } = useI18n();
+  const navigate = useNavigate();
   const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
   const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
@@ -70,13 +80,17 @@ const ArticlePage = () => {
   const { data: article, isLoading } = useQuery({
     queryKey: ["article", slug],
     queryFn: async () => {
+      const safeSlug = (slug ?? "").trim();
+      if (!safeSlug) throw new Error("Missing slug");
       const { data, error } = await supabase
         .from("logbook_articles")
         .select("*")
-        .eq("slug", slug)
+        .or(bilingualSlugOrFilter(safeSlug))
         .eq("status", "published")
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Article not found");
       return data;
     },
   });
@@ -85,13 +99,25 @@ const ArticlePage = () => {
   useQualifiedArticleRead(article?.id ?? null, slug);
   useSyncArticleViewCount(article?.id ?? null, slug);
 
+  // If the user landed on a slug that doesn't match the current language's
+  // preferred slug, redirect (replace) to the canonical lang-correct URL.
+  useEffect(() => {
+    if (!article || !slug) return;
+    const preferred = slugForLang(article as any, lang);
+    if (preferred && preferred !== slug) {
+      navigate(`/${lang}/logbook/${preferred}${window.location.search}${window.location.hash}`, {
+        replace: true,
+      });
+    }
+  }, [article, slug, lang, navigate]);
+
   const { data: storyChapters = [] } = useQuery({
     queryKey: ["story-chapters-published", storyId],
     enabled: Boolean(storyId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
-        .select("id, slug, title_en, title_it, published_at")
+        .select("id, slug, slug_it, slug_en, title_en, title_it, published_at")
         .eq("story_id", storyId!)
         .eq("status", "published")
         .order("published_at", { ascending: true, nullsFirst: false });
@@ -452,7 +478,8 @@ const ArticlePage = () => {
     applySeo({
       title: `${title} | BITE`,
       description: seoDescription,
-      pathname: `/logbook/${article.slug}`,
+      pathname: articlePathForLang(article as any, lang),
+      localizedPaths: articleLocalizedPaths(article as any),
       image: article.cover_image,
       type: "article",
       structuredData: [
@@ -461,8 +488,8 @@ const ArticlePage = () => {
           "@type": "Article",
           headline: title,
           description: seoDescription,
-          url: `${window.location.origin}/logbook/${article.slug}`,
-          mainEntityOfPage: `${window.location.origin}/logbook/${article.slug}`,
+          url: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
+          mainEntityOfPage: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
           image: imageUrls.length ? imageUrls : undefined,
           datePublished: article.published_at || undefined,
           dateModified: article.updated_at || article.published_at || undefined,
@@ -644,7 +671,7 @@ const ArticlePage = () => {
 
               {story && (
                 <Link
-                  to={`/logbook/story/${story.slug}`}
+                  to={storyPathForLang(story as any, lang)}
                   className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group"
                 >
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
@@ -666,7 +693,7 @@ const ArticlePage = () => {
                 >
                   {chapterPrevNext.prev ? (
                     <Link
-                      to={`/logbook/${chapterPrevNext.prev.slug}`}
+                      to={articlePathForLang(chapterPrevNext.prev as any, lang)}
                       title={prevTitle}
                       className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors"
                     >
@@ -683,7 +710,7 @@ const ArticlePage = () => {
                   )}
                   {chapterPrevNext.next ? (
                     <Link
-                      to={`/logbook/${chapterPrevNext.next.slug}`}
+                      to={articlePathForLang(chapterPrevNext.next as any, lang)}
                       title={nextTitle}
                       className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center justify-end gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors sm:text-right"
                     >

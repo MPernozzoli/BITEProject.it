@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
@@ -8,11 +8,19 @@ import ProfileCard from "@/components/ProfileCard";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import {
+  articlePathForLang,
+  bilingualSlugOrFilter,
+  slugForLang,
+  storyLocalizedPaths,
+  storyPathForLang,
+} from "@/lib/article-slug";
 
 const StoryPage = () => {
   const { slug } = useParams();
   const { lang } = useI18n();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,15 +36,30 @@ const StoryPage = () => {
   const { data: story, isLoading } = useQuery({
     queryKey: ["story", slug],
     queryFn: async () => {
+      const safe = (slug ?? "").trim();
+      if (!safe) throw new Error("Missing slug");
       const { data, error } = await supabase
         .from("stories")
         .select("*")
-        .eq("slug", slug)
-        .single();
+        .or(bilingualSlugOrFilter(safe))
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Story not found");
       return data;
     },
   });
+
+  // Redirect to current-lang canonical slug when user landed on the other slug.
+  useEffect(() => {
+    if (!story || !slug) return;
+    const preferred = slugForLang(story as any, lang);
+    if (preferred && preferred !== slug) {
+      navigate(`/${lang}/logbook/story/${preferred}${window.location.search}${window.location.hash}`, {
+        replace: true,
+      });
+    }
+  }, [story, slug, lang, navigate]);
 
   // Chapters (articles in this story, chronological)
   const { data: chapters = [] } = useQuery({
@@ -131,7 +154,8 @@ const StoryPage = () => {
     applySeo({
       title: `${title} | BITE`,
       description: desc || DEFAULT_DESCRIPTION,
-      pathname: `/logbook/story/${story.slug}`,
+      pathname: storyPathForLang(story as any, lang),
+      localizedPaths: storyLocalizedPaths(story as any),
       image: story.cover_image,
       type: "collection",
       structuredData: [
@@ -140,17 +164,17 @@ const StoryPage = () => {
           "@type": "CollectionPage",
           name: title,
           description: desc || DEFAULT_DESCRIPTION,
-          url: `${window.location.origin}/logbook/story/${story.slug}`,
+          url: `${window.location.origin}/${lang}${storyPathForLang(story as any, lang)}`,
           mainEntity: {
             "@type": "CreativeWorkSeries",
             name: title,
             description: desc || DEFAULT_DESCRIPTION,
-            url: `${window.location.origin}/logbook/story/${story.slug}`,
+            url: `${window.location.origin}/${lang}${storyPathForLang(story as any, lang)}`,
           },
           hasPart: chapters.map((chapter) => ({
             "@type": "Article",
             headline: lang === "en" ? chapter.title_en : chapter.title_it || chapter.title_en,
-            url: `${window.location.origin}/logbook/${chapter.slug}`,
+            url: `${window.location.origin}/${lang}${articlePathForLang(chapter as any, lang)}`,
             datePublished: chapter.published_at || undefined,
           })),
           publisher: { "@id": ORGANIZATION_ID },
@@ -226,14 +250,14 @@ const StoryPage = () => {
                 <article key={chapter.id} className="group">
                   <div className="flex gap-6 items-start">
                     <Link
-                      to={`/logbook/${chapter.slug}`}
+                      to={articlePathForLang(chapter as any, lang)}
                       className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border text-sm font-sans text-muted-foreground group-hover:border-accent group-hover:text-accent transition-colors"
                       aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
                     >
                       {idx + 1}
                     </Link>
                     <div className="flex-1 min-w-0">
-                      <Link to={`/logbook/${chapter.slug}`} className="block">
+                      <Link to={articlePathForLang(chapter as any, lang)} className="block">
                         <h3 className="editorial-heading text-xl md:text-2xl mb-1 group-hover:text-accent transition-colors">
                           {chTitle}
                         </h3>
@@ -260,7 +284,7 @@ const StoryPage = () => {
                     </div>
                     {chapter.cover_image && (
                       <Link
-                        to={`/logbook/${chapter.slug}`}
+                        to={articlePathForLang(chapter as any, lang)}
                         className="hidden sm:block flex-shrink-0 w-24 h-16 overflow-hidden bg-muted"
                         aria-label={lang === "it" ? `Apri capitolo ${chTitle}` : `Open chapter ${chTitle}`}
                       >
