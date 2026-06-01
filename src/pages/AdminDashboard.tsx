@@ -454,7 +454,6 @@ const AdminDashboard = () => {
           <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
               <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
-              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
               <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
                 Gestisci articoli, stories, rotte e newsletter dentro un’unica interfaccia coerente con il nuovo linguaggio del progetto.
               </p>
