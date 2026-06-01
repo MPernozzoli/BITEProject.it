@@ -39,6 +39,8 @@ type ArticleEditorDraft = {
   titleEn: string;
   titleIt: string;
   slug: string;
+  slugIt: string;
+  slugEn: string;
   excerptEn: string;
   excerptIt: string;
   contentEn: object;
