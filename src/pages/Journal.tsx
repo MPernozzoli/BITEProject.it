@@ -620,6 +620,7 @@ const Journal = () => {
 
   return (
     <div className={mapRootClass}>
+      <h1 className="sr-only">{t("journal.page.title")}</h1>
       {viewMode === "map" ? (
         <div className={mapInnerClass}>
           {/* Full-screen map */}

@@ -1021,7 +1021,7 @@ const Index = () => {
                 key={i}
                 className={`glass-panel-soft rounded-[28px] p-6 md:p-8 transition-transform duration-reveal ease-out-expo md:hover:-translate-y-0.5 ${i >= 3 ? "md:mt-8" : ""}`}
               >
-                <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
+                <h2 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h2>
                 <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
               </div>
             ))}
