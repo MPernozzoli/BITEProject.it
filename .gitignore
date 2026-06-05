@@ -22,3 +22,29 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+<<<<<<< Updated upstream
+=======
+
+# Test / coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
+
+# Lovable (legacy, da rimuovere in Fase 5)
+.lovable/
+
+# Vercel
+.vercel/
+
+# macOS / sync conflicts (file '* 2', '* 3', etc.)
+* 2
+* 2.*
+* 3
+* 3.*
+*.csv
+>>>>>>> Stashed changes
