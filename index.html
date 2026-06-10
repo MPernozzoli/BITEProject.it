@@ -92,13 +92,31 @@
       #bite-boot-splash.is-hiding { opacity: 0; pointer-events: none; }
       #bite-boot-splash .bite-boot-stage {
         position: relative;
-        width: min(220px, 56vw);
+        width: min(200px, 50vw);
         aspect-ratio: 1 / 1;
         display: flex;
         align-items: center;
         justify-content: center;
       }
-      #bite-boot-splash svg { width: 100%; height: 100%; overflow: visible; }
+      #bite-boot-splash .bite-boot-stage svg { width: 100%; height: 100%; overflow: visible; }
+      #bite-boot-splash .bite-boot-waves {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 38vh;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      #bite-boot-splash .bite-boot-waves svg {
+        position: absolute;
+        bottom: 0;
+        left: -10%;
+        width: 120%;
+        height: 100%;
+        display: block;
+      }
       .bite-boot-boat {
         transform-origin: 100px 78px;
         animation: bite-boot-rock 4.2s ease-in-out infinite;
@@ -117,7 +135,7 @@
       }
       @keyframes bite-boot-wave {
         0%, 100% { transform: translateX(0); }
-        50% { transform: translateX(-18px); }
+        50% { transform: translateX(-40px); }
       }
       #bite-boot-splash .bite-boot-label {
         opacity: 0.75;
