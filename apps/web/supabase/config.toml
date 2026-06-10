@@ -1,0 +1,52 @@
+project_id = "vdflrzcmlipvtardannd"
+
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = true
+  [functions.send-transactional-email]
+    verify_jwt = true
+  [functions.preview-transactional-email]
+    verify_jwt = false
+  [functions.handle-email-unsubscribe]
+    verify_jwt = false
+  [functions.handle-email-suppression]
+    verify_jwt = false
+  [functions.newsletter-subscribe]
+    verify_jwt = false
+  [functions.newsletter-dispatch]
+    verify_jwt = true
+  [functions.send-newsletter-digest]
+    verify_jwt = true
+  [functions.newsletter-track-open]
+    verify_jwt = false
+  [functions.newsletter-track-click]
+    verify_jwt = false
+  [functions.confirm-newsletter-subscription]
+    verify_jwt = false
+  [functions.my-newsletter-subscription]
+    verify_jwt = true
+  [functions.update-my-profile]
+    verify_jwt = true
+  [functions.notify-story-subscribers]
+    verify_jwt = true
+  [functions.translate-editor-content]
+    verify_jwt = true
+  [functions.public-sitemap]
+    verify_jwt = false
+  [functions.public-llms]
+    verify_jwt = false
+  [functions.public-semantic]
+    verify_jwt = false
+  [functions.public-geo]
+    verify_jwt = false
+  [functions.vapid-public-key]
+    verify_jwt = false
+  [functions.publish-scheduled-articles]
+    verify_jwt = false
+  # false: il gateway non deve rifiutare il JWT prima del codice; l’auth è in requireAdmin() nella function.
+  [functions.social-oauth-start]
+    verify_jwt = false
+  [functions.social-oauth-callback]
+    verify_jwt = false

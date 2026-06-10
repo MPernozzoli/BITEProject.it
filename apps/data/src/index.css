@@ -1,0 +1,228 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-serif: 'Playfair Display', Georgia, serif;
+    --font-sans: 'DM Sans', system-ui, sans-serif;
+
+    --background: 210 18% 97%;
+    --foreground: 220 30% 12%;
+
+    --card: 210 14% 95%;
+    --card-foreground: 220 30% 12%;
+
+    --popover: 210 18% 97%;
+    --popover-foreground: 220 30% 12%;
+
+    --primary: 220 40% 15%;
+    --primary-foreground: 210 18% 97%;
+
+    --secondary: 210 12% 90%;
+    --secondary-foreground: 220 30% 12%;
+
+    --muted: 210 10% 92%;
+    --muted-foreground: 220 12% 38%;
+
+    --accent: 192 28% 32%;
+    --accent-foreground: 210 18% 97%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 210 12% 86%;
+    --input: 210 12% 86%;
+    --ring: 220 40% 15%;
+
+    --radius: 0.375rem;
+
+    --navy: 220 40% 15%;
+    --navy-light: 220 30% 25%;
+    --teal: 192 28% 32%;
+    --teal-light: 192 22% 45%;
+    --slate-cool: 215 16% 47%;
+    --salt: 210 18% 97%;
+    --salt-warm: 208 20% 94%;
+    --data-blue: 205 55% 48%;
+    --data-green: 162 40% 40%;
+    --data-amber: 38 65% 50%;
+    --data-red: 4 58% 50%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100vh;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 15% 10%, hsla(192, 30%, 70%, 0.15), transparent 30%),
+      radial-gradient(circle at 80% 15%, hsla(210, 25%, 75%, 0.12), transparent 28%),
+      radial-gradient(circle at 65% 75%, hsla(205, 20%, 80%, 0.10), transparent 25%),
+      linear-gradient(180deg, hsla(210, 20%, 98%, 0.96) 0%, hsla(210, 18%, 96%, 0.94) 50%, hsla(215, 16%, 95%, 0.96) 100%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+  }
+
+  #root {
+    min-height: 100vh;
+    position: relative;
+    isolation: isolate;
+  }
+}
+
+@layer components {
+  .editorial-heading {
+    font-family: var(--font-serif);
+    @apply tracking-tight leading-tight;
+  }
+
+  .editorial-body {
+    font-family: var(--font-sans);
+    @apply leading-relaxed;
+  }
+
+  .page-section {
+    @apply py-16 md:py-24 px-6 md:px-12 lg:px-20;
+  }
+
+  .page-section-narrow {
+    @apply max-w-4xl mx-auto;
+  }
+
+  .page-section-wide {
+    @apply max-w-7xl mx-auto;
+  }
+
+  .section-divider {
+    @apply w-16 h-px bg-border mx-auto;
+  }
+
+  /* Glass panel system — adapted from BITE */
+  .glass-panel,
+  .glass-panel-soft,
+  .glass-panel-dark,
+  .glass-chip,
+  .glass-chip-dark {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+  }
+
+  .glass-panel > *,
+  .glass-panel-soft > *,
+  .glass-panel-dark > *,
+  .glass-chip > *,
+  .glass-chip-dark > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .glass-panel::before,
+  .glass-panel-soft::before,
+  .glass-panel-dark::before,
+  .glass-chip::before,
+  .glass-chip-dark::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 14%, rgba(255, 255, 255, 0.3), transparent 26%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02) 42%, rgba(255, 255, 255, 0.06) 100%);
+    opacity: 0.85;
+  }
+
+  .glass-panel {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1));
+    box-shadow: 0 16px 40px rgba(26, 44, 70, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+  }
+
+  .glass-panel-soft {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+    box-shadow: 0 12px 32px rgba(26, 44, 70, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(20px) saturate(130%);
+    -webkit-backdrop-filter: blur(20px) saturate(130%);
+  }
+
+  .glass-panel-dark {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: linear-gradient(180deg, rgba(30, 50, 80, 0.45), rgba(18, 30, 50, 0.35));
+    box-shadow: 0 16px 42px rgba(8, 16, 28, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+
+  .glass-chip {
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+    box-shadow: 0 6px 18px rgba(26, 44, 70, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(16px) saturate(135%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
+  }
+
+  .glass-chip-dark {
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+    box-shadow: 0 8px 22px rgba(8, 16, 28, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+  }
+
+  .glass-divider {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Data-specific styles */
+  .data-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-sans font-medium tracking-wide;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(12px);
+  }
+
+  .data-badge--active {
+    background: linear-gradient(180deg, hsla(192, 28%, 32%, 0.15), hsla(192, 28%, 32%, 0.08));
+    border-color: hsla(192, 28%, 32%, 0.3);
+    color: hsl(192, 28%, 32%);
+  }
+
+  .metric-value {
+    font-family: var(--font-sans);
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+    color: hsl(var(--navy));
+  }
+
+  .metric-label {
+    font-family: var(--font-sans);
+    @apply text-xs uppercase tracking-[0.15em] font-medium;
+    color: hsl(var(--slate-cool));
+  }
+}

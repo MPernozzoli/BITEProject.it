@@ -1,0 +1,187 @@
+import { Suspense, lazy, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { I18nProvider } from "@/lib/i18n";
+import { AuthProvider } from "@/hooks/useAuth";
+import Layout from "@/components/Layout";
+import AdminRoute from "@/components/AdminRoute";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { LegacyLangRedirect } from "@/components/LegacyLangRedirect";
+import {
+  LegacyVoyageRedirect,
+  LegacyArticleRedirect,
+  LegacyStoryRedirect,
+} from "@/components/LegacyLangRedirect";
+import { detectPreferredLang, withLang } from "@/lib/seo";
+
+const createAppQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 60 * 5,
+        gcTime: 1000 * 60 * 30,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        retry: 1,
+      },
+    },
+  });
+
+const createAppPersister = () => {
+  if (typeof window === "undefined") return null;
+
+  return createSyncStoragePersister({
+    storage: window.localStorage,
+    key: "bite-query-cache-v1",
+    throttleTime: 2000,
+  });
+};
+
+const Index = lazy(() => import("./pages/Index"));
+const TheCrew = lazy(() => import("./pages/About"));
+const Manifesto = lazy(() => import("./pages/Manifesto"));
+const Journal = lazy(() => import("./pages/Journal"));
+const Collaborations = lazy(() => import("./pages/Collaborations"));
+const Contact = lazy(() => import("./pages/Contact"));
+const ArticlePage = lazy(() => import("./pages/ArticlePage"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
+const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
+const AdminProfile = lazy(() => import("./pages/AdminProfile"));
+const UserLogin = lazy(() => import("./pages/UserLogin"));
+const PublicProfile = lazy(() => import("./pages/PublicProfile"));
+const StoryPage = lazy(() => import("./pages/StoryPage"));
+const VoyagesPage = lazy(() => import("./pages/Voyages"));
+const VoyagePage = lazy(() => import("./pages/VoyagePage"));
+const LinksPage = lazy(() => import("./pages/Links"));
+const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
+const NewsletterConfirm = lazy(() => import("./pages/NewsletterConfirm"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center pt-24">
+    <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading...</p>
+  </div>
+);
+
+/** Root redirect: / → /it or /en based on persisted preference / browser. */
+const RootLangRedirect = () => {
+  const location = useLocation();
+  const lang = detectPreferredLang();
+  return <Navigate to={withLang(lang, "/") + location.search + location.hash} replace />;
+};
+
+/** Localized routes used identically under /it and /en prefixes. */
+const LocalizedRoutes = () => (
+  <Routes>
+    <Route index element={<Index />} />
+    <Route path="crew" element={<TheCrew />} />
+    <Route path="manifesto" element={<Manifesto />} />
+    <Route path="logbook" element={<Journal />} />
+    <Route path="voyages" element={<VoyagesPage />} />
+    <Route path="voyages/:voyageRef" element={<VoyagePage />} />
+    <Route path="links" element={<LinksPage />} />
+    <Route path="collaborations" element={<Collaborations />} />
+    <Route path="contact" element={<Contact />} />
+    <Route path="logbook/story/:slug" element={<StoryPage />} />
+    <Route path="logbook/:slug" element={<ArticlePage />} />
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
+
+const App = () => {
+  const [queryClient] = useState(createAppQueryClient);
+  const [queryPersister] = useState(createAppPersister);
+
+  const appTree = (
+    <>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <I18nProvider>
+          <AuthProvider>
+            <AppErrorBoundary>
+              <Layout>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    {/* Root → redirect to /it or /en based on user preference */}
+                    <Route path="/" element={<RootLangRedirect />} />
+
+                    {/* Localized public routes under /it and /en */}
+                    <Route path="/it/*" element={<LocalizedRoutes />} />
+                    <Route path="/en/*" element={<LocalizedRoutes />} />
+
+                    {/* Legacy URL redirects → preserve external/social links */}
+                    <Route path="/about" element={<LegacyLangRedirect to="/crew" />} />
+                    <Route path="/crew" element={<LegacyLangRedirect to="/crew" />} />
+                    <Route path="/manifesto" element={<LegacyLangRedirect to="/manifesto" />} />
+                    <Route path="/logbook" element={<LegacyLangRedirect to="/logbook" />} />
+                    <Route path="/voyages" element={<LegacyLangRedirect to="/voyages" />} />
+                    <Route path="/voyages/:voyageRef" element={<LegacyVoyageRedirect />} />
+                    <Route path="/logbook/story/:slug" element={<LegacyStoryRedirect />} />
+                    <Route path="/logbook/:slug" element={<LegacyArticleRedirect />} />
+                    <Route path="/links" element={<LegacyLangRedirect to="/links" />} />
+                    <Route path="/linktree" element={<LegacyLangRedirect to="/links" />} />
+                    <Route path="/route" element={<LegacyLangRedirect to="/logbook" />} />
+                    <Route path="/collaborations" element={<LegacyLangRedirect to="/collaborations" />} />
+                    <Route path="/contact" element={<LegacyLangRedirect to="/contact" />} />
+
+                    {/* Non-localized routes (auth, profile, admin, legal, system) */}
+                    <Route path="/profile/:id" element={<PublicProfile />} />
+                    <Route path="/login" element={<UserLogin />} />
+                    <Route path="/signup" element={<UserLogin />} />
+                    <Route path="/admin/login" element={<AdminLogin />} />
+                    <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
+                    <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
+                    <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
+                    <Route path="/profile" element={<AdminProfile />} />
+                    <Route path="/unsubscribe" element={<Unsubscribe />} />
+                    <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
+                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                    <Route path="/cookie-policy" element={<CookiePolicy />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </Layout>
+            </AppErrorBoundary>
+          </AuthProvider>
+        </I18nProvider>
+      </BrowserRouter>
+    </>
+  );
+
+  if (!queryPersister) {
+    return <QueryClientProvider client={queryClient}>{appTree}</QueryClientProvider>;
+  }
+
+  return (
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: queryPersister,
+        maxAge: 1000 * 60 * 60 * 24,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) =>
+            query.meta?.persist === true
+            && query.state.status === "success"
+            && query.state.data != null,
+        },
+      }}
+      onSuccess={() => {
+        void queryClient.resumePausedMutations().catch(() => undefined);
+      }}
+    >
+      {appTree}
+    </PersistQueryClientProvider>
+  );
+};
+
+export default App;
