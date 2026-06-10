@@ -275,6 +275,16 @@ const Index = () => {
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
   }, [heroVideoPool, isMobile]);
+
+  const heroImagePool = publicContent?.heroImagePool ?? null;
+  const currentHeroImagePool = useMemo<string[]>(() => {
+    if (!heroImagePool) return [];
+    return isMobile ? (heroImagePool.mobile ?? []) : (heroImagePool.desktop ?? []);
+  }, [heroImagePool, isMobile]);
+  const heroBackgroundImage = useMemo<string | null>(() => {
+    if (!currentHeroImagePool.length) return null;
+    return currentHeroImagePool[heroPlaylistIndex % currentHeroImagePool.length] ?? null;
+  }, [currentHeroImagePool, heroPlaylistIndex]);
   const shouldAggressivelyWarmHeroCache = useMemo(
     () => shouldWarmHeroCacheAggressively(isMobile),
     [isMobile]
