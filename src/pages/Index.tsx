@@ -75,6 +75,7 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
+const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
@@ -127,13 +128,26 @@ const getVideoMimeType = (filename: string) => {
   return "video/mp4";
 };
 
-const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+const createStorageImageUrls = (folder: string, files: StorageListItem[]): string[] =>
   files
+    .filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      return Boolean(extension && SUPPORTED_HERO_IMAGE_EXTENSIONS.has(extension));
+    })
+    .map((file) => {
+      const path = `${folder}/${file.name}`;
+      const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    });
+
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => {
+  const posters = createStorageImageUrls(folder, files);
+  return files
     .filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
       return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
     })
-    .map((file) => {
+    .map((file, index) => {
       const path = `${folder}/${file.name}`;
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
@@ -142,8 +156,11 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
+        poster: posters.length ? posters[index % posters.length] : undefined,
       };
     });
+};
+
 
 const getNextHeroTransition = (
   currentIndex: number,
@@ -258,6 +275,16 @@ const Index = () => {
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
   }, [heroVideoPool, isMobile]);
+
+  const heroImagePool = publicContent?.heroImagePool ?? null;
+  const currentHeroImagePool = useMemo<string[]>(() => {
+    if (!heroImagePool) return [];
+    return isMobile ? (heroImagePool.mobile ?? []) : (heroImagePool.desktop ?? []);
+  }, [heroImagePool, isMobile]);
+  const heroBackgroundImage = useMemo<string | null>(() => {
+    if (!currentHeroImagePool.length) return null;
+    return currentHeroImagePool[heroPlaylistIndex % currentHeroImagePool.length] ?? null;
+  }, [currentHeroImagePool, heroPlaylistIndex]);
   const shouldAggressivelyWarmHeroCache = useMemo(
     () => shouldWarmHeroCacheAggressively(isMobile),
     [isMobile]
@@ -537,14 +564,6 @@ const Index = () => {
   };
 
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
-    const playbackSrc = getHeroPlaybackSrc(media);
-    const shouldEagerPreload =
-      !isMobile
-      && (
-        mode === "pending"
-        || playbackSrc !== media.src
-        || media.src === heroMedia?.src
-      );
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -554,6 +573,15 @@ const Index = () => {
           ? "hero-layer--incoming-active"
           : "hero-layer--incoming"
     }`;
+
+    const playbackSrc = getHeroPlaybackSrc(media);
+    const shouldEagerPreload =
+      !isMobile
+      && (
+        mode === "pending"
+        || playbackSrc !== media.src
+        || media.src === heroMedia?.src
+      );
 
     return (
       <video
@@ -939,6 +967,18 @@ const Index = () => {
       />
       <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
+          {heroBackgroundImage ? (
+            <img
+              key={heroBackgroundImage}
+              src={heroBackgroundImage}
+              alt=""
+              aria-hidden="true"
+              className="img-cover hero-layer hero-layer--active"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          ) : null}
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />

@@ -14,6 +14,11 @@ export interface HomepageHeroVideoPool {
   mobile: HeroMedia[];
 }
 
+export interface HomepageHeroImagePool {
+  desktop: string[];
+  mobile: string[];
+}
+
 export interface HeroVideoPoolVersion {
   desktopSources: string[];
   mobileSources: string[];
@@ -38,6 +43,7 @@ export interface PublicContentSnapshot {
   version: PublicContentVersion;
   heroVideoVersion: HeroVideoPoolVersion;
   heroVideoPool: HomepageHeroVideoPool;
+  heroImagePool: HomepageHeroImagePool;
   articles: PublicContentArticle[];
   voyages: Voyage[];
   voyageWaypoints: VoyageWaypoint[];
@@ -51,6 +57,7 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
+const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 
 const getVideoMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
@@ -59,13 +66,26 @@ const getVideoMimeType = (filename: string) => {
   return "video/mp4";
 };
 
-const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+const createStorageImageUrls = (folder: string, files: StorageListItem[]): string[] =>
   files
+    .filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      return Boolean(extension && SUPPORTED_HERO_IMAGE_EXTENSIONS.has(extension));
+    })
+    .map((file) => {
+      const path = `${folder}/${file.name}`;
+      const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    });
+
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => {
+  const posters = createStorageImageUrls(folder, files);
+  return files
     .filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
       return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
     })
-    .map((file) => {
+    .map((file, index) => {
       const path = `${folder}/${file.name}`;
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
@@ -74,10 +94,16 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
+        poster: posters.length ? posters[index % posters.length] : undefined,
       };
     });
+};
 
-const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
+
+const fetchHeroMediaPools = async (): Promise<{
+  videoPool: HomepageHeroVideoPool;
+  imagePool: HomepageHeroImagePool;
+}> => {
   try {
     const [desktopResult, mobileResult] = await Promise.all([
       supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_HORIZONTAL_FOLDER, {
@@ -94,25 +120,37 @@ const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
       throw desktopResult.error;
     }
 
+    const desktopFiles = (desktopResult.data ?? []) as StorageListItem[];
+    const mobileFiles = (mobileResult.data ?? []) as StorageListItem[];
+
     return {
-      desktop: createStorageVideoEntries(
-        HOMEPAGE_HORIZONTAL_FOLDER,
-        (desktopResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the desktop hero"
-      ),
-      mobile: createStorageVideoEntries(
-        HOMEPAGE_VERTICAL_FOLDER,
-        (mobileResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the mobile hero"
-      ),
+      videoPool: {
+        desktop: createStorageVideoEntries(
+          HOMEPAGE_HORIZONTAL_FOLDER,
+          desktopFiles,
+          "Spritz sailing footage for the desktop hero"
+        ),
+        mobile: createStorageVideoEntries(
+          HOMEPAGE_VERTICAL_FOLDER,
+          mobileFiles,
+          "Spritz sailing footage for the mobile hero"
+        ),
+      },
+      imagePool: {
+        desktop: createStorageImageUrls(HOMEPAGE_HORIZONTAL_FOLDER, desktopFiles),
+        mobile: createStorageImageUrls(HOMEPAGE_VERTICAL_FOLDER, mobileFiles),
+      },
     };
   } catch {
     return {
-      desktop: [],
-      mobile: [],
+      videoPool: { desktop: [], mobile: [] },
+      imagePool: { desktop: [], mobile: [] },
     };
   }
 };
+
+const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> =>
+  (await fetchHeroMediaPools()).videoPool;
 
 export const buildHeroVideoPoolVersion = (pool: HomepageHeroVideoPool): HeroVideoPoolVersion => ({
   desktopSources: pool.desktop.map((media) => media.src).sort(),
@@ -257,8 +295,8 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
 }
 
 export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapshot> {
-  const [heroVideoPool, articlesResponse, voyagesResponse] = await Promise.all([
-    fetchHeroVideoPool(),
+  const [heroMediaPools, articlesResponse, voyagesResponse] = await Promise.all([
+    fetchHeroMediaPools(),
     supabase
       .from("logbook_articles")
       .select(
@@ -360,8 +398,9 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
   return {
     generatedAt: new Date().toISOString(),
     version: snapshotVersion,
-    heroVideoVersion: buildHeroVideoPoolVersion(heroVideoPool),
-    heroVideoPool,
+    heroVideoVersion: buildHeroVideoPoolVersion(heroMediaPools.videoPool),
+    heroVideoPool: heroMediaPools.videoPool,
+    heroImagePool: heroMediaPools.imagePool,
     articles: articles.map((article) => ({
       id: article.id,
       title_en: article.title_en,

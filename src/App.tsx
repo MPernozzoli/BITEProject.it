@@ -66,9 +66,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 
 const RouteFallback = () => (
-  <div className="min-h-screen flex items-center justify-center pt-24">
-    <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading...</p>
-  </div>
+  <div className="min-h-screen bg-background" aria-hidden="true" />
 );
 
 /** Root redirect: / → /it or /en based on persisted preference / browser. */
