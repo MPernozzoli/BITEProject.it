@@ -100,7 +100,10 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
 };
 
 
-const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
+const fetchHeroMediaPools = async (): Promise<{
+  videoPool: HomepageHeroVideoPool;
+  imagePool: HomepageHeroImagePool;
+}> => {
   try {
     const [desktopResult, mobileResult] = await Promise.all([
       supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_HORIZONTAL_FOLDER, {
@@ -117,25 +120,37 @@ const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
       throw desktopResult.error;
     }
 
+    const desktopFiles = (desktopResult.data ?? []) as StorageListItem[];
+    const mobileFiles = (mobileResult.data ?? []) as StorageListItem[];
+
     return {
-      desktop: createStorageVideoEntries(
-        HOMEPAGE_HORIZONTAL_FOLDER,
-        (desktopResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the desktop hero"
-      ),
-      mobile: createStorageVideoEntries(
-        HOMEPAGE_VERTICAL_FOLDER,
-        (mobileResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the mobile hero"
-      ),
+      videoPool: {
+        desktop: createStorageVideoEntries(
+          HOMEPAGE_HORIZONTAL_FOLDER,
+          desktopFiles,
+          "Spritz sailing footage for the desktop hero"
+        ),
+        mobile: createStorageVideoEntries(
+          HOMEPAGE_VERTICAL_FOLDER,
+          mobileFiles,
+          "Spritz sailing footage for the mobile hero"
+        ),
+      },
+      imagePool: {
+        desktop: createStorageImageUrls(HOMEPAGE_HORIZONTAL_FOLDER, desktopFiles),
+        mobile: createStorageImageUrls(HOMEPAGE_VERTICAL_FOLDER, mobileFiles),
+      },
     };
   } catch {
     return {
-      desktop: [],
-      mobile: [],
+      videoPool: { desktop: [], mobile: [] },
+      imagePool: { desktop: [], mobile: [] },
     };
   }
 };
+
+const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> =>
+  (await fetchHeroMediaPools()).videoPool;
 
 export const buildHeroVideoPoolVersion = (pool: HomepageHeroVideoPool): HeroVideoPoolVersion => ({
   desktopSources: pool.desktop.map((media) => media.src).sort(),
