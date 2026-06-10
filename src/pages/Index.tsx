@@ -967,6 +967,18 @@ const Index = () => {
       />
       <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
+          {heroBackgroundImage ? (
+            <img
+              key={heroBackgroundImage}
+              src={heroBackgroundImage}
+              alt=""
+              aria-hidden="true"
+              className="img-cover hero-layer hero-layer--active"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          ) : null}
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
