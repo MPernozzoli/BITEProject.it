@@ -78,6 +78,7 @@ const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
+const HERO_IMAGE_DURATION_MS = 7000;
 const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
 
 const getNavigatorConnectionInfo = (): NavigatorConnectionInfo | null => {
@@ -161,6 +162,18 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
     });
 };
 
+const createStorageImageEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+  createStorageImageUrls(folder, files).map((src) => ({
+    kind: "image" as const,
+    src,
+    alt,
+  }));
+
+const createStorageMediaEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => [
+  ...createStorageVideoEntries(folder, files, alt),
+  ...createStorageImageEntries(folder, files, alt),
+];
+
 const getNextHeroTransition = (
   currentIndex: number,
   playlist: HeroMedia[],
@@ -243,12 +256,12 @@ const Index = () => {
       }
 
       return {
-        desktop: createStorageVideoEntries(
+        desktop: createStorageMediaEntries(
           HOMEPAGE_HORIZONTAL_FOLDER,
           (desktopResult.data ?? []) as StorageListItem[],
           "Spritz sailing footage for the desktop hero"
         ),
-        mobile: createStorageVideoEntries(
+        mobile: createStorageMediaEntries(
           HOMEPAGE_VERTICAL_FOLDER,
           (mobileResult.data ?? []) as StorageListItem[],
           "Spritz sailing footage for the mobile hero"
@@ -468,9 +481,40 @@ const Index = () => {
   useEffect(() => {
     const pendingVideo = pendingHeroVideoRef.current;
     if (!pendingVideo || !pendingHeroTransition || isMobile) return;
+    if (pendingHeroTransition.media.kind !== "video") return;
 
     pendingVideo.load();
   }, [isMobile, pendingHeroPlaybackSrc, pendingHeroTransition]);
+
+  // When the pending hero media is a still image, fix the duration up front
+  // so the active layer's advance timer crossfades to it correctly.
+  useEffect(() => {
+    if (pendingHeroTransition?.media.kind === "image") {
+      pendingHeroPlaybackDurationRef.current = HERO_IMAGE_DURATION_MS;
+    }
+  }, [pendingHeroTransition]);
+
+  // When the active hero media is a still image there is no `onEnded`
+  // event, so schedule the advance manually.
+  useEffect(() => {
+    if (!heroMedia || heroMedia.kind !== "image") return;
+    if (isHeroCrossfading) return;
+    if (heroPlaylist.length <= 1) return;
+
+    if (heroPlaybackTimeoutRef.current) {
+      window.clearTimeout(heroPlaybackTimeoutRef.current);
+    }
+    heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+      queueHeroCrossfade();
+    }, Math.max(HERO_IMAGE_DURATION_MS - HERO_CROSSFADE_DURATION_MS, 0));
+
+    return () => {
+      if (heroPlaybackTimeoutRef.current) {
+        window.clearTimeout(heroPlaybackTimeoutRef.current);
+        heroPlaybackTimeoutRef.current = null;
+      }
+    };
+  }, [heroMedia, isHeroCrossfading, heroPlaylist.length, pendingHeroTransition]);
 
   const finalizeHeroCrossfade = () => {
     if (!pendingHeroTransition) return;
@@ -485,7 +529,9 @@ const Index = () => {
     if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
     if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
 
-    pendingHeroVideoRef.current?.play().catch(() => undefined);
+    if (pendingHeroTransition.media.kind === "video") {
+      pendingHeroVideoRef.current?.play().catch(() => undefined);
+    }
     heroPlaybackTimeoutRef.current = window.setTimeout(() => {
       queueHeroCrossfade();
     }, Math.max(pendingHeroPlaybackDurationRef.current - HERO_CROSSFADE_DURATION_MS, 0));
@@ -553,14 +599,6 @@ const Index = () => {
   };
 
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
-    const playbackSrc = getHeroPlaybackSrc(media);
-    const shouldEagerPreload =
-      !isMobile
-      && (
-        mode === "pending"
-        || playbackSrc !== media.src
-        || media.src === heroMedia?.src
-      );
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -570,6 +608,29 @@ const Index = () => {
           ? "hero-layer--incoming-active"
           : "hero-layer--incoming"
     }`;
+
+    if (media.kind === "image") {
+      return (
+        <img
+          key={`${mode}:${media.src}`}
+          src={media.src}
+          alt={media.alt}
+          className={baseClassName}
+          loading={mode === "active" ? "eager" : "lazy"}
+          decoding="async"
+          {...(mode === "active" ? { fetchPriority: "high" as const } : {})}
+        />
+      );
+    }
+
+    const playbackSrc = getHeroPlaybackSrc(media);
+    const shouldEagerPreload =
+      !isMobile
+      && (
+        mode === "pending"
+        || playbackSrc !== media.src
+        || media.src === heroMedia?.src
+      );
 
     return (
       <video
