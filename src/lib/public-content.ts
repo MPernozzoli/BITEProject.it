@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export interface HeroMedia {
-  kind: "video" | "image";
+  kind: "video";
   src: string;
   alt: string;
   poster?: string;
