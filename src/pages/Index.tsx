@@ -481,6 +481,7 @@ const Index = () => {
   useEffect(() => {
     const pendingVideo = pendingHeroVideoRef.current;
     if (!pendingVideo || !pendingHeroTransition || isMobile) return;
+    if (pendingHeroTransition.media.kind !== "video") return;
 
     pendingVideo.load();
   }, [isMobile, pendingHeroPlaybackSrc, pendingHeroTransition]);
@@ -498,7 +499,9 @@ const Index = () => {
     if (heroCrossfadeTimeoutRef.current) window.clearTimeout(heroCrossfadeTimeoutRef.current);
     if (heroPlaybackTimeoutRef.current) window.clearTimeout(heroPlaybackTimeoutRef.current);
 
-    pendingHeroVideoRef.current?.play().catch(() => undefined);
+    if (pendingHeroTransition.media.kind === "video") {
+      pendingHeroVideoRef.current?.play().catch(() => undefined);
+    }
     heroPlaybackTimeoutRef.current = window.setTimeout(() => {
       queueHeroCrossfade();
     }, Math.max(pendingHeroPlaybackDurationRef.current - HERO_CROSSFADE_DURATION_MS, 0));
