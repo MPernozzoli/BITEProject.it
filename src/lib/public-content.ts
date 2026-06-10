@@ -93,17 +93,6 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
     });
 };
 
-const createStorageImageEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
-  createStorageImageUrls(folder, files).map((src) => ({
-    kind: "image" as const,
-    src,
-    alt,
-  }));
-
-const createStorageMediaEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => [
-  ...createStorageVideoEntries(folder, files, alt),
-  ...createStorageImageEntries(folder, files, alt),
-];
 
 const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
   try {
