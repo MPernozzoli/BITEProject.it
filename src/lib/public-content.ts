@@ -14,6 +14,11 @@ export interface HomepageHeroVideoPool {
   mobile: HeroMedia[];
 }
 
+export interface HomepageHeroImagePool {
+  desktop: string[];
+  mobile: string[];
+}
+
 export interface HeroVideoPoolVersion {
   desktopSources: string[];
   mobileSources: string[];
@@ -38,6 +43,7 @@ export interface PublicContentSnapshot {
   version: PublicContentVersion;
   heroVideoVersion: HeroVideoPoolVersion;
   heroVideoPool: HomepageHeroVideoPool;
+  heroImagePool: HomepageHeroImagePool;
   articles: PublicContentArticle[];
   voyages: Voyage[];
   voyageWaypoints: VoyageWaypoint[];
