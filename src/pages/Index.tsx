@@ -78,7 +78,6 @@ const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
 const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
-const HERO_IMAGE_DURATION_MS = 7000;
 const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
 
 const getNavigatorConnectionInfo = (): NavigatorConnectionInfo | null => {
