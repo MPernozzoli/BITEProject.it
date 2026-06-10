@@ -398,8 +398,9 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
   return {
     generatedAt: new Date().toISOString(),
     version: snapshotVersion,
-    heroVideoVersion: buildHeroVideoPoolVersion(heroVideoPool),
-    heroVideoPool,
+    heroVideoVersion: buildHeroVideoPoolVersion(heroMediaPools.videoPool),
+    heroVideoPool: heroMediaPools.videoPool,
+    heroImagePool: heroMediaPools.imagePool,
     articles: articles.map((article) => ({
       id: article.id,
       title_en: article.title_en,
