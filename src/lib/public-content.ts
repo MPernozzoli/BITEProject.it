@@ -295,8 +295,8 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
 }
 
 export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapshot> {
-  const [heroVideoPool, articlesResponse, voyagesResponse] = await Promise.all([
-    fetchHeroVideoPool(),
+  const [heroMediaPools, articlesResponse, voyagesResponse] = await Promise.all([
+    fetchHeroMediaPools(),
     supabase
       .from("logbook_articles")
       .select(
