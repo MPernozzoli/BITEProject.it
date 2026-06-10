@@ -569,14 +569,6 @@ const Index = () => {
   };
 
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
-    const playbackSrc = getHeroPlaybackSrc(media);
-    const shouldEagerPreload =
-      !isMobile
-      && (
-        mode === "pending"
-        || playbackSrc !== media.src
-        || media.src === heroMedia?.src
-      );
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -586,6 +578,29 @@ const Index = () => {
           ? "hero-layer--incoming-active"
           : "hero-layer--incoming"
     }`;
+
+    if (media.kind === "image") {
+      return (
+        <img
+          key={`${mode}:${media.src}`}
+          src={media.src}
+          alt={media.alt}
+          className={baseClassName}
+          loading={mode === "active" ? "eager" : "lazy"}
+          decoding="async"
+          {...(mode === "active" ? { fetchPriority: "high" as const } : {})}
+        />
+      );
+    }
+
+    const playbackSrc = getHeroPlaybackSrc(media);
+    const shouldEagerPreload =
+      !isMobile
+      && (
+        mode === "pending"
+        || playbackSrc !== media.src
+        || media.src === heroMedia?.src
+      );
 
     return (
       <video
