@@ -565,20 +565,6 @@ const Index = () => {
           : "hero-layer--incoming"
     }`;
 
-    if (media.kind === "image") {
-      return (
-        <img
-          key={`${mode}:${media.src}`}
-          src={media.src}
-          alt={media.alt}
-          className={baseClassName}
-          loading={mode === "active" ? "eager" : "lazy"}
-          decoding="async"
-          {...(mode === "active" ? { fetchPriority: "high" as const } : {})}
-        />
-      );
-    }
-
     const playbackSrc = getHeroPlaybackSrc(media);
     const shouldEagerPreload =
       !isMobile
