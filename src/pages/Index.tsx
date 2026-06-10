@@ -245,12 +245,12 @@ const Index = () => {
       }
 
       return {
-        desktop: createStorageMediaEntries(
+        desktop: createStorageVideoEntries(
           HOMEPAGE_HORIZONTAL_FOLDER,
           (desktopResult.data ?? []) as StorageListItem[],
           "Spritz sailing footage for the desktop hero"
         ),
-        mobile: createStorageMediaEntries(
+        mobile: createStorageVideoEntries(
           HOMEPAGE_VERTICAL_FOLDER,
           (mobileResult.data ?? []) as StorageListItem[],
           "Spritz sailing footage for the mobile hero"
