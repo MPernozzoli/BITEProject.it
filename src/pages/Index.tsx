@@ -486,6 +486,36 @@ const Index = () => {
     pendingVideo.load();
   }, [isMobile, pendingHeroPlaybackSrc, pendingHeroTransition]);
 
+  // When the pending hero media is a still image, fix the duration up front
+  // so the active layer's advance timer crossfades to it correctly.
+  useEffect(() => {
+    if (pendingHeroTransition?.media.kind === "image") {
+      pendingHeroPlaybackDurationRef.current = HERO_IMAGE_DURATION_MS;
+    }
+  }, [pendingHeroTransition]);
+
+  // When the active hero media is a still image there is no `onEnded`
+  // event, so schedule the advance manually.
+  useEffect(() => {
+    if (!heroMedia || heroMedia.kind !== "image") return;
+    if (isHeroCrossfading) return;
+    if (heroPlaylist.length <= 1) return;
+
+    if (heroPlaybackTimeoutRef.current) {
+      window.clearTimeout(heroPlaybackTimeoutRef.current);
+    }
+    heroPlaybackTimeoutRef.current = window.setTimeout(() => {
+      queueHeroCrossfade();
+    }, Math.max(HERO_IMAGE_DURATION_MS - HERO_CROSSFADE_DURATION_MS, 0));
+
+    return () => {
+      if (heroPlaybackTimeoutRef.current) {
+        window.clearTimeout(heroPlaybackTimeoutRef.current);
+        heroPlaybackTimeoutRef.current = null;
+      }
+    };
+  }, [heroMedia, isHeroCrossfading, heroPlaylist.length, pendingHeroTransition]);
+
   const finalizeHeroCrossfade = () => {
     if (!pendingHeroTransition) return;
     setHeroPlaylist(pendingHeroTransition.playlist);
