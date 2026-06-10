@@ -51,6 +51,7 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
+const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 
 const getVideoMimeType = (filename: string) => {
   const extension = filename.split(".").pop()?.toLowerCase();
@@ -59,13 +60,26 @@ const getVideoMimeType = (filename: string) => {
   return "video/mp4";
 };
 
-const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+const createStorageImageUrls = (folder: string, files: StorageListItem[]): string[] =>
   files
+    .filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      return Boolean(extension && SUPPORTED_HERO_IMAGE_EXTENSIONS.has(extension));
+    })
+    .map((file) => {
+      const path = `${folder}/${file.name}`;
+      const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    });
+
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => {
+  const posters = createStorageImageUrls(folder, files);
+  return files
     .filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
       return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
     })
-    .map((file) => {
+    .map((file, index) => {
       const path = `${folder}/${file.name}`;
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
@@ -74,8 +88,10 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
+        poster: posters.length ? posters[index % posters.length] : undefined,
       };
     });
+};
 
 const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
   try {
