@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 
 export interface HeroMedia {
-  kind: "video" | "image";
+  kind: "video";
   src: string;
   alt: string;
   poster?: string;
@@ -12,6 +12,11 @@ export interface HeroMedia {
 export interface HomepageHeroVideoPool {
   desktop: HeroMedia[];
   mobile: HeroMedia[];
+}
+
+export interface HomepageHeroImagePool {
+  desktop: string[];
+  mobile: string[];
 }
 
 export interface HeroVideoPoolVersion {
@@ -38,6 +43,7 @@ export interface PublicContentSnapshot {
   version: PublicContentVersion;
   heroVideoVersion: HeroVideoPoolVersion;
   heroVideoPool: HomepageHeroVideoPool;
+  heroImagePool: HomepageHeroImagePool;
   articles: PublicContentArticle[];
   voyages: Voyage[];
   voyageWaypoints: VoyageWaypoint[];
@@ -93,19 +99,11 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
     });
 };
 
-const createStorageImageEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
-  createStorageImageUrls(folder, files).map((src) => ({
-    kind: "image" as const,
-    src,
-    alt,
-  }));
 
-const createStorageMediaEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => [
-  ...createStorageVideoEntries(folder, files, alt),
-  ...createStorageImageEntries(folder, files, alt),
-];
-
-const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
+const fetchHeroMediaPools = async (): Promise<{
+  videoPool: HomepageHeroVideoPool;
+  imagePool: HomepageHeroImagePool;
+}> => {
   try {
     const [desktopResult, mobileResult] = await Promise.all([
       supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).list(HOMEPAGE_HORIZONTAL_FOLDER, {
@@ -122,25 +120,37 @@ const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> => {
       throw desktopResult.error;
     }
 
+    const desktopFiles = (desktopResult.data ?? []) as StorageListItem[];
+    const mobileFiles = (mobileResult.data ?? []) as StorageListItem[];
+
     return {
-      desktop: createStorageMediaEntries(
-        HOMEPAGE_HORIZONTAL_FOLDER,
-        (desktopResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the desktop hero"
-      ),
-      mobile: createStorageMediaEntries(
-        HOMEPAGE_VERTICAL_FOLDER,
-        (mobileResult.data ?? []) as StorageListItem[],
-        "Spritz sailing footage for the mobile hero"
-      ),
+      videoPool: {
+        desktop: createStorageVideoEntries(
+          HOMEPAGE_HORIZONTAL_FOLDER,
+          desktopFiles,
+          "Spritz sailing footage for the desktop hero"
+        ),
+        mobile: createStorageVideoEntries(
+          HOMEPAGE_VERTICAL_FOLDER,
+          mobileFiles,
+          "Spritz sailing footage for the mobile hero"
+        ),
+      },
+      imagePool: {
+        desktop: createStorageImageUrls(HOMEPAGE_HORIZONTAL_FOLDER, desktopFiles),
+        mobile: createStorageImageUrls(HOMEPAGE_VERTICAL_FOLDER, mobileFiles),
+      },
     };
   } catch {
     return {
-      desktop: [],
-      mobile: [],
+      videoPool: { desktop: [], mobile: [] },
+      imagePool: { desktop: [], mobile: [] },
     };
   }
 };
+
+const fetchHeroVideoPool = async (): Promise<HomepageHeroVideoPool> =>
+  (await fetchHeroMediaPools()).videoPool;
 
 export const buildHeroVideoPoolVersion = (pool: HomepageHeroVideoPool): HeroVideoPoolVersion => ({
   desktopSources: pool.desktop.map((media) => media.src).sort(),
@@ -285,8 +295,8 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
 }
 
 export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapshot> {
-  const [heroVideoPool, articlesResponse, voyagesResponse] = await Promise.all([
-    fetchHeroVideoPool(),
+  const [heroMediaPools, articlesResponse, voyagesResponse] = await Promise.all([
+    fetchHeroMediaPools(),
     supabase
       .from("logbook_articles")
       .select(
@@ -388,8 +398,9 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
   return {
     generatedAt: new Date().toISOString(),
     version: snapshotVersion,
-    heroVideoVersion: buildHeroVideoPoolVersion(heroVideoPool),
-    heroVideoPool,
+    heroVideoVersion: buildHeroVideoPoolVersion(heroMediaPools.videoPool),
+    heroVideoPool: heroMediaPools.videoPool,
+    heroImagePool: heroMediaPools.imagePool,
     articles: articles.map((article) => ({
       id: article.id,
       title_en: article.title_en,
