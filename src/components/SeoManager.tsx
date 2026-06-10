@@ -113,6 +113,14 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
     robots: "noindex, nofollow",
   },
+  "/newsletter/confirm": {
+    title: { en: "Confirm subscription | BITE", it: "Conferma iscrizione | BITE" },
+    description: {
+      en: "Confirm your BITE newsletter subscription.",
+      it: "Conferma la tua iscrizione alla newsletter BITE.",
+    },
+    robots: "noindex, nofollow",
+  },
 };
 
 const getSeoForPathname = (rawPath: string): SeoConfig => {
@@ -129,7 +137,9 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
     };
   }
 
-  if (pathname === "/profile" || pathname.startsWith("/profile/")) {
+  // Own profile area is private (noindex). Public profile pages /profile/:id
+  // ARE indexable — they are listed in the public sitemap.
+  if (pathname === "/profile") {
     return {
       title: { en: "Profile | BITE", it: "Profilo | BITE" },
       description: {
@@ -137,6 +147,16 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
         it: "Pagina profilo BITE.",
       },
       robots: "noindex, nofollow",
+    };
+  }
+
+  if (pathname.startsWith("/profile/")) {
+    return {
+      title: { en: "Profile | BITE", it: "Profilo | BITE" },
+      description: {
+        en: "Public BITE profile page.",
+        it: "Profilo pubblico BITE.",
+      },
     };
   }
 
