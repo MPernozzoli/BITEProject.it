@@ -71,10 +71,66 @@
   <meta property="og:description" content="BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.">
   <meta name="twitter:description" content="BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.">
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <style>
+      #bite-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        background: radial-gradient(circle at 50% 30%, #1a3047 0%, #0c1a2a 60%, #060d18 100%);
+        color: #f6efe2;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-size: 11px;
+        transition: opacity 480ms ease-out;
+      }
+      #bite-boot-splash.is-hiding { opacity: 0; pointer-events: none; }
+      #bite-boot-splash svg { width: min(180px, 50vw); height: auto; overflow: visible; }
+      .bite-boot-boat { transform-origin: 60px 70px; animation: bite-boot-rock 3.4s ease-in-out infinite; }
+      .bite-boot-wave { animation: bite-boot-wave 3.4s ease-in-out infinite; }
+      .bite-boot-wave--back { animation-delay: -1.2s; opacity: 0.55; }
+      @keyframes bite-boot-rock {
+        0%, 100% { transform: rotate(-6deg) translateY(0); }
+        50% { transform: rotate(6deg) translateY(2px); }
+      }
+      @keyframes bite-boot-wave {
+        0%, 100% { transform: translateX(0); }
+        50% { transform: translateX(-12px); }
+      }
+      #bite-boot-splash .bite-boot-label { opacity: 0.7; }
+      @media (prefers-reduced-motion: reduce) {
+        .bite-boot-boat, .bite-boot-wave { animation: none; }
+      }
+    </style>
 </head>
 
   <body>
     <div id="root"></div>
+    <div id="bite-boot-splash" aria-hidden="true">
+      <svg viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Loading">
+        <g class="bite-boot-boat">
+          <!-- Mast -->
+          <line x1="60" y1="20" x2="60" y2="78" stroke="#f6efe2" stroke-width="1.5" stroke-linecap="round" />
+          <!-- Sail -->
+          <path d="M60 22 L60 70 L96 70 Z" fill="#f6efe2" opacity="0.92" />
+          <path d="M60 24 L60 66 L40 70 Z" fill="#9fcfd6" opacity="0.85" />
+          <!-- Hull -->
+          <path d="M28 76 L92 76 L82 92 L38 92 Z" fill="#d6834c" />
+          <path d="M28 76 L92 76 L88 80 L32 80 Z" fill="#b56a3a" />
+        </g>
+        <!-- Waves -->
+        <g transform="translate(-20 90)">
+          <path class="bite-boot-wave bite-boot-wave--back" d="M0 16 Q 20 4, 40 16 T 80 16 T 120 16 T 160 16 T 200 16 T 240 16 V 40 H 0 Z" fill="#9fcfd6" />
+          <path class="bite-boot-wave" d="M0 20 Q 20 8, 40 20 T 80 20 T 120 20 T 160 20 T 200 20 T 240 20 V 40 H 0 Z" fill="#3a6f86" />
+        </g>
+      </svg>
+      <span class="bite-boot-label">BITE</span>
+    </div>
     <noscript>
       <main>
         <h1>BITE</h1>
