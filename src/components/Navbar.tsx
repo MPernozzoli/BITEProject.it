@@ -6,6 +6,7 @@ import { ArrowRight, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import ProfileNotificationsMenu from "@/components/ProfileNotificationsMenu";
+import { getAdminUrl } from "@/lib/admin-host";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -319,12 +320,12 @@ const Navbar = () => {
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2">
+                    <a href={getAdminUrl("/admin")} className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
                         ⚙
                       </span>
                       <span>Dashboard</span>
-                    </Link>
+                    </a>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={toggleLanguage}>
@@ -411,12 +412,12 @@ const Navbar = () => {
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2">
+                    <a href={getAdminUrl("/admin")} className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
                         ⚙
                       </span>
                       <span>Dashboard</span>
-                    </Link>
+                    </a>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={toggleLanguage}>
@@ -567,8 +568,8 @@ const Navbar = () => {
                       </Link>
 
                       {isAdmin && (
-                        <Link
-                          to="/admin"
+                        <a
+                          href={getAdminUrl("/admin")}
                           className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
                         >
                           <span className="flex items-center gap-3">
@@ -576,7 +577,7 @@ const Navbar = () => {
                             Dashboard
                           </span>
                           <ArrowRight size={16} className="text-slate-500" />
-                        </Link>
+                        </a>
                       )}
 
                       <button

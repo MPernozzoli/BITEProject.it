@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Compass, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, Compass, Fingerprint, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
 import boatHarbor from "@/assets/boat-harbor.webp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
 type AuthStep = "email" | "verify";
-type AuthMethod = "google" | "email";
+type AuthMethod = "google" | "email" | "passkey";
 
 const OTP_LENGTH = 8;
 const LAST_AUTH_METHOD_STORAGE_KEY = "bite_last_auth_method";
@@ -88,6 +88,7 @@ const AUTH_COPY = {
         "Default attivo. Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
       divider: "oppure",
       google: "Continua con Google",
+      passkey: "Accedi con passkey",
       emailMethod: "Continua via email",
       lastUsed: "Ultimo usato",
       oauthHint: "Google usa lo stesso accesso rapido del codice email.",
@@ -121,6 +122,8 @@ const AUTH_COPY = {
       sessionNotReady: "Sessione non pronta. Riprova tra un secondo.",
       verifyGeneric: "Errore durante la verifica",
       oauth: "Errore durante l'accesso con Google",
+      passkey: "Errore durante l'accesso con passkey",
+      passkeyUnsupported: "Questo browser o dispositivo non supporta ancora le passkey.",
       loginMissingAccount: "Non troviamo un account associato a questa email. Prova con Registrati.",
     },
   },
@@ -189,6 +192,7 @@ const AUTH_COPY = {
         "Enabled by default. You will receive editorial updates and periodic digests, and you can unsubscribe anytime.",
       divider: "or",
       google: "Continue with Google",
+      passkey: "Sign in with passkey",
       emailMethod: "Continue with email",
       lastUsed: "Last used",
       oauthHint: "Google uses the same fast access flow as the email code.",
@@ -222,6 +226,8 @@ const AUTH_COPY = {
       sessionNotReady: "Session is not ready yet. Try again in a second.",
       verifyGeneric: "Error while verifying the code",
       oauth: "Error while signing in with Google",
+      passkey: "Error while signing in with passkey",
+      passkeyUnsupported: "This browser or device does not support passkeys yet.",
       loginMissingAccount: "We couldn't find an account for this email. Try Sign up instead.",
     },
   },
@@ -279,7 +285,7 @@ const UserLogin = () => {
 
   useEffect(() => {
     const storedMethod = window.localStorage.getItem(LAST_AUTH_METHOD_STORAGE_KEY);
-    if (storedMethod === "google" || storedMethod === "email") {
+    if (storedMethod === "google" || storedMethod === "email" || storedMethod === "passkey") {
       setLastUsedMethod(storedMethod);
     }
   }, []);
@@ -469,6 +475,45 @@ const UserLogin = () => {
     setLoading(false);
   };
 
+  const handlePasskeyAuth = async () => {
+    if (!window.PublicKeyCredential) {
+      setError(ui.errors.passkeyUnsupported);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data, error: passkeyError } = await supabase.auth.signInWithPasskey();
+
+      if (passkeyError) {
+        setError(passkeyError.message || ui.errors.passkey);
+        return;
+      }
+
+      if (!data?.session) {
+        setError(ui.errors.sessionNotReady);
+        return;
+      }
+
+      if (!rememberMe) {
+        localStorage.setItem("bite_ephemeral_session", "true");
+      } else {
+        localStorage.removeItem("bite_ephemeral_session");
+      }
+
+      localStorage.setItem(LAST_AUTH_METHOD_STORAGE_KEY, "passkey");
+      setLastUsedMethod("passkey");
+      navigate(redirectTo, { replace: true });
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : ui.errors.passkey;
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const featureCards =
     authMode === "signup"
       ? [
@@ -633,6 +678,27 @@ const UserLogin = () => {
                         )}
                       </span>
                     </Button>
+                    {authMode === "login" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePasskeyAuth}
+                        disabled={loading}
+                        className="h-12 w-full rounded-full border-white/85 bg-white/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-white"
+                      >
+                        <span className="flex w-full items-center justify-between gap-3">
+                          <span className="flex items-center gap-3">
+                            <Fingerprint className="h-5 w-5 text-accent" />
+                            <span>{ui.form.passkey}</span>
+                          </span>
+                          {lastUsedMethod === "passkey" && (
+                            <span className="rounded-full border border-white/80 bg-white/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              {ui.form.lastUsed}
+                            </span>
+                          )}
+                        </span>
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-3 pt-2">

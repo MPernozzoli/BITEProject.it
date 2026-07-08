@@ -16,6 +16,7 @@ import {
   LegacyArticleRedirect,
   LegacyStoryRedirect,
 } from "@/components/LegacyLangRedirect";
+import { isCurrentAdminHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
 
 const createAppQueryClient = () =>
@@ -51,6 +52,7 @@ const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
+const AdminMedia = lazy(() => import("./pages/AdminMedia"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
@@ -72,6 +74,10 @@ const RouteFallback = () => (
 /** Root redirect: / → /it or /en based on persisted preference / browser. */
 const RootLangRedirect = () => {
   const location = useLocation();
+  if (isCurrentAdminHostname()) {
+    return <Navigate to={`/admin${location.search}${location.hash}`} replace />;
+  }
+
   const lang = detectPreferredLang();
   return <Navigate to={withLang(lang, "/") + location.search + location.hash} replace />;
 };
@@ -137,6 +143,7 @@ const App = () => {
                     <Route path="/signup" element={<UserLogin />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
                     <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                     <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />

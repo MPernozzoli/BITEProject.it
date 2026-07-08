@@ -22,6 +22,7 @@ import {
   PanelLeftOpen,
   CalendarDays,
   MapPinned,
+  UploadCloud,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -460,6 +461,21 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex items-center gap-3 self-start">
+              <Link
+                to="/admin/media"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/media");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Media"
+              >
+                <UploadCloud size={16} />
+                Media
+              </Link>
               <Link
                 to="/admin/trackers"
                 onClick={(event) => {
