@@ -214,11 +214,19 @@ function setManagedJsonLd(data: SeoStructuredData) {
   });
 }
 
-function removeStaticCanonical() {
-  // Drop the canonical baked into index.html — only the per-route one is correct.
+function removeStaticSeoTags() {
+  // Drop the SEO tags baked into index.html (canonical, hreflang, og:*, twitter:*)
+  // — only the per-route managed ones are correct once the app is running.
   if (typeof document === "undefined") return;
   document.head
-    .querySelectorAll('link[rel="canonical"]:not([data-bite-seo-managed])')
+    .querySelectorAll(
+      [
+        'link[rel="canonical"]:not([data-bite-seo-managed])',
+        'link[rel="alternate"][hreflang]:not([data-bite-seo-managed])',
+        'meta[property^="og:"]:not([data-bite-seo-managed])',
+        'meta[name^="twitter:"]:not([data-bite-seo-managed])',
+      ].join(", ")
+    )
     .forEach((el) => el.remove());
 }
 
@@ -272,7 +280,7 @@ export function applySeo(options: ApplySeoOptions): void {
   descEl.setAttribute("content", options.description);
 
   // Clear previously-managed tags then re-emit
-  removeStaticCanonical();
+  removeStaticSeoTags();
   clearManagedTags();
 
   setManagedLink("canonical", canonical);

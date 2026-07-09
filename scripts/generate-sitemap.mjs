@@ -83,8 +83,16 @@ const extractImagesFromRichContent = (content) => {
 
 const loadEnvFile = async () => {
   const envPath = path.join(projectRoot, ".env");
-  const envContents = await readFile(envPath, "utf8");
-  const env = {};
+  let envContents = "";
+  try {
+    envContents = await readFile(envPath, "utf8");
+  } catch {
+    // No .env file (e.g. Vercel CI) — fall back to process env below.
+  }
+  const env = {
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
+    VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
 
   for (const rawLine of envContents.split(/\r?\n/)) {
     const line = rawLine.trim();

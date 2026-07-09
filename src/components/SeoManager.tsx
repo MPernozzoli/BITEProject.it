@@ -105,6 +105,14 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
     robots: "noindex, nofollow",
   },
+  "/bookings": {
+    title: { en: "My Bookings | BITE", it: "Le mie prenotazioni | BITE" },
+    description: {
+      en: "Manage your BITE voyage bookings.",
+      it: "Gestisci le tue prenotazioni BITE.",
+    },
+    robots: "noindex, nofollow",
+  },
   "/unsubscribe": {
     title: { en: "Unsubscribe | BITE", it: "Disiscriviti | BITE" },
     description: {
@@ -190,11 +198,15 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
     };
   }
 
+  // Every legit public route is enumerated above (static map + dynamic
+  // prefixes). Anything else renders the NotFound page at an arbitrary URL:
+  // noindex it so soft-404s never get indexed. New public routes must be
+  // registered in STATIC_ROUTE_SEO (or a prefix branch) to be indexable.
   return (
     STATIC_ROUTE_SEO[pathname] ?? {
-      title: { en: "BITE", it: "BITE" },
+      title: { en: "Page not found | BITE", it: "Pagina non trovata | BITE" },
       description: { en: DEFAULT_DESCRIPTION, it: DEFAULT_DESCRIPTION_IT },
-      robots: pathname === "/404" ? "noindex, nofollow" : "index, follow",
+      robots: "noindex, nofollow",
     }
   );
 };

@@ -7,10 +7,34 @@ const PACK_PREFIX = "/_pack";
 const DATA_PREFIX = "/_data";
 const PUBLIC_FILE_RE = /\.[a-z0-9]+$/i;
 
+/**
+ * Crawlers that don't (reliably) execute JavaScript get a prerendered HTML
+ * document from /api/prerender with correct per-page meta and content.
+ */
+const BOT_UA_RE =
+  /googlebot|bingbot|yandex|baiduspider|duckduckbot|slurp|facebookexternalhit|facebot|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|pinterest(?:bot)?|redditbot|applebot|ia_archiver|embedly|quora link preview|outbrain|vkshare|skypeuripreview|gptbot|chatgpt-user|oai-searchbot|claudebot|claude-web|anthropic-ai|perplexitybot|ccbot|bytespider|amazonbot/i;
+
+/** Paths that must never be prerendered (private/system areas). */
+const PRERENDER_EXCLUDE_RE =
+  /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter)(\/|$)/i;
+
 const getHostname = (request: Request) => {
   const forwardedHost = request.headers.get("x-forwarded-host");
   const host = forwardedHost || request.headers.get("host") || "";
   return host.split(",")[0]?.trim().split(":")[0]?.toLowerCase() || "";
+};
+
+const getPreferredLang = (request: Request): "it" | "en" => {
+  const cookie = request.headers.get("cookie") || "";
+  const match = cookie.match(/(?:^|;\s*)bite-lang=(it|en)(?:;|$)/i);
+  if (match) return match[1].toLowerCase() as "it" | "en";
+  const acceptLanguage = (request.headers.get("accept-language") || "").toLowerCase();
+  for (const part of acceptLanguage.split(",")) {
+    const code = part.trim().split("-")[0].split(";")[0];
+    if (code === "it") return "it";
+    if (code === "en") return "en";
+  }
+  return "en";
 };
 
 export default function middleware(request: Request) {
@@ -30,6 +54,31 @@ export default function middleware(request: Request) {
         : null;
 
   if (!prefix) {
+    // Main site.
+
+    // Root → /it or /en at the HTTP level (302: language-dependent), so
+    // crawlers get a real redirect instead of the client-side <Navigate>.
+    if (url.pathname === "/") {
+      const target = new URL(url);
+      target.pathname = `/${getPreferredLang(request)}`;
+      return Response.redirect(target, 302);
+    }
+
+    // Dynamic rendering for crawlers: serve prerendered HTML with the
+    // correct per-page meta (the SPA shell is identical on every URL).
+    const userAgent = request.headers.get("user-agent") || "";
+    if (
+      request.method === "GET" &&
+      BOT_UA_RE.test(userAgent) &&
+      !PUBLIC_FILE_RE.test(url.pathname) &&
+      !PRERENDER_EXCLUDE_RE.test(url.pathname)
+    ) {
+      const target = new URL(url);
+      target.pathname = "/api/prerender";
+      target.search = `?path=${encodeURIComponent(url.pathname)}`;
+      return rewrite(target);
+    }
+
     return next();
   }
 
