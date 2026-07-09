@@ -19,6 +19,10 @@ import {
   Loader2,
   Search,
   GripVertical,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
@@ -789,6 +793,9 @@ const AdminVoyageManager = ({
   /** Bumps when async route geometry (OSRM / BRouter) finishes so the map redraws even if waypoints state is unchanged. */
   const [routeGeometryTick, setRouteGeometryTick] = useState(0);
   const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
+  const [isMapWorkspaceFullscreen, setIsMapWorkspaceFullscreen] = useState(false);
+  const [isWaypointSidebarCollapsed, setIsWaypointSidebarCollapsed] = useState(false);
+  const [autoOpenWaypointPanel, setAutoOpenWaypointPanel] = useState(true);
   const waypointEditorPanelIdRef = useRef<string | null>(null);
 
   const setCurrentSelectedVoyageId = useCallback((nextVoyageId: string | null) => {
@@ -1283,6 +1290,7 @@ const AdminVoyageManager = ({
       );
       primeGeometryOverrideAfterWaypointEdit(voyageId, committedWaypoints);
 
+      setIsWaypointSidebarCollapsed(false);
       setWaypointEditorPanelId(createdWaypoint.id);
       window.setTimeout(() => {
         void focusWaypointOnMapRef.current(createdWaypoint.id);
@@ -1407,13 +1415,18 @@ const AdminVoyageManager = ({
     focusWaypointOnMapRef.current = focusWaypointOnMap;
   }, [focusWaypointOnMap]);
 
-  const openWaypointPopup = useCallback((waypointId: string) => {
+  const openWaypointPopup = useCallback((waypointId: string, options?: { automatic?: boolean }) => {
+    if (options?.automatic && !autoOpenWaypointPanel) {
+      queueMicrotask(() => void focusWaypointOnMap(waypointId));
+      return;
+    }
+    setIsWaypointSidebarCollapsed(false);
     setWaypointEditorPanelId((prev) => {
       if (prev === waypointId) return null;
       queueMicrotask(() => void focusWaypointOnMap(waypointId));
       return waypointId;
     });
-  }, [focusWaypointOnMap]);
+  }, [autoOpenWaypointPanel, focusWaypointOnMap]);
 
   const startWaypointRelocation = useCallback((voyageId: string, waypointId: string) => {
     waypointRelocationRef.current = { voyageId, waypointId };
@@ -1941,11 +1954,31 @@ const AdminVoyageManager = ({
   }, [waypointEditorPanelId, selectedVoyageId, waypoints, createWaypointPopupContent]);
 
   useEffect(() => {
+    if (!isMapWorkspaceFullscreen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMapWorkspaceFullscreen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMapWorkspaceFullscreen]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const id = requestAnimationFrame(() => map.resize());
-    return () => cancelAnimationFrame(id);
-  }, [waypointEditorPanelId]);
+    const transitionId = window.setTimeout(() => map.resize(), 320);
+    return () => {
+      cancelAnimationFrame(id);
+      window.clearTimeout(transitionId);
+    };
+  }, [isMapWorkspaceFullscreen, isWaypointSidebarCollapsed, waypointEditorPanelId]);
 
   const createWaypointMarkerEl = useCallback((waypoint: VoyageWaypoint, index: number, total: number) => {
     const el = document.createElement("button");
@@ -2070,11 +2103,10 @@ const AdminVoyageManager = ({
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
       markerEl.addEventListener("click", (event) => {
         event.stopPropagation();
-        setWaypointEditorPanelIdRef.current((prev) => {
-          if (prev === waypoint.id) return null;
-          queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
-          return waypoint.id;
-        });
+        queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
+        if (!autoOpenWaypointPanel) return;
+        setIsWaypointSidebarCollapsed(false);
+        setWaypointEditorPanelIdRef.current((prev) => (prev === waypoint.id ? null : waypoint.id));
       });
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
@@ -2094,7 +2126,7 @@ const AdminVoyageManager = ({
       markersRef.current.push(marker);
       markersByWaypointRef.current[waypoint.id] = marker;
     });
-  }, [createWaypointMarkerEl, ensureSegmentPreviewMarker, updateWaypoint]);
+  }, [autoOpenWaypointPanel, createWaypointMarkerEl, ensureSegmentPreviewMarker, updateWaypoint]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -3602,16 +3634,66 @@ const AdminVoyageManager = ({
         )}
       </div>
 
-      <div className="border border-border overflow-hidden">
-          <div className="flex flex-col lg:flex-row lg:items-stretch min-h-[min(420px,70vh)]">
-            <div className="relative flex-1 min-w-0 min-h-[280px] lg:min-h-[420px]" style={{ height: "420px" }}>
+      <div
+        className={`border border-border overflow-hidden bg-background ${
+          isMapWorkspaceFullscreen
+            ? "fixed inset-0 z-50 flex flex-col border-0"
+            : ""
+        }`}
+      >
+          <div
+            className={`flex flex-col lg:flex-row lg:items-stretch ${
+              isMapWorkspaceFullscreen
+                ? "min-h-0 flex-1"
+                : "min-h-[min(420px,70vh)]"
+            }`}
+          >
+            <div
+              className={`relative flex-1 min-w-0 min-h-[280px] ${
+                isMapWorkspaceFullscreen ? "lg:min-h-0" : "lg:min-h-[420px]"
+              }`}
+              style={{ height: isMapWorkspaceFullscreen ? "auto" : "420px" }}
+            >
               <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
+              <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/90 px-1.5 py-1 shadow-sm backdrop-blur-xl">
+                  <button
+                    type="button"
+                    onClick={() => setIsMapWorkspaceFullscreen((value) => !value)}
+                    className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-sans text-foreground hover:bg-muted transition-colors"
+                    title={isMapWorkspaceFullscreen ? "Esci da mappa fullscreen" : "Apri mappa fullscreen"}
+                  >
+                    {isMapWorkspaceFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    <span>{isMapWorkspaceFullscreen ? "Esci" : "Fullscreen"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsWaypointSidebarCollapsed((value) => !value)}
+                    className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-sans text-foreground hover:bg-muted transition-colors"
+                    title={isWaypointSidebarCollapsed ? "Mostra sidebar waypoint" : "Collassa sidebar waypoint"}
+                  >
+                    {isWaypointSidebarCollapsed ? <PanelRightOpen size={14} /> : <PanelRightClose size={14} />}
+                    <span>{isWaypointSidebarCollapsed ? "Dettagli" : "Collassa"}</span>
+                  </button>
+                </div>
+                <label className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 text-xs font-sans text-foreground shadow-sm backdrop-blur-xl">
+                  <input
+                    type="checkbox"
+                    checked={autoOpenWaypointPanel}
+                    onChange={(event) => setAutoOpenWaypointPanel(event.target.checked)}
+                    className="h-3.5 w-3.5 accent-[hsl(var(--accent))]"
+                  />
+                  <span>Auto dettagli</span>
+                </label>
+              </div>
             </div>
             <aside
               data-waypoint-editor-panel
-              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[transform,opacity,width] duration-300 ease-out-expo overflow-hidden ${
-                waypointEditorPanelId
-                  ? "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
+              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/86 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[max-height,width,opacity] duration-300 overflow-hidden ${
+                waypointEditorPanelId && !isWaypointSidebarCollapsed
+                  ? isMapWorkspaceFullscreen
+                    ? "max-h-[45vh] lg:max-h-none lg:w-[390px] xl:w-[430px] opacity-100"
+                    : "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
                   : "max-h-0 lg:max-h-none lg:w-0 lg:opacity-0 lg:pointer-events-none border-t-0 lg:border-l-0"
               }`}
             >
@@ -3619,26 +3701,36 @@ const AdminVoyageManager = ({
                 <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Waypoint
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setWaypointEditorPanelId(null)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                  aria-label="Chiudi pannello waypoint"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsWaypointSidebarCollapsed(true)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    aria-label="Collassa pannello waypoint"
+                  >
+                    <PanelRightClose size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWaypointEditorPanelId(null)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    aria-label="Chiudi pannello waypoint"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
               <div ref={waypointPanelMountRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2" />
             </aside>
           </div>
 
-          {!selectedVoyageId && (
+          {!isMapWorkspaceFullscreen && !selectedVoyageId && (
             <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
               Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito un waypoint: start e arrivo restano pubblici di default, gli intermedi diventano tecnici.
             </p>
           )}
 
-          {selectedVoyageId && (
+          {!isMapWorkspaceFullscreen && selectedVoyageId && (
             <div className="p-4 border-t border-border space-y-4">
               {selectedVoyage?.type === "land" && (
                 <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
