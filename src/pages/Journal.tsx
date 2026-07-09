@@ -2,8 +2,9 @@ import { useI18n } from "@/lib/i18n";
 import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Loader2, X, TicketCheck } from "lucide-react";
+import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -27,6 +28,19 @@ import {
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import {
+  type BookableLegAvailability,
+  type BookingRequest,
+  type BookingWaypoint,
+  getLegLabel,
+  getLegRangeBetweenWaypoints,
+} from "@/lib/booking-utils";
+
+type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
+type SupabaseRpcClient = {
+  rpc: <T = unknown>(fn: string, args?: Record<string, unknown>) => Promise<SupabaseRpcResponse<T>>;
+};
+const bookingRpcClient = supabase as unknown as SupabaseRpcClient;
 
 const getVoyageTypeIconClassName = (voyageType: Voyage["type"]) =>
   voyageType === "water" ? "text-sky-700" : "text-orange-700";
@@ -56,7 +70,8 @@ const Journal = () => {
   const MOBILE_SIDEBAR_HANDLE = 34;
   const MOBILE_SHEET_SWIPE_THRESHOLD = 48;
   const { t, lang } = useI18n();
-  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { session, isAdmin } = useAuth();
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -75,6 +90,12 @@ const Journal = () => {
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
   const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
+  const [bookingAnchor, setBookingAnchor] = useState<{ voyageId: string; waypointId: string } | null>(null);
+  const [selectedBookingLegIds, setSelectedBookingLegIds] = useState<string[]>([]);
+  const [bookingRejectedLegIds, setBookingRejectedLegIds] = useState<string[]>([]);
+  const [bookingPartySize, setBookingPartySize] = useState(1);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -250,6 +271,46 @@ const Journal = () => {
     return map;
   }, [allWaypoints]);
 
+  const bookableVoyageIds = useMemo(
+    () => voyages.filter((voyage) => voyage.booking_enabled).map((voyage) => voyage.id),
+    [voyages]
+  );
+  const bookableVoyageIdsKey = useMemo(() => [...bookableVoyageIds].sort().join(","), [bookableVoyageIds]);
+
+  const { data: bookingLegs = [], refetch: refetchBookingLegs } = useQuery({
+    queryKey: ["public-voyage-leg-availability", bookableVoyageIdsKey],
+    enabled: bookableVoyageIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await bookingRpcClient.rpc<BookableLegAvailability[]>("get_public_voyage_leg_availability", {
+        _voyage_ids: bookableVoyageIds,
+      });
+      if (error) {
+        console.warn("[Journal] get_public_voyage_leg_availability unavailable", error);
+        return [] as BookableLegAvailability[];
+      }
+      return ((data || []) as BookableLegAvailability[]).sort((a, b) => {
+        if (a.voyage_id === b.voyage_id) return a.sort_order - b.sort_order;
+        return a.voyage_id.localeCompare(b.voyage_id);
+      });
+    },
+    staleTime: 1000 * 30,
+  });
+
+  const bookingLegsByVoyage = useMemo(() => {
+    const map: Record<string, BookableLegAvailability[]> = {};
+    bookingLegs.forEach((leg) => {
+      if (!map[leg.voyage_id]) map[leg.voyage_id] = [];
+      map[leg.voyage_id].push(leg);
+    });
+    Object.values(map).forEach((legs) => legs.sort((a, b) => a.sort_order - b.sort_order));
+    return map;
+  }, [bookingLegs]);
+
+  const bookingLegsById = useMemo(
+    () => Object.fromEntries(bookingLegs.map((leg) => [leg.id, leg])),
+    [bookingLegs]
+  );
+
   // Filter articles
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return articles;
@@ -365,6 +426,148 @@ const Journal = () => {
     setPanelProfileId(null);
     setVoyageFilterOpen(false);
   }, []);
+
+  const clearBookingSelection = useCallback(() => {
+    setBookingAnchor(null);
+    setSelectedBookingLegIds([]);
+    setBookingRejectedLegIds([]);
+    setBookingMessage("");
+    setBookingPartySize(1);
+  }, []);
+
+  const handleWaypointBookingAction = useCallback((voyageId: string, waypointId: string, direction: "from" | "to") => {
+    const voyageLegs = bookingLegsByVoyage[voyageId] || [];
+    const voyageWaypoints = waypointsMap[voyageId] || [];
+    const waypointIds = voyageWaypoints.map((waypoint) => waypoint.id);
+
+    setFocusedVoyageId(voyageId);
+    setSelectedRouteVoyageId(voyageId);
+
+    if (!bookingAnchor || bookingAnchor.voyageId !== voyageId) {
+      setBookingAnchor({ voyageId, waypointId });
+      setSelectedBookingLegIds([]);
+      setBookingRejectedLegIds([]);
+      toast.info(
+        lang === "it"
+          ? direction === "from"
+            ? "Punto di partenza impostato. Clicca un altro waypoint e scegli “Prenota fino a qui”."
+            : "Punto di arrivo impostato. Clicca un altro waypoint e scegli “Prenota da qui”."
+          : direction === "from"
+            ? "Start point set. Click another waypoint and choose “Book to here”."
+            : "Arrival point set. Click another waypoint and choose “Book from here”."
+      );
+      return;
+    }
+
+    const fromWaypointId = direction === "to" ? bookingAnchor.waypointId : waypointId;
+    const toWaypointId = direction === "to" ? waypointId : bookingAnchor.waypointId;
+    const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
+
+    if (rangeLegs.length === 0) {
+      toast.error(lang === "it" ? "Non ci sono tratte prenotabili tra questi waypoint." : "There are no bookable legs between these waypoints.");
+      setBookingRejectedLegIds([]);
+      return;
+    }
+
+    const partySize = Math.max(1, bookingPartySize);
+    const availableLegs = rangeLegs.filter((leg) => leg.available && leg.remaining >= partySize);
+    const rejectedLegs = rangeLegs.filter((leg) => !leg.available || leg.remaining < partySize);
+
+    setSelectedBookingLegIds(availableLegs.map((leg) => leg.id));
+    setBookingRejectedLegIds(rejectedLegs.map((leg) => leg.id));
+
+    if (rejectedLegs.length > 0) {
+      toast.error(
+        lang === "it"
+          ? "Alcune tratte non hanno disponibilità: ho selezionato solo quelle ancora prenotabili."
+          : "Some legs have no availability: only available legs were selected."
+      );
+      return;
+    }
+
+    toast.success(lang === "it" ? "Tratte selezionate per la prenotazione." : "Booking legs selected.");
+  }, [bookingAnchor, bookingLegsByVoyage, bookingPartySize, lang, waypointsMap]);
+
+  const toggleBookingLeg = useCallback((legId: string) => {
+    const leg = bookingLegsById[legId];
+    if (!leg) return;
+    if (!leg.available || leg.remaining < bookingPartySize) {
+      toast.error(lang === "it" ? "Questa tratta non ha posti disponibili." : "This leg has no available seats.");
+      setBookingRejectedLegIds((current) => [...new Set([...current, legId])]);
+      return;
+    }
+
+    setSelectedBookingLegIds((current) =>
+      current.includes(legId) ? current.filter((id) => id !== legId) : [...current, legId]
+    );
+    setBookingRejectedLegIds((current) => current.filter((id) => id !== legId));
+  }, [bookingLegsById, bookingPartySize, lang]);
+
+  const submitBookingFromLogbook = useCallback(async () => {
+    if (!session?.user) {
+      navigate("/login", { state: { from: `/${lang}/logbook` } });
+      return;
+    }
+
+    if (!bookingAnchor || selectedBookingLegIds.length === 0) {
+      toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+      return;
+    }
+
+    const selectedLegs = selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean);
+    const unavailableLegs = selectedLegs.filter((leg) => !leg.available || leg.remaining < bookingPartySize);
+    if (unavailableLegs.length > 0) {
+      setBookingRejectedLegIds(unavailableLegs.map((leg) => leg.id));
+      setSelectedBookingLegIds(selectedLegs.filter((leg) => leg.available && leg.remaining >= bookingPartySize).map((leg) => leg.id));
+      toast.error(
+        lang === "it"
+          ? "La disponibilità è cambiata: ho lasciato selezionate solo le tratte ancora disponibili."
+          : "Availability changed: only still-available legs remain selected."
+      );
+      return;
+    }
+
+    setBookingSubmitting(true);
+    try {
+      const { data, error } = await bookingRpcClient.rpc<{ booking_status?: BookingRequest["status"] }[] | { booking_status?: BookingRequest["status"] }>("request_voyage_booking", {
+        _voyage_id: bookingAnchor.voyageId,
+        _leg_ids: selectedBookingLegIds,
+        _party_size: Math.max(1, bookingPartySize),
+        _message: bookingMessage.trim() || null,
+      });
+
+      if (error) throw error;
+      const result = Array.isArray(data) ? data[0] : data as { booking_status?: BookingRequest["status"] } | null;
+      toast.success(
+        result?.booking_status === "waitlisted"
+          ? (lang === "it" ? "Richiesta inviata in waiting list." : "Request sent to the waiting list.")
+          : (lang === "it" ? "Richiesta di prenotazione inviata." : "Booking request sent.")
+      );
+      clearBookingSelection();
+      void refetchBookingLegs();
+    } catch (error: unknown) {
+      await refetchBookingLegs();
+      toast.error(
+        lang === "it"
+          ? "Prenotazione non riuscita: almeno una tratta potrebbe non avere più posti."
+          : "Booking failed: at least one leg may no longer have seats."
+      );
+      console.error("[Journal] request_voyage_booking failed", error);
+    } finally {
+      setBookingSubmitting(false);
+    }
+  }, [
+    bookingAnchor,
+    bookingLegsById,
+    bookingMessage,
+    bookingPartySize,
+    clearBookingSelection,
+    lang,
+    navigate,
+    refetchBookingLegs,
+    selectedBookingLegIds,
+    session?.user,
+  ]);
 
   const handleProfilePreviewOpen = useCallback((profileId: string) => {
     setPanelProfileId(profileId);
@@ -566,6 +769,41 @@ const Journal = () => {
     return focusedVoyageId;
   }, [focusedVoyageId, selectedArticle]);
 
+  const bookingSummaryVoyage = useMemo(
+    () => voyages.find((voyage) => voyage.id === bookingAnchor?.voyageId) || null,
+    [bookingAnchor?.voyageId, voyages]
+  );
+  const selectedBookingLegs = useMemo(
+    () => selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
+    [bookingLegsById, selectedBookingLegIds]
+  );
+  const rejectedBookingLegs = useMemo(
+    () => bookingRejectedLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
+    [bookingLegsById, bookingRejectedLegIds]
+  );
+  const selectedBookingWaypointsById = useMemo<Record<string, BookingWaypoint>>(
+    () => Object.fromEntries((bookingAnchor ? waypointsMap[bookingAnchor.voyageId] || [] : []).map((waypoint) => [
+      waypoint.id,
+      {
+        id: waypoint.id,
+        voyage_id: waypoint.voyage_id,
+        name: waypoint.name,
+        name_it: waypoint.name_it,
+        name_en: waypoint.name_en,
+        sort_order: waypoint.sort_order,
+        lat: waypoint.lat,
+        lng: waypoint.lng,
+        waypoint_type: waypoint.waypoint_type as BookingWaypoint["waypoint_type"],
+        visibility_mode: waypoint.visibility_mode as BookingWaypoint["visibility_mode"],
+        planned_stop_duration_minutes: waypoint.planned_stop_duration_minutes,
+        date_start: waypoint.date_start,
+        date_end: waypoint.date_end,
+      } satisfies BookingWaypoint,
+    ])),
+    [bookingAnchor, waypointsMap]
+  );
+  const bookingVoyageLegs = bookingAnchor ? bookingLegsByVoyage[bookingAnchor.voyageId] || [] : [];
+
   const filteredVoyages = useMemo(() => {
     const list =
       voyageTypeFilter === "all" ? [...voyages] : voyages.filter((voyage) => voyage.type === voyageTypeFilter);
@@ -634,6 +872,10 @@ const Journal = () => {
             onArticleClick={handleArticleClick}
             onVoyageSelect={setSelectedRouteVoyageId}
             selectedRouteVoyageId={selectedRouteVoyageId}
+            bookingLegsByVoyage={bookingLegsByVoyage}
+            selectedBookingLegIds={selectedBookingLegIds}
+            bookingSelectionAnchor={bookingAnchor}
+            onWaypointBookingAction={handleWaypointBookingAction}
             presenceMarkers={mapPresenceMarkers}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}
@@ -679,6 +921,138 @@ const Journal = () => {
               </div>
             );
           })()}
+
+          {(bookingAnchor || selectedBookingLegs.length > 0 || rejectedBookingLegs.length > 0) && (
+            <div
+              className={`fixed z-30 min-w-0 transition-[left,right,bottom,max-width] duration-300 ease-out-expo ${
+                isMobile
+                  ? "left-3 right-3 bottom-[calc(0.75rem+72px)]"
+                  : sidebarOpen && !isSidebarAutoHidden
+                    ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] right-4 bottom-6 max-w-[720px]"
+                    : "left-4 right-4 bottom-6 max-w-[720px]"
+              }`}
+            >
+              <div className="rounded-[28px] border border-white/60 bg-background/86 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.2)] backdrop-blur-2xl">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {lang === "it" ? "Prenotazione viaggio" : "Voyage booking"}
+                    </p>
+                    <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
+                      {bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : (lang === "it" ? "Selezione" : "Selection")}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearBookingSelection}
+                    className="rounded-full border border-white/60 bg-white/60 p-2 text-muted-foreground transition-colors hover:text-foreground"
+                    title={lang === "it" ? "Chiudi riepilogo" : "Close summary"}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                {bookingAnchor && selectedBookingLegs.length === 0 ? (
+                  <div className="rounded-[18px] border border-dashed border-emerald-300/70 bg-emerald-50/75 px-3 py-2 text-xs text-emerald-800">
+                    {lang === "it"
+                      ? "Waypoint impostato. Clicca un altro waypoint sulla stessa rotta per completare la selezione."
+                      : "Waypoint set. Click another waypoint on the same route to complete the selection."}
+                  </div>
+                ) : null}
+
+                {bookingVoyageLegs.length > 0 ? (
+                  <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+                    {bookingVoyageLegs.map((leg) => {
+                      const selected = selectedBookingLegIds.includes(leg.id);
+                      const rejected = bookingRejectedLegIds.includes(leg.id);
+                      return (
+                        <button
+                          key={leg.id}
+                          type="button"
+                          onClick={() => toggleBookingLeg(leg.id)}
+                          className={`h-2 min-w-10 flex-1 rounded-full transition-colors ${
+                            selected
+                              ? "bg-emerald-600"
+                              : rejected
+                                ? "bg-red-500"
+                                : leg.available
+                                  ? "bg-emerald-200 hover:bg-emerald-300"
+                                  : "bg-slate-300"
+                          }`}
+                          title={`${getLegLabel(leg, selectedBookingWaypointsById, lang)} · ${leg.occupied}/${leg.capacity}`}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {selectedBookingLegs.length > 0 ? (
+                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                    {selectedBookingLegs.map((leg) => (
+                      <div key={leg.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-emerald-200/70 bg-emerald-50/75 px-3 py-2 text-xs">
+                        <span className="min-w-0 truncate text-foreground">{getLegLabel(leg, selectedBookingWaypointsById, lang)}</span>
+                        <span className="shrink-0 text-emerald-800">{leg.remaining}/{leg.capacity}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleBookingLeg(leg.id)}
+                          className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground"
+                          title={lang === "it" ? "Rimuovi tratta" : "Remove leg"}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {rejectedBookingLegs.length > 0 ? (
+                  <div className="mt-3 rounded-[18px] border border-red-200/75 bg-red-50/80 px-3 py-2 text-xs text-red-800">
+                    <p className="font-medium">
+                      {lang === "it" ? "Tratte escluse perché non disponibili" : "Legs excluded because unavailable"}
+                    </p>
+                    <p className="mt-1 line-clamp-2">
+                      {rejectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang)).join(" · ")}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[120px_1fr_auto] sm:items-end">
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Pax</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={bookingPartySize}
+                      onChange={(event) => setBookingPartySize(Math.max(1, Number(event.target.value) || 1))}
+                      className="w-full rounded-full border border-white/70 bg-white/65 px-3 py-2 text-xs focus:outline-none"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      {lang === "it" ? "Messaggio" : "Message"}
+                    </span>
+                    <input
+                      value={bookingMessage}
+                      onChange={(event) => setBookingMessage(event.target.value)}
+                      placeholder={lang === "it" ? "Note opzionali" : "Optional notes"}
+                      className="w-full rounded-full border border-white/70 bg-white/65 px-3 py-2 text-xs focus:outline-none"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void submitBookingFromLogbook()}
+                    disabled={bookingSubmitting || selectedBookingLegIds.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bookingSubmitting ? <Loader2 size={14} className="animate-spin" /> : <TicketCheck size={14} />}
+                    {session?.user
+                      ? (lang === "it" ? "Prenota" : "Book")
+                      : (lang === "it" ? "Accedi" : "Sign in")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Floating controls — top right */}
           <div

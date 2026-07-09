@@ -52,6 +52,7 @@ export const uiCopy = isItalian
       },
       actions: {
         contact: "Scrivici",
+        biteProject: "Vai al BITE Project",
         navigate: "Naviga",
         mediaKit: "Apri media kit",
         sendInquiry: "Invia richiesta",
@@ -147,6 +148,7 @@ export const uiCopy = isItalian
       },
       actions: {
         contact: "Get in touch",
+        biteProject: "Go to BITE Project",
         navigate: "Navigate",
         mediaKit: "Open media kit",
         sendInquiry: "Send inquiry",

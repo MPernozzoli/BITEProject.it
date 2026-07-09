@@ -74,6 +74,13 @@ export interface BookingRequestLeg {
   bookable_leg_id: string;
 }
 
+export interface BookableLegAvailability extends BookableLeg {
+  occupied: number;
+  capacity: number;
+  remaining: number;
+  available: boolean;
+}
+
 export interface BookingProfile {
   id: string;
   name: string;
@@ -203,6 +210,62 @@ export function isLegCurrentOrFuture(leg: BookableLeg) {
 
 export function isLegSelectable(leg: BookableLeg) {
   return leg.is_bookable && isLegCurrentOrFuture(leg);
+}
+
+export function getLegAvailability(
+  leg: BookableLeg,
+  occupied: number,
+  capacity: number,
+  partySize = 1
+): BookableLegAvailability {
+  const safeCapacity = Math.max(1, Number(capacity) || 1);
+  const safeOccupied = Math.max(0, Number(occupied) || 0);
+  const remaining = Math.max(0, safeCapacity - safeOccupied);
+  return {
+    ...leg,
+    occupied: safeOccupied,
+    capacity: safeCapacity,
+    remaining,
+    available: isLegSelectable(leg) && remaining >= Math.max(1, partySize),
+  };
+}
+
+export function buildLegCapacityMap(requests: BookingRequest[], requestLegs: BookingRequestLeg[]) {
+  const map: Record<string, number> = {};
+  for (const request of requests) {
+    if (!capacityBlockingStatuses.has(request.status)) continue;
+    for (const link of requestLegs) {
+      if (link.booking_request_id === request.id) {
+        map[link.bookable_leg_id] = (map[link.bookable_leg_id] || 0) + request.party_size;
+      }
+    }
+  }
+  return map;
+}
+
+export function getLegRangeBetweenWaypoints(
+  waypointIds: string[],
+  legs: BookableLeg[],
+  fromWaypointId: string,
+  toWaypointId: string
+) {
+  const fromIndex = waypointIds.indexOf(fromWaypointId);
+  const toIndex = waypointIds.indexOf(toWaypointId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return [];
+
+  const startIndex = Math.min(fromIndex, toIndex);
+  const endIndex = Math.max(fromIndex, toIndex);
+  const legsByPair = new Map(legs.map((leg) => [`${leg.from_waypoint_id}:${leg.to_waypoint_id}`, leg]));
+  const selected: BookableLeg[] = [];
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const from = waypointIds[index];
+    const to = waypointIds[index + 1];
+    const leg = legsByPair.get(`${from}:${to}`);
+    if (leg) selected.push(leg);
+  }
+
+  return selected;
 }
 
 export function getLegLabel(

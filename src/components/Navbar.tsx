@@ -23,6 +23,14 @@ const PAGE_SUBTITLES: Record<string, string> = {
   "/contact": "'s contact",
 };
 
+const BITE_HOME_URL = "https://biteproject.it/";
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+const getBiteHomeHref = () => {
+  if (typeof window === "undefined") return "/";
+  return LOCAL_HOSTNAMES.has(window.location.hostname) ? "/" : BITE_HOME_URL;
+};
+
 const Navbar = () => {
   const { t, lang, setLang } = useI18n();
   const { session, isAdmin, loading: authLoading } = useAuth();
@@ -173,8 +181,8 @@ const Navbar = () => {
         )}
       >
         {/* Logo with hover expand */}
-        <Link
-          to="/"
+        <a
+          href={getBiteHomeHref()}
           className={cn(
             "relative inline-flex items-baseline gap-0 overflow-hidden font-serif text-xl font-bold tracking-widest transition-colors duration-500 md:text-2xl",
             navTextClass,
@@ -237,7 +245,7 @@ const Navbar = () => {
               {pageSubtitle}
             </span>
           )}
-        </Link>
+        </a>
 
         {/* Desktop Nav */}
         <div className="hidden lg:flex items-center gap-7">

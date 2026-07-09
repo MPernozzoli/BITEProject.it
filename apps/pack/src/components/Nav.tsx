@@ -126,7 +126,13 @@ export const Nav = () => {
           ))}
         </div>
 
-        <div className="hidden lg:block">
+        <div className="hidden items-center gap-2 lg:flex">
+          <a
+            href="https://biteproject.it/"
+            className="inline-flex h-10 items-center justify-center rounded-full border border-cream/15 px-5 py-0 font-sans text-[13px] tracking-wide text-cream/80 transition-colors duration-300 hover:border-bronze/35 hover:text-cream"
+          >
+            {uiCopy.actions.biteProject}
+          </a>
           <a
             href="#contact"
             className="glass-button inline-flex h-10 items-center justify-center gap-2 px-6 py-0"
@@ -193,9 +199,16 @@ export const Nav = () => {
               ))}
             </nav>
             <a
+              href="https://biteproject.it/"
+              onClick={() => setOpen(false)}
+              className="mt-5 flex h-12 w-full items-center justify-center rounded-full border border-cream/15 px-4 font-sans text-sm text-cream/80 transition-colors duration-300 hover:border-bronze/35 hover:text-cream"
+            >
+              {uiCopy.actions.biteProject}
+            </a>
+            <a
               href="#contact"
               onClick={() => setOpen(false)}
-              className="glass-button mt-5 flex h-12 w-full items-center justify-center gap-2"
+              className="glass-button mt-3 flex h-12 w-full items-center justify-center gap-2"
             >
               {uiCopy.actions.contact}
               <ArrowRight size={16} />

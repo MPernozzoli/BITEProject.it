@@ -14,6 +14,14 @@ const links = [
   { to: "/collaborate", label: "Collaborate" },
 ];
 
+const BITE_HOME_URL = "https://biteproject.it/";
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+const getBiteHomeHref = () => {
+  if (typeof window === "undefined") return "/";
+  return LOCAL_HOSTNAMES.has(window.location.hostname) ? "/" : BITE_HOME_URL;
+};
+
 const DataNavbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -48,7 +56,7 @@ const DataNavbar = () => {
         )}
       >
         {/* Logo */}
-        <Link to="/" className={cn(
+        <a href={getBiteHomeHref()} className={cn(
           "flex items-baseline gap-2 font-serif text-lg font-bold tracking-wider transition-colors",
           mobileOpen || !scrolled ? "text-primary-foreground" : "text-foreground"
         )}>
@@ -57,7 +65,7 @@ const DataNavbar = () => {
             "text-[10px] font-sans font-medium uppercase tracking-[0.2em]",
             mobileOpen || !scrolled ? "text-primary-foreground/60" : "text-muted-foreground"
           )}>Data</span>
-        </Link>
+        </a>
 
         {/* Desktop */}
         <div className="hidden lg:flex items-center gap-1">
