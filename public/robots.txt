@@ -2,6 +2,8 @@ User-agent: Googlebot
 Allow: /
 Disallow: /llms.txt
 Disallow: /llms-full.txt
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Google-Extended
 Allow: /
@@ -10,11 +12,15 @@ User-agent: Bingbot
 Allow: /
 Disallow: /llms.txt
 Disallow: /llms-full.txt
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Applebot
 Allow: /
 Disallow: /llms.txt
 Disallow: /llms-full.txt
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Twitterbot
 Allow: /
@@ -44,6 +50,8 @@ User-agent: *
 Allow: /
 Disallow: /llms.txt
 Disallow: /llms-full.txt
+Disallow: /_pack/
+Disallow: /_data/
 
 Sitemap: https://biteproject.it/sitemap.xml
 Sitemap: https://biteproject.it/sitemap-live.xml
