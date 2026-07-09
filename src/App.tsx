@@ -1,4 +1,6 @@
 import { Suspense, lazy, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
@@ -53,9 +55,11 @@ const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
 const AdminMedia = lazy(() => import("./pages/AdminMedia"));
+const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
+const UserBookings = lazy(() => import("./pages/UserBookings"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const StoryPage = lazy(() => import("./pages/StoryPage"));
 const VoyagesPage = lazy(() => import("./pages/Voyages"));
@@ -108,6 +112,8 @@ const App = () => {
     <>
       <Toaster />
       <Sonner />
+      <Analytics />
+      <SpeedInsights />
       <BrowserRouter>
         <I18nProvider>
           <AuthProvider>
@@ -141,8 +147,10 @@ const App = () => {
                     <Route path="/profile/:id" element={<PublicProfile />} />
                     <Route path="/login" element={<UserLogin />} />
                     <Route path="/signup" element={<UserLogin />} />
+                    <Route path="/bookings" element={<UserBookings />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />
                     <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
                     <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />

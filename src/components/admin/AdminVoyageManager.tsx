@@ -70,6 +70,9 @@ interface VoyageFormState {
   waterway_autoroute: boolean;
   status: "planned" | "active" | "completed";
   is_published: boolean;
+  booking_enabled: boolean;
+  booking_max_guests: string;
+  booking_planning_speed_kn: string;
   dates_tbd: boolean;
   start_date: string;
   start_time: string;
@@ -102,6 +105,9 @@ const emptyVoyageForm: VoyageFormState = {
   waterway_autoroute: false,
   status: "planned",
   is_published: true,
+  booking_enabled: false,
+  booking_max_guests: "2",
+  booking_planning_speed_kn: "5",
   dates_tbd: true,
   start_date: "",
   start_time: "",
@@ -423,6 +429,7 @@ const WAYPOINT_PERSIST_PATCH_KEYS = [
   "event_time",
   "date_start",
   "date_end",
+  "planned_stop_duration_minutes",
   "waypoint_type",
   "visibility_mode",
   "sort_order",
@@ -468,7 +475,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute", "booking_enabled", "booking_max_guests", "booking_planning_speed_kn"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -497,6 +504,7 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   event_date: (waypoint?.event_date ?? null) as string | null,
   event_time: (waypoint?.event_time ?? null) as string | null,
   media: normalizeWaypointMedia(waypoint?.media),
+  planned_stop_duration_minutes: Math.max(0, Number(waypoint?.planned_stop_duration_minutes ?? 0)),
   date_start: (waypoint?.date_start ?? null) as string | null,
   date_end: (waypoint?.date_end ?? null) as string | null,
 });
@@ -512,6 +520,11 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   cached_geometry: (voyage?.cached_geometry ?? null) as Voyage["cached_geometry"],
   waterway_autoroute: Boolean(voyage?.waterway_autoroute),
   is_published: (voyage?.is_published ?? true) as boolean,
+  booking_enabled: Boolean(voyage?.booking_enabled),
+  booking_max_guests: Math.max(1, Number(voyage?.booking_max_guests ?? 2)),
+  booking_planning_speed_kn: Math.max(0.1, Number(voyage?.booking_planning_speed_kn ?? 5)),
+  departure_window_start: (voyage?.departure_window_start ?? null) as string | null,
+  departure_window_end: (voyage?.departure_window_end ?? null) as string | null,
   start_date: (voyage?.start_date ?? null) as string | null,
   start_time: (voyage?.start_time ?? null) as string | null,
   start_date_flex_days: (voyage?.start_date_flex_days ?? 0) as number | null,
@@ -1032,6 +1045,20 @@ const AdminVoyageManager = ({
     [commitVoyages, refreshVoyageGeometryPreview]
   );
 
+  const syncBookableLegs = useCallback(async (voyageId: string) => {
+    try {
+      const { error } = await supabase.rpc("sync_voyage_bookable_legs" as never, { _voyage_id: voyageId } as never);
+      if (error) {
+        console.warn("[AdminVoyageManager] sync_voyage_bookable_legs skipped", error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn("[AdminVoyageManager] sync_voyage_bookable_legs unavailable", error);
+      return false;
+    }
+  }, []);
+
   const uploadWaypointMediaAsset = useCallback(async (waypointId: string, file: File) => {
     const ext = file.name.split(".").pop() || "bin";
     const path = `voyage-waypoints/${waypointId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -1167,6 +1194,7 @@ const AdminVoyageManager = ({
       event_time: waypoint.event_time,
       date_start: waypoint.date_start,
       date_end: waypoint.date_end,
+      planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0)),
       media: waypoint.media as unknown as import("@/integrations/supabase/types").Json,
     };
     const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
@@ -1637,6 +1665,18 @@ const AdminVoyageManager = ({
                 ${escapeHtml(departureSuggestionNote || "Opzionale. Se valorizzata, verrà usata per stimare le tappe successive.")}
               </p>
             </div>
+            <div>
+              <label style="${popupLabelStyle}">Sosta prevista</label>
+              <input
+                name="planned_stop_duration_minutes"
+                type="number"
+                min="0"
+                step="30"
+                value="${escapeHtml(String(Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0))))}"
+                style="${popupInputStyle}"
+              />
+              <p style="${popupHintStyle}">Durata in minuti da considerare per le tappe successive e per il booking.</p>
+            </div>
           </div>
           <div data-details-kind="technical" style="display:${effectiveType === "technical" ? "grid" : "none"};gap:10px;">
             <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
@@ -1683,6 +1723,7 @@ const AdminVoyageManager = ({
       const departureDateInput = wrapper.querySelector('input[name="date_start"]') as HTMLInputElement | null;
       const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
       const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
+      const stopDurationInput = wrapper.querySelector('input[name="planned_stop_duration_minutes"]') as HTMLInputElement | null;
       const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
       const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
@@ -1775,6 +1816,9 @@ const AdminVoyageManager = ({
           description_en: descriptionEnInput?.value.trim() || null,
           visibility_mode,
           waypoint_type,
+          planned_stop_duration_minutes: waypoint_type === "narrative"
+            ? parseNonNegativeInteger(stopDurationInput?.value || "0")
+            : 0,
         };
 
         if (waypoint_type === "narrative") {
@@ -2220,6 +2264,9 @@ const AdminVoyageManager = ({
         waterway_autoroute: voyage.type === "water" ? Boolean(voyage.waterway_autoroute) : false,
         status: voyage.status,
         is_published: voyage.is_published,
+        booking_enabled: Boolean(voyage.booking_enabled),
+        booking_max_guests: String(Math.max(1, Number(voyage.booking_max_guests ?? 2))),
+        booking_planning_speed_kn: String(Math.max(0.1, Number(voyage.booking_planning_speed_kn ?? 5))),
         dates_tbd: hasVoyageDatesTbd(voyage),
         start_date: voyage.start_date || "",
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
@@ -2256,6 +2303,8 @@ const AdminVoyageManager = ({
     const datesTbd = voyageForm.status === "planned" && voyageForm.dates_tbd;
     const startFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.start_date_flex_days);
     const endFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
+    const bookingMaxGuests = Math.max(1, parseNonNegativeInteger(voyageForm.booking_max_guests) || 2);
+    const bookingPlanningSpeedKn = Math.max(0.1, Number.parseFloat(voyageForm.booking_planning_speed_kn) || 5);
     const legacyName = nameEn || nameIt || "Untitled voyage";
     const legacyDescription = descriptionEn || descriptionIt || null;
     const data: TablesInsert<"voyages"> = {
@@ -2268,6 +2317,9 @@ const AdminVoyageManager = ({
       type: voyageForm.type,
       status: voyageForm.status,
       is_published: voyageForm.is_published,
+      booking_enabled: voyageForm.booking_enabled,
+      booking_max_guests: bookingMaxGuests,
+      booking_planning_speed_kn: bookingPlanningSpeedKn,
       start_date: datesTbd ? null : voyageForm.start_date || null,
       start_time: datesTbd ? null : voyageForm.start_time || null,
       start_date_flex_days: datesTbd ? 0 : startFlexDays,
@@ -2312,6 +2364,9 @@ const AdminVoyageManager = ({
       if ((waypointsRef.current[editingVoyage.id] || []).length >= 2) {
         await syncVoyageGeometry(editingVoyage.id, waypointsRef.current[editingVoyage.id]);
       }
+      if (voyageForm.booking_enabled && (waypointsRef.current[editingVoyage.id] || []).length >= 2) {
+        await syncBookableLegs(editingVoyage.id);
+      }
       toast.success("Voyage updated");
     } else {
       let { data: newVoyage, error } = await supabase.from("voyages").insert(data).select().single();
@@ -2332,7 +2387,7 @@ const AdminVoyageManager = ({
     initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
     return true;
-  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncVoyageGeometry, voyageForm]);
+  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncBookableLegs, syncVoyageGeometry, voyageForm]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -2619,7 +2674,7 @@ const AdminVoyageManager = ({
         if (Object.keys(changes).length) mutationSteps += 1;
       }
 
-      const totalSteps = Math.max(1, toDelete.length + mutationSteps + 2);
+      const totalSteps = Math.max(1, toDelete.length + mutationSteps + 2 + (selectedVoyage.booking_enabled ? 1 : 0));
       let completed = 0;
 
       const reportProgress = async (label: string) => {
@@ -2736,6 +2791,10 @@ const AdminVoyageManager = ({
         "Calcolo e salvataggio geometria (può richiedere diversi secondi se il routing è attivo)…"
       );
       const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+      if (selectedVoyage.booking_enabled) {
+        await reportProgress("Sincronizzazione tratte prenotabili...");
+        await syncBookableLegs(selectedVoyageId);
+      }
 
       setRouteSaveProgress({ label: "Completato", percent: 100, step: totalSteps, totalSteps });
       await yieldToUi();
@@ -2767,6 +2826,7 @@ const AdminVoyageManager = ({
     persistWaypointPatch,
     selectedVoyage,
     selectedVoyageId,
+    syncBookableLegs,
     syncVoyageGeometry,
     setWaypointEditorPanelId,
   ]);
@@ -3090,6 +3150,61 @@ const AdminVoyageManager = ({
                 </span>
               </span>
             </label>
+
+            <div className="rounded-[20px] border border-border px-4 py-3">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={voyageForm.booking_enabled}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({ ...form, booking_enabled: event.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                    {voyageForm.booking_enabled ? "Booking aperto" : "Booking disattivato"}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
+                    Consente agli utenti registrati di richiedere imbarco sulle tratte pubbliche del viaggio.
+                  </span>
+                </span>
+              </label>
+              {voyageForm.booking_enabled && (
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      Persone max
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={voyageForm.booking_max_guests}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_max_guests: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      Velocità kn
+                    </label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={voyageForm.booking_planning_speed_kn}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_planning_speed_kn: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">

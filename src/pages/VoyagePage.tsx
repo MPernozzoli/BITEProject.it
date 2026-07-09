@@ -24,7 +24,7 @@ import {
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
-import { ArrowLeft, MapPinned, Navigation } from "lucide-react";
+import { ArrowLeft, CalendarCheck, MapPinned, Navigation } from "lucide-react";
 
 const VoyagePage = () => {
   const { voyageRef } = useParams();
@@ -224,6 +224,15 @@ const VoyagePage = () => {
                 <p className="text-sm">{routeDistance ? `${routeDistance.value} ${routeDistance.unit}` : "-"}</p>
               </div>
             </div>
+            {voyage.booking_enabled && (
+              <Link
+                to={`/bookings?voyage=${voyage.id}`}
+                className="glass-chip mt-6 inline-flex items-center gap-2 px-4 py-3 text-sm text-foreground transition-colors hover:text-accent"
+              >
+                <CalendarCheck size={16} />
+                {lang === "it" ? "Richiedi imbarco su questo viaggio" : "Request a berth on this voyage"}
+              </Link>
+            )}
           </div>
         </div>
       </section>

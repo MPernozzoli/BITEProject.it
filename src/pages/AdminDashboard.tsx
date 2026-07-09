@@ -17,6 +17,7 @@ import {
   Mail,
   ArrowUpRight,
   CalendarClock,
+  CalendarCheck,
   Award,
   PanelLeftClose,
   PanelLeftOpen,
@@ -461,6 +462,21 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex items-center gap-3 self-start">
+              <Link
+                to="/admin/bookings"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/bookings");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Booking"
+              >
+                <CalendarCheck size={16} />
+                Booking
+              </Link>
               <Link
                 to="/admin/media"
                 onClick={(event) => {

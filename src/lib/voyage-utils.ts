@@ -1078,6 +1078,11 @@ export interface Voyage {
   type: VoyageType;
   /** When true with type water, geometry follows inland waterways (BRouter); still shown everywhere as a normal water voyage. Omitted = false. */
   waterway_autoroute?: boolean;
+  booking_enabled?: boolean;
+  booking_max_guests?: number;
+  booking_planning_speed_kn?: number;
+  departure_window_start?: string | null;
+  departure_window_end?: string | null;
   status: VoyageStatus;
   is_published: boolean;
   sort_order: number;
@@ -1108,6 +1113,7 @@ export interface VoyageWaypoint {
   event_date: string | null;
   event_time: string | null;
   media: VoyageWaypointMediaItem[];
+  planned_stop_duration_minutes?: number;
   date_start: string | null;
   date_end: string | null;
   created_at: string;

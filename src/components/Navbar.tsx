@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowRight, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
+import { ArrowRight, CalendarCheck, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import ProfileNotificationsMenu from "@/components/ProfileNotificationsMenu";
@@ -318,6 +318,12 @@ const Navbar = () => {
                     <span>{lang === "it" ? "Profilo" : "Profile"}</span>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/bookings" className="flex items-center gap-2">
+                    <CalendarCheck size={14} />
+                    <span>{lang === "it" ? "Imbarchi" : "Bookings"}</span>
+                  </Link>
+                </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
                     <a href={getAdminUrl("/admin")} className="flex items-center gap-2">
@@ -408,6 +414,12 @@ const Navbar = () => {
                   <Link to="/profile" className="flex items-center gap-2">
                     <User size={14} />
                     <span>{lang === "it" ? "Profilo" : "Profile"}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/bookings" className="flex items-center gap-2">
+                    <CalendarCheck size={14} />
+                    <span>{lang === "it" ? "Imbarchi" : "Bookings"}</span>
                   </Link>
                 </DropdownMenuItem>
                 {isAdmin && (
@@ -563,6 +575,17 @@ const Navbar = () => {
                         <span className="flex items-center gap-3">
                           <User size={16} />
                           {lang === "it" ? "Profilo" : "Profile"}
+                        </span>
+                        <ArrowRight size={16} className="text-slate-500" />
+                      </Link>
+
+                      <Link
+                        to="/bookings"
+                        className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
+                      >
+                        <span className="flex items-center gap-3">
+                          <CalendarCheck size={16} />
+                          {lang === "it" ? "Imbarchi" : "Bookings"}
                         </span>
                         <ArrowRight size={16} className="text-slate-500" />
                       </Link>

@@ -1696,6 +1696,7 @@ export type Database = {
           name: string | null
           name_en: string | null
           name_it: string | null
+          planned_stop_duration_minutes: number
           sort_order: number
           visibility_mode: string
           voyage_id: string
@@ -1716,6 +1717,7 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          planned_stop_duration_minutes?: number
           sort_order?: number
           visibility_mode?: string
           voyage_id: string
@@ -1736,6 +1738,7 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          planned_stop_duration_minutes?: number
           sort_order?: number
           visibility_mode?: string
           voyage_id?: string
@@ -1754,10 +1757,15 @@ export type Database = {
       voyages: {
         Row: {
           cached_geometry: Json | null
+          booking_enabled: boolean
+          booking_max_guests: number
+          booking_planning_speed_kn: number
           created_at: string
           description: string | null
           description_en: string | null
           description_it: string | null
+          departure_window_end: string | null
+          departure_window_start: string | null
           end_date: string | null
           end_date_flex_days: number | null
           end_time: string | null
@@ -1777,10 +1785,15 @@ export type Database = {
         }
         Insert: {
           cached_geometry?: Json | null
+          booking_enabled?: boolean
+          booking_max_guests?: number
+          booking_planning_speed_kn?: number
           created_at?: string
           description?: string | null
           description_en?: string | null
           description_it?: string | null
+          departure_window_end?: string | null
+          departure_window_start?: string | null
           end_date?: string | null
           end_date_flex_days?: number | null
           end_time?: string | null
@@ -1800,10 +1813,15 @@ export type Database = {
         }
         Update: {
           cached_geometry?: Json | null
+          booking_enabled?: boolean
+          booking_max_guests?: number
+          booking_planning_speed_kn?: number
           created_at?: string
           description?: string | null
           description_en?: string | null
           description_it?: string | null
+          departure_window_end?: string | null
+          departure_window_start?: string | null
           end_date?: string | null
           end_date_flex_days?: number | null
           end_time?: string | null
