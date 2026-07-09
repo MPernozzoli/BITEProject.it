@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5188"],
+      "port": 5188
+    },
+    {
+      "name": "pack",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/pack", "--", "--port", "5199"],
+      "port": 5199
+    }
+  ]
+}
