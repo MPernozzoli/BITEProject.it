@@ -34,7 +34,7 @@ export const ChoosePath = () => {
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 ease-out group-hover:scale-[1.04]"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/5" />
                 <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-10 lg:p-12">
                   <div className="label-eyebrow mb-3 text-bronze">{isItalian ? "Brand" : "Brands"}</div>
                   <h3 className="mb-3 font-serif text-3xl leading-tight text-cream md:text-4xl lg:text-5xl">
@@ -73,7 +73,7 @@ export const ChoosePath = () => {
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 ease-out group-hover:scale-[1.04]"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/5" />
                 <div className="absolute inset-0 flex flex-col justify-end p-8 md:p-10 lg:p-12">
                   <div className="label-eyebrow mb-3 text-bronze">Casting</div>
                   <h3 className="mb-3 font-serif text-3xl leading-tight text-cream md:text-4xl lg:text-5xl">

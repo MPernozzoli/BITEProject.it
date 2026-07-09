@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 
 // BITE Project (source) — publishable credentials
-const BITE_URL = "https://vdflrzcmlipvtardannd.supabase.co";
+const BITE_URL = "https://ekwloweuicrqjjgabfdp.supabase.co";
 const BITE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkZmxyemNtbGlwdnRhcmRhbm5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDA3MDksImV4cCI6MjA5MDAxNjcwOX0.wPZhb2YKT8LOoGe_JgUvEO-6eFIHedv90YJlnQCR508";
 

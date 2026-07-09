@@ -318,7 +318,7 @@ export const Hero = () => {
       className="relative min-h-[420vh] bg-charcoal"
       aria-label={uiCopy.hero.aria}
     >
-      <div className="sticky top-0 h-screen min-h-[720px] overflow-hidden">
+      <div className="sticky top-0 h-dvh min-h-[720px] overflow-hidden">
         <img
           src={duoPhotos.studioExtended}
           alt={uiCopy.hero.alt}
@@ -333,7 +333,7 @@ export const Hero = () => {
         <div className="container-editorial relative z-10 flex h-full items-end pb-10 pt-28 md:items-center md:pb-0">
           {heroChapters.map((chapter, index) => {
             const distance = Math.abs(progress - chapterProgress[index]);
-            const opacity = reducedMotion && index > 0 ? 0 : clamp(1 - distance * 3.5);
+            const opacity = reducedMotion && index > 0 ? 0 : clamp(1 - distance * 4);
             const lift = (1 - opacity) * 18;
             const isKit = chapter.layout === "kit";
 

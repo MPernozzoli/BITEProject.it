@@ -46,4 +46,4 @@ Disallow: /llms.txt
 Disallow: /llms-full.txt
 
 Sitemap: https://biteproject.it/sitemap.xml
-Sitemap: https://vdflrzcmlipvtardannd.supabase.co/functions/v1/public-sitemap
+Sitemap: https://ekwloweuicrqjjgabfdp.supabase.co/functions/v1/public-sitemap

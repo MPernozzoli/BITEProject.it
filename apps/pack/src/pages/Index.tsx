@@ -1,4 +1,5 @@
 import { Nav } from "@/components/Nav";
+import { isItalian } from "@/data/site";
 import { Hero } from "@/components/sections/Hero";
 import { Overview } from "@/components/sections/Overview";
 import { ChoosePath } from "@/components/sections/ChoosePath";
@@ -20,6 +21,12 @@ const Index = () => {
         <span className="site-shell__orb site-shell__orb--two" />
         <span className="site-shell__orb site-shell__orb--three" />
       </div>
+      <a
+        href="#overview"
+        className="sr-only z-[60] rounded-full bg-cream px-5 py-3 font-sans text-sm font-semibold text-charcoal focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+      >
+        {isItalian ? "Vai al contenuto" : "Skip to content"}
+      </a>
       <Nav />
       <main>
         <Hero />

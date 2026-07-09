@@ -48,3 +48,5 @@ supabase/.branches/
 * 3.*
 *.csv
 >>>>>>> Stashed changes
+.env
+.env

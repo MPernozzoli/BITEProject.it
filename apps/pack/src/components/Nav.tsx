@@ -8,6 +8,25 @@ export const Nav = () => {
   const [heroComplete, setHeroComplete] = useState(false);
   const [open, setOpen] = useState(false);
   const [logoHovered, setLogoHovered] = useState(false);
+  const [activeSection, setActiveSection] = useState("");
+
+  useEffect(() => {
+    const sections = navLinks
+      .map((link) => document.getElementById(link.id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id);
+        });
+      },
+      { rootMargin: "-35% 0px -60% 0px" },
+    );
+    sections.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const onScroll = () => {
@@ -95,9 +114,11 @@ export const Nav = () => {
             <a
               key={link.id}
               href={`#${link.id}`}
+              aria-current={activeSection === link.id ? "true" : undefined}
               className={cn(
-                "relative rounded-full px-3 py-2 font-sans text-[13px] tracking-wide text-cream/80 transition-colors duration-300 hover:text-cream",
+                "relative rounded-full px-3 py-2 font-sans text-[13px] tracking-wide transition-colors duration-300 hover:text-cream",
                 "after:absolute after:bottom-1 after:left-1/2 after:h-px after:w-0 after:-translate-x-1/2 after:bg-bronze after:transition-all after:duration-300 hover:after:w-[60%]",
+                activeSection === link.id ? "text-cream after:w-[60%]" : "text-cream/80",
               )}
             >
               {link.label}

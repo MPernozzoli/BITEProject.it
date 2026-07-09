@@ -221,10 +221,22 @@
   h5,
   h6 {
     font-family: var(--font-serif);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :is(a, button, [role="button"]):focus-visible {
+    outline: 2px solid hsl(var(--sand) / 0.85);
+    outline-offset: 3px;
+    border-radius: 6px;
   }
 
   #root {
     min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
     isolation: isolate;
   }
@@ -259,6 +271,17 @@
     pointer-events: none;
     z-index: -1;
     overflow: hidden;
+  }
+
+  /* Subtle film grain to break digital flatness on large dark surfaces */
+  .site-shell__ambient::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
   }
 
   .site-shell__orb {
@@ -431,6 +454,13 @@
       inset 0 1px 0 rgba(244, 241, 234, 0.4);
   }
 
+  .glass-button:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow:
+      0 12px 28px rgba(139, 94, 60, 0.3),
+      inset 0 1px 0 rgba(244, 241, 234, 0.3);
+  }
+
   .glass-button-ghost {
     border-radius: 9999px;
     border: 1px solid rgba(244, 241, 234, 0.16);
@@ -451,6 +481,10 @@
     transform: translateY(-1px);
     background: rgba(244, 241, 234, 0.1);
     border-color: rgba(244, 241, 234, 0.22);
+  }
+
+  .glass-button-ghost:active {
+    transform: translateY(0) scale(0.98);
   }
 
   .glass-frame {

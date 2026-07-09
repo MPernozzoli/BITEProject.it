@@ -23,7 +23,7 @@ export const Overview = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {overviewCards.map((card, i) => (
               <OverviewCard key={card.label} {...card} index={i} />
             ))}
@@ -53,8 +53,7 @@ const OverviewCard = ({
       style={{ transitionDelay: `${index * 70}ms` }}
     >
       <div className="font-serif text-3xl text-bronze/90 md:text-4xl">{label}</div>
-      <div className="label-eyebrow mb-4 mt-6 text-bronze">{uiCopy.sections.cardLabel}</div>
-      <h3 className="mb-3 font-serif text-2xl leading-tight text-cream">{title}</h3>
+      <h3 className="mb-3 mt-6 font-serif text-2xl leading-tight text-cream">{title}</h3>
       <p className="font-sans text-sm leading-relaxed text-muted-foreground">{body}</p>
     </div>
   );
