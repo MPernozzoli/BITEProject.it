@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { galleryItems, galleryCategories, isItalian } from "@/data/site";
+import { galleryItems, isItalian } from "@/data/site";
 import { SectionHeader } from "@/components/SectionHeader";
-import { cn } from "@/lib/utils";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 
 const categoryLabel = (category: string) => {
   if (!isItalian) return category;
@@ -23,20 +23,17 @@ const categoryLabel = (category: string) => {
 };
 
 export const Gallery = () => {
-  const [filter, setFilter] = useState<(typeof galleryCategories)[number]>("All");
   const [lightbox, setLightbox] = useState<number | null>(null);
 
-  const filtered = galleryItems.filter((g) => filter === "All" || g.category === filter);
-
   const goPrev = useCallback(() => {
-    if (lightbox === null || filtered.length === 0) return;
-    setLightbox((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length));
-  }, [lightbox, filtered.length]);
+    if (lightbox === null || galleryItems.length === 0) return;
+    setLightbox((i) => (i === null ? null : (i - 1 + galleryItems.length) % galleryItems.length));
+  }, [lightbox]);
 
   const goNext = useCallback(() => {
-    if (lightbox === null || filtered.length === 0) return;
-    setLightbox((i) => (i === null ? null : (i + 1) % filtered.length));
-  }, [lightbox, filtered.length]);
+    if (lightbox === null || galleryItems.length === 0) return;
+    setLightbox((i) => (i === null ? null : (i + 1) % galleryItems.length));
+  }, [lightbox]);
 
   useEffect(() => {
     if (lightbox === null) return;
@@ -58,60 +55,59 @@ export const Gallery = () => {
             title={isItalian ? "Uno stills file vivo, non una raccolta patinata." : "A running stills file, not a greatest-hits reel."}
             description={
               isItalian
-                ? "Ritratti, barca, città, acqua. Apri ogni frame pulito; i filtri servono solo a togliere quello che non ti serve ora."
-                : "Portraits, boat days, city nights. Tap any frame to view it clean; filters only hide what you do not need on this pass."
+                ? "Ritratti, barca, città, acqua. Scorri il carosello e apri ogni frame pulito quando ti serve vederlo meglio."
+                : "Portraits, boat days, city nights. Scroll the carousel and tap any frame when you need a cleaner view."
             }
           />
 
-          <div className="mt-10 mb-10 flex flex-wrap gap-2">
-            {galleryCategories.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setFilter(c)}
-                className={cn(
-                  "rounded-full border px-4 py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all duration-300",
-                  filter === c
-                    ? "glass-chip-bronze border-bronze/50 text-charcoal"
-                    : "border-cream/12 bg-cream/[0.05] text-muted-foreground hover:border-bronze/30 hover:text-cream",
-                )}
-              >
-                {categoryLabel(c)}
-              </button>
-            ))}
-          </div>
-
-          <div className="columns-1 gap-3 [column-fill:_balance] sm:columns-2 lg:columns-3 md:gap-4">
-            {filtered.map((item, i) => (
-              <button
-                key={`${item.src}-${i}`}
-                type="button"
-                onClick={() => setLightbox(i)}
-                className="group relative mb-3 block w-full cursor-zoom-in break-inside-avoid overflow-hidden md:mb-4"
-              >
-                <div className="glass-frame rounded-[24px] p-1.5 transition-shadow duration-500 group-hover:shadow-[0_0_0_1px_rgba(214,184,156,0.28)]">
-                  <div className="overflow-hidden rounded-[18px]">
-                    <img
-                      src={item.src}
-                      alt={item.alt}
-                      className="h-auto w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
-                <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-background/0 transition-colors duration-500 group-hover:bg-background/15" />
-                <div className="absolute bottom-4 left-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                  <span className="glass-chip inline-flex px-2.5 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-cream">
-                    {item.category}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
+          <Carousel
+            opts={{ align: "start", loop: true }}
+            className="mt-12"
+            aria-label={isItalian ? "Carosello galleria" : "Gallery carousel"}
+          >
+            <CarouselContent className="-ml-4">
+              {galleryItems.map((item, i) => (
+                <CarouselItem key={`${item.src}-${i}`} className="pl-4 sm:basis-1/2 lg:basis-1/3">
+                  <button
+                    type="button"
+                    onClick={() => setLightbox(i)}
+                    className="group block h-full w-full cursor-zoom-in text-left"
+                  >
+                    <div className="glass-frame h-full rounded-[24px] p-1.5 transition-shadow duration-500 group-hover:shadow-[0_0_0_1px_rgba(214,184,156,0.28)]">
+                      <div className="relative aspect-[4/5] overflow-hidden rounded-[18px]">
+                        <img
+                          src={item.src}
+                          alt={item.alt}
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                          loading="lazy"
+                        />
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/70 via-background/5 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                        <div className="absolute bottom-4 left-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                          <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-cream">
+                            {categoryLabel(item.category)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <CarouselPrevious
+                className="static h-11 w-11 translate-y-0 border-cream/12 bg-cream/[0.06] text-cream hover:bg-cream/10 disabled:opacity-35"
+                aria-label={isItalian ? "Scorri indietro" : "Previous images"}
+              />
+              <CarouselNext
+                className="static h-11 w-11 translate-y-0 border-cream/12 bg-cream/[0.06] text-cream hover:bg-cream/10 disabled:opacity-35"
+                aria-label={isItalian ? "Scorri avanti" : "Next images"}
+              />
+            </div>
+          </Carousel>
         </div>
       </div>
 
-      {lightbox !== null && filtered[lightbox] && (
+      {lightbox !== null && galleryItems[lightbox] && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 p-4 backdrop-blur-2xl animate-in fade-in duration-200 md:p-10"
           role="dialog"
@@ -127,7 +123,7 @@ export const Gallery = () => {
           >
             <X size={22} />
           </button>
-          {filtered.length > 1 && (
+          {galleryItems.length > 1 && (
             <>
               <button
                 type="button"
@@ -158,12 +154,12 @@ export const Gallery = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={filtered[lightbox].src}
-              alt={filtered[lightbox].alt}
+              src={galleryItems[lightbox].src}
+              alt={galleryItems[lightbox].alt}
               className="max-h-[min(82vh,860px)] w-auto max-w-full rounded-[22px] object-contain"
             />
             <p className="mt-3 text-center font-sans text-xs text-muted-foreground">
-              {lightbox + 1} / {filtered.length} · {categoryLabel(filtered[lightbox].category)}
+              {lightbox + 1} / {galleryItems.length} · {categoryLabel(galleryItems[lightbox].category)}
             </p>
           </div>
         </div>

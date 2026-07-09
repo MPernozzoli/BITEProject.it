@@ -8,10 +8,7 @@ export const Overview = () => {
         <div className="glass-panel rounded-[38px] p-8 md:p-12 lg:p-14">
           <div className="mb-12 grid gap-10 lg:grid-cols-12 lg:gap-16">
             <div className="lg:col-span-5">
-              <span className="glass-chip-bronze mb-5 inline-flex items-center gap-2 px-4 py-2 text-[10px] font-sans font-medium uppercase tracking-[0.26em] text-cream">
-                <span className="h-1.5 w-1.5 rounded-full bg-charcoal/70" />
-                {uiCopy.sections.overviewEyebrow}
-              </span>
+              <div className="label-eyebrow mb-4 text-bronze/90">{uiCopy.sections.overviewEyebrow}</div>
               <h2 className="font-serif text-4xl leading-[1.05] tracking-tight text-cream md:text-5xl">
                 {uiCopy.sections.overviewTitle}
               </h2>

@@ -16,21 +16,16 @@ const Field = ({ label, value }: { label: string; value: string }) => (
 const ProfilePanel = ({ p }: { p: DogProfile }) => {
   const ref = useReveal<HTMLDivElement>();
   return (
-    <div ref={ref} className="reveal mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
-      <div className="lg:col-span-5">
-        <div className="glass-frame rounded-[30px] p-2">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-[24px]">
+    <div ref={ref} className="reveal mt-10 grid items-stretch gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="flex flex-col lg:col-span-5">
+        <div className="glass-frame flex-1 rounded-[30px] p-2">
+          <div className="relative h-full min-h-[440px] overflow-hidden rounded-[24px]">
             <img
               src={p.image}
               alt={`${p.name} — ${p.breed}`}
               className="absolute inset-0 h-full w-full object-cover"
               loading="lazy"
             />
-            <div className="absolute bottom-4 left-4">
-              <span className="glass-chip-bronze inline-flex px-3 py-1.5 text-[10px] font-sans font-semibold uppercase tracking-[0.2em] text-cream">
-                {p.name}
-              </span>
-            </div>
           </div>
         </div>
         <div className="mt-6">
@@ -42,7 +37,7 @@ const ProfilePanel = ({ p }: { p: DogProfile }) => {
         </div>
       </div>
 
-      <div className="glass-panel-soft rounded-[28px] p-6 md:p-8 lg:col-span-7">
+      <div className="glass-panel-soft h-full rounded-[28px] p-6 md:p-8 lg:col-span-7">
         <Field label={uiCopy.profileFields.sex} value={p.sex} />
         <Field label={uiCopy.profileFields.born} value={p.born} />
         <Field label={uiCopy.profileFields.weight} value={p.weight} />

@@ -13,14 +13,11 @@ export const DuoProfile = () => {
       <div className="container-editorial">
         <div
           ref={ref}
-          className="reveal grid items-center gap-10 lg:grid-cols-12 lg:gap-16"
+          className="reveal grid items-stretch gap-10 lg:grid-cols-12 lg:gap-16"
         >
           <div className="order-2 lg:order-1 lg:col-span-6">
-            <div className="glass-panel-soft rounded-[32px] p-8 md:p-10">
-              <span className="glass-chip-bronze mb-5 inline-flex items-center gap-2 px-4 py-2 text-[10px] font-sans font-medium uppercase tracking-[0.26em] text-cream">
-                <span className="h-1.5 w-1.5 rounded-full bg-charcoal/70" />
-                {uiCopy.sections.duoEyebrow}
-              </span>
+            <div className="glass-panel-soft flex h-full flex-col justify-center rounded-[32px] p-8 md:p-10">
+              <div className="label-eyebrow mb-4 text-bronze/90">{uiCopy.sections.duoEyebrow}</div>
               <h2 className="font-serif text-4xl leading-[1.05] tracking-tight text-cream md:text-5xl lg:text-6xl">
                 {uiCopy.sections.duoTitle}
               </h2>
@@ -42,8 +39,8 @@ export const DuoProfile = () => {
             </div>
           </div>
           <div className="order-1 lg:order-2 lg:col-span-6">
-            <div className="glass-frame rounded-[34px] p-2">
-              <div className="relative aspect-[5/6] overflow-hidden rounded-[28px]">
+            <div className="glass-frame h-full rounded-[34px] p-2">
+              <div className="relative h-full min-h-[420px] overflow-hidden rounded-[28px] md:min-h-[560px]">
                 <img
                   src={duoPhotos.studioWide}
                   alt="Godot and Freyja, full-length studio portrait"

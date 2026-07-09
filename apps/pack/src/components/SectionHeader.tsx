@@ -22,12 +22,7 @@ export const SectionHeader = ({ eyebrow, title, description, align = "left", cla
       )}
     >
       {eyebrow && (
-        <div className="mb-5">
-          <span className="glass-chip-bronze inline-flex items-center gap-2 px-4 py-2 text-[10px] font-sans font-medium uppercase tracking-[0.26em] text-cream">
-            <span className="h-1.5 w-1.5 rounded-full bg-charcoal/70" />
-            {eyebrow}
-          </span>
-        </div>
+        <div className="label-eyebrow mb-4 text-bronze/90">{eyebrow}</div>
       )}
       <h2 className="font-serif text-4xl leading-[1.05] tracking-tight text-cream md:text-5xl lg:text-6xl">
         {title}

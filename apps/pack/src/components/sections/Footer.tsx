@@ -24,10 +24,7 @@ export const Footer = () => (
       <div className="glass-panel mx-auto max-w-7xl rounded-[34px] px-6 py-10 md:px-10 md:py-12">
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-md">
-            <span className="glass-chip-bronze mb-5 inline-flex items-center gap-2 px-4 py-2 text-[10px] font-sans font-semibold uppercase tracking-[0.28em] text-cream">
-              <span className="h-2 w-2 rounded-full bg-charcoal/75" />
-              BITE · PACK
-            </span>
+            <div className="label-eyebrow mb-4 text-bronze/90">BITE · PACK</div>
             <h3 className="mb-3 font-serif text-2xl font-semibold tracking-[0.12em] text-cream md:text-3xl">
               Godot &amp; Freyja
             </h3>
@@ -39,12 +36,12 @@ export const Footer = () => (
           </div>
 
           <div className="flex flex-col gap-8 md:items-end">
-            <nav className="flex flex-wrap gap-2 md:justify-end">
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 md:justify-end">
               {navLinks.map((l) => (
                 <a
                   key={l.id}
                   href={`#${l.id}`}
-                  className="glass-chip rounded-full px-4 py-2 font-sans text-xs text-muted-foreground transition-colors hover:text-cream"
+                  className="font-sans text-xs uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-cream"
                 >
                   {l.label}
                 </a>

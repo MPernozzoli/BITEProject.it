@@ -11,10 +11,7 @@ export const ChoosePath = () => {
     <section className="page-section pt-8 md:pt-10">
       <div className="container-editorial">
         <div className="mb-14 text-center">
-          <span className="glass-chip-bronze mb-5 inline-flex items-center gap-2 px-4 py-2 text-[10px] font-sans font-medium uppercase tracking-[0.26em] text-cream">
-            <span className="h-1.5 w-1.5 rounded-full bg-charcoal/70" />
-            {isItalian ? "Da qui" : "Start here"}
-          </span>
+          <div className="label-eyebrow mb-4 text-bronze/90">{isItalian ? "Da qui" : "Start here"}</div>
           <h2 className="mx-auto max-w-4xl font-serif text-4xl leading-[1.05] tracking-tight text-cream md:text-5xl lg:text-6xl">
             {isItalian ? "Da quale lato vuoi partire?" : "Where would you like to begin?"}
           </h2>

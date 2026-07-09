@@ -165,8 +165,7 @@ export const Nav = () => {
             )}
           >
             <div className="mb-4 flex items-center justify-between">
-              <span className="glass-chip-bronze inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-sans uppercase tracking-[0.24em] text-cream">
-                <span className="h-1.5 w-1.5 rounded-full bg-cream/90" />
+              <span className="label-eyebrow text-bronze/90">
                 {uiCopy.actions.navigate}
               </span>
             </div>
