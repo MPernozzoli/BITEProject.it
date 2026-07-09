@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
   type BookingProfile,
@@ -108,6 +109,11 @@ const haversineNm = (from: BookingWaypoint | undefined, to: BookingWaypoint | un
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 3440.065 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
+
+const hasWaypointCoordinates = (
+  waypoint: BookingWaypoint
+): waypoint is BookingWaypoint & { lat: number; lng: number } =>
+  Number.isFinite(Number(waypoint.lat)) && Number.isFinite(Number(waypoint.lng));
 
 const AdminVoyageBookings = () => {
   const [loading, setLoading] = useState(true);
@@ -288,17 +294,25 @@ const AdminVoyageBookings = () => {
     (legId) => (legCapacity[legId] || 0) + selectedManualPartySize > (selectedVoyage?.booking_max_guests || 2)
   );
   const planningSpeedKn = Math.max(0.1, Number(selectedVoyage?.booking_planning_speed_kn ?? 5) || 5);
+  const publicPlanningWaypoints = useMemo(
+    () =>
+      waypoints.filter(
+        (waypoint, index) => getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative"
+      ),
+    [waypoints]
+  );
   const routePlanningStats = useMemo(() => {
-    const totalDistanceNm = legs.reduce((total, leg) => total + (haversineNm(waypointsById[leg.from_waypoint_id], waypointsById[leg.to_waypoint_id]) || 0), 0);
+    const routeWaypoints = waypoints.filter(hasWaypointCoordinates);
+    const totalDistanceNm = routeWaypoints.length >= 2 ? totalWaypointDistance(routeWaypoints) : 0;
     const navigationMinutes = planningSpeedKn > 0 ? (totalDistanceNm / planningSpeedKn) * 60 : 0;
-    const stopMinutes = waypoints.reduce((total, waypoint) => total + Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0), 0);
+    const stopMinutes = publicPlanningWaypoints.reduce((total, waypoint) => total + Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0), 0);
     return {
       totalDistanceNm,
       navigationMinutes,
       stopMinutes,
       totalMinutes: navigationMinutes + stopMinutes,
     };
-  }, [legs, planningSpeedKn, waypoints, waypointsById]);
+  }, [planningSpeedKn, publicPlanningWaypoints, waypoints]);
 
   const requestWouldExceedCapacity = (request: BookingRequest, nextStatus: VoyageBookingStatus) => {
     if (!capacityBlockingStatuses.has(nextStatus)) return false;
@@ -693,7 +707,7 @@ const AdminVoyageBookings = () => {
 
             <div className="grid gap-3 sm:grid-cols-2">
               {[
-                { label: "Waypoint", value: waypoints.length, icon: <MapPinned size={15} /> },
+                { label: "Waypoint pubblici", value: publicPlanningWaypoints.length, icon: <MapPinned size={15} /> },
                 { label: "Tratte navigazione", value: legs.length, icon: <CalendarClock size={15} /> },
                 { label: "Navigazione stimata", value: formatDuration(routePlanningStats.navigationMinutes), icon: <Clock size={15} /> },
                 { label: "Soste pianificate", value: formatDuration(routePlanningStats.stopMinutes), icon: <Clock size={15} /> },
@@ -720,7 +734,7 @@ const AdminVoyageBookings = () => {
                 <span className="text-xs text-muted-foreground">Durata prevista in sosta</span>
               </div>
               <div className="space-y-2">
-                {waypoints.map((waypoint, index) => (
+                {publicPlanningWaypoints.map((waypoint, index) => (
                   <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3 sm:grid-cols-[1fr_120px] sm:items-center">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
@@ -747,7 +761,7 @@ const AdminVoyageBookings = () => {
                     </label>
                   </div>
                 ))}
-                {waypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint caricato per questa rotta.</p>}
+                {publicPlanningWaypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint pubblico caricato per questa rotta.</p>}
               </div>
             </div>
 
