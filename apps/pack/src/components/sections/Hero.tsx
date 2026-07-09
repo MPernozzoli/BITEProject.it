@@ -76,12 +76,23 @@ const heroChapters: HeroChapter[] = [
   },
 ];
 
-const chapterProgress = heroChapters.map((_, index) => index / heroChapters.length);
+const kitChapterProgress = 0.8;
+const chapterProgress = heroChapters.map(
+  (_, index) => (index / (heroChapters.length - 1)) * kitChapterProgress,
+);
 const finalChapterProgress = chapterProgress[chapterProgress.length - 1];
 const finalExitProgress = finalChapterProgress + (1 - finalChapterProgress) / 2;
 const magneticSnapDelay = 140;
 const magneticSnapMinDuration = 360;
 const magneticSnapMaxDuration = 820;
+
+// Within each gap between two chapter markers, the outgoing chapter stays fully
+// visible until 60% of the way across, then both chapters crossfade in the same
+// narrow window (60%–88%) right before the next marker — instead of a linear fade
+// spanning the whole gap, which made the next chapter appear too early and sit on
+// top of the previous one for most of the scroll.
+const chapterCrossfadeStart = 0.6;
+const chapterCrossfadeEnd = 0.88;
 
 const outerStatPositions = [
   "md:col-start-1 md:row-start-1",
@@ -311,6 +322,29 @@ export const Hero = () => {
     };
   }, [progress, reducedMotion]);
 
+  const chapterOpacities = useMemo(() => {
+    if (reducedMotion) return heroChapters.map((_, index) => (index === 0 ? 1 : 0));
+
+    const clampedProgress = clamp(progress, 0, finalChapterProgress);
+    let segment = chapterProgress.length - 2;
+    for (let i = 0; i < chapterProgress.length - 1; i += 1) {
+      if (clampedProgress <= chapterProgress[i + 1]) {
+        segment = i;
+        break;
+      }
+    }
+
+    const gap = chapterProgress[segment + 1] - chapterProgress[segment];
+    const t = gap > 0 ? clamp((clampedProgress - chapterProgress[segment]) / gap) : 1;
+    const eased = smoothstep(clamp((t - chapterCrossfadeStart) / (chapterCrossfadeEnd - chapterCrossfadeStart)));
+
+    return heroChapters.map((_, index) => {
+      if (index === segment) return 1 - eased;
+      if (index === segment + 1) return eased;
+      return 0;
+    });
+  }, [progress, reducedMotion]);
+
   return (
     <section
       ref={sectionRef}
@@ -332,8 +366,7 @@ export const Hero = () => {
 
         <div className="container-editorial relative z-10 flex h-full items-end pb-10 pt-28 md:items-center md:pb-0">
           {heroChapters.map((chapter, index) => {
-            const distance = Math.abs(progress - chapterProgress[index]);
-            const opacity = reducedMotion && index > 0 ? 0 : clamp(1 - distance * 4);
+            const opacity = chapterOpacities[index];
             const lift = (1 - opacity) * 18;
             const isKit = chapter.layout === "kit";
 

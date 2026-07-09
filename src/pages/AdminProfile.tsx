@@ -218,6 +218,8 @@ const COPY = {
         "Aggiungi una passkey per accedere senza codice email, usando Face ID, Touch ID, PIN del dispositivo o una chiave di sicurezza.",
       passkeyUnsupported:
         "Questo browser o dispositivo non supporta ancora le passkey.",
+      passkeyInsecure:
+        "Le passkey richiedono HTTPS, tranne su localhost.",
       passkeyEmpty:
         "Nessuna passkey registrata per questo account.",
       passkeyCreatedAt: "Creata",
@@ -259,6 +261,11 @@ const COPY = {
       passkeyAdded: "Passkey aggiunta.",
       passkeyRemoved: "Passkey rimossa.",
       passkeyError: "Impossibile aggiornare le passkey.",
+      passkeyCancelled: "Operazione passkey annullata.",
+      passkeyDisabled:
+        "Le passkey non risultano abilitate nella configurazione Auth di Supabase.",
+      passkeyConfigError:
+        "Configurazione WebAuthn non valida per questo dominio. Controlla Relying Party ID e Relying Party Origins in Supabase.",
       removePasskey: "Rimuovi passkey",
     },
     prompt: {
@@ -351,6 +358,8 @@ const COPY = {
         "Add a passkey to sign in without an email code, using Face ID, Touch ID, your device PIN, or a security key.",
       passkeyUnsupported:
         "This browser or device does not support passkeys yet.",
+      passkeyInsecure:
+        "Passkeys require HTTPS, except on localhost.",
       passkeyEmpty:
         "No passkeys registered for this account.",
       passkeyCreatedAt: "Created",
@@ -392,6 +401,11 @@ const COPY = {
       passkeyAdded: "Passkey added.",
       passkeyRemoved: "Passkey removed.",
       passkeyError: "Unable to update passkeys.",
+      passkeyCancelled: "Passkey operation cancelled.",
+      passkeyDisabled:
+        "Passkeys do not appear to be enabled in Supabase Auth configuration.",
+      passkeyConfigError:
+        "Invalid WebAuthn configuration for this domain. Check Relying Party ID and Relying Party Origins in Supabase.",
       removePasskey: "Remove passkey",
     },
     prompt: {
@@ -462,6 +476,7 @@ const AdminProfile = () => {
   const isInstalledApp = isRunningAsInstalledApp();
   const canUseWebPush = supportsWebPush();
   const supportsPasskeys = typeof window !== "undefined" && Boolean(window.PublicKeyCredential);
+  const isPasskeySecureContext = typeof window !== "undefined" && window.isSecureContext;
   const pushInstallInstructions = getInstallInstructions(mobileOs, lang === "en" ? "en" : "it");
   const [pushPublicKey, setPushPublicKey] = useState<string | undefined>(
     (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined) || undefined
@@ -480,6 +495,11 @@ const AdminProfile = () => {
   }, [pushPublicKey]);
 
   const copy = COPY[lang === "en" ? "en" : "it"];
+  const passkeyUnavailableMessage = !supportsPasskeys
+    ? copy.fields.passkeyUnsupported
+    : !isPasskeySecureContext
+      ? copy.fields.passkeyInsecure
+      : "";
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
   const activeSocialCount = Object.values(socials).filter((value) => value.trim()).length;
   const preferredLanguageLabel =
@@ -883,8 +903,8 @@ const AdminProfile = () => {
   }, [session?.user]);
 
   const handleRegisterPasskey = useCallback(async () => {
-    if (!supportsPasskeys) {
-      toast.error(copy.fields.passkeyUnsupported);
+    if (passkeyUnavailableMessage) {
+      toast.error(passkeyUnavailableMessage);
       return;
     }
 
@@ -896,11 +916,43 @@ const AdminProfile = () => {
       await loadPasskeys();
     } catch (error) {
       console.error("Passkey registration error:", error);
-      toast.error(error instanceof Error ? error.message : copy.actions.passkeyError);
+      const errorLike = error as { code?: string; message?: string; name?: string };
+      const message = errorLike?.message || "";
+      const code = errorLike?.code || "";
+      const lowered = `${code} ${message} ${errorLike?.name || ""}`.toLowerCase();
+
+      if (
+        code === "ERROR_INVALID_RP_ID" ||
+        code === "ERROR_INVALID_DOMAIN" ||
+        lowered.includes("rp id") ||
+        lowered.includes("relying party") ||
+        lowered.includes("origin") ||
+        lowered.includes("securityerror")
+      ) {
+        toast.error(`${copy.actions.passkeyConfigError} Origin: ${window.location.origin}`);
+      } else if (lowered.includes("passkey_disabled") || lowered.includes("passkey") && lowered.includes("disabled")) {
+        toast.error(copy.actions.passkeyDisabled);
+      } else if (
+        code === "ERROR_CEREMONY_ABORTED" ||
+        lowered.includes("notallowederror") ||
+        lowered.includes("cancel")
+      ) {
+        toast.error(copy.actions.passkeyCancelled);
+      } else {
+        toast.error(message || copy.actions.passkeyError);
+      }
     } finally {
       setRegisteringPasskey(false);
     }
-  }, [copy.actions.passkeyAdded, copy.actions.passkeyError, copy.fields.passkeyUnsupported, loadPasskeys, supportsPasskeys]);
+  }, [
+    copy.actions.passkeyAdded,
+    copy.actions.passkeyCancelled,
+    copy.actions.passkeyConfigError,
+    copy.actions.passkeyDisabled,
+    copy.actions.passkeyError,
+    loadPasskeys,
+    passkeyUnavailableMessage,
+  ]);
 
   const handleRemovePasskey = useCallback(async (passkeyId: string) => {
     setRemovingPasskeyId(passkeyId);
@@ -1733,10 +1785,10 @@ const AdminProfile = () => {
                       </div>
                     </div>
 
-                    {!supportsPasskeys ? (
+                    {passkeyUnavailableMessage ? (
                       <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
                         <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                          {copy.fields.passkeyUnsupported}
+                          {passkeyUnavailableMessage}
                         </p>
                       </div>
                     ) : (

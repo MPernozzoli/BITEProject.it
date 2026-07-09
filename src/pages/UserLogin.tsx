@@ -21,6 +21,19 @@ const OTP_LENGTH = 8;
 const LAST_AUTH_METHOD_STORAGE_KEY = "bite_last_auth_method";
 const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const AUTH_ROUTES = new Set(["/login", "/signup"]);
+
+const normalizeInternalRedirect = (value: string | null | undefined) => {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin) return "";
+    if (AUTH_ROUTES.has(parsed.pathname)) return "";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "";
+  }
+};
 
 const AUTH_COPY = {
   it: {
@@ -271,11 +284,11 @@ const UserLogin = () => {
   const location = useLocation();
 
   const authMode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
-  const requestedRedirect = (location.state as { from?: string } | null)?.from;
-  const redirectTo =
-    requestedRedirect && !["/login", "/signup"].includes(requestedRedirect)
-      ? requestedRedirect
-      : "/profile";
+  const searchParams = new URLSearchParams(location.search);
+  const stateRedirect = normalizeInternalRedirect((location.state as { from?: string } | null)?.from);
+  const queryRedirect = normalizeInternalRedirect(searchParams.get("redirect"));
+  const homeRedirect = lang === "en" ? "/en" : "/it";
+  const redirectTo = stateRedirect || queryRedirect || homeRedirect;
   const ui = AUTH_COPY[lang === "it" ? "it" : "en"];
   const heroContent = ui.hero[authMode];
   const formContent = ui.form[authMode];
@@ -458,8 +471,9 @@ const UserLogin = () => {
       window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
     }
 
+    const oauthReturnPath = `/login?redirect=${encodeURIComponent(redirectTo)}`;
     const { error: oauthError } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: new URL(oauthReturnPath, window.location.origin).toString(),
     });
 
     if (oauthError) {
@@ -609,7 +623,7 @@ const UserLogin = () => {
               <div className="space-y-4">
                 <div className="inline-flex w-full rounded-full border border-white/80 bg-white/70 p-1 shadow-[0_20px_40px_-30px_hsl(var(--navy)/0.35)]">
                   <Link
-                    to="/login"
+                    to={{ pathname: "/login", search: location.search }}
                     state={location.state}
                     className={cn(
                       "flex-1 rounded-full px-4 py-2.5 text-center text-sm font-medium transition-colors",
@@ -621,7 +635,7 @@ const UserLogin = () => {
                     {ui.form.tabs.login}
                   </Link>
                   <Link
-                    to="/signup"
+                    to={{ pathname: "/signup", search: location.search }}
                     state={location.state}
                     className={cn(
                       "flex-1 rounded-full px-4 py-2.5 text-center text-sm font-medium transition-colors",

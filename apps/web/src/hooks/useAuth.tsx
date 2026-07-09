@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import {
   deferSupabaseAuthWork,
-  getSupabaseAuthStorageKey,
+  removeSupabaseAuthStorage,
   validateSessionOrSignOut,
 } from "@/lib/supabase-auth";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
@@ -84,8 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const clearEphemeralSession = () => {
       if (!localStorage.getItem("bite_ephemeral_session")) return;
-      const key = getSupabaseAuthStorageKey();
-      if (key) localStorage.removeItem(key);
+      removeSupabaseAuthStorage();
     };
 
     window.addEventListener("beforeunload", clearEphemeralSession);

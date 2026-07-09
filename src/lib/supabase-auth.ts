@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 import { supabase } from "@/integrations/supabase/client";
+import { removeSharedSupabaseAuthItem } from "@/lib/supabase-auth-storage";
 
-/** Chiave localStorage usata da Supabase JS per la sessione (sb-<ref>-auth-token). */
+/** Chiave storage usata da Supabase JS per la sessione (sb-<ref>-auth-token). */
 export function getSupabaseAuthStorageKey(): string {
   const raw = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   if (!raw) return "";
@@ -50,4 +51,9 @@ export async function validateSessionOrSignOut() {
     return { session: null as null };
   }
   return { session };
+}
+
+export function removeSupabaseAuthStorage() {
+  const key = getSupabaseAuthStorageKey();
+  if (key) removeSharedSupabaseAuthItem(key);
 }
