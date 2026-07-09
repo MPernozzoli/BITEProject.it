@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Mountain, Ship, X } from "lucide-react";
+import { BookOpen, Mountain, Ship, TicketCheck, X } from "lucide-react";
 import {
   buildVoyageLegendArticlePlan,
   getLocalizedArticleTitle,
@@ -21,6 +21,13 @@ import {
 } from "@/lib/voyage-utils";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import type { Language } from "@/lib/i18n";
+import {
+  getLegComplexity,
+  getLegDangerLevel,
+  isVoyageBookableNow,
+  type BookableLegAvailability,
+} from "@/lib/booking-utils";
+import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 
 export interface VoyageLegendStoryTitles {
   title_it: string | null;
@@ -36,6 +43,8 @@ interface VoyageLegendProps {
   onClose: () => void;
   onWaypointClick?: (waypoint: VoyageWaypoint) => void;
   onArticleClick?: (article: GeoArticle) => void;
+  bookingLegs?: BookableLegAvailability[];
+  onWaypointBookingAction?: (voyageId: string, waypointId: string, direction: "from" | "to") => void;
   /** Titoli storia da `stories` (opzionale; caricati dal parent). */
   storyTitlesById?: Record<string, VoyageLegendStoryTitles>;
 }
@@ -129,6 +138,8 @@ const VoyageLegend = ({
   onClose,
   onWaypointClick,
   onArticleClick,
+  bookingLegs = [],
+  onWaypointBookingAction,
   storyTitlesById,
 }: VoyageLegendProps) => {
   const visibleWaypoints = useMemo(
@@ -189,6 +200,15 @@ const VoyageLegend = ({
   }, [visibleWaypoints]);
 
   const totalDistance = useMemo(() => segments.reduce((sum, d) => sum + d, 0), [segments]);
+
+  /** Bookable legs keyed by "fromWaypointId:toWaypointId" for per-edge complexity. */
+  const legByWaypointPair = useMemo(() => {
+    const map = new Map<string, BookableLegAvailability>();
+    for (const leg of bookingLegs) {
+      map.set(`${leg.from_waypoint_id}:${leg.to_waypoint_id}`, leg);
+    }
+    return map;
+  }, [bookingLegs]);
 
   /** Ortodromia su tutti i waypoint del viaggio (anche tecnici), ordine `waypoints`. */
   const fullVoyageDistanceNm = useMemo(() => {
@@ -277,6 +297,11 @@ const VoyageLegend = ({
   const endLabel = formatDate(voyage.end_date, lang);
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
   const isWater = voyage.type === "water";
+  const firstVisibleWaypoint = visibleWaypoints[0] || null;
+  const lastVisibleWaypoint = visibleWaypoints[visibleWaypoints.length - 1] || null;
+  const voyageIsBookable = isVoyageBookableNow(voyage);
+  const hasBookableLegs = bookingLegs.length > 0;
+  const hasAvailableLegs = bookingLegs.some((leg) => leg.available);
 
   if (visibleWaypoints.length < 2) return null;
 
@@ -310,6 +335,12 @@ const VoyageLegend = ({
             className={`shrink-0 ${isWater ? "text-sky-600" : "text-orange-600"}`}
           />
           <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
+          {voyageIsBookable ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-50/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-800">
+              <TicketCheck size={10} />
+              {lang === "it" ? "Prenotabile" : "Bookable"}
+            </span>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-start gap-3">
           {storyIndexLinks.length > 0 ? (
@@ -365,6 +396,57 @@ const VoyageLegend = ({
           ) : null}
         </p>
       )}
+
+      {voyageIsBookable ? (
+        <div className="mb-3 rounded-[18px] border border-emerald-200/80 bg-emerald-50/82 p-3 font-sans shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-800">
+                {lang === "it" ? "Puoi partecipare a questo viaggio" : "You can join this voyage"}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/75">
+                {!hasBookableLegs
+                  ? (lang === "it"
+                    ? "Prenotazioni non ancora aperte per le singole tratte."
+                    : "Bookings are not open for individual legs yet.")
+                  : hasAvailableLegs
+                    ? (lang === "it"
+                      ? "Scegli un waypoint di partenza o arrivo, poi completa la selezione sulla mappa."
+                      : "Choose a start or arrival waypoint, then complete the selection on the map.")
+                    : (lang === "it"
+                      ? "Le tratte esistono, ma al momento non risultano posti disponibili."
+                      : "Legs exist, but no seats are currently available.")}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!hasAvailableLegs || !firstVisibleWaypoint || !onWaypointBookingAction}
+                onClick={() => {
+                  if (!firstVisibleWaypoint) return;
+                  onWaypointBookingAction?.(voyage.id, firstVisibleWaypoint.id, "from");
+                  onWaypointClick?.(firstVisibleWaypoint);
+                }}
+                className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
+              >
+                {lang === "it" ? "Prenota da inizio" : "Book from start"}
+              </button>
+              <button
+                type="button"
+                disabled={!hasAvailableLegs || !lastVisibleWaypoint || !onWaypointBookingAction}
+                onClick={() => {
+                  if (!lastVisibleWaypoint) return;
+                  onWaypointBookingAction?.(voyage.id, lastVisibleWaypoint.id, "to");
+                  onWaypointClick?.(lastVisibleWaypoint);
+                }}
+                className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
+              >
+                {lang === "it" ? "Prenota fino ad arrivo" : "Book to arrival"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {articlePlan.wholeVoyageArticles.length > 0 && (
         <div className="mb-3 space-y-2">
@@ -490,6 +572,9 @@ const VoyageLegend = ({
 
             const edgeArts = !isLast ? edgeArticlesByEdge.get(i) : undefined;
             const edgeHasStory = Boolean(edgeArts?.length);
+            const edgeLeg = !isLast
+              ? legByWaypointPair.get(`${wp.id}:${visibleWaypoints[i + 1]?.id ?? ""}`)
+              : undefined;
 
             return (
               <Fragment key={wp.id}>
@@ -593,6 +678,17 @@ const VoyageLegend = ({
                     {edgeArts?.length && onArticleClick ? (
                       <div className="absolute left-1/2 top-1/2 z-[11] -translate-x-1/2 -translate-y-1/2">
                         <LegendArticleChip articles={edgeArts} lang={lang} onOpen={openArticle} />
+                      </div>
+                    ) : null}
+
+                    {edgeLeg ? (
+                      <div className="pointer-events-auto absolute left-1/2 top-full z-[12] -translate-x-1/2" style={{ marginTop: 4 }}>
+                        <ComplexityIndicator
+                          variant="dot"
+                          level={getLegComplexity(edgeLeg)}
+                          dangerLevel={getLegDangerLevel(edgeLeg)}
+                          lang={lang}
+                        />
                       </div>
                     ) : null}
 

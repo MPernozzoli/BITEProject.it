@@ -14,13 +14,22 @@ import {
   type BookingVoyage,
   type BookingWaypoint,
   type VoyageBookingStatus,
+  DANGER_MAX,
   capacityBlockingStatuses,
+  computeAutoLegComplexity,
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
   getBookingStatusShortLabel,
+  getComplexityClass,
+  getComplexityLabel,
+  getDangerClass,
+  getDangerLabel,
+  getLegComplexity,
+  getLegDangerLevel,
   getLegLabel,
   getLocalizedBookingVoyageName,
+  isLegComplexityAuto,
   isLegSelectable,
 } from "@/lib/booking-utils";
 
@@ -355,6 +364,33 @@ const AdminVoyageBookings = () => {
     setLegs((current) => current.map((leg) => (leg.id === legId ? { ...leg, ...patch } : leg)));
   };
 
+  // Difficulty/danger indicators persist immediately (they behave like cycle toggles,
+  // not part of the "Salva" batch). Optimistic update, reload on failure.
+  const persistLegIndicators = async (legId: string, patch: Partial<BookableLeg>) => {
+    updateLegPlanning(legId, patch);
+    const { error } = await typedSupabase.from("voyage_bookable_legs").update(patch).eq("id", legId);
+    if (error) {
+      toast.error(error.message);
+      if (selectedVoyageId) await loadVoyageDetails(selectedVoyageId);
+    }
+  };
+
+  const cycleLegComplexity = (leg: BookableLeg) => {
+    const current = leg.complexity_override ?? null;
+    const next = current == null ? 1 : current >= 5 ? null : current + 1;
+    void persistLegIndicators(leg.id, { complexity_override: next });
+  };
+
+  const cycleLegDanger = (leg: BookableLeg) => {
+    const current = getLegDangerLevel(leg);
+    const next = current >= DANGER_MAX ? 0 : current + 1;
+    void persistLegIndicators(leg.id, { danger_level: next });
+  };
+
+  const toggleLegOpenSea = (leg: BookableLeg) => {
+    void persistLegIndicators(leg.id, { open_sea: !leg.open_sea });
+  };
+
   const toggleLegEditing = (legId: string) => {
     setEditableLegIds((current) => {
       const next = new Set(current);
@@ -407,6 +443,9 @@ const AdminVoyageBookings = () => {
               ends_at_window_start: leg.ends_at_window_start || null,
               ends_at_window_end: leg.ends_at_window_end || null,
               is_bookable: Boolean(leg.is_bookable),
+              danger_level: getLegDangerLevel(leg),
+              open_sea: Boolean(leg.open_sea),
+              complexity_override: leg.complexity_override ?? null,
             })
             .eq("id", leg.id)
         )
@@ -830,6 +869,37 @@ const AdminVoyageBookings = () => {
                             {isEditingLeg ? "Chiudi edit" : "Edit orari"}
                           </button>
                         </div>
+                      </div>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => cycleLegComplexity(leg)}
+                          title="Clic per cambiare livello (Auto → 1 → … → 5 → Auto)"
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getComplexityClass(getLegComplexity(leg))}`}
+                        >
+                          Complessità {getLegComplexity(leg)} · {getComplexityLabel(getLegComplexity(leg), "it")}
+                          {isLegComplexityAuto(leg) ? ` (auto ${computeAutoLegComplexity(leg)})` : ""}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cycleLegDanger(leg)}
+                          title="Clic per cambiare livello di pericolo (0 → 3 → 0)"
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getDangerClass(getLegDangerLevel(leg))}`}
+                        >
+                          Pericolo · {getDangerLabel(getLegDangerLevel(leg), "it")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleLegOpenSea(leg)}
+                          title="Mare aperto (>12 nm dalla costa): aumenta la complessità"
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                            leg.open_sea
+                              ? "border-indigo-300/70 bg-indigo-100/70 text-indigo-800"
+                              : "border-border/70 bg-background text-muted-foreground"
+                          }`}
+                        >
+                          Mare aperto{leg.open_sea ? " ✓" : ""}
+                        </button>
                       </div>
                       {isEditingLeg && (
                         <div className="grid gap-3 md:grid-cols-2">

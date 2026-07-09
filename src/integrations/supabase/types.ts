@@ -1698,6 +1698,10 @@ export type Database = {
           name_it: string | null
           planned_stop_duration_minutes: number
           sort_order: number
+          stop_departure_time: string | null
+          stop_hours: number | null
+          stop_mode: string
+          stop_nights: number | null
           visibility_mode: string
           voyage_id: string
           waypoint_type: string
@@ -1719,6 +1723,10 @@ export type Database = {
           name_it?: string | null
           planned_stop_duration_minutes?: number
           sort_order?: number
+          stop_departure_time?: string | null
+          stop_hours?: number | null
+          stop_mode?: string
+          stop_nights?: number | null
           visibility_mode?: string
           voyage_id: string
           waypoint_type?: string
@@ -1740,6 +1748,10 @@ export type Database = {
           name_it?: string | null
           planned_stop_duration_minutes?: number
           sort_order?: number
+          stop_departure_time?: string | null
+          stop_hours?: number | null
+          stop_mode?: string
+          stop_nights?: number | null
           visibility_mode?: string
           voyage_id?: string
           waypoint_type?: string

@@ -3,6 +3,7 @@ import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { CalendarCheck, Check, Clock3, Loader2, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -15,11 +16,15 @@ import {
   type BookingVoyage,
   type BookingWaypoint,
   formatBookingDate,
+  formatBookingWindow,
   getBookingStatusClass,
+  getLegComplexity,
+  getLegDangerLevel,
   getBookingStatusLabel,
   getLegLabel,
   getLocalizedBookingVoyageName,
   isLegSelectable,
+  isVoyageBookableNow,
 } from "@/lib/booking-utils";
 
 type RequestBookingResult = { booking_request_id: string; booking_status: BookingRequest["status"] };
@@ -172,11 +177,11 @@ const UserBookings = () => {
     setTaskCompletions(((completionsRes.data as BookingTaskCompletion[] | null) || []));
     setSelectedVoyageId((current) => {
       const requestedVoyageId = searchParams.get("voyage");
-      if (requestedVoyageId && loadedVoyages.some((voyage) => voyage.id === requestedVoyageId && voyage.booking_enabled)) {
+      if (requestedVoyageId && loadedVoyages.some((voyage) => voyage.id === requestedVoyageId && isVoyageBookableNow(voyage))) {
         return requestedVoyageId;
       }
-      if (current && loadedVoyages.some((voyage) => voyage.id === current && voyage.booking_enabled)) return current;
-      return loadedVoyages.find((voyage) => voyage.booking_enabled)?.id || "";
+      if (current && loadedVoyages.some((voyage) => voyage.id === current && isVoyageBookableNow(voyage))) return current;
+      return loadedVoyages.find(isVoyageBookableNow)?.id || "";
     });
     setBusy(false);
   }, [searchParams, session?.user.id]);
@@ -193,9 +198,12 @@ const UserBookings = () => {
     () => Object.fromEntries(voyages.map((voyage) => [voyage.id, voyage])),
     [voyages]
   );
+  const bookableVoyages = useMemo(() => voyages.filter(isVoyageBookableNow), [voyages]);
   const legsById = useMemo(() => Object.fromEntries(legs.map((leg) => [leg.id, leg])), [legs]);
   const selectedVoyage = voyagesById[selectedVoyageId] || null;
-  const selectedVoyageLegs = legs.filter((leg) => leg.voyage_id === selectedVoyageId && isLegSelectable(leg));
+  const selectedVoyageLegs = isVoyageBookableNow(selectedVoyage)
+    ? legs.filter((leg) => leg.voyage_id === selectedVoyageId && isLegSelectable(leg))
+    : [];
 
   const toggleLeg = (legId: string) => {
     setSelectedLegIds((current) =>
@@ -206,6 +214,10 @@ const UserBookings = () => {
   const submitRequest = async () => {
     if (!selectedVoyageId || selectedLegIds.length === 0) {
       toast.error(lang === "it" ? "Seleziona almeno una tratta." : "Select at least one leg.");
+      return;
+    }
+    if (!isVoyageBookableNow(selectedVoyage)) {
+      toast.error(lang === "it" ? "Questo viaggio non è più prenotabile." : "This voyage is no longer bookable.");
       return;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
@@ -324,7 +336,7 @@ const UserBookings = () => {
                   {lang === "it" ? "Richiedi imbarco" : "Request a berth"}
                 </h2>
               </div>
-              {voyages.length === 0 ? (
+              {bookableVoyages.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {lang === "it" ? "Nessun viaggio prenotabile al momento." : "No bookable voyages right now."}
                 </p>
@@ -340,7 +352,7 @@ const UserBookings = () => {
                       }}
                       className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
                     >
-                      {voyages.map((voyage) => (
+                      {bookableVoyages.map((voyage) => (
                         <option key={voyage.id} value={voyage.id}>
                           {getLocalizedBookingVoyageName(voyage, lang)}
                         </option>
@@ -370,10 +382,19 @@ const UserBookings = () => {
                           <span>
                             <span className="block text-foreground">{getLegLabel(leg, waypointsById, lang)}</span>
                             <span className="mt-1 block text-xs text-muted-foreground">
-                              {[formatBookingDate(leg.starts_at_window_start, locale), formatBookingDate(leg.ends_at_window_end, locale)]
+                              {[
+                                formatBookingWindow(leg.starts_at_window_start, leg.starts_at_window_end, locale),
+                                formatBookingWindow(leg.ends_at_window_start, leg.ends_at_window_end, locale),
+                              ]
                                 .filter(Boolean)
                                 .join(" → ") || (lang === "it" ? "Date in definizione" : "Dates being refined")}
                             </span>
+                            <ComplexityIndicator
+                              className="mt-2"
+                              level={getLegComplexity(leg)}
+                              dangerLevel={getLegDangerLevel(leg)}
+                              lang={lang}
+                            />
                           </span>
                         </label>
                       ))

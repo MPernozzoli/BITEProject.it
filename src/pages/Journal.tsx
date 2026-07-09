@@ -15,6 +15,7 @@ import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
+import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
@@ -34,6 +35,7 @@ import {
   type BookingWaypoint,
   getLegLabel,
   getLegRangeBetweenWaypoints,
+  isVoyageBookableNow,
 } from "@/lib/booking-utils";
 
 type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
@@ -96,6 +98,7 @@ const Journal = () => {
   const [bookingPartySize, setBookingPartySize] = useState(1);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
   const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -272,7 +275,7 @@ const Journal = () => {
   }, [allWaypoints]);
 
   const bookableVoyageIds = useMemo(
-    () => voyages.filter((voyage) => voyage.booking_enabled).map((voyage) => voyage.id),
+    () => voyages.filter(isVoyageBookableNow).map((voyage) => voyage.id),
     [voyages]
   );
   const bookableVoyageIdsKey = useMemo(() => [...bookableVoyageIds].sort().join(","), [bookableVoyageIds]);
@@ -514,6 +517,13 @@ const Journal = () => {
       return;
     }
 
+    const selectedBookingVoyage = voyages.find((voyage) => voyage.id === bookingAnchor.voyageId);
+    if (!isVoyageBookableNow(selectedBookingVoyage)) {
+      toast.error(lang === "it" ? "Questo viaggio non è più prenotabile." : "This voyage is no longer bookable.");
+      clearBookingSelection();
+      return;
+    }
+
     const selectedLegs = selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean);
     const unavailableLegs = selectedLegs.filter((leg) => !leg.available || leg.remaining < bookingPartySize);
     if (unavailableLegs.length > 0) {
@@ -543,6 +553,7 @@ const Journal = () => {
           ? (lang === "it" ? "Richiesta inviata in waiting list." : "Request sent to the waiting list.")
           : (lang === "it" ? "Richiesta di prenotazione inviata." : "Booking request sent.")
       );
+      setBookingConfirmOpen(false);
       clearBookingSelection();
       void refetchBookingLegs();
     } catch (error: unknown) {
@@ -567,6 +578,7 @@ const Journal = () => {
     refetchBookingLegs,
     selectedBookingLegIds,
     session?.user,
+    voyages,
   ]);
 
   const handleProfilePreviewOpen = useCallback((profileId: string) => {
@@ -908,6 +920,8 @@ const Journal = () => {
                   lang={lang}
                   onClose={() => setSelectedRouteVoyageId(null)}
                   onArticleClick={handleArticleClick}
+                  bookingLegs={bookingLegsByVoyage[selectedRouteVoyageId] || []}
+                  onWaypointBookingAction={handleWaypointBookingAction}
                   storyTitlesById={voyageLegendStoryTitlesById}
                   onWaypointClick={(wp) => {
                     const wps = waypointsMap[selectedRouteVoyageId] || [];
@@ -1040,7 +1054,17 @@ const Journal = () => {
                   </label>
                   <button
                     type="button"
-                    onClick={() => void submitBookingFromLogbook()}
+                    onClick={() => {
+                      if (!session?.user) {
+                        navigate("/login", { state: { from: `/${lang}/logbook` } });
+                        return;
+                      }
+                      if (selectedBookingLegIds.length === 0) {
+                        toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+                        return;
+                      }
+                      setBookingConfirmOpen(true);
+                    }}
                     disabled={bookingSubmitting || selectedBookingLegIds.length === 0}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1053,6 +1077,18 @@ const Journal = () => {
               </div>
             </div>
           )}
+
+          <BookingConfirmDialog
+            open={bookingConfirmOpen}
+            onOpenChange={setBookingConfirmOpen}
+            lang={lang}
+            voyageName={bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : undefined}
+            legLabels={selectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang))}
+            partySize={bookingPartySize}
+            message={bookingMessage}
+            submitting={bookingSubmitting}
+            onConfirm={() => void submitBookingFromLogbook()}
+          />
 
           {/* Floating controls — top right */}
           <div

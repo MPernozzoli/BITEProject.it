@@ -37,9 +37,22 @@ export interface BookingWaypoint {
   waypoint_type?: "technical" | "narrative";
   visibility_mode?: "auto" | "manual";
   planned_stop_duration_minutes?: number;
+  stop_mode?: StopMode | null;
+  stop_hours?: number | null;
+  stop_nights?: number | null;
+  stop_departure_time?: string | null;
   date_start: string | null;
   date_end: string | null;
 }
+
+export type StopMode = "legacy" | "hours" | "nights";
+
+/** Suggested short-stop durations (hours) and day counts offered in the editor. */
+export const STOP_HOURS_PRESETS = [8, 12] as const;
+export const STOP_NIGHTS_PRESETS = [1, 2, 3] as const;
+/** Suggested departure times of day; the editor also allows a free custom value. */
+export const STOP_DEPARTURE_PRESETS = ["07:00", "19:00"] as const;
+export const DEFAULT_STOP_DEPARTURE_TIME = "07:00";
 
 export interface BookableLeg {
   id: string;
@@ -52,6 +65,12 @@ export interface BookableLeg {
   ends_at_window_start: string | null;
   ends_at_window_end: string | null;
   is_bookable: boolean;
+  /** Manual external-hazard rating, 0 (minimo) … 3 (consistente). */
+  danger_level?: number | null;
+  /** Manual flag: open-sea passage (>12 nm offshore); feeds auto complexity. */
+  open_sea?: boolean | null;
+  /** Manual complexity override, 1 … 5; null means use the auto value. */
+  complexity_override?: number | null;
 }
 
 export interface BookingRequest {
@@ -193,23 +212,94 @@ export function formatBookingDate(value?: string | null, locale = "it-IT") {
   }).format(date);
 }
 
+/**
+ * Formats a planning window (an earliest→latest pair sharing the same time-of-day)
+ * as a compact range, e.g. "10–13 set h 20:10". Because the departure flexibility
+ * only shifts the date, `start` and `end` normally carry the same time; when they
+ * don't (or one is missing) it degrades gracefully to a full range or single value.
+ */
+export function formatBookingWindow(
+  startValue?: string | null,
+  endValue?: string | null,
+  locale = "it-IT"
+) {
+  const start = startValue ? new Date(startValue) : null;
+  const end = endValue ? new Date(endValue) : null;
+  const validStart = start && !Number.isNaN(start.getTime()) ? start : null;
+  const validEnd = end && !Number.isNaN(end.getTime()) ? end : null;
+
+  if (!validStart && !validEnd) return null;
+  if (!validStart) return formatBookingWindowSingle(validEnd!, locale);
+  if (!validEnd) return formatBookingWindowSingle(validStart, locale);
+
+  const sameDay =
+    validStart.getFullYear() === validEnd.getFullYear() &&
+    validStart.getMonth() === validEnd.getMonth() &&
+    validStart.getDate() === validEnd.getDate();
+  if (sameDay || validStart.getTime() === validEnd.getTime()) {
+    return formatBookingWindowSingle(validStart, locale);
+  }
+
+  const dayFmt = new Intl.DateTimeFormat(locale, { day: "2-digit" });
+  const monthFmt = new Intl.DateTimeFormat(locale, { month: "short" });
+  const time = formatBookingWindowTime(validStart, locale);
+  const sameTime =
+    validStart.getHours() === validEnd.getHours() && validStart.getMinutes() === validEnd.getMinutes();
+
+  // Identical time-of-day → collapse to a single "day–day month h HH:MM".
+  if (sameTime) {
+    const sameMonth =
+      validStart.getFullYear() === validEnd.getFullYear() && validStart.getMonth() === validEnd.getMonth();
+    if (sameMonth) {
+      return `${dayFmt.format(validStart)}–${dayFmt.format(validEnd)} ${monthFmt.format(validStart)} h ${time}`;
+    }
+    return `${dayFmt.format(validStart)} ${monthFmt.format(validStart)}–${dayFmt.format(validEnd)} ${monthFmt.format(validEnd)} h ${time}`;
+  }
+
+  // Different times → show both endpoints in full.
+  return `${formatBookingWindowSingle(validStart, locale)} – ${formatBookingWindowSingle(validEnd, locale)}`;
+}
+
+function formatBookingWindowTime(date: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatBookingWindowSingle(date: Date, locale: string) {
+  const dayMonth = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short" }).format(date);
+  return `${dayMonth} h ${formatBookingWindowTime(date, locale)}`;
+}
+
 export function getLegEffectiveDate(leg: BookableLeg) {
   return leg.starts_at_window_end || leg.starts_at_window_start || leg.ends_at_window_end || leg.ends_at_window_start || null;
 }
 
-export function isLegCurrentOrFuture(leg: BookableLeg) {
-  const value = getLegEffectiveDate(leg);
+function isDateCurrentOrFuture(value?: string | null) {
   if (!value) return true;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return true;
   const today = new Date();
   const currentDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const legDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  return legDay >= currentDay;
+  const valueDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return valueDay >= currentDay;
+}
+
+export function isLegCurrentOrFuture(leg: BookableLeg) {
+  return isDateCurrentOrFuture(getLegEffectiveDate(leg));
 }
 
 export function isLegSelectable(leg: BookableLeg) {
   return leg.is_bookable && isLegCurrentOrFuture(leg);
+}
+
+export function isVoyageBookableNow(
+  voyage: Pick<
+    BookingVoyage,
+    "booking_enabled" | "start_date" | "end_date" | "departure_window_start" | "departure_window_end"
+  > | null | undefined
+) {
+  if (!voyage?.booking_enabled) return false;
+  const effectiveEnd = voyage.end_date || voyage.departure_window_end || voyage.start_date || voyage.departure_window_start;
+  return isDateCurrentOrFuture(effectiveEnd);
 }
 
 export function getLegAvailability(
@@ -276,4 +366,189 @@ export function getLegLabel(
   const from = getLocalizedBookingWaypointName(waypointsById[leg.from_waypoint_id], lang);
   const to = getLocalizedBookingWaypointName(waypointsById[leg.to_waypoint_id], lang);
   return `${from} → ${to}`;
+}
+
+// --- Leg complexity & danger -----------------------------------------------------------
+
+export const COMPLEXITY_LEVELS = [1, 2, 3, 4, 5] as const;
+export const COMPLEXITY_MAX = 5;
+export const DANGER_LEVELS = [0, 1, 2, 3] as const;
+export const DANGER_MAX = 3;
+/** Danger level at/above which a leg is forced to maximum complexity. */
+export const DANGER_COMPLEXITY_THRESHOLD = 2;
+
+const complexityClassMap: Record<number, string> = {
+  1: "border-emerald-300/70 bg-emerald-100/70 text-emerald-800",
+  2: "border-lime-300/70 bg-lime-100/70 text-lime-800",
+  3: "border-amber-300/70 bg-amber-100/70 text-amber-800",
+  4: "border-orange-300/70 bg-orange-100/70 text-orange-800",
+  5: "border-red-300/70 bg-red-100/75 text-red-800",
+};
+
+const dangerClassMap: Record<number, string> = {
+  0: "border-stone-300/70 bg-stone-100/70 text-stone-700",
+  1: "border-sky-300/70 bg-sky-100/70 text-sky-800",
+  2: "border-orange-300/70 bg-orange-100/70 text-orange-800",
+  3: "border-red-300/70 bg-red-100/75 text-red-800",
+};
+
+function clampLevel(value: number, min: number, max: number) {
+  if (Number.isNaN(value)) return min;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+export function getComplexityLabel(level: number, lang: Language | "it" | "en" = "it") {
+  const idx = clampLevel(level, 1, 5) - 1;
+  const it = ["Semplice", "Facile", "Media", "Impegnativa", "Molto difficile"];
+  const en = ["Simple", "Easy", "Moderate", "Challenging", "Very hard"];
+  return (lang === "it" ? it : en)[idx];
+}
+
+export function getComplexityClass(level: number) {
+  return complexityClassMap[clampLevel(level, 1, 5)];
+}
+
+export function getDangerLabel(level: number, lang: Language | "it" | "en" = "it") {
+  const idx = clampLevel(level, 0, 3);
+  const it = ["Minimo", "Basso", "Elevato", "Consistente"];
+  const en = ["Minimal", "Low", "High", "Serious"];
+  return (lang === "it" ? it : en)[idx];
+}
+
+export function getDangerClass(level: number) {
+  return dangerClassMap[clampLevel(level, 0, 3)];
+}
+
+/** Short heading used above the complexity disclaimer. */
+export function getComplexityTitle(lang: Language | "it" | "en" = "it") {
+  return lang === "it" ? "Complessità della tratta" : "Leg complexity";
+}
+
+/**
+ * Disclaimer shown wherever the complexity estimate appears: it is only an estimate and
+ * the real difficulty at sea depends on factors that cannot be predicted in advance.
+ */
+export function getComplexityDisclaimer(lang: Language | "it" | "en" = "it") {
+  return lang === "it"
+    ? "Stima orientativa calcolata da durata, navigazione notturna e altri fattori. La complessità reale durante la navigazione dipende da condizioni non prevedibili in anticipo — meteo e stato del mare, traffico marittimo e altro — e può variare sensibilmente nella realtà. Va intesa come indicazione generica e approssimativa."
+    : "A rough estimate based on duration, night navigation and other factors. The real complexity while sailing depends on conditions that cannot be predicted in advance — weather and sea state, traffic and more — and may vary significantly in reality. Treat it as a generic, approximate indication.";
+}
+
+export function getLegDangerLevel(leg: Pick<BookableLeg, "danger_level">) {
+  return clampLevel(Number(leg.danger_level ?? 0), 0, 3);
+}
+
+/** Duration of the leg in hours, using the "early" scenario window consistently. */
+export function getLegDurationHours(
+  leg: Pick<BookableLeg, "starts_at_window_start" | "ends_at_window_start">
+): number | null {
+  const dep = leg.starts_at_window_start;
+  const arr = leg.ends_at_window_start;
+  if (!dep || !arr) return null;
+  const depMs = new Date(dep).getTime();
+  const arrMs = new Date(arr).getTime();
+  if (Number.isNaN(depMs) || Number.isNaN(arrMs)) return null;
+  return Math.max(0, (arrMs - depMs) / 3_600_000);
+}
+
+/** Fractional local (Europe/Rome) hour of an instant, e.g. 19.5 for 19:30. */
+function romeHourFraction(value: string): number | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  return (hour % 24) + minute / 60;
+}
+
+/**
+ * Whether the passage sails during the night band (23:00–06:00 Europe/Rome) at any point.
+ * A leg is night-free only if it fits entirely inside the 06:00–23:00 daytime window.
+ */
+export function legHasNightNavigation(
+  leg: Pick<BookableLeg, "starts_at_window_start" | "ends_at_window_start">
+): boolean {
+  const duration = getLegDurationHours(leg);
+  if (duration == null) return false;
+  if (duration >= 24) return true;
+  const depHour = leg.starts_at_window_start ? romeHourFraction(leg.starts_at_window_start) : null;
+  if (depHour == null) return false;
+  const nightFree = depHour >= 6 && depHour + duration <= 23;
+  return !nightFree;
+}
+
+/**
+ * Auto complexity (1–5) from duration, night navigation, open-sea and danger. Danger at or
+ * above {@link DANGER_COMPLEXITY_THRESHOLD} pins the leg to the maximum.
+ */
+export function computeAutoLegComplexity(leg: BookableLeg): number {
+  let level = 1;
+  const duration = getLegDurationHours(leg);
+  if (legHasNightNavigation(leg)) level = Math.max(level, 2);
+  if (duration != null && duration > 20) level = Math.max(level, 3);
+  if (duration != null && duration > 40) level = Math.max(level, 4);
+  if (leg.open_sea) level += 1;
+  if (getLegDangerLevel(leg) >= DANGER_COMPLEXITY_THRESHOLD) level = 5;
+  return clampLevel(level, 1, 5);
+}
+
+/** Effective complexity: the manual override when set, otherwise the auto value. */
+export function getLegComplexity(leg: BookableLeg): number {
+  const override = leg.complexity_override;
+  if (override != null && override >= 1 && override <= 5) return clampLevel(Number(override), 1, 5);
+  return computeAutoLegComplexity(leg);
+}
+
+/** Is the leg currently showing an auto (non-overridden) complexity? */
+export function isLegComplexityAuto(leg: BookableLeg): boolean {
+  const override = leg.complexity_override;
+  return !(override != null && override >= 1 && override <= 5);
+}
+
+// --- Stop configuration ----------------------------------------------------------------
+
+export function getWaypointStopMode(waypoint: Pick<BookingWaypoint, "stop_mode">): StopMode {
+  const mode = waypoint.stop_mode;
+  return mode === "hours" || mode === "nights" ? mode : "legacy";
+}
+
+/** Human-readable summary of a waypoint's stop, or null when there is no stop. */
+export function formatStopSummary(
+  waypoint: Pick<
+    BookingWaypoint,
+    "stop_mode" | "stop_hours" | "stop_nights" | "stop_departure_time" | "planned_stop_duration_minutes"
+  >,
+  lang: Language | "it" | "en" = "it"
+): string | null {
+  const italian = lang === "it";
+  const mode = getWaypointStopMode(waypoint);
+
+  if (mode === "hours") {
+    const hours = Math.max(0, Number(waypoint.stop_hours ?? 0));
+    if (!hours) return null;
+    return italian ? `Sosta ${hours}h` : `${hours}h stop`;
+  }
+
+  if (mode === "nights") {
+    const nights = Math.max(0, Number(waypoint.stop_nights ?? 1));
+    const time = (waypoint.stop_departure_time ?? DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
+    const dayWord = italian ? (nights === 1 ? "giorno" : "giorni") : nights === 1 ? "day" : "days";
+    return italian
+      ? `Sosta ${nights} ${dayWord}, ripartenza h ${time}`
+      : `${nights}-${dayWord} stop, departs ${time}`;
+  }
+
+  const minutes = Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0));
+  if (!minutes) return null;
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  const parts = [days ? `${days}g` : "", hours ? `${hours}h` : "", mins ? `${mins}m` : ""].filter(Boolean);
+  return italian ? `Sosta ${parts.join(" ")}` : `${parts.join(" ")} stop`;
 }

@@ -16,7 +16,10 @@ import {
   LegacyArticleRedirect,
   LegacyStoryRedirect,
 } from "@/components/LegacyLangRedirect";
+import { isCurrentAdminHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
+
+const BITE_HOME_URL = "https://biteproject.it/";
 
 const createAppQueryClient = () =>
   new QueryClient({
@@ -74,6 +77,11 @@ const RouteFallback = () => (
 /** Root redirect: / → /it or /en based on persisted preference / browser. */
 const RootLangRedirect = () => {
   const location = useLocation();
+  if (isCurrentAdminHostname()) {
+    window.location.replace(BITE_HOME_URL);
+    return null;
+  }
+
   const lang = detectPreferredLang();
   return <Navigate to={withLang(lang, "/") + location.search + location.hash} replace />;
 };

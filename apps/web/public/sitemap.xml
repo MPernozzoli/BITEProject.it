@@ -140,14 +140,14 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning</loc>
-    <lastmod>2026-04-16T13:11:15.263Z</lastmod>
+    <lastmod>2026-07-09T13:34:35.120Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
   </url>
   <url>
     <loc>https://biteproject.it/en/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning</loc>
-    <lastmod>2026-04-16T13:11:15.263Z</lastmod>
+    <lastmod>2026-07-09T13:34:35.120Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/voyages/29b9572a-b2a5-418e-a694-f3aff6ec9ab5--the-beginning" />
@@ -321,6 +321,20 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/voyages/42179cfa-e684-457f-833f-f13ee6698f90--the-european-canals" />
   </url>
   <url>
+    <loc>https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound</loc>
+    <lastmod>2026-07-09T18:13:58.704Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound</loc>
+    <lastmod>2026-07-09T18:13:58.704Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--antlantic-bound" />
+  </url>
+  <url>
     <loc>https://biteproject.it/it/logbook/story/boat-buying</loc>
     <lastmod>2026-04-01T19:58:04.022Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/story/boat-buying" />
@@ -336,72 +350,72 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/arrested-by-the-hellenic-coast-guard</loc>
-    <lastmod>2026-05-17T06:22:03.188Z</lastmod>
+    <lastmod>2026-07-09T10:25:17.964Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1775581318056-bt7yz73kph.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1775581318056-bt7yz73kph.png</image:loc>
       <image:caption>Arrested by the Hellenic Coast Guard</image:caption>
       <image:title>Arrested by the Hellenic Coast Guard</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard</loc>
-    <lastmod>2026-05-17T06:22:03.188Z</lastmod>
+    <lastmod>2026-07-09T10:25:17.964Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1775581318056-bt7yz73kph.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1775581318056-bt7yz73kph.png</image:loc>
       <image:caption>Arrested by the Hellenic Coast Guard</image:caption>
       <image:title>Arrested by the Hellenic Coast Guard</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/we-bought-a-boat-in-greece-it-went-very-wrong</loc>
-    <lastmod>2026-05-16T09:12:20.346Z</lastmod>
+    <lastmod>2026-07-04T17:14:51.349Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1774914807701-dyrdmbawcc6.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1774914807701-dyrdmbawcc6.png</image:loc>
       <image:caption>We Bought a Boat in Greece (It Went Very Wrong)</image:caption>
       <image:title>We Bought a Boat in Greece (It Went Very Wrong)</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong</loc>
-    <lastmod>2026-05-16T09:12:20.346Z</lastmod>
+    <lastmod>2026-07-04T17:14:51.349Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1774914807701-dyrdmbawcc6.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1774914807701-dyrdmbawcc6.png</image:loc>
       <image:caption>We Bought a Boat in Greece (It Went Very Wrong)</image:caption>
       <image:title>We Bought a Boat in Greece (It Went Very Wrong)</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea</loc>
-    <lastmod>2026-05-23T14:32:25.438Z</lastmod>
+    <lastmod>2026-07-09T10:34:36.836Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1774710390885-7c4w2a6oqhf.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1774710390885-7c4w2a6oqhf.png</image:loc>
       <image:caption>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:caption>
       <image:title>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea</loc>
-    <lastmod>2026-05-23T14:32:25.438Z</lastmod>
+    <lastmod>2026-07-09T10:34:36.836Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1774710390885-7c4w2a6oqhf.png</image:loc>
+      <image:loc>https://vdflrzcmlipvtardannd.supabase.co/storage/v1/object/public/logbook-media/covers/1774710390885-7c4w2a6oqhf.png</image:loc>
       <image:caption>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:caption>
       <image:title>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:title>
     </image:image>

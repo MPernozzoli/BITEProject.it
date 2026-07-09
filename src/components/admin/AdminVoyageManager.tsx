@@ -434,6 +434,10 @@ const WAYPOINT_PERSIST_PATCH_KEYS = [
   "date_start",
   "date_end",
   "planned_stop_duration_minutes",
+  "stop_mode",
+  "stop_hours",
+  "stop_nights",
+  "stop_departure_time",
   "waypoint_type",
   "visibility_mode",
   "sort_order",
@@ -509,6 +513,11 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   event_time: (waypoint?.event_time ?? null) as string | null,
   media: normalizeWaypointMedia(waypoint?.media),
   planned_stop_duration_minutes: Math.max(0, Number(waypoint?.planned_stop_duration_minutes ?? 0)),
+  stop_mode:
+    waypoint?.stop_mode === "hours" || waypoint?.stop_mode === "nights" ? waypoint.stop_mode : "legacy",
+  stop_hours: waypoint?.stop_hours == null ? null : Math.max(0, Number(waypoint.stop_hours)),
+  stop_nights: waypoint?.stop_nights == null ? null : Math.max(0, Number(waypoint.stop_nights)),
+  stop_departure_time: (waypoint?.stop_departure_time ?? null) as string | null,
   date_start: (waypoint?.date_start ?? null) as string | null,
   date_end: (waypoint?.date_end ?? null) as string | null,
 });
@@ -1523,6 +1532,25 @@ const AdminVoyageManager = ({
         dateSuggestions.departureTime,
         dateSuggestions.departureSource
       );
+      const legacyStopMinutes = Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0));
+      const initialStopUiMode: "none" | "hours" | "nights" =
+        waypoint.stop_mode === "nights"
+          ? "nights"
+          : waypoint.stop_mode === "hours"
+            ? (Math.max(0, Number(waypoint.stop_hours ?? 0)) > 0 ? "hours" : "none")
+            : legacyStopMinutes > 0
+              ? "hours"
+              : "none";
+      const initialStopHours =
+        waypoint.stop_mode === "hours"
+          ? Math.max(0, Number(waypoint.stop_hours ?? 0)) || 12
+          : legacyStopMinutes > 0
+            ? Math.max(1, Math.round(legacyStopMinutes / 60))
+            : 12;
+      const initialStopNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
+      const initialStopDeparture = (waypoint.stop_departure_time ?? "07:00").slice(0, 5);
+      const popupChipStyle =
+        "padding:4px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:999px;";
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
       const statusLabel = waypoint.visibility_mode === "manual"
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
@@ -1679,16 +1707,54 @@ const AdminVoyageManager = ({
               </p>
             </div>
             <div>
-              <label style="${popupLabelStyle}">Sosta prevista</label>
-              <input
-                name="planned_stop_duration_minutes"
-                type="number"
-                min="0"
-                step="30"
-                value="${escapeHtml(String(Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0))))}"
-                style="${popupInputStyle}"
-              />
-              <p style="${popupHintStyle}">Durata in minuti da considerare per le tappe successive e per il booking.</p>
+              <label style="${popupLabelStyle}">Sosta e ripartenza</label>
+              <select name="stop_mode_ui" style="${popupInputStyle}">
+                <option value="none"${initialStopUiMode === "none" ? " selected" : ""}>Nessuna sosta</option>
+                <option value="hours"${initialStopUiMode === "hours" ? " selected" : ""}>Sosta breve (ore)</option>
+                <option value="nights"${initialStopUiMode === "nights" ? " selected" : ""}>Giorni + orario di ripartenza</option>
+              </select>
+              <div data-stop-panel="hours" style="display:${initialStopUiMode === "hours" ? "grid" : "none"};gap:6px;margin-top:8px;">
+                <input
+                  name="stop_hours"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(String(initialStopHours))}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-hours="8" style="${popupChipStyle}">8h</button>
+                  <button type="button" data-stop-hours="12" style="${popupChipStyle}">12h</button>
+                </div>
+              </div>
+              <div data-stop-panel="nights" style="display:${initialStopUiMode === "nights" ? "grid" : "none"};gap:6px;margin-top:8px;">
+                <label style="${popupLabelStyle}">Giorni di sosta</label>
+                <input
+                  name="stop_nights"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="${escapeHtml(String(initialStopNights))}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-nights="1" style="${popupChipStyle}">1</button>
+                  <button type="button" data-stop-nights="2" style="${popupChipStyle}">2</button>
+                  <button type="button" data-stop-nights="3" style="${popupChipStyle}">3</button>
+                </div>
+                <label style="${popupLabelStyle}">Orario di ripartenza</label>
+                <input
+                  name="stop_departure_time"
+                  type="time"
+                  value="${escapeHtml(initialStopDeparture)}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-departure="07:00" style="${popupChipStyle}">07:00</button>
+                  <button type="button" data-stop-departure="19:00" style="${popupChipStyle}">19:00</button>
+                </div>
+              </div>
+              <p style="${popupHintStyle}">Es.: arrivo il 10 alle 15 con 2 giorni e ripartenza 19:00 → si riparte il 12 alle 19:00.</p>
             </div>
           </div>
           <div data-details-kind="technical" style="display:${effectiveType === "technical" ? "grid" : "none"};gap:10px;">
@@ -1736,7 +1802,11 @@ const AdminVoyageManager = ({
       const departureDateInput = wrapper.querySelector('input[name="date_start"]') as HTMLInputElement | null;
       const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
       const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
-      const stopDurationInput = wrapper.querySelector('input[name="planned_stop_duration_minutes"]') as HTMLInputElement | null;
+      const stopModeUiSelect = wrapper.querySelector('select[name="stop_mode_ui"]') as HTMLSelectElement | null;
+      const stopHoursInput = wrapper.querySelector('input[name="stop_hours"]') as HTMLInputElement | null;
+      const stopNightsInput = wrapper.querySelector('input[name="stop_nights"]') as HTMLInputElement | null;
+      const stopDepartureInput = wrapper.querySelector('input[name="stop_departure_time"]') as HTMLInputElement | null;
+      const stopPanels = wrapper.querySelectorAll<HTMLElement>("[data-stop-panel]");
       const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
       const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
@@ -1772,6 +1842,31 @@ const AdminVoyageManager = ({
 
       visibilitySelect?.addEventListener("change", syncDetailsPanels);
       syncDetailsPanels();
+
+      const syncStopPanels = () => {
+        const mode = stopModeUiSelect?.value || "none";
+        stopPanels.forEach((panelElement) => {
+          panelElement.style.display = panelElement.getAttribute("data-stop-panel") === mode ? "grid" : "none";
+        });
+      };
+      stopModeUiSelect?.addEventListener("change", syncStopPanels);
+      syncStopPanels();
+
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-hours]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopHoursInput) stopHoursInput.value = chip.getAttribute("data-stop-hours") || "";
+        });
+      });
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-nights]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopNightsInput) stopNightsInput.value = chip.getAttribute("data-stop-nights") || "";
+        });
+      });
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-departure]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopDepartureInput) stopDepartureInput.value = chip.getAttribute("data-stop-departure") || "";
+        });
+      });
 
       aiTranslateButton?.addEventListener("click", () => {
         void (async () => {
@@ -1829,9 +1924,14 @@ const AdminVoyageManager = ({
           description_en: descriptionEnInput?.value.trim() || null,
           visibility_mode,
           waypoint_type,
-          planned_stop_duration_minutes: waypoint_type === "narrative"
-            ? parseNonNegativeInteger(stopDurationInput?.value || "0")
-            : 0,
+        };
+
+        const applyNoStop = () => {
+          nextChanges.stop_mode = "hours";
+          nextChanges.stop_hours = 0;
+          nextChanges.stop_nights = null;
+          nextChanges.stop_departure_time = null;
+          nextChanges.planned_stop_duration_minutes = 0;
         };
 
         if (waypoint_type === "narrative") {
@@ -1839,7 +1939,30 @@ const AdminVoyageManager = ({
           nextChanges.date_start = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(departureDateInput?.value || null);
           nextChanges.event_date = null;
           nextChanges.event_time = null;
+
+          const stopUiMode = stopModeUiSelect?.value === "hours" || stopModeUiSelect?.value === "nights"
+            ? stopModeUiSelect.value
+            : "none";
+          if (stopUiMode === "hours") {
+            const hours = parseNonNegativeInteger(stopHoursInput?.value || "0");
+            nextChanges.stop_mode = "hours";
+            nextChanges.stop_hours = hours;
+            nextChanges.stop_nights = null;
+            nextChanges.stop_departure_time = null;
+            nextChanges.planned_stop_duration_minutes = hours * 60;
+          } else if (stopUiMode === "nights") {
+            const nights = Math.max(1, parseNonNegativeInteger(stopNightsInput?.value || "1"));
+            const time = (stopDepartureInput?.value || "07:00").slice(0, 5);
+            nextChanges.stop_mode = "nights";
+            nextChanges.stop_nights = nights;
+            nextChanges.stop_departure_time = time;
+            nextChanges.stop_hours = null;
+            nextChanges.planned_stop_duration_minutes = 0;
+          } else {
+            applyNoStop();
+          }
         } else {
+          applyNoStop();
           nextChanges.event_date = selectedVoyageDatesTbd ? null : eventDateInput?.value || null;
           nextChanges.event_time = selectedVoyageDatesTbd ? null : eventTimeInput?.value || null;
           nextChanges.date_start = null;

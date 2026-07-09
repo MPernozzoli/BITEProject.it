@@ -21,6 +21,8 @@ import {
 import { isCurrentAdminHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
 
+const BITE_HOME_URL = "https://biteproject.it/";
+
 const createAppQueryClient = () =>
   new QueryClient({
     defaultOptions: {
@@ -79,7 +81,8 @@ const RouteFallback = () => (
 const RootLangRedirect = () => {
   const location = useLocation();
   if (isCurrentAdminHostname()) {
-    return <Navigate to={`/admin${location.search}${location.hash}`} replace />;
+    window.location.replace(BITE_HOME_URL);
+    return null;
   }
 
   const lang = detectPreferredLang();

@@ -1114,6 +1114,10 @@ export interface VoyageWaypoint {
   event_time: string | null;
   media: VoyageWaypointMediaItem[];
   planned_stop_duration_minutes?: number;
+  stop_mode?: "legacy" | "hours" | "nights" | null;
+  stop_hours?: number | null;
+  stop_nights?: number | null;
+  stop_departure_time?: string | null;
   date_start: string | null;
   date_end: string | null;
   created_at: string;
