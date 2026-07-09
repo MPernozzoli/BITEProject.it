@@ -51,8 +51,16 @@ export type StopMode = "legacy" | "hours" | "nights";
 export const STOP_HOURS_PRESETS = [8, 12] as const;
 export const STOP_NIGHTS_PRESETS = [1, 2, 3] as const;
 /** Suggested departure times of day; the editor also allows a free custom value. */
-export const STOP_DEPARTURE_PRESETS = ["07:00", "19:00"] as const;
-export const DEFAULT_STOP_DEPARTURE_TIME = "07:00";
+export const STOP_DEPARTURE_PRESETS = ["07:30", "19:00"] as const;
+/** Default departure time for a "nights" stop: the morning after arrival. */
+export const DEFAULT_STOP_DEPARTURE_TIME = "07:30";
+/** Default departure time for a stop preceding an open-sea leg (sailed overnight). */
+export const OPEN_SEA_STOP_DEPARTURE_TIME = "19:00";
+
+/** Suggested default departure time for a new stop, based on whether the outbound leg is open-sea. */
+export function getDefaultStopDepartureTime(outboundLegIsOpenSea: boolean) {
+  return outboundLegIsOpenSea ? OPEN_SEA_STOP_DEPARTURE_TIME : DEFAULT_STOP_DEPARTURE_TIME;
+}
 
 export interface BookableLeg {
   id: string;
@@ -516,6 +524,44 @@ export function isLegComplexityAuto(leg: BookableLeg): boolean {
 export function getWaypointStopMode(waypoint: Pick<BookingWaypoint, "stop_mode">): StopMode {
   const mode = waypoint.stop_mode;
   return mode === "hours" || mode === "nights" ? mode : "legacy";
+}
+
+/**
+ * Tri-state UI mode for the stop editor: "hours" with stop_hours=0 (or an untouched
+ * legacy waypoint with no minutes) reads as "no stop", not as an hours stop of zero length.
+ */
+export function getWaypointStopUiMode(
+  waypoint: Pick<BookingWaypoint, "stop_mode" | "stop_hours" | "planned_stop_duration_minutes">
+): "none" | "hours" | "nights" {
+  if (waypoint.stop_mode === "nights") return "nights";
+  if (waypoint.stop_mode === "hours") {
+    return Math.max(0, Number(waypoint.stop_hours ?? 0)) > 0 ? "hours" : "none";
+  }
+  return Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0)) > 0 ? "hours" : "none";
+}
+
+/** Sensible "hours" value to pre-fill when switching a waypoint into hours-stop mode. */
+export function getEffectiveStopHoursDefault(
+  waypoint: Pick<BookingWaypoint, "stop_mode" | "stop_hours" | "planned_stop_duration_minutes">
+): number {
+  if (waypoint.stop_mode === "hours") {
+    return Math.max(0, Number(waypoint.stop_hours ?? 0)) || 12;
+  }
+  const legacyMinutes = Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0));
+  return legacyMinutes > 0 ? Math.max(1, Math.round(legacyMinutes / 60)) : 12;
+}
+
+/** Rough total stop duration in minutes, for display/estimation purposes only. */
+export function estimateStopMinutes(
+  waypoint: Pick<BookingWaypoint, "stop_mode" | "stop_hours" | "stop_nights" | "planned_stop_duration_minutes">
+): number {
+  if (waypoint.stop_mode === "nights") {
+    return Math.max(0, Number(waypoint.stop_nights ?? 1)) * 24 * 60;
+  }
+  if (waypoint.stop_mode === "hours") {
+    return Math.max(0, Number(waypoint.stop_hours ?? 0)) * 60;
+  }
+  return Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0));
 }
 
 /** Human-readable summary of a waypoint's stop, or null when there is no stop. */

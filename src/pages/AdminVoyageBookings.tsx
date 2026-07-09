@@ -15,8 +15,12 @@ import {
   type BookingWaypoint,
   type VoyageBookingStatus,
   DANGER_MAX,
+  STOP_DEPARTURE_PRESETS,
+  STOP_HOURS_PRESETS,
+  STOP_NIGHTS_PRESETS,
   capacityBlockingStatuses,
   computeAutoLegComplexity,
+  estimateStopMinutes,
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
@@ -25,10 +29,13 @@ import {
   getComplexityLabel,
   getDangerClass,
   getDangerLabel,
+  getDefaultStopDepartureTime,
+  getEffectiveStopHoursDefault,
   getLegComplexity,
   getLegDangerLevel,
   getLegLabel,
   getLocalizedBookingVoyageName,
+  getWaypointStopUiMode,
   isLegComplexityAuto,
   isLegSelectable,
 } from "@/lib/booking-utils";
@@ -182,7 +189,7 @@ const AdminVoyageBookings = () => {
     const [waypointsRes, legsRes, requestsRes, settingsRes, tasksRes] = await Promise.all([
       typedSupabase
         .from("voyage_waypoints")
-        .select("id,voyage_id,name,name_it,name_en,sort_order,lat,lng,waypoint_type,visibility_mode,planned_stop_duration_minutes,date_start,date_end")
+        .select("id,voyage_id,name,name_it,name_en,sort_order,lat,lng,waypoint_type,visibility_mode,planned_stop_duration_minutes,stop_mode,stop_hours,stop_nights,stop_departure_time,date_start,date_end")
         .eq("voyage_id", voyageId)
         .order("sort_order", { ascending: true }),
       typedSupabase
@@ -325,7 +332,7 @@ const AdminVoyageBookings = () => {
     const routeWaypoints = waypoints.filter(hasWaypointCoordinates);
     const totalDistanceNm = routeWaypoints.length >= 2 ? totalWaypointDistance(routeWaypoints) : 0;
     const navigationMinutes = planningSpeedKn > 0 ? (totalDistanceNm / planningSpeedKn) * 60 : 0;
-    const stopMinutes = publicPlanningWaypoints.reduce((total, waypoint) => total + Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0), 0);
+    const stopMinutes = publicPlanningWaypoints.reduce((total, waypoint) => total + estimateStopMinutes(waypoint), 0);
     return {
       totalDistanceNm,
       navigationMinutes,

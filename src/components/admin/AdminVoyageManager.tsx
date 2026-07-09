@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type SetStateAction } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DEFAULT_STOP_DEPARTURE_TIME,
+  STOP_DEPARTURE_PRESETS,
+  getEffectiveStopHoursDefault,
+  getWaypointStopUiMode,
+} from "@/lib/booking-utils";
 import { useI18n } from "@/lib/i18n";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -1532,23 +1538,10 @@ const AdminVoyageManager = ({
         dateSuggestions.departureTime,
         dateSuggestions.departureSource
       );
-      const legacyStopMinutes = Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0));
-      const initialStopUiMode: "none" | "hours" | "nights" =
-        waypoint.stop_mode === "nights"
-          ? "nights"
-          : waypoint.stop_mode === "hours"
-            ? (Math.max(0, Number(waypoint.stop_hours ?? 0)) > 0 ? "hours" : "none")
-            : legacyStopMinutes > 0
-              ? "hours"
-              : "none";
-      const initialStopHours =
-        waypoint.stop_mode === "hours"
-          ? Math.max(0, Number(waypoint.stop_hours ?? 0)) || 12
-          : legacyStopMinutes > 0
-            ? Math.max(1, Math.round(legacyStopMinutes / 60))
-            : 12;
+      const initialStopUiMode = getWaypointStopUiMode(waypoint);
+      const initialStopHours = getEffectiveStopHoursDefault(waypoint);
       const initialStopNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
-      const initialStopDeparture = (waypoint.stop_departure_time ?? "07:00").slice(0, 5);
+      const initialStopDeparture = (waypoint.stop_departure_time ?? DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
       const popupChipStyle =
         "padding:4px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:999px;";
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
@@ -1750,8 +1743,8 @@ const AdminVoyageManager = ({
                   style="${popupInputStyle}"
                 />
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" data-stop-departure="07:00" style="${popupChipStyle}">07:00</button>
-                  <button type="button" data-stop-departure="19:00" style="${popupChipStyle}">19:00</button>
+                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[0]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[0]}</button>
+                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[1]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[1]}</button>
                 </div>
               </div>
               <p style="${popupHintStyle}">Es.: arrivo il 10 alle 15 con 2 giorni e ripartenza 19:00 → si riparte il 12 alle 19:00.</p>
@@ -1952,7 +1945,7 @@ const AdminVoyageManager = ({
             nextChanges.planned_stop_duration_minutes = hours * 60;
           } else if (stopUiMode === "nights") {
             const nights = Math.max(1, parseNonNegativeInteger(stopNightsInput?.value || "1"));
-            const time = (stopDepartureInput?.value || "07:00").slice(0, 5);
+            const time = (stopDepartureInput?.value || DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
             nextChanges.stop_mode = "nights";
             nextChanges.stop_nights = nights;
             nextChanges.stop_departure_time = time;
