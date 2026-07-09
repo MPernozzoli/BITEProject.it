@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Pencil, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
@@ -115,6 +115,12 @@ const hasWaypointCoordinates = (
 ): waypoint is BookingWaypoint & { lat: number; lng: number } =>
   Number.isFinite(Number(waypoint.lat)) && Number.isFinite(Number(waypoint.lng));
 
+const formatPlanningWindow = (start?: string | null, end?: string | null) => {
+  if (!start && !end) return "Non impostata";
+  if (start && end && start !== end) return `${formatPlanningDate(start)} → ${formatPlanningDate(end)}`;
+  return formatPlanningDate(start || end);
+};
+
 const AdminVoyageBookings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -135,6 +141,7 @@ const AdminVoyageBookings = () => {
   const [manualStatus, setManualStatus] = useState<VoyageBookingStatus>("admin_approved");
   const [manualNotes, setManualNotes] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId) || null;
 
@@ -250,6 +257,10 @@ const AdminVoyageBookings = () => {
     if (selectedVoyageId) void loadVoyageDetails(selectedVoyageId);
   }, [loadVoyageDetails, selectedVoyageId]);
 
+  useEffect(() => {
+    setEditableLegIds(new Set());
+  }, [selectedVoyageId]);
+
   const waypointsById = useMemo(
     () => Object.fromEntries(waypoints.map((waypoint) => [waypoint.id, waypoint])),
     [waypoints]
@@ -342,6 +353,15 @@ const AdminVoyageBookings = () => {
 
   const updateLegPlanning = (legId: string, patch: Partial<BookableLeg>) => {
     setLegs((current) => current.map((leg) => (leg.id === legId ? { ...leg, ...patch } : leg)));
+  };
+
+  const toggleLegEditing = (legId: string) => {
+    setEditableLegIds((current) => {
+      const next = new Set(current);
+      if (next.has(legId)) next.delete(legId);
+      else next.add(legId);
+      return next;
+    });
   };
 
   const saveRoutePlanning = async ({ syncAfterSave = false }: { syncAfterSave?: boolean } = {}) => {
@@ -741,7 +761,7 @@ const AdminVoyageBookings = () => {
                         {index + 1}. {waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {waypoint.waypoint_type || "waypoint"} · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
+                        narrative · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
                       </p>
                     </div>
                     <label className="block">
@@ -774,6 +794,7 @@ const AdminVoyageBookings = () => {
                 {legs.map((leg) => {
                   const distanceNm = haversineNm(waypointsById[leg.from_waypoint_id], waypointsById[leg.to_waypoint_id]);
                   const estimatedMinutes = distanceNm === null ? null : (distanceNm / planningSpeedKn) * 60;
+                  const isEditingLeg = editableLegIds.has(leg.id);
                   return (
                     <div key={leg.id} className="rounded-[18px] border border-border/70 p-3">
                       <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -783,55 +804,73 @@ const AdminVoyageBookings = () => {
                             {distanceNm === null ? "Distanza non disponibile" : `${distanceNm.toFixed(1)} nm`}
                             {estimatedMinutes === null ? "" : ` · ${formatDuration(estimatedMinutes)} a ${planningSpeedKn.toFixed(1)} kn`}
                           </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Partenza: {formatPlanningWindow(leg.starts_at_window_start, leg.starts_at_window_end)}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Arrivo: {formatPlanningWindow(leg.ends_at_window_start, leg.ends_at_window_end)}
+                          </p>
                         </div>
-                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(leg.is_bookable)}
-                            onChange={(event) => updateLegPlanning(leg.id, { is_bookable: event.target.checked })}
-                            className="h-4 w-4 accent-[hsl(var(--accent))]"
-                          />
-                          Prenotabile
-                        </label>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(leg.is_bookable)}
+                              onChange={(event) => updateLegPlanning(leg.id, { is_bookable: event.target.checked })}
+                              className="h-4 w-4 accent-[hsl(var(--accent))]"
+                            />
+                            Prenotabile
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => toggleLegEditing(leg.id)}
+                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-foreground hover:text-accent"
+                          >
+                            <Pencil size={12} />
+                            {isEditingLeg ? "Chiudi edit" : "Edit orari"}
+                          </button>
+                        </div>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <label className="block">
-                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza da</span>
-                          <input
-                            type="datetime-local"
-                            value={toDateTimeLocalValue(leg.starts_at_window_start)}
-                            onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_start: fromDateTimeLocalValue(event.target.value) })}
-                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza a</span>
-                          <input
-                            type="datetime-local"
-                            value={toDateTimeLocalValue(leg.starts_at_window_end)}
-                            onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_end: fromDateTimeLocalValue(event.target.value) })}
-                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo da</span>
-                          <input
-                            type="datetime-local"
-                            value={toDateTimeLocalValue(leg.ends_at_window_start)}
-                            onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_start: fromDateTimeLocalValue(event.target.value) })}
-                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          />
-                        </label>
-                        <label className="block">
-                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo a</span>
-                          <input
-                            type="datetime-local"
-                            value={toDateTimeLocalValue(leg.ends_at_window_end)}
-                            onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_end: fromDateTimeLocalValue(event.target.value) })}
-                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          />
-                        </label>
-                      </div>
+                      {isEditingLeg && (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza da</span>
+                            <input
+                              type="datetime-local"
+                              value={toDateTimeLocalValue(leg.starts_at_window_start)}
+                              onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_start: fromDateTimeLocalValue(event.target.value) })}
+                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza a</span>
+                            <input
+                              type="datetime-local"
+                              value={toDateTimeLocalValue(leg.starts_at_window_end)}
+                              onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_end: fromDateTimeLocalValue(event.target.value) })}
+                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo da</span>
+                            <input
+                              type="datetime-local"
+                              value={toDateTimeLocalValue(leg.ends_at_window_start)}
+                              onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_start: fromDateTimeLocalValue(event.target.value) })}
+                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo a</span>
+                            <input
+                              type="datetime-local"
+                              value={toDateTimeLocalValue(leg.ends_at_window_end)}
+                              onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_end: fromDateTimeLocalValue(event.target.value) })}
+                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            />
+                          </label>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

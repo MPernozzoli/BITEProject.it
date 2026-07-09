@@ -78,14 +78,13 @@ const createStorageImageUrls = (folder: string, files: StorageListItem[]): strin
       return data.publicUrl;
     });
 
-const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => {
-  const posters = createStorageImageUrls(folder, files);
-  return files
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+  files
     .filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
       return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
     })
-    .map((file, index) => {
+    .map((file) => {
       const path = `${folder}/${file.name}`;
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
@@ -94,10 +93,8 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
-        poster: posters.length ? posters[index % posters.length] : undefined,
       };
     });
-};
 
 
 const fetchHeroMediaPools = async (): Promise<{

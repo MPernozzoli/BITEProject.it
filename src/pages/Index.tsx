@@ -140,14 +140,13 @@ const createStorageImageUrls = (folder: string, files: StorageListItem[]): strin
       return data.publicUrl;
     });
 
-const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] => {
-  const posters = createStorageImageUrls(folder, files);
-  return files
+const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
+  files
     .filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
       return Boolean(extension && SUPPORTED_HERO_VIDEO_EXTENSIONS.has(extension));
     })
-    .map((file, index) => {
+    .map((file) => {
       const path = `${folder}/${file.name}`;
       const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
 
@@ -156,10 +155,8 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         src: data.publicUrl,
         alt,
         mimeType: getVideoMimeType(file.name),
-        poster: posters.length ? posters[index % posters.length] : undefined,
       };
     });
-};
 
 
 const getNextHeroTransition = (
@@ -291,19 +288,7 @@ const Index = () => {
   );
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
-  const heroPosterUrl = heroMedia?.poster ?? null;
-  useEffect(() => {
-    if (!heroPosterUrl) return;
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = heroPosterUrl;
-    link.setAttribute("fetchpriority", "high");
-    document.head.appendChild(link);
-    return () => {
-      document.head.removeChild(link);
-    };
-  }, [heroPosterUrl]);
+  const shouldRenderHeroBackgroundImage = !heroMedia && Boolean(heroBackgroundImage);
   const heroPriorityMedia = useMemo(() => {
     const candidates = [
       heroMedia,
@@ -588,7 +573,6 @@ const Index = () => {
         key={`${mode}:${media.src}`}
         ref={mode === "pending" ? pendingHeroVideoRef : undefined}
         className={baseClassName}
-        poster={media.poster}
         autoPlay={mode === "active"}
         muted
         playsInline
@@ -967,7 +951,7 @@ const Index = () => {
       />
       <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          {heroBackgroundImage ? (
+          {shouldRenderHeroBackgroundImage ? (
             <img
               key={heroBackgroundImage}
               src={heroBackgroundImage}
