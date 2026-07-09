@@ -14,9 +14,13 @@ export interface BookingVoyage {
   name: string;
   name_it: string | null;
   name_en: string | null;
+  type?: "water" | "land";
   status: "planned" | "active" | "completed";
   booking_enabled?: boolean;
   booking_max_guests?: number;
+  booking_planning_speed_kn?: number;
+  departure_window_start?: string | null;
+  departure_window_end?: string | null;
   start_date: string | null;
   end_date: string | null;
 }
@@ -28,6 +32,11 @@ export interface BookingWaypoint {
   name_it: string | null;
   name_en: string | null;
   sort_order: number;
+  lat?: number | null;
+  lng?: number | null;
+  waypoint_type?: "technical" | "narrative";
+  visibility_mode?: "auto" | "manual";
+  planned_stop_duration_minutes?: number;
   date_start: string | null;
   date_end: string | null;
 }

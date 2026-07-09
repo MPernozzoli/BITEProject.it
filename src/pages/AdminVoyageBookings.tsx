@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, Loader2, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -65,6 +65,50 @@ const statusOptions: VoyageBookingStatus[] = [
   "expired",
 ];
 
+const toDateTimeLocalValue = (value?: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+};
+
+const fromDateTimeLocalValue = (value: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const formatPlanningDate = (value?: string | null) => {
+  if (!value) return "Non impostata";
+  return formatBookingDate(value, "it-IT") || "Non impostata";
+};
+
+const formatDuration = (minutes: number) => {
+  const safeMinutes = Math.max(0, Math.round(minutes || 0));
+  const days = Math.floor(safeMinutes / 1440);
+  const hours = Math.floor((safeMinutes % 1440) / 60);
+  const mins = safeMinutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days}g`);
+  if (hours) parts.push(`${hours}h`);
+  if (mins || parts.length === 0) parts.push(`${mins}m`);
+  return parts.join(" ");
+};
+
+const haversineNm = (from: BookingWaypoint | undefined, to: BookingWaypoint | undefined) => {
+  if (typeof from?.lat !== "number" || typeof from?.lng !== "number" || typeof to?.lat !== "number" || typeof to?.lng !== "number") {
+    return null;
+  }
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 3440.065 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 const AdminVoyageBookings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +136,7 @@ const AdminVoyageBookings = () => {
     const [voyagesRes, profilesRes] = await Promise.all([
       typedSupabase
         .from("voyages")
-        .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,start_date,end_date")
+        .select("id,name,name_it,name_en,type,status,booking_enabled,booking_max_guests,booking_planning_speed_kn,departure_window_start,departure_window_end,start_date,end_date")
         .order("start_date", { ascending: true, nullsFirst: false }),
       typedSupabase
         .from("profiles")
@@ -116,7 +160,7 @@ const AdminVoyageBookings = () => {
     const [waypointsRes, legsRes, requestsRes, settingsRes, tasksRes] = await Promise.all([
       typedSupabase
         .from("voyage_waypoints")
-        .select("id,voyage_id,name,name_it,name_en,sort_order,date_start,date_end")
+        .select("id,voyage_id,name,name_it,name_en,sort_order,lat,lng,waypoint_type,visibility_mode,planned_stop_duration_minutes,date_start,date_end")
         .eq("voyage_id", voyageId)
         .order("sort_order", { ascending: true }),
       typedSupabase
@@ -243,6 +287,18 @@ const AdminVoyageBookings = () => {
   const manualOverCapacity = manualLegIds.some(
     (legId) => (legCapacity[legId] || 0) + selectedManualPartySize > (selectedVoyage?.booking_max_guests || 2)
   );
+  const planningSpeedKn = Math.max(0.1, Number(selectedVoyage?.booking_planning_speed_kn ?? 5) || 5);
+  const routePlanningStats = useMemo(() => {
+    const totalDistanceNm = legs.reduce((total, leg) => total + (haversineNm(waypointsById[leg.from_waypoint_id], waypointsById[leg.to_waypoint_id]) || 0), 0);
+    const navigationMinutes = planningSpeedKn > 0 ? (totalDistanceNm / planningSpeedKn) * 60 : 0;
+    const stopMinutes = waypoints.reduce((total, waypoint) => total + Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0), 0);
+    return {
+      totalDistanceNm,
+      navigationMinutes,
+      stopMinutes,
+      totalMinutes: navigationMinutes + stopMinutes,
+    };
+  }, [legs, planningSpeedKn, waypoints, waypointsById]);
 
   const requestWouldExceedCapacity = (request: BookingRequest, nextStatus: VoyageBookingStatus) => {
     if (!capacityBlockingStatuses.has(nextStatus)) return false;
@@ -259,6 +315,89 @@ const AdminVoyageBookings = () => {
     setManualLegIds((current) =>
       current.includes(legId) ? current.filter((id) => id !== legId) : [...current, legId]
     );
+  };
+
+  const updateSelectedVoyagePlanning = (patch: Partial<BookingVoyage>) => {
+    if (!selectedVoyageId) return;
+    setVoyages((current) => current.map((voyage) => (voyage.id === selectedVoyageId ? { ...voyage, ...patch } : voyage)));
+  };
+
+  const updateWaypointPlanning = (waypointId: string, patch: Partial<BookingWaypoint>) => {
+    setWaypoints((current) => current.map((waypoint) => (waypoint.id === waypointId ? { ...waypoint, ...patch } : waypoint)));
+  };
+
+  const updateLegPlanning = (legId: string, patch: Partial<BookableLeg>) => {
+    setLegs((current) => current.map((leg) => (leg.id === legId ? { ...leg, ...patch } : leg)));
+  };
+
+  const saveRoutePlanning = async ({ syncAfterSave = false }: { syncAfterSave?: boolean } = {}) => {
+    if (!selectedVoyageId || !selectedVoyage) return;
+    setSaving(true);
+    const voyagePatch = {
+      booking_enabled: Boolean(selectedVoyage.booking_enabled),
+      booking_max_guests: Math.max(1, Number(selectedVoyage.booking_max_guests ?? 2) || 2),
+      booking_planning_speed_kn: Math.max(0.1, Number(selectedVoyage.booking_planning_speed_kn ?? 5) || 5),
+      departure_window_start: selectedVoyage.departure_window_start || null,
+      departure_window_end: selectedVoyage.departure_window_end || null,
+    };
+    const voyageRes = await typedSupabase.from("voyages").update(voyagePatch).eq("id", selectedVoyageId);
+    if (voyageRes.error) {
+      setSaving(false);
+      toast.error(voyageRes.error.message);
+      return;
+    }
+
+    const waypointResults = await Promise.all(
+      waypoints.map((waypoint) =>
+        typedSupabase
+          .from("voyage_waypoints")
+          .update({ planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0) })
+          .eq("id", waypoint.id)
+      )
+    );
+    const waypointError = waypointResults.find((result) => result.error)?.error;
+    if (waypointError) {
+      setSaving(false);
+      toast.error(waypointError.message);
+      return;
+    }
+
+    if (!syncAfterSave) {
+      const legResults = await Promise.all(
+        legs.map((leg) =>
+          typedSupabase
+            .from("voyage_bookable_legs")
+            .update({
+              starts_at_window_start: leg.starts_at_window_start || null,
+              starts_at_window_end: leg.starts_at_window_end || null,
+              ends_at_window_start: leg.ends_at_window_start || null,
+              ends_at_window_end: leg.ends_at_window_end || null,
+              is_bookable: Boolean(leg.is_bookable),
+            })
+            .eq("id", leg.id)
+        )
+      );
+      const legError = legResults.find((result) => result.error)?.error;
+      if (legError) {
+        setSaving(false);
+        toast.error(legError.message);
+        return;
+      }
+    }
+
+    if (syncAfterSave) {
+      const { error } = await typedSupabase.rpc("sync_voyage_bookable_legs", { _voyage_id: selectedVoyageId });
+      if (error) {
+        setSaving(false);
+        toast.error(error.message);
+        return;
+      }
+    }
+
+    setSaving(false);
+    toast.success(syncAfterSave ? "Pianificazione salvata e tratte ricalcolate." : "Pianificazione rotta salvata.");
+    await loadVoyages();
+    await loadVoyageDetails(selectedVoyageId);
   };
 
   const syncLegs = async () => {
@@ -456,6 +595,236 @@ const AdminVoyageBookings = () => {
               <p className="mt-2 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{item.label}</p>
             </div>
           ))}
+        </section>
+
+        <section className="glass-panel rounded-[30px] p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <MapPinned size={18} className="text-accent" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Route planning</p>
+                <h2 className="editorial-heading text-2xl">Percorso, soste e tratte future</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void saveRoutePlanning()}
+                disabled={saving || !selectedVoyageId}
+                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
+                Salva planning
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveRoutePlanning({ syncAfterSave: true })}
+                disabled={saving || !selectedVoyageId || !selectedVoyage?.booking_enabled}
+                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+                Salva e ricalcola
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[22px] border border-border/70 p-4">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectedVoyage?.booking_enabled)}
+                  onChange={(event) => updateSelectedVoyagePlanning({ booking_enabled: event.target.checked })}
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs uppercase tracking-[0.2em] text-foreground">
+                    {selectedVoyage?.booking_enabled ? "Booking attivo per questa rotta" : "Booking disattivato per questa rotta"}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                    Quando è disattivo, le tratte restano in pianificazione ma non vengono mostrate come prenotabili.
+                  </span>
+                </span>
+              </label>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Persone max</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={selectedVoyage?.booking_max_guests ?? 2}
+                    onChange={(event) => updateSelectedVoyagePlanning({ booking_max_guests: Math.max(1, Number(event.target.value) || 1) })}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Velocità stimata kn</span>
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={selectedVoyage?.booking_planning_speed_kn ?? 5}
+                    onChange={(event) => updateSelectedVoyagePlanning({ booking_planning_speed_kn: Math.max(0.1, Number(event.target.value) || 5) })}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Finestra partenza da</span>
+                  <input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(selectedVoyage?.departure_window_start)}
+                    onChange={(event) => updateSelectedVoyagePlanning({ departure_window_start: fromDateTimeLocalValue(event.target.value) })}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Finestra partenza a</span>
+                  <input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(selectedVoyage?.departure_window_end)}
+                    onChange={(event) => updateSelectedVoyagePlanning({ departure_window_end: fromDateTimeLocalValue(event.target.value) })}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: "Waypoint", value: waypoints.length, icon: <MapPinned size={15} /> },
+                { label: "Tratte navigazione", value: legs.length, icon: <CalendarClock size={15} /> },
+                { label: "Navigazione stimata", value: formatDuration(routePlanningStats.navigationMinutes), icon: <Clock size={15} /> },
+                { label: "Soste pianificate", value: formatDuration(routePlanningStats.stopMinutes), icon: <Clock size={15} /> },
+              ].map((item) => (
+                <div key={item.label} className="rounded-[22px] border border-border/70 p-4">
+                  <div className="mb-2 flex items-center gap-2 text-muted-foreground">{item.icon}</div>
+                  <p className="editorial-heading text-2xl">{item.value}</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
+                </div>
+              ))}
+              <div className="rounded-[22px] border border-border/70 p-4 sm:col-span-2">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Totale viaggio stimato</p>
+                <p className="mt-2 text-sm text-foreground">
+                  {routePlanningStats.totalDistanceNm.toFixed(1)} nm · {formatDuration(routePlanningStats.totalMinutes)} incluse soste
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Soste waypoint</p>
+                <span className="text-xs text-muted-foreground">Durata prevista in sosta</span>
+              </div>
+              <div className="space-y-2">
+                {waypoints.map((waypoint, index) => (
+                  <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3 sm:grid-cols-[1fr_120px] sm:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {index + 1}. {waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {waypoint.waypoint_type || "waypoint"} · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
+                      </p>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Sosta min</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="30"
+                        value={Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0)}
+                        onChange={(event) =>
+                          updateWaypointPlanning(waypoint.id, {
+                            planned_stop_duration_minutes: Math.max(0, Number(event.target.value) || 0),
+                          })
+                        }
+                        className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                      />
+                    </label>
+                  </div>
+                ))}
+                {waypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint caricato per questa rotta.</p>}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Tratte di navigazione</p>
+                <span className="text-xs text-muted-foreground">Finestre e disponibilità</span>
+              </div>
+              <div className="space-y-2">
+                {legs.map((leg) => {
+                  const distanceNm = haversineNm(waypointsById[leg.from_waypoint_id], waypointsById[leg.to_waypoint_id]);
+                  const estimatedMinutes = distanceNm === null ? null : (distanceNm / planningSpeedKn) * 60;
+                  return (
+                    <div key={leg.id} className="rounded-[18px] border border-border/70 p-3">
+                      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{getLegLabel(leg, waypointsById, "it")}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {distanceNm === null ? "Distanza non disponibile" : `${distanceNm.toFixed(1)} nm`}
+                            {estimatedMinutes === null ? "" : ` · ${formatDuration(estimatedMinutes)} a ${planningSpeedKn.toFixed(1)} kn`}
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(leg.is_bookable)}
+                            onChange={(event) => updateLegPlanning(leg.id, { is_bookable: event.target.checked })}
+                            className="h-4 w-4 accent-[hsl(var(--accent))]"
+                          />
+                          Prenotabile
+                        </label>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza da</span>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(leg.starts_at_window_start)}
+                            onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_start: fromDateTimeLocalValue(event.target.value) })}
+                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza a</span>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(leg.starts_at_window_end)}
+                            onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_end: fromDateTimeLocalValue(event.target.value) })}
+                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo da</span>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(leg.ends_at_window_start)}
+                            onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_start: fromDateTimeLocalValue(event.target.value) })}
+                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo a</span>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(leg.ends_at_window_end)}
+                            onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_end: fromDateTimeLocalValue(event.target.value) })}
+                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+                {legs.length === 0 && <p className="text-sm text-muted-foreground">Nessuna tratta: abilita il booking e usa “Salva e ricalcola”.</p>}
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="glass-panel rounded-[30px] p-5 md:p-6">
