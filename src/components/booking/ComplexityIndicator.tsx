@@ -3,17 +3,30 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   getComplexityClass,
   getComplexityDisclaimer,
+  getComplexityExplanation,
   getComplexityLabel,
   getComplexityTitle,
   getDangerClass,
   getDangerLabel,
+  type BookableLeg,
 } from "@/lib/booking-utils";
+
+type ComplexityLegFactors = Pick<
+  BookableLeg,
+  "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+>;
 
 interface ComplexityIndicatorProps {
   level: number;
   lang: Language | "it" | "en";
   /** Optional danger level (0–3); when > 0 it is surfaced in the tooltip (and as a chip in badge mode). */
   dangerLevel?: number;
+  /**
+   * The leg the estimate is for. When provided, the tooltip explains the specific factors
+   * behind the level (open sea, duration, night navigation, danger) instead of a generic
+   * disclaimer.
+   */
+  leg?: ComplexityLegFactors;
   /** "badge" = labelled pill (default); "dot" = compact numbered circle for dense layouts. */
   variant?: "badge" | "dot";
   /** Smaller footprint for dense layouts. */
@@ -30,6 +43,7 @@ const ComplexityIndicator = ({
   level,
   lang,
   dangerLevel = 0,
+  leg,
   variant = "badge",
   compact = false,
   className = "",
@@ -80,6 +94,11 @@ const ComplexityIndicator = ({
           align="center"
           sideOffset={8}
           collisionPadding={12}
+          // Without this, Radix/Floating-UI uses the trigger's nearest scrollable ancestor
+          // (e.g. the horizontally-scrolling route diagram in VoyageLegend) as the collision
+          // boundary, which can push the tooltip into a bad position even though it renders
+          // in a portal. Use the whole viewport instead.
+          collisionBoundary={typeof document !== "undefined" ? document.body : undefined}
           className="z-[13000] w-[min(280px,78vw)] rounded-xl border-border/70 bg-popover/95 p-3 text-left text-[11px] font-normal leading-relaxed shadow-xl backdrop-blur"
         >
           <span className="mb-1 block text-[11px] font-semibold text-foreground">
@@ -90,7 +109,9 @@ const ComplexityIndicator = ({
               {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
             </span>
           )}
-          <span className="block text-muted-foreground">{getComplexityDisclaimer(lang)}</span>
+          <span className="block text-muted-foreground">
+            {leg ? getComplexityExplanation(leg, lang) : getComplexityDisclaimer(lang)}
+          </span>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

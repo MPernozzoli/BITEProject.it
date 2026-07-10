@@ -687,6 +687,7 @@ const VoyageLegend = ({
                           variant="dot"
                           level={getLegComplexity(edgeLeg)}
                           dangerLevel={getLegDangerLevel(edgeLeg)}
+                          leg={edgeLeg}
                           lang={lang}
                         />
                       </div>

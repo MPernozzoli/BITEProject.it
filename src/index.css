@@ -1174,8 +1174,11 @@ html {
 .voyage-popup__help-tooltip {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 3;
+  /* Opens downward, not upward: the map view (`Journal.tsx`'s map wrapper) clips its
+     content with `overflow: hidden`, and popups can sit right at the top of that
+     viewport — an upward-opening tooltip would be cut off there. */
+  top: calc(100% + 8px);
+  z-index: 20;
   display: none;
   width: min(250px, 72vw);
   border: 1px solid hsl(166 34% 80% / 0.95);

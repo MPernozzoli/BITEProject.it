@@ -444,6 +444,87 @@ export function getComplexityDisclaimer(lang: Language | "it" | "en" = "it") {
     : "A rough estimate based on duration, night navigation and other factors. The real complexity while sailing depends on conditions that cannot be predicted in advance — weather and sea state, traffic and more — and may vary significantly in reality. Treat it as a generic, approximate indication.";
 }
 
+function joinReasonsList(items: string[], lang: Language | "it" | "en" = "it") {
+  if (items.length === 1) return items[0];
+  const and = lang === "it" ? "e" : "and";
+  return `${items.slice(0, -1).join(", ")} ${and} ${items[items.length - 1]}`;
+}
+
+/**
+ * Human-readable reasons behind the auto-computed complexity, most impactful first —
+ * mirrors the factors weighed by {@link computeAutoLegComplexity}. Empty when the level was
+ * manually overridden, since the auto factors may no longer explain it.
+ */
+export function getComplexityReasons(
+  leg: Pick<BookableLeg, "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start">,
+  lang: Language | "it" | "en" = "it"
+): string[] {
+  if (!isLegComplexityAuto(leg as BookableLeg)) return [];
+  const it = lang === "it";
+  const reasons: string[] = [];
+  const duration = getLegDurationHours(leg);
+  const danger = getLegDangerLevel(leg);
+
+  if (danger >= DANGER_COMPLEXITY_THRESHOLD) {
+    reasons.push(
+      it ? "livello di pericolo segnalato come elevato per questa tratta" : "a danger level flagged as high for this leg"
+    );
+  }
+  if (leg.open_sea) {
+    reasons.push(it ? "naviga in mare aperto, lontano dalla costa" : "sails in open sea, far from the coast");
+  }
+  if (duration != null && duration > 40) {
+    reasons.push(
+      it
+        ? `una traversata molto lunga (circa ${Math.round(duration)} ore)`
+        : `a very long crossing (about ${Math.round(duration)} hours)`
+    );
+  } else if (duration != null && duration > 20) {
+    reasons.push(
+      it ? `una traversata lunga (circa ${Math.round(duration)} ore)` : `a long crossing (about ${Math.round(duration)} hours)`
+    );
+  }
+  if (legHasNightNavigation(leg)) {
+    reasons.push(it ? "include navigazione notturna" : "includes night navigation");
+  }
+  return reasons;
+}
+
+/**
+ * Full tooltip explanation for a leg's complexity: a sentence naming the specific factors
+ * behind it (open sea, duration, night navigation, danger level) when available, falling
+ * back to a generic line, followed by the short "this is only an estimate" disclaimer.
+ */
+export function getComplexityExplanation(
+  leg: Pick<
+    BookableLeg,
+    "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+  >,
+  lang: Language | "it" | "en" = "it"
+): string {
+  const it = lang === "it";
+  const shortDisclaimer = it
+    ? "È una stima orientativa: la complessità reale in mare dipende da condizioni non prevedibili in anticipo (meteo, stato del mare, traffico marittimo) e può variare."
+    : "It's a rough estimate: real complexity at sea depends on conditions that can't be predicted in advance (weather, sea state, traffic) and may vary.";
+
+  if (!isLegComplexityAuto(leg as BookableLeg)) {
+    return it
+      ? `Livello impostato manualmente dall'organizzatore. ${shortDisclaimer}`
+      : `Level set manually by the organizer. ${shortDisclaimer}`;
+  }
+
+  const reasons = getComplexityReasons(leg, lang);
+  if (reasons.length === 0) {
+    return it
+      ? `Tratta breve e senza fattori di rischio particolari. ${shortDisclaimer}`
+      : `A short leg with no particular risk factors. ${shortDisclaimer}`;
+  }
+
+  const list = joinReasonsList(reasons, lang);
+  const intro = it ? `Complessità più alta perché ${list}.` : `Higher complexity because ${list}.`;
+  return `${intro} ${shortDisclaimer}`;
+}
+
 export function getLegDangerLevel(leg: Pick<BookableLeg, "danger_level">) {
   return clampLevel(Number(leg.danger_level ?? 0), 0, 3);
 }

@@ -578,6 +578,7 @@ const UserBookings = () => {
                               className="mt-2"
                               level={getLegComplexity(leg)}
                               dangerLevel={getLegDangerLevel(leg)}
+                              leg={leg}
                               lang={lang}
                             />
                           </span>

@@ -15,7 +15,7 @@ import {
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import {
-  getComplexityDisclaimer,
+  getComplexityExplanation,
   getComplexityLabel,
   getComplexityTitle,
   getDangerLabel,
@@ -23,6 +23,7 @@ import {
   getLegDangerLevel,
   isLegCurrentOrFuture,
   isVoyageBookableNow,
+  type BookableLeg,
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
 import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
@@ -89,14 +90,14 @@ const buildPopupMediaModule = (waypoint: VoyageWaypoint, label: string) => {
   );
 };
 
-const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, disclaimer: string) => {
+const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, explanation: string) => {
   const helpLabel = lang === "it" ? "Spiegazione complessità" : "Complexity explanation";
   return `
     <span class="voyage-popup__help">
       <button type="button" class="voyage-popup__help-trigger" aria-label="${escapePopupHtml(helpLabel)}" aria-describedby="voyage-popup-complexity-help">?</button>
       <span id="voyage-popup-complexity-help" role="tooltip" class="voyage-popup__help-tooltip">
         <span class="voyage-popup__help-title">${escapePopupHtml(label)}</span>
-        <span>${escapePopupHtml(disclaimer)}</span>
+        <span>${escapePopupHtml(explanation)}</span>
       </span>
     </span>
   `;
@@ -106,7 +107,9 @@ const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, disclaimer:
  * Compact, color-coded complexity chip meant to live inside the booking module — the
  * complexity estimate only matters to someone deciding whether to book this leg.
  */
-const buildComplexityChipMarkup = (level: number, danger: number, lang: "en" | "it") => {
+const buildComplexityChipMarkup = (leg: BookableLeg, lang: "en" | "it") => {
+  const level = getLegComplexity(leg);
+  const danger = getLegDangerLevel(leg);
   const label = getComplexityLabel(level, lang);
   const helpTitle = `${getComplexityTitle(lang)} · ${label}`;
   return `
@@ -115,7 +118,7 @@ const buildComplexityChipMarkup = (level: number, danger: number, lang: "en" | "
       <span class="voyage-popup__complexity-label">${escapePopupHtml(label)}${
         danger > 0 ? ` · ${escapePopupHtml(getDangerLabel(danger, lang))}` : ""
       }</span>
-      ${buildComplexityHelpMarkup(lang, helpTitle, getComplexityDisclaimer(lang))}
+      ${buildComplexityHelpMarkup(lang, helpTitle, getComplexityExplanation(leg, lang))}
     </div>
   `;
 };
@@ -384,9 +387,8 @@ const VoyageMap = ({
       hasAnyBookingLeg: boolean;
       /** Whether any leg touching this waypoint (outbound or inbound) is still current/future, i.e. not past/completed. */
       hasCurrentLegFromHere: boolean;
-      /** Complexity/danger of the leg departing from this waypoint, if any (only set when that leg is still current/future). */
-      outboundComplexity: number | null;
-      outboundDanger: number;
+      /** The leg departing from this waypoint, if any (only set when that leg is still current/future). */
+      outboundLeg: BookableLeg | null;
     };
     const items: Item[] = [];
     for (const voyage of publishedVoyages) {
@@ -452,8 +454,7 @@ const VoyageMap = ({
           hasInboundAvailability,
           hasAnyBookingLeg: voyageBookingLegs.length > 0,
           hasCurrentLegFromHere,
-          outboundComplexity: outboundLeg ? getLegComplexity(outboundLeg) : null,
-          outboundDanger: outboundLeg ? getLegDangerLevel(outboundLeg) : 0,
+          outboundLeg: outboundLeg ?? null,
         });
       }
     }
@@ -1040,9 +1041,7 @@ const VoyageMap = ({
           )
         : "";
       const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
-      const complexityChip = meta.outboundComplexity != null
-        ? buildComplexityChipMarkup(meta.outboundComplexity, meta.outboundDanger, L)
-        : "";
+      const complexityChip = meta.outboundLeg ? buildComplexityChipMarkup(meta.outboundLeg, L) : "";
       const canBookFrom = meta.isBookableVoyage && meta.hasOutboundAvailability;
       const canBookTo = meta.isBookableVoyage && meta.hasInboundAvailability;
       const hasBookingAction = canBookFrom || canBookTo;
