@@ -16,6 +16,8 @@ import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import { perPersonDepositEur, totalDepositEur, isDepositCapped } from "@/lib/booking-deposit";
+import { startDepositPayment } from "@/lib/booking-payment";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
@@ -539,7 +541,8 @@ const Journal = () => {
 
     setBookingSubmitting(true);
     try {
-      const { data, error } = await bookingRpcClient.rpc<{ booking_status?: BookingRequest["status"] }[] | { booking_status?: BookingRequest["status"] }>("request_voyage_booking", {
+      type RequestBookingRow = { booking_request_id?: string; booking_status?: BookingRequest["status"] };
+      const { data, error } = await bookingRpcClient.rpc<RequestBookingRow[] | RequestBookingRow>("request_voyage_booking", {
         _voyage_id: bookingAnchor.voyageId,
         _leg_ids: selectedBookingLegIds,
         _party_size: Math.max(1, bookingPartySize),
@@ -547,12 +550,36 @@ const Journal = () => {
       });
 
       if (error) throw error;
-      const result = Array.isArray(data) ? data[0] : data as { booking_status?: BookingRequest["status"] } | null;
+      const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
       toast.success(
         result?.booking_status === "waitlisted"
           ? (lang === "it" ? "Richiesta inviata in waiting list." : "Request sent to the waiting list.")
           : (lang === "it" ? "Richiesta di prenotazione inviata." : "Booking request sent.")
       );
+
+      // Kick off the Bunq security-deposit payment for the just-created booking.
+      const bookingRequestId = result?.booking_request_id;
+      if (bookingRequestId) {
+        const payment = await startDepositPayment(bookingRequestId);
+        if (payment.ok && "shareUrl" in payment) {
+          window.location.href = payment.shareUrl;
+          return;
+        }
+        if (!payment.ok && "notConfigured" in payment) {
+          toast.info(
+            lang === "it"
+              ? "Prenotazione registrata. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
+              : "Booking saved. Deposit payment is not active yet: we'll send you the link shortly."
+          );
+        } else if (!payment.ok) {
+          toast.error(
+            lang === "it"
+              ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del deposito. Riprova dalle tue prenotazioni."
+              : "Booking saved, but we couldn't start the deposit payment. Retry from your bookings."
+          );
+        }
+      }
+
       setBookingConfirmOpen(false);
       clearBookingSelection();
       void refetchBookingLegs();
@@ -1086,6 +1113,10 @@ const Journal = () => {
             legLabels={selectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang))}
             partySize={bookingPartySize}
             message={bookingMessage}
+            requiresPayment
+            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs)}
+            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize)}
+            depositCapped={isDepositCapped(selectedBookingLegs)}
             submitting={bookingSubmitting}
             onConfirm={() => void submitBookingFromLogbook()}
           />

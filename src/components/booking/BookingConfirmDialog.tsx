@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { formatDepositEur } from "@/lib/booking-deposit";
 
 /**
  * Booking conditions the user must explicitly accept before a request is sent.
@@ -43,10 +44,21 @@ const BOOKING_CONDITIONS: BookingCondition[] = [
     en: "I am aware that the route may change and may require additional travel, at my own care and expense, beyond what was planned to reach or leave the boat.",
   },
   {
+    id: "active-crew",
+    it: "Sono consapevole che non si tratta di una vacanza: mi sarà richiesto di prendere parte attiva alle operazioni di manovra dell'imbarcazione, incluse attività di pulizia, timoneria, regolazione delle vele e turni di guardia, anche notturni.",
+    en: "I understand that this is not a holiday: I will be required to take an active part in handling the boat, including cleaning, helming, sail trimming and watch shifts, including at night.",
+  },
+  {
+    id: "deposit-nature",
+    paymentOnly: true,
+    it: "Ho compreso che l'importo richiesto è un deposito cauzionale, restituito al termine del viaggio: non è un biglietto, non è una quota di partecipazione e non dà diritto al viaggio né all'erogazione di alcun servizio. Il pagamento non garantisce la partecipazione.",
+    en: "I understand that the amount requested is a refundable security deposit, returned at the end of the voyage: it is not a ticket, not a participation fee, and grants no right to the voyage or to any service. Payment does not guarantee participation.",
+  },
+  {
     id: "cancellation-policy",
     paymentOnly: true,
-    it: "Sono consapevole che, in caso di annullamento entro i 14 giorni precedenti la partenza effettiva o di mancata presentazione alla data e all'ora comunicate, l'importo versato non mi sarà rimborsato.",
-    en: "I am aware that, in the event of cancellation within 14 days of the actual departure or a no-show at the communicated date and time, the amount paid will not be refunded.",
+    it: "Ho compreso che il deposito viene trattenuto solo se non mi presento alla partenza o se annullo con meno di 14 giorni di preavviso; se sono gli organizzatori ad annullare o a modificare le date impedendomi di partecipare, il deposito mi sarà restituito.",
+    en: "I understand that the deposit is withheld only if I do not show up at departure or if I cancel with less than 14 days' notice; if the organisers cancel or change the dates in a way that prevents me from taking part, the deposit will be returned to me.",
   },
   {
     id: "physical-fitness",
@@ -81,8 +93,14 @@ interface BookingConfirmDialogProps {
   legLabels?: string[];
   partySize: number;
   message?: string;
-  /** When true, shows the deposit/no-refund condition (Bunq payment flow). */
+  /** When true, shows the deposit conditions + payment box (Bunq flow). */
   requiresPayment?: boolean;
+  /** Per-person deposit (EUR), shown when requiresPayment. */
+  depositPerPersonEur?: number;
+  /** Total deposit charged (per-person × pax), shown when requiresPayment. */
+  depositTotalEur?: number;
+  /** Whether the per-person amount hit the €250 cap (surfaces the ceiling note). */
+  depositCapped?: boolean;
   submitting?: boolean;
   onConfirm: () => void;
 }
@@ -96,6 +114,9 @@ const BookingConfirmDialog = ({
   partySize,
   message,
   requiresPayment = false,
+  depositPerPersonEur,
+  depositTotalEur,
+  depositCapped = false,
   submitting = false,
   onConfirm,
 }: BookingConfirmDialogProps) => {
@@ -156,6 +177,32 @@ const BookingConfirmDialog = ({
             </div>
           )}
 
+          {requiresPayment && typeof depositTotalEur === "number" && (
+            <div className="mb-4 rounded-2xl border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
+                  {lang === "it" ? "Deposito cauzionale" : "Security deposit"}
+                </span>
+                <span className="text-lg font-bold text-amber-900 dark:text-amber-200">
+                  {formatDepositEur(depositTotalEur, lang === "it" ? "it" : "en")}
+                </span>
+              </div>
+              {typeof depositPerPersonEur === "number" && partySize > 1 && (
+                <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/80">
+                  {lang === "it"
+                    ? `${formatDepositEur(depositPerPersonEur, "it")} a persona × ${partySize} persone`
+                    : `${formatDepositEur(depositPerPersonEur, "en")} per person × ${partySize} guests`}
+                  {depositCapped ? (lang === "it" ? " (tetto di €250 a persona)" : " (€250 per-person cap)") : ""}
+                </p>
+              )}
+              <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
+                {lang === "it"
+                  ? "Questo importo è un deposito cauzionale, non un biglietto: serve solo come impegno a partecipare davvero al viaggio ed evitare che un posto resti occupato da chi poi non si presenta. Non costituisce alcun diritto al viaggio né all'erogazione di servizi e ti verrà restituito al termine del viaggio. Le spese effettive (vitto, attività, ecc.) saranno calcolate e divise tra l'equipaggio durante il viaggio, tramite strumenti come Splitwise. Il viaggio di andata/ritorno e ogni spesa connessa sono a tuo carico. Prenotando più tratte gli importi si sommano fino a un massimo di €250 a persona. Il deposito viene trattenuto solo in caso di mancata presentazione o annullamento con meno di 14 giorni di preavviso; se siamo noi ad annullare o a cambiare le date impedendoti di partecipare, viene sempre rimborsato."
+                  : "This amount is a refundable security deposit, not a ticket: it only serves as a commitment to genuinely take part in the voyage and to prevent a seat being held by someone who then does not show up. It grants no right to the voyage or to any service, and it will be returned to you at the end of the voyage. The actual costs (food, activities, etc.) will be calculated and split among the crew during the voyage, using tools such as Splitwise. Travel to and from the boat and any related expenses are your responsibility. Booking multiple legs sums the amounts up to a maximum of €250 per person. The deposit is withheld only in case of a no-show or cancellation with less than 14 days' notice; if we cancel or change the dates in a way that prevents you from taking part, it is always refunded."}
+              </p>
+            </div>
+          )}
+
           <ul className="space-y-3">
             {conditions.map((condition) => {
               const checked = Boolean(accepted[condition.id]);
@@ -199,7 +246,13 @@ const BookingConfirmDialog = ({
             className="gap-2"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <TicketCheck size={16} />}
-            {lang === "it" ? "Conferma prenotazione" : "Confirm booking"}
+            {requiresPayment
+              ? lang === "it"
+                ? "Conferma e paga il deposito"
+                : "Confirm & pay deposit"
+              : lang === "it"
+                ? "Conferma prenotazione"
+                : "Confirm booking"}
           </Button>
         </DialogFooter>
       </DialogContent>

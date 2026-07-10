@@ -4,6 +4,9 @@ import { CalendarCheck, Check, Clock3, Loader2, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
+import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import { perPersonDepositEur, totalDepositEur, isDepositCapped } from "@/lib/booking-deposit";
+import { startDepositPayment } from "@/lib/booking-payment";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -65,6 +68,7 @@ const UserBookings = () => {
   const [selectedLegIds, setSelectedLegIds] = useState<string[]>([]);
   const [partySize, setPartySize] = useState("1");
   const [message, setMessage] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!session?.user.id) {
@@ -211,14 +215,14 @@ const UserBookings = () => {
     );
   };
 
-  const submitRequest = async () => {
+  const validateBookingRequest = () => {
     if (!selectedVoyageId || selectedLegIds.length === 0) {
       toast.error(lang === "it" ? "Seleziona almeno una tratta." : "Select at least one leg.");
-      return;
+      return false;
     }
     if (!isVoyageBookableNow(selectedVoyage)) {
       toast.error(lang === "it" ? "Questo viaggio non è più prenotabile." : "This voyage is no longer bookable.");
-      return;
+      return false;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
     const maxGuests = selectedVoyage?.booking_max_guests || 1;
@@ -228,8 +232,19 @@ const UserBookings = () => {
           ? `Per questo viaggio puoi richiedere al massimo ${maxGuests} persone.`
           : `You can request at most ${maxGuests} people for this voyage.`
       );
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const openBookingConfirm = () => {
+    if (!validateBookingRequest()) return;
+    setConfirmOpen(true);
+  };
+
+  const submitRequest = async () => {
+    if (!validateBookingRequest()) return;
+    const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
     setSaving(true);
     const { data, error } = await typedSupabase.rpc("request_voyage_booking", {
       _voyage_id: selectedVoyageId,
@@ -237,8 +252,8 @@ const UserBookings = () => {
       _party_size: parsedPartySize,
       _message: message,
     });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast.error(error.message);
       return;
     }
@@ -248,6 +263,33 @@ const UserBookings = () => {
         ? lang === "it" ? "Posti pieni: sei in waiting list." : "Fully booked: you are on the waiting list."
         : lang === "it" ? "Richiesta inviata." : "Request sent."
     );
+
+    // Kick off the Bunq security-deposit payment for the just-created booking.
+    const bookingRequestId = result?.booking_request_id;
+    if (bookingRequestId) {
+      const payment = await startDepositPayment(bookingRequestId);
+      if (payment.ok && "shareUrl" in payment) {
+        // Leave the app to complete the payment on Bunq; state reset is unnecessary.
+        window.location.href = payment.shareUrl;
+        return;
+      }
+      if (!payment.ok && "notConfigured" in payment) {
+        toast.info(
+          lang === "it"
+            ? "Prenotazione registrata. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
+            : "Booking saved. Deposit payment is not active yet: we'll send you the link shortly."
+        );
+      } else if (!payment.ok) {
+        toast.error(
+          lang === "it"
+            ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del deposito. Riprova dalle tue prenotazioni."
+            : "Booking saved, but we couldn't start the deposit payment. Please retry from your bookings."
+        );
+      }
+    }
+
+    setSaving(false);
+    setConfirmOpen(false);
     setSelectedLegIds([]);
     setMessage("");
     await loadData();
@@ -430,7 +472,7 @@ const UserBookings = () => {
 
                   <button
                     type="button"
-                    onClick={submitRequest}
+                    onClick={openBookingConfirm}
                     disabled={saving || selectedLegIds.length === 0}
                     className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm text-foreground transition-colors hover:text-accent disabled:opacity-50"
                   >
@@ -440,6 +482,32 @@ const UserBookings = () => {
                 </div>
               )}
             </section>
+
+            <BookingConfirmDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              lang={lang}
+              voyageName={selectedVoyage ? getLocalizedBookingVoyageName(selectedVoyage, lang) : undefined}
+              legLabels={selectedLegIds
+                .map((id) => legsById[id])
+                .filter(Boolean)
+                .map((leg) => getLegLabel(leg, waypointsById, lang))}
+              partySize={Math.max(1, Number.parseInt(partySize, 10) || 1)}
+              message={message}
+              requiresPayment
+              depositPerPersonEur={perPersonDepositEur(
+                selectedLegIds.map((id) => legsById[id]).filter(Boolean)
+              )}
+              depositTotalEur={totalDepositEur(
+                selectedLegIds.map((id) => legsById[id]).filter(Boolean),
+                Math.max(1, Number.parseInt(partySize, 10) || 1)
+              )}
+              depositCapped={isDepositCapped(
+                selectedLegIds.map((id) => legsById[id]).filter(Boolean)
+              )}
+              submitting={saving}
+              onConfirm={() => void submitRequest()}
+            />
 
             <section className="glass-panel rounded-[30px] p-5 md:p-6">
               <h2 className="editorial-heading mb-5 text-2xl">

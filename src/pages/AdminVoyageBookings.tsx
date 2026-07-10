@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Pencil, Plus, RefreshCw, Settings, Trash2, UserPlus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -137,7 +148,49 @@ const formatPlanningWindow = (start?: string | null, end?: string | null) => {
   return formatPlanningDate(start || end);
 };
 
+/**
+ * Snapshot of the "Salva planning" batch: voyage booking settings + waypoint stop config +
+ * leg windows/bookable flag. Deliberately excludes danger_level/open_sea/complexity_override,
+ * which persist immediately on click (see persistLegIndicators) and are never "unsaved".
+ */
+const buildRoutePlanningSnapshot = (
+  voyage: BookingVoyage | null,
+  waypointsList: BookingWaypoint[],
+  legsList: BookableLeg[]
+) =>
+  JSON.stringify({
+    voyage: voyage
+      ? {
+          booking_enabled: Boolean(voyage.booking_enabled),
+          booking_max_guests: voyage.booking_max_guests ?? null,
+          booking_planning_speed_kn: voyage.booking_planning_speed_kn ?? null,
+          departure_window_start: voyage.departure_window_start || null,
+          departure_window_end: voyage.departure_window_end || null,
+        }
+      : null,
+    waypoints: waypointsList.map((waypoint) => ({
+      id: waypoint.id,
+      planned_stop_duration_minutes: waypoint.planned_stop_duration_minutes ?? 0,
+      stop_mode: waypoint.stop_mode ?? null,
+      stop_hours: waypoint.stop_hours ?? null,
+      stop_nights: waypoint.stop_nights ?? null,
+      stop_departure_time: waypoint.stop_departure_time ?? null,
+    })),
+    legs: legsList.map((leg) => ({
+      id: leg.id,
+      starts_at_window_start: leg.starts_at_window_start || null,
+      starts_at_window_end: leg.starts_at_window_end || null,
+      ends_at_window_start: leg.ends_at_window_start || null,
+      ends_at_window_end: leg.ends_at_window_end || null,
+      is_bookable: Boolean(leg.is_bookable),
+    })),
+  });
+
+const buildBookingSettingsSnapshot = (settings: BookingSettings) => JSON.stringify(settings);
+
 const AdminVoyageBookings = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [voyages, setVoyages] = useState<BookingVoyage[]>([]);
@@ -151,6 +204,13 @@ const AdminVoyageBookings = () => {
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | VoyageBookingStatus>("all");
+  const [voyageSearchQuery, setVoyageSearchQuery] = useState("");
+  const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | "water" | "land">("all");
+  // Completed voyages can't act on their bookings anymore, so they're hidden by default;
+  // toggle them back in when you need to look up historical bookings.
+  const [voyageStatusFilter, setVoyageStatusFilter] = useState<Set<BookingVoyage["status"]>>(
+    () => new Set(["planned", "active"])
+  );
   const [manualProfileId, setManualProfileId] = useState("");
   const [manualLegIds, setManualLegIds] = useState<string[]>([]);
   const [manualPartySize, setManualPartySize] = useState("1");
@@ -158,8 +218,59 @@ const AdminVoyageBookings = () => {
   const [manualNotes, setManualNotes] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
+
+  // Holds the last voyages list loaded from the DB (updated only by loadVoyages, never by
+  // local edits) so loadVoyageDetails can snapshot the voyage-level route-planning fields
+  // without a render-timing race against a separate sync effect.
+  const voyagesRef = useRef<BookingVoyage[]>([]);
+  const initialRoutePlanningSnapshotRef = useRef<string | null>(null);
+  const initialBookingSettingsSnapshotRef = useRef<string | null>(null);
+  const pendingNavigationRef = useRef<{ type: "path"; to: string } | { type: "back" } | null>(null);
+  const ignoreNextPopRef = useRef(false);
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+
+  const toggleVoyageStatusFilter = (status: BookingVoyage["status"]) => {
+    setVoyageStatusFilter((current) => {
+      const next = new Set(current);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
+  const filteredVoyages = useMemo(() => {
+    const query = voyageSearchQuery.trim().toLowerCase();
+    const matches = voyages.filter((voyage) => {
+      if (voyageTypeFilter !== "all" && voyage.type !== voyageTypeFilter) return false;
+      if (!voyageStatusFilter.has(voyage.status)) return false;
+      if (query && !getLocalizedBookingVoyageName(voyage, "it").toLowerCase().includes(query)) return false;
+      return true;
+    });
+    // Never let the currently selected voyage disappear from the picker just because a
+    // filter changed underneath it — the admin is still actively working on it.
+    if (selectedVoyageId && !matches.some((voyage) => voyage.id === selectedVoyageId)) {
+      const current = voyages.find((voyage) => voyage.id === selectedVoyageId);
+      if (current) return [current, ...matches];
+    }
+    return matches;
+  }, [voyages, voyageTypeFilter, voyageStatusFilter, voyageSearchQuery, selectedVoyageId]);
+
+  const isRoutePlanningDirty = useMemo(
+    () =>
+      initialRoutePlanningSnapshotRef.current !== null &&
+      buildRoutePlanningSnapshot(selectedVoyage, waypoints, legs) !== initialRoutePlanningSnapshotRef.current,
+    [selectedVoyage, waypoints, legs]
+  );
+  const isBookingSettingsDirty = useMemo(
+    () =>
+      initialBookingSettingsSnapshotRef.current !== null &&
+      buildBookingSettingsSnapshot(bookingSettings) !== initialBookingSettingsSnapshotRef.current,
+    [bookingSettings]
+  );
+  const isDirty = isRoutePlanningDirty || isBookingSettingsDirty;
 
   const loadVoyages = useCallback(async () => {
     const [voyagesRes, profilesRes] = await Promise.all([
@@ -178,6 +289,7 @@ const AdminVoyageBookings = () => {
       return;
     }
     const loaded = ((voyagesRes.data as BookingVoyage[] | null) || []);
+    voyagesRef.current = loaded;
     setVoyages(loaded);
     setAvailableProfiles(((profilesRes.data as BookingProfile[] | null) || []));
     setSelectedVoyageId((current) => current || loaded.find((voyage) => voyage.booking_enabled)?.id || loaded[0]?.id || "");
@@ -251,17 +363,28 @@ const AdminVoyageBookings = () => {
       return;
     }
 
-    setWaypoints(((waypointsRes.data as BookingWaypoint[] | null) || []));
-    setLegs(((legsRes.data as BookableLeg[] | null) || []));
-    setRequests(loadedRequests);
-    setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
-    setProfiles(((profilesRes.data as BookingProfile[] | null) || []));
-    setBookingSettings({
+    const loadedWaypoints = ((waypointsRes.data as BookingWaypoint[] | null) || []);
+    const loadedLegs = ((legsRes.data as BookableLeg[] | null) || []);
+    const loadedSettings: BookingSettings = {
       ...emptySettingsForm,
       ...(((settingsRes.data as BookingSettings[] | null) || [])[0] || {}),
       voyage_id: voyageId,
-    });
+    };
+
+    setWaypoints(loadedWaypoints);
+    setLegs(loadedLegs);
+    setRequests(loadedRequests);
+    setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
+    setProfiles(((profilesRes.data as BookingProfile[] | null) || []));
+    setBookingSettings(loadedSettings);
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
+
+    // Baseline for the unsaved-changes guard: this reflects what's actually persisted, so
+    // it must be captured from the freshly-fetched data, not from (possibly stale) state.
+    const loadedVoyage = voyagesRef.current.find((voyage) => voyage.id === voyageId) || null;
+    initialRoutePlanningSnapshotRef.current = buildRoutePlanningSnapshot(loadedVoyage, loadedWaypoints, loadedLegs);
+    initialBookingSettingsSnapshotRef.current = buildBookingSettingsSnapshot(loadedSettings);
+
     setLoading(false);
   }, []);
 
@@ -318,7 +441,7 @@ const AdminVoyageBookings = () => {
 
   const selectedManualPartySize = Math.max(1, Number.parseInt(manualPartySize, 10) || 1);
   const manualOverCapacity = manualLegIds.some(
-    (legId) => (legCapacity[legId] || 0) + selectedManualPartySize > (selectedVoyage?.booking_max_guests || 2)
+    (legId) => (legCapacity[legId] || 0) + selectedManualPartySize > (selectedVoyage?.booking_max_guests || 4)
   );
   const planningSpeedKn = Math.max(0.1, Number(selectedVoyage?.booking_planning_speed_kn ?? 5) || 5);
   const publicPlanningWaypoints = useMemo(
@@ -348,7 +471,7 @@ const AdminVoyageBookings = () => {
       .map((link) => link.bookable_leg_id);
     return currentLegIds.some((legId) => {
       const alreadyCounted = capacityBlockingStatuses.has(request.status) ? request.party_size : 0;
-      return (legCapacity[legId] || 0) - alreadyCounted + request.party_size > (selectedVoyage?.booking_max_guests || 2);
+      return (legCapacity[legId] || 0) - alreadyCounted + request.party_size > (selectedVoyage?.booking_max_guests || 4);
     });
   };
 
@@ -407,12 +530,15 @@ const AdminVoyageBookings = () => {
     });
   };
 
-  const saveRoutePlanning = async ({ syncAfterSave = false }: { syncAfterSave?: boolean } = {}) => {
-    if (!selectedVoyageId || !selectedVoyage) return;
+  const saveRoutePlanning = async ({
+    syncAfterSave = false,
+    showSuccessToast = true,
+  }: { syncAfterSave?: boolean; showSuccessToast?: boolean } = {}): Promise<boolean> => {
+    if (!selectedVoyageId || !selectedVoyage) return false;
     setSaving(true);
     const voyagePatch = {
       booking_enabled: Boolean(selectedVoyage.booking_enabled),
-      booking_max_guests: Math.max(1, Number(selectedVoyage.booking_max_guests ?? 2) || 2),
+      booking_max_guests: Math.max(1, Number(selectedVoyage.booking_max_guests ?? 4) || 4),
       booking_planning_speed_kn: Math.max(0.1, Number(selectedVoyage.booking_planning_speed_kn ?? 5) || 5),
       departure_window_start: selectedVoyage.departure_window_start || null,
       departure_window_end: selectedVoyage.departure_window_end || null,
@@ -421,22 +547,35 @@ const AdminVoyageBookings = () => {
     if (voyageRes.error) {
       setSaving(false);
       toast.error(voyageRes.error.message);
-      return;
+      return false;
     }
 
     const waypointResults = await Promise.all(
-      waypoints.map((waypoint) =>
-        typedSupabase
-          .from("voyage_waypoints")
-          .update({ planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0) })
-          .eq("id", waypoint.id)
-      )
+      waypoints.map((waypoint) => {
+        // Only persist the new stop_mode/hours/nights/departure columns for waypoints the
+        // admin has actually switched into "hours" or "nights" mode via this editor. A
+        // waypoint still in the DB default 'legacy' mode is left untouched here so an
+        // unrelated save (e.g. editing dates) can't silently zero out its existing
+        // minutes-based stop.
+        const patch: Record<string, unknown> = {
+          planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0),
+        };
+        if (waypoint.stop_mode === "hours" || waypoint.stop_mode === "nights") {
+          patch.stop_mode = waypoint.stop_mode;
+          patch.stop_hours = waypoint.stop_mode === "hours" ? Math.max(0, Number(waypoint.stop_hours ?? 0)) : null;
+          patch.stop_nights =
+            waypoint.stop_mode === "nights" ? Math.max(1, Number(waypoint.stop_nights ?? 1)) : null;
+          patch.stop_departure_time =
+            waypoint.stop_mode === "nights" ? waypoint.stop_departure_time || null : null;
+        }
+        return typedSupabase.from("voyage_waypoints").update(patch).eq("id", waypoint.id);
+      })
     );
     const waypointError = waypointResults.find((result) => result.error)?.error;
     if (waypointError) {
       setSaving(false);
       toast.error(waypointError.message);
-      return;
+      return false;
     }
 
     if (!syncAfterSave) {
@@ -461,7 +600,7 @@ const AdminVoyageBookings = () => {
       if (legError) {
         setSaving(false);
         toast.error(legError.message);
-        return;
+        return false;
       }
     }
 
@@ -470,14 +609,17 @@ const AdminVoyageBookings = () => {
       if (error) {
         setSaving(false);
         toast.error(error.message);
-        return;
+        return false;
       }
     }
 
     setSaving(false);
-    toast.success(syncAfterSave ? "Pianificazione salvata e tratte ricalcolate." : "Pianificazione rotta salvata.");
+    if (showSuccessToast) {
+      toast.success(syncAfterSave ? "Pianificazione salvata e tratte ricalcolate." : "Pianificazione rotta salvata.");
+    }
     await loadVoyages();
     await loadVoyageDetails(selectedVoyageId);
+    return true;
   };
 
   const syncLegs = async () => {
@@ -558,8 +700,10 @@ const AdminVoyageBookings = () => {
     setBookingSettings((current) => ({ ...current, [field]: value }));
   };
 
-  const saveBookingSettings = async () => {
-    if (!selectedVoyageId) return;
+  const saveBookingSettings = async ({
+    showSuccessToast = true,
+  }: { showSuccessToast?: boolean } = {}): Promise<boolean> => {
+    if (!selectedVoyageId) return false;
     setSaving(true);
     const { error } = await typedSupabase
       .from("voyage_booking_settings")
@@ -574,10 +718,115 @@ const AdminVoyageBookings = () => {
     setSaving(false);
     if (error) {
       toast.error(error.message);
+      return false;
+    }
+    if (showSuccessToast) toast.success("Settings booking salvati.");
+    await loadVoyageDetails(selectedVoyageId);
+    return true;
+  };
+
+  // Unsaved-changes leave guard (same pattern as /profile): warns on tab close/reload,
+  // in-app link clicks, and back/forward navigation while route planning or booking
+  // settings edits haven't been persisted yet.
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty || saving || saveAndLeavePending) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, saveAndLeavePending, saving]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!isDirty || saving || saveAndLeavePending) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) return;
+
+      const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      if (currentUrl === nextPath) return;
+
+      event.preventDefault();
+      pendingNavigationRef.current = { type: "path", to: nextPath };
+      setLeaveDialogOpen(true);
+    };
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => document.removeEventListener("click", handleDocumentClick, true);
+  }, [isDirty, location.hash, location.pathname, location.search, saveAndLeavePending, saving]);
+
+  useEffect(() => {
+    const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+
+    const handlePopState = () => {
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      if (!isDirty || saving || saveAndLeavePending) return;
+
+      pendingNavigationRef.current = { type: "back" };
+      setLeaveDialogOpen(true);
+      window.history.pushState(null, "", currentUrl);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isDirty, location.hash, location.pathname, location.search, saveAndLeavePending, saving]);
+
+  const continuePendingNavigation = () => {
+    const pendingNavigation = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    setLeaveDialogOpen(false);
+
+    if (!pendingNavigation) return;
+
+    if (pendingNavigation.type === "path") {
+      navigate(pendingNavigation.to);
       return;
     }
-    toast.success("Settings booking salvati.");
-    await loadVoyageDetails(selectedVoyageId);
+
+    ignoreNextPopRef.current = true;
+    window.history.back();
+  };
+
+  const handleStayOnPage = () => {
+    setLeaveDialogOpen(false);
+    pendingNavigationRef.current = null;
+  };
+
+  const handleLeaveWithoutSaving = () => {
+    continuePendingNavigation();
+  };
+
+  const handleSaveAndLeave = async () => {
+    setSaveAndLeavePending(true);
+    // Route planning must be saved before booking settings: saveBookingSettings ends by
+    // reloading voyage details, which unconditionally overwrites the local waypoints/legs
+    // state with fresh DB data — if it ran first it would silently discard any still-
+    // unsaved route-planning edits.
+    let ok = true;
+    if (isRoutePlanningDirty) {
+      ok = (await saveRoutePlanning({ showSuccessToast: false })) && ok;
+    }
+    if (ok && isBookingSettingsDirty) {
+      ok = (await saveBookingSettings({ showSuccessToast: false })) && ok;
+    }
+    if (ok) {
+      continuePendingNavigation();
+      toast.success("Modifiche salvate.");
+    }
+    setSaveAndLeavePending(false);
   };
 
   const addBookingTask = async () => {
@@ -637,19 +886,7 @@ const AdminVoyageBookings = () => {
                 Monitora imbarchi programmati, disponibilità per tratta e stato delle persone a bordo.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <select
-                value={selectedVoyageId}
-                onChange={(event) => setSelectedVoyageId(event.target.value)}
-                className="min-w-[18rem] border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              >
-                {voyages.map((voyage) => (
-                  <option key={voyage.id} value={voyage.id}>
-                    {getLocalizedBookingVoyageName(voyage, "it")}
-                    {voyage.booking_enabled ? "" : " · booking off"}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-end gap-3">
               <button
                 type="button"
                 onClick={syncLegs}
@@ -660,6 +897,84 @@ const AdminVoyageBookings = () => {
                 Sync tratte
               </button>
             </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={voyageSearchQuery}
+                onChange={(event) => setVoyageSearchQuery(event.target.value)}
+                placeholder="Cerca viaggio..."
+                className="w-[15rem] border border-border bg-background/70 py-2 pl-8 pr-3 text-sm focus:border-accent focus:outline-none"
+              />
+            </div>
+            <span className="mx-1 h-5 w-px bg-border" />
+            <button
+              type="button"
+              onClick={() => setVoyageTypeFilter("all")}
+              className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                voyageTypeFilter === "all" ? "bg-foreground text-background" : "glass-chip text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Tutti
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoyageTypeFilter("water")}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                voyageTypeFilter === "water" ? "bg-sky-100 text-sky-800" : "glass-chip text-sky-700 hover:bg-sky-50"
+              }`}
+            >
+              <Ship size={11} /> Mare
+            </button>
+            <button
+              type="button"
+              onClick={() => setVoyageTypeFilter("land")}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                voyageTypeFilter === "land" ? "bg-orange-100 text-orange-800" : "glass-chip text-orange-700 hover:bg-orange-50"
+              }`}
+            >
+              <Mountain size={11} /> Terra
+            </button>
+            <span className="mx-1 h-5 w-px bg-border" />
+            {(
+              [
+                { value: "planned" as const, label: "Programmati" },
+                { value: "active" as const, label: "In corso" },
+                { value: "completed" as const, label: "Completati" },
+              ]
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleVoyageStatusFilter(option.value)}
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                  voyageStatusFilter.has(option.value)
+                    ? "bg-accent/15 text-accent"
+                    : "glass-chip text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-4">
+            <select
+              value={selectedVoyageId}
+              onChange={(event) => setSelectedVoyageId(event.target.value)}
+              className="min-w-[18rem] max-w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            >
+              {filteredVoyages.length === 0 && <option value="">Nessun viaggio con questi filtri</option>}
+              {filteredVoyages.map((voyage) => (
+                <option key={voyage.id} value={voyage.id}>
+                  {getLocalizedBookingVoyageName(voyage, "it")}
+                  {voyage.booking_enabled ? "" : " · booking off"}
+                </option>
+              ))}
+            </select>
           </div>
         </section>
 
@@ -686,7 +1001,12 @@ const AdminVoyageBookings = () => {
                 <h2 className="editorial-heading text-2xl">Percorso, soste e tratte future</h2>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {isRoutePlanningDirty && (
+                <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+                  Modifiche non salvate
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => void saveRoutePlanning()}
@@ -734,7 +1054,7 @@ const AdminVoyageBookings = () => {
                     type="number"
                     min="1"
                     step="1"
-                    value={selectedVoyage?.booking_max_guests ?? 2}
+                    value={selectedVoyage?.booking_max_guests ?? 4}
                     onChange={(event) => updateSelectedVoyagePlanning({ booking_max_guests: Math.max(1, Number(event.target.value) || 1) })}
                     className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
                   />
@@ -800,33 +1120,164 @@ const AdminVoyageBookings = () => {
                 <span className="text-xs text-muted-foreground">Durata prevista in sosta</span>
               </div>
               <div className="space-y-2">
-                {publicPlanningWaypoints.map((waypoint, index) => (
-                  <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3 sm:grid-cols-[1fr_120px] sm:items-center">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {index + 1}. {waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        narrative · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
-                      </p>
+                {publicPlanningWaypoints.map((waypoint, index) => {
+                  const stopUiMode = getWaypointStopUiMode(waypoint);
+                  const outboundLeg = legs.find((leg) => leg.from_waypoint_id === waypoint.id);
+                  const effectiveHours = getEffectiveStopHoursDefault(waypoint);
+                  const effectiveNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
+                  const defaultDeparture = getDefaultStopDepartureTime(Boolean(outboundLeg?.open_sea));
+                  const effectiveDeparture = (waypoint.stop_departure_time ?? defaultDeparture).slice(0, 5);
+
+                  const applyStopMode = (mode: "none" | "hours" | "nights") => {
+                    if (mode === "none") {
+                      updateWaypointPlanning(waypoint.id, {
+                        stop_mode: "hours",
+                        stop_hours: 0,
+                        stop_nights: null,
+                        stop_departure_time: null,
+                        planned_stop_duration_minutes: 0,
+                      });
+                    } else if (mode === "hours") {
+                      updateWaypointPlanning(waypoint.id, {
+                        stop_mode: "hours",
+                        stop_hours: effectiveHours,
+                        stop_nights: null,
+                        stop_departure_time: null,
+                        planned_stop_duration_minutes: effectiveHours * 60,
+                      });
+                    } else {
+                      updateWaypointPlanning(waypoint.id, {
+                        stop_mode: "nights",
+                        stop_nights: effectiveNights,
+                        stop_departure_time: waypoint.stop_departure_time || defaultDeparture,
+                        stop_hours: null,
+                        planned_stop_duration_minutes: 0,
+                      });
+                    }
+                  };
+
+                  return (
+                    <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {index + 1}. {waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          narrative · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Sosta</span>
+                          <select
+                            value={stopUiMode}
+                            onChange={(event) => applyStopMode(event.target.value as "none" | "hours" | "nights")}
+                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          >
+                            <option value="none">Nessuna sosta</option>
+                            <option value="hours">Sosta breve (ore)</option>
+                            <option value="nights">Giorni + orario di ripartenza</option>
+                          </select>
+                        </label>
+
+                        {stopUiMode === "hours" && (
+                          <div>
+                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ore</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={effectiveHours}
+                                onChange={(event) => {
+                                  const hours = Math.max(0, Number(event.target.value) || 0);
+                                  updateWaypointPlanning(waypoint.id, {
+                                    stop_hours: hours,
+                                    planned_stop_duration_minutes: hours * 60,
+                                  });
+                                }}
+                                className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                              />
+                              {STOP_HOURS_PRESETS.map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() =>
+                                    updateWaypointPlanning(waypoint.id, {
+                                      stop_hours: preset,
+                                      planned_stop_duration_minutes: preset * 60,
+                                    })
+                                  }
+                                  className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
+                                >
+                                  {preset}h
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {stopUiMode === "nights" && (
+                          <>
+                            <div>
+                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Giorni</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={effectiveNights}
+                                  onChange={(event) =>
+                                    updateWaypointPlanning(waypoint.id, {
+                                      stop_nights: Math.max(1, Number(event.target.value) || 1),
+                                    })
+                                  }
+                                  className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                                />
+                                {STOP_NIGHTS_PRESETS.map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => updateWaypointPlanning(waypoint.id, { stop_nights: preset })}
+                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
+                                  >
+                                    {preset}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                Ripartenza{outboundLeg?.open_sea ? " · mare aperto → default 19:00" : ""}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="time"
+                                  value={effectiveDeparture}
+                                  onChange={(event) =>
+                                    updateWaypointPlanning(waypoint.id, { stop_departure_time: event.target.value })
+                                  }
+                                  className="w-28 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                                />
+                                {STOP_DEPARTURE_PRESETS.map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => updateWaypointPlanning(waypoint.id, { stop_departure_time: preset })}
+                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
+                                  >
+                                    {preset}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Sosta min</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="30"
-                        value={Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0) || 0)}
-                        onChange={(event) =>
-                          updateWaypointPlanning(waypoint.id, {
-                            planned_stop_duration_minutes: Math.max(0, Number(event.target.value) || 0),
-                          })
-                        }
-                        className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                      />
-                    </label>
-                  </div>
-                ))}
+                  );
+                })}
                 {publicPlanningWaypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint pubblico caricato per questa rotta.</p>}
               </div>
             </div>
@@ -1025,7 +1476,7 @@ const AdminVoyageBookings = () => {
                   {activeLegs.map((leg) => {
                     const selected = manualLegIds.includes(leg.id);
                     const nextCount = (legCapacity[leg.id] || 0) + (selected ? selectedManualPartySize : 0);
-                    const full = nextCount > (selectedVoyage?.booking_max_guests || 2);
+                    const full = nextCount > (selectedVoyage?.booking_max_guests || 4);
                     return (
                       <label key={leg.id} className="flex gap-3 rounded-[18px] border border-border/70 p-3 text-sm">
                         <input
@@ -1037,7 +1488,7 @@ const AdminVoyageBookings = () => {
                         <span>
                           <span className="block text-foreground">{getLegLabel(leg, waypointsById, "it")}</span>
                           <span className={full ? "mt-1 block text-xs text-amber-700" : "mt-1 block text-xs text-muted-foreground"}>
-                            {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 2} pax
+                            {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 4} pax
                           </span>
                         </span>
                       </label>
@@ -1111,7 +1562,7 @@ const AdminVoyageBookings = () => {
                       <th key={leg.id} className="min-w-[170px] border-b border-border p-3 text-left align-bottom">
                         <span className="block text-xs font-medium leading-snug">{getLegLabel(leg, waypointsById, "it")}</span>
                         <span className="mt-1 block text-[11px] text-muted-foreground">
-                          {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 2} pax
+                          {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 4} pax
                         </span>
                       </th>
                     ))}
@@ -1211,15 +1662,22 @@ const AdminVoyageBookings = () => {
                 <h2 className="editorial-heading text-2xl">Prepartenza, briefing e checklist</h2>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void saveBookingSettings()}
-              disabled={saving || !selectedVoyageId}
-              className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
-              Salva settings
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {isBookingSettingsDirty && (
+                <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+                  Modifiche non salvate
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void saveBookingSettings()}
+                disabled={saving || !selectedVoyageId}
+                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
+                Salva settings
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -1342,6 +1800,41 @@ const AdminVoyageBookings = () => {
           </div>
         </section>
       </div>
+
+      <AlertDialog open={leaveDialogOpen}>
+        <AlertDialogContent className="glass-panel max-w-[560px] rounded-[28px] border-border/70">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">
+              Hai modifiche non salvate
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed text-muted-foreground">
+              Se lasci questa pagina adesso perdi le modifiche alla pianificazione. Puoi uscire senza salvare oppure salvare prima di continuare.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:justify-end">
+            <AlertDialogCancel onClick={handleStayOnPage} className="mt-0">
+              Resta qui
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleLeaveWithoutSaving}
+              className="border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              Esci senza salvare
+            </Button>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleSaveAndLeave();
+              }}
+              disabled={saving || saveAndLeavePending}
+            >
+              {saveAndLeavePending ? "Salvataggio..." : "Salva ed esci"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

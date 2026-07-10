@@ -94,6 +94,8 @@ export interface BookingRequest {
   confirmed_at: string | null;
   cancelled_at: string | null;
   updated_at: string;
+  /** True for the two fixed crew members auto-booked when a voyage's booking goes live. */
+  is_crew?: boolean;
 }
 
 export interface BookingRequestLeg {
