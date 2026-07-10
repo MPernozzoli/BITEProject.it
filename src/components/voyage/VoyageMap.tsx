@@ -21,6 +21,7 @@ import {
   getDangerLabel,
   getLegComplexity,
   getLegDangerLevel,
+  isLegCurrentOrFuture,
   isVoyageBookableNow,
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
@@ -42,7 +43,6 @@ interface VoyageMapProps {
   onVoyageSelect?: (voyageId: string | null) => void;
   selectedRouteVoyageId?: string | null;
   bookingLegsByVoyage?: Record<string, BookableLegAvailability[]>;
-  selectedBookingLegIds?: string[];
   bookingSelectionAnchor?: { voyageId: string; waypointId: string } | null;
   onWaypointBookingAction?: (voyageId: string, waypointId: string, direction: "from" | "to") => void;
   flyToWaypointRef?: MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
@@ -99,6 +99,24 @@ const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, disclaimer:
         <span>${escapePopupHtml(disclaimer)}</span>
       </span>
     </span>
+  `;
+};
+
+/**
+ * Compact, color-coded complexity chip meant to live inside the booking module — the
+ * complexity estimate only matters to someone deciding whether to book this leg.
+ */
+const buildComplexityChipMarkup = (level: number, danger: number, lang: "en" | "it") => {
+  const label = getComplexityLabel(level, lang);
+  const helpTitle = `${getComplexityTitle(lang)} · ${label}`;
+  return `
+    <div class="voyage-popup__complexity">
+      <span class="voyage-popup__complexity-dot voyage-popup__complexity-dot--${level}">${level}</span>
+      <span class="voyage-popup__complexity-label">${escapePopupHtml(label)}${
+        danger > 0 ? ` · ${escapePopupHtml(getDangerLabel(danger, lang))}` : ""
+      }</span>
+      ${buildComplexityHelpMarkup(lang, helpTitle, getComplexityDisclaimer(lang))}
+    </div>
   `;
 };
 
@@ -284,7 +302,6 @@ const VoyageMap = ({
   onVoyageSelect,
   selectedRouteVoyageId: controlledRouteVoyageId,
   bookingLegsByVoyage = {},
-  selectedBookingLegIds = [],
   bookingSelectionAnchor = null,
   onWaypointBookingAction,
   flyToWaypointRef,
@@ -334,10 +351,6 @@ const VoyageMap = ({
   langRef.current = lang;
   const onWaypointBookingActionRef = useRef(onWaypointBookingAction);
   onWaypointBookingActionRef.current = onWaypointBookingAction;
-  const bookingLegsByVoyageRef = useRef(bookingLegsByVoyage);
-  bookingLegsByVoyageRef.current = bookingLegsByVoyage;
-  const selectedBookingLegIdsRef = useRef(selectedBookingLegIds);
-  selectedBookingLegIdsRef.current = selectedBookingLegIds;
   const bookingSelectionAnchorRef = useRef(bookingSelectionAnchor);
   bookingSelectionAnchorRef.current = bookingSelectionAnchor;
 
@@ -369,7 +382,9 @@ const VoyageMap = ({
       hasOutboundAvailability: boolean;
       hasInboundAvailability: boolean;
       hasAnyBookingLeg: boolean;
-      /** Complexity/danger of the leg departing from this waypoint, if any. */
+      /** Whether any leg touching this waypoint (outbound or inbound) is still current/future, i.e. not past/completed. */
+      hasCurrentLegFromHere: boolean;
+      /** Complexity/danger of the leg departing from this waypoint, if any (only set when that leg is still current/future). */
       outboundComplexity: number | null;
       outboundDanger: number;
     };
@@ -412,7 +427,15 @@ const VoyageMap = ({
           const endIndex = waypointIndexById.get(leg.to_waypoint_id);
           return leg.available && endIndex != null && endIndex <= safeIndex;
         });
-        const outboundLeg = voyageBookingLegs.find((leg) => leg.from_waypoint_id === w.id);
+        const hasCurrentLegFromHere = voyageBookingLegs.some((leg) => {
+          if (!isLegCurrentOrFuture(leg)) return false;
+          const startIndex = waypointIndexById.get(leg.from_waypoint_id);
+          const endIndex = waypointIndexById.get(leg.to_waypoint_id);
+          return (startIndex != null && startIndex >= safeIndex) || (endIndex != null && endIndex <= safeIndex);
+        });
+        const outboundLeg = voyageBookingLegs.find(
+          (leg) => leg.from_waypoint_id === w.id && isLegCurrentOrFuture(leg)
+        );
         items.push({
           key: `${voyage.id}:${w.id}`,
           lng: w.lng,
@@ -428,6 +451,7 @@ const VoyageMap = ({
           hasOutboundAvailability,
           hasInboundAvailability,
           hasAnyBookingLeg: voyageBookingLegs.length > 0,
+          hasCurrentLegFromHere,
           outboundComplexity: outboundLeg ? getLegComplexity(outboundLeg) : null,
           outboundDanger: outboundLeg ? getLegDangerLevel(outboundLeg) : 0,
         });
@@ -807,59 +831,6 @@ const VoyageMap = ({
             },
           });
 
-          if (isVoyageBookableNow(voyage)) {
-            const bookableLegs = bookingLegsByVoyageRef.current[voyage.id] || [];
-            const selectedLegIds = new Set(selectedBookingLegIdsRef.current);
-            bookableLegs.forEach((leg) => {
-              const startIndex = wps.findIndex((waypoint) => waypoint.id === leg.from_waypoint_id);
-              const endIndex = wps.findIndex((waypoint) => waypoint.id === leg.to_waypoint_id);
-              if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) return;
-
-              const legCoordinates = getArticleSegmentGeometry(
-                wps,
-                voyage.type,
-                Math.min(startIndex, endIndex),
-                Math.max(startIndex, endIndex),
-                getCachedGeometryCoordinates(voyage)
-              );
-              if (legCoordinates.length < 2) return;
-
-              const legId = `voyage-booking-leg-${leg.id}`;
-              map.addSource(legId, {
-                type: "geojson",
-                data: {
-                  type: "Feature",
-                  geometry: {
-                    type: "LineString",
-                    coordinates: legCoordinates,
-                  },
-                  properties: {},
-                },
-              });
-
-              const selected = selectedLegIds.has(leg.id);
-              map.addLayer({
-                id: legId,
-                type: "line",
-                source: legId,
-                layout: {
-                  "line-cap": "round",
-                  "line-join": "round",
-                },
-                paint: {
-                  "line-color": selected
-                    ? "hsl(142, 72%, 35%)"
-                    : leg.available
-                      ? "hsl(168, 70%, 36%)"
-                      : "hsl(3, 62%, 55%)",
-                  "line-width": selected ? Math.max(3.2, lineMetrics.width + 2.2) : Math.max(2.2, lineMetrics.width - 0.4),
-                  "line-opacity": isDimmed ? 0.2 : selected ? 0.96 : leg.available ? 0.74 : 0.58,
-                  ...(!leg.available ? { "line-dasharray": [1.4, 2.1] } : {}),
-                },
-              });
-            });
-          }
-
           map.addLayer({
             id: lineHitId,
             type: "line",
@@ -1023,7 +994,6 @@ const VoyageMap = ({
     lang,
     publishedVoyages,
     selectedArticleId,
-    selectedBookingLegIds,
     waypointsMap,
   ]);
 
@@ -1070,32 +1040,26 @@ const VoyageMap = ({
           )
         : "";
       const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
-      const complexityBlock = meta.outboundComplexity != null
-        ? buildPopupModule(
-            "booking",
-            getComplexityTitle(L),
-            `<div class="voyage-popup__module-title voyage-popup__module-title--inline">
-              <span>${escapePopupHtml(
-                `${L === "it" ? "Complessità" : "Complexity"}: ${getComplexityLabel(meta.outboundComplexity, L)}`
-                + (meta.outboundDanger > 0 ? ` · ${L === "it" ? "Pericolo" : "Danger"}: ${getDangerLabel(meta.outboundDanger, L)}` : "")
-              )}</span>
-              ${buildComplexityHelpMarkup(L, getComplexityTitle(L), getComplexityDisclaimer(L))}
-            </div>`
-          )
+      const complexityChip = meta.outboundComplexity != null
+        ? buildComplexityChipMarkup(meta.outboundComplexity, meta.outboundDanger, L)
         : "";
       const canBookFrom = meta.isBookableVoyage && meta.hasOutboundAvailability;
       const canBookTo = meta.isBookableVoyage && meta.hasInboundAvailability;
       const hasBookingAction = canBookFrom || canBookTo;
+      // A leg is "completed" once every leg touching this stop is in the past — at that point
+      // the complexity estimate and booking module are no longer relevant and must not show.
+      const isPastCompleted = meta.hasAnyBookingLeg && !meta.hasCurrentLegFromHere;
       const bookingHint = !meta.hasAnyBookingLeg
         ? `<p class="voyage-popup__hint">${L === "it" ? "Prenotazioni non ancora aperte per questa tappa." : "Bookings are not open for this stop yet."}</p>`
         : !canBookFrom && !canBookTo
           ? `<p class="voyage-popup__hint">${L === "it" ? "Scegli un'altra tappa sulla stessa rotta per verificare le tratte disponibili." : "Choose another stop on the same route to check available legs."}</p>`
           : "";
-      const bookableBlock = meta.isBookableVoyage
+      const bookableBlock = meta.isBookableVoyage && !isPastCompleted
         ? buildPopupModule(
             "booking",
             L === "it" ? "Viaggio prenotabile" : "Bookable voyage",
-            `${hasBookingAction ? `<div class="voyage-popup__actions">
+            `${complexityChip}`
+            + `${hasBookingAction ? `<div class="voyage-popup__actions">
               <button type="button" class="voyage-popup__action" data-booking-direction="from" ${canBookFrom ? "" : "disabled"}>${L === "it" ? "Prenota da qui" : "Book from here"}</button>
               <button type="button" class="voyage-popup__action" data-booking-direction="to" ${canBookTo ? "" : "disabled"}>${L === "it" ? "Prenota fino a qui" : "Book to here"}</button>
             </div>` : ""}`
@@ -1111,7 +1075,6 @@ const VoyageMap = ({
           <div class="voyage-popup__body">
             ${mediaBlock}
             ${articleBlock}
-            ${complexityBlock}
             ${bookableBlock}
           </div>
         </div>

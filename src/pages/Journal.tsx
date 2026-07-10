@@ -931,7 +931,6 @@ const Journal = () => {
             onVoyageSelect={setSelectedRouteVoyageId}
             selectedRouteVoyageId={selectedRouteVoyageId}
             bookingLegsByVoyage={bookingLegsByVoyage}
-            selectedBookingLegIds={selectedBookingLegIds}
             bookingSelectionAnchor={bookingAnchor}
             onWaypointBookingAction={handleWaypointBookingAction}
             presenceMarkers={mapPresenceMarkers}

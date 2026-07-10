@@ -988,7 +988,7 @@ html {
 
 .voyage-popup {
   width: min(330px, calc(100vw - 36px));
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid hsl(220 18% 88% / 0.92);
   border-left: 5px solid var(--voyage-popup-accent, hsl(206 72% 47%));
   border-radius: 20px;
@@ -1045,7 +1045,7 @@ html {
 }
 
 .voyage-popup__module {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid hsl(220 16% 89% / 0.92);
   border-radius: 15px;
   background: hsl(0 0% 100% / 0.7);
@@ -1088,6 +1088,65 @@ html {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.voyage-popup__complexity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.voyage-popup__complexity-dot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  min-width: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.voyage-popup__complexity-dot--1 {
+  border-color: hsl(152 45% 68% / 0.9);
+  background: hsl(152 58% 90%);
+  color: hsl(158 55% 24%);
+}
+
+.voyage-popup__complexity-dot--2 {
+  border-color: hsl(84 40% 60% / 0.9);
+  background: hsl(84 52% 88%);
+  color: hsl(84 42% 22%);
+}
+
+.voyage-popup__complexity-dot--3 {
+  border-color: hsl(42 62% 60% / 0.9);
+  background: hsl(45 78% 88%);
+  color: hsl(38 58% 26%);
+}
+
+.voyage-popup__complexity-dot--4 {
+  border-color: hsl(26 65% 60% / 0.9);
+  background: hsl(28 78% 88%);
+  color: hsl(22 62% 28%);
+}
+
+.voyage-popup__complexity-dot--5 {
+  border-color: hsl(0 55% 65% / 0.9);
+  background: hsl(0 68% 92%);
+  color: hsl(0 58% 32%);
+}
+
+.voyage-popup__complexity-label {
+  flex: 1 1 auto;
+  color: hsl(220 18% 34%);
+  font-size: 11px;
+  font-weight: 620;
+  line-height: 1.2;
 }
 
 .voyage-popup__help {
@@ -1146,6 +1205,7 @@ html {
 .voyage-popup__module--media {
   position: relative;
   display: grid;
+  overflow: hidden;
   background: hsl(220 28% 12%);
 }
 
