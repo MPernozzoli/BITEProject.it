@@ -4,6 +4,7 @@ import {
   DEPOSIT_COMPLEX_EUR,
   DEPOSIT_NORMAL_EUR,
   DEPOSIT_PER_PERSON_CAP_EUR,
+  depositForPayerEur,
   isDepositCapped,
   legDepositEur,
   perPersonDepositEur,
@@ -60,5 +61,21 @@ describe("booking deposit", () => {
 
   it("treats party size < 1 as 1", () => {
     expect(totalDepositEur([makeLeg({})], 0)).toBe(DEPOSIT_NORMAL_EUR);
+  });
+
+  it("charges the lead the whole party in lead_pays_all", () => {
+    const legs = [makeLeg({})]; // €50 per person
+    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize: 3 })).toBe(150);
+  });
+
+  it("charges the lead only their share in each_pays_own", () => {
+    const legs = [makeLeg({})];
+    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize: 3 })).toBe(DEPOSIT_NORMAL_EUR);
+  });
+
+  it("charges a guest only their own share regardless of mode", () => {
+    const legs = [makeLeg({ open_sea: true })]; // €100 per person
+    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "lead_pays_all", partySize: 4 })).toBe(DEPOSIT_COMPLEX_EUR);
+    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "each_pays_own", partySize: 4 })).toBe(DEPOSIT_COMPLEX_EUR);
   });
 });

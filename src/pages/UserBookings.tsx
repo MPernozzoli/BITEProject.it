@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, Link, useSearchParams } from "react-router-dom";
+import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarCheck, Check, Clock3, Loader2, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,12 @@ import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import { perPersonDepositEur, totalDepositEur, isDepositCapped } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
+import {
+  listMyParticipations,
+  acceptParticipation,
+  declineParticipation,
+  type MyParticipation,
+} from "@/lib/booking-participants";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -53,6 +59,7 @@ const UserBookings = () => {
   const { session, loading } = useAuth();
   const { lang } = useI18n();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const locale = lang === "it" ? "it-IT" : "en-US";
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,6 +76,9 @@ const UserBookings = () => {
   const [partySize, setPartySize] = useState("1");
   const [message, setMessage] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [myParticipations, setMyParticipations] = useState<MyParticipation[]>([]);
+  const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
+  const [acceptSubmitting, setAcceptSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!session?.user.id) {
@@ -194,6 +204,19 @@ const UserBookings = () => {
     if (!loading && session?.user.id) void loadData();
   }, [loadData, loading, session?.user.id]);
 
+  const loadParticipations = useCallback(async () => {
+    if (!session?.user.id) return;
+    try {
+      setMyParticipations(await listMyParticipations());
+    } catch {
+      /* non-fatal: the invites section just stays empty */
+    }
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (!loading && session?.user.id) void loadParticipations();
+  }, [loadParticipations, loading, session?.user.id]);
+
   const waypointsById = useMemo(
     () => Object.fromEntries(waypoints.map((waypoint) => [waypoint.id, waypoint])),
     [waypoints]
@@ -254,7 +277,15 @@ const UserBookings = () => {
     });
     if (error) {
       setSaving(false);
-      toast.error(error.message);
+      if ((error as { code?: string }).code === "BK001") {
+        toast.error(
+          lang === "it"
+            ? "Hai già una prenotazione per una di queste tratte."
+            : "You already have a booking for one of these legs."
+        );
+      } else {
+        toast.error(error.message);
+      }
       return;
     }
     const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
@@ -264,8 +295,15 @@ const UserBookings = () => {
         : lang === "it" ? "Richiesta inviata." : "Request sent."
     );
 
-    // Kick off the Bunq security-deposit payment for the just-created booking.
     const bookingRequestId = result?.booking_request_id;
+
+    // Multi-person bookings go to the participants page (add guests, choose who pays).
+    if (bookingRequestId && parsedPartySize > 1) {
+      navigate(`/bookings/${bookingRequestId}/participants`);
+      return;
+    }
+
+    // Solo booking: kick off the Bunq security-deposit payment right away.
     if (bookingRequestId) {
       const payment = await startDepositPayment(bookingRequestId);
       if (payment.ok && "shareUrl" in payment) {
@@ -338,6 +376,53 @@ const UserBookings = () => {
     await loadData();
   };
 
+  const handleAcceptConfirm = async () => {
+    if (!acceptTarget) return;
+    setAcceptSubmitting(true);
+    try {
+      await acceptParticipation(acceptTarget.participant_id);
+      // Guests paying their own share are sent straight to Bunq.
+      if (acceptTarget.requires_payment) {
+        const payment = await startDepositPayment(acceptTarget.booking_request_id, acceptTarget.participant_id);
+        if (payment.ok && "shareUrl" in payment) {
+          window.location.href = payment.shareUrl;
+          return;
+        }
+        if (!payment.ok && "notConfigured" in payment) {
+          toast.info(
+            lang === "it"
+              ? "Invito accettato. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
+              : "Invitation accepted. Deposit payment is not active yet: we'll send you the link shortly."
+          );
+        }
+      } else {
+        toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
+      }
+      setAcceptTarget(null);
+      await loadParticipations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error");
+    } finally {
+      setAcceptSubmitting(false);
+    }
+  };
+
+  const handleDecline = async (participantId: string) => {
+    if (!confirm(lang === "it" ? "Rifiutare questo invito?" : "Decline this invitation?")) return;
+    try {
+      await declineParticipation(participantId);
+      toast.success(lang === "it" ? "Invito rifiutato." : "Invitation declined.");
+      await loadParticipations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error");
+    }
+  };
+
+  const participationVoyageName = (p: MyParticipation) =>
+    (lang === "it" ? p.voyage_name_it : p.voyage_name_en) || p.voyage_name || (lang === "it" ? "Viaggio" : "Voyage");
+
+  const pendingParticipations = myParticipations.filter((p) => p.status === "pending");
+
   if (loading) {
     return <div className="min-h-screen pt-28 text-center text-sm text-muted-foreground">Loading...</div>;
   }
@@ -364,6 +449,64 @@ const UserBookings = () => {
             <CalendarCheck className="text-accent" size={26} />
           </div>
         </section>
+
+        {pendingParticipations.length > 0 && (
+          <section className="glass-panel rounded-[30px] border border-accent/40 p-5 md:p-6">
+            <h2 className="editorial-heading mb-4 text-2xl">
+              {lang === "it" ? "Inviti in attesa" : "Pending invitations"}
+            </h2>
+            <div className="space-y-3">
+              {pendingParticipations.map((p) => (
+                <div
+                  key={p.participant_id}
+                  className="flex flex-col gap-3 rounded-2xl border border-border/70 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{participationVoyageName(p)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {p.requires_payment
+                        ? lang === "it"
+                          ? "Accetta le condizioni e versa il tuo deposito per confermare il posto."
+                          : "Accept the terms and pay your deposit to confirm your seat."
+                        : lang === "it"
+                          ? "Accetta le condizioni per confermare la partecipazione."
+                          : "Accept the terms to confirm your participation."}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAcceptTarget(p)}
+                      className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                    >
+                      <Check size={14} /> {lang === "it" ? "Accetta" : "Accept"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDecline(p.participant_id)}
+                      className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={14} /> {lang === "it" ? "Rifiuta" : "Decline"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <BookingConfirmDialog
+          open={acceptTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setAcceptTarget(null);
+          }}
+          lang={lang}
+          voyageName={acceptTarget ? participationVoyageName(acceptTarget) : undefined}
+          partySize={1}
+          requiresPayment={acceptTarget?.requires_payment ?? false}
+          submitting={acceptSubmitting}
+          onConfirm={() => void handleAcceptConfirm()}
+        />
 
         {busy ? (
           <div className="glass-panel rounded-[30px] p-8 text-muted-foreground">
@@ -554,8 +697,15 @@ const UserBookings = () => {
                               {formatBookingDate(request.requested_at, locale)} · {request.party_size} pax
                             </p>
                           </div>
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${getBookingStatusClass(request.status)}`}>
-                            {getBookingStatusLabel(request.status, lang)}
+                          <span className="flex items-center gap-2">
+                            {request.is_crew && (
+                              <span className="inline-flex items-center rounded-full border border-indigo-300/70 bg-indigo-100/70 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-indigo-800">
+                                {lang === "it" ? "Equipaggio" : "Crew"}
+                              </span>
+                            )}
+                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${getBookingStatusClass(request.status)}`}>
+                              {getBookingStatusLabel(request.status, lang)}
+                            </span>
                           </span>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -592,7 +742,7 @@ const UserBookings = () => {
                                 <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{termsContent}</p>
                               </div>
                             )}
-                            {voyageTasks.length > 0 && (
+                            {voyageTasks.length > 0 && !request.is_crew && (
                               <div>
                                 <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                                   {lang === "it" ? "Checklist" : "Checklist"}

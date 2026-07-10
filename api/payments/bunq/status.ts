@@ -31,6 +31,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   }
 
   const bookingRequestId = (firstQueryParam(req, "bookingRequestId") ?? "").trim();
+  const participantId = (firstQueryParam(req, "participantId") ?? "").trim();
   if (!bookingRequestId) {
     sendJson(res, 400, { error: "missing_booking_request_id" });
     return;
@@ -46,22 +47,46 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const user = userData.user;
 
     const db = createServiceClient();
+    const userEmail = (user.email ?? "").toLowerCase();
 
-    // Verify the booking belongs to the caller, then load the latest deposit.
+    // Authorize: the booking owner, or the guest whose participation this is.
     const { data: request } = await db
       .from("voyage_booking_requests")
       .select("id, profile_id")
       .eq("id", bookingRequestId)
       .maybeSingle();
-    if (!request || (request as { profile_id: string }).profile_id !== user.id) {
+    if (!request) {
+      sendJson(res, 404, { error: "booking_not_found" });
+      return;
+    }
+    const isOwner = (request as { profile_id: string }).profile_id === user.id;
+
+    if (participantId) {
+      const { data: p } = await db
+        .from("voyage_booking_participants")
+        .select("id, booking_request_id, profile_id, email")
+        .eq("id", participantId)
+        .maybeSingle();
+      const part = p as { booking_request_id: string; profile_id: string | null; email: string } | null;
+      const matches =
+        part &&
+        part.booking_request_id === bookingRequestId &&
+        (part.profile_id === user.id || part.email.toLowerCase() === userEmail);
+      if (!isOwner && !matches) {
+        sendJson(res, 404, { error: "booking_not_found" });
+        return;
+      }
+    } else if (!isOwner) {
       sendJson(res, 404, { error: "booking_not_found" });
       return;
     }
 
-    const { data: deposit } = await db
+    let depositQuery = db
       .from("voyage_booking_deposits")
       .select("id, status, amount_cents, bunq_request_id")
-      .eq("booking_request_id", bookingRequestId)
+      .eq("booking_request_id", bookingRequestId);
+    if (participantId) depositQuery = depositQuery.eq("participant_id", participantId);
+    const { data: deposit } = await depositQuery
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();

@@ -10,7 +10,10 @@ export type StartDepositResult =
  * Ask the backend to create a Bunq deposit payment request for a freshly-created booking.
  * On success returns the bunq.me share URL the caller should redirect the user to.
  */
-export async function startDepositPayment(bookingRequestId: string): Promise<StartDepositResult> {
+export async function startDepositPayment(
+  bookingRequestId: string,
+  participantId?: string,
+): Promise<StartDepositResult> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) return { ok: false, error: "unauthenticated" };
@@ -23,7 +26,7 @@ export async function startDepositPayment(bookingRequestId: string): Promise<Sta
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ bookingRequestId }),
+      body: JSON.stringify({ bookingRequestId, participantId }),
     });
   } catch {
     return { ok: false, error: "network" };

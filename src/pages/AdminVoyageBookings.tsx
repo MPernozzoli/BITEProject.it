@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import BookingGanttTable from "@/components/admin/BookingGanttTable";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -35,7 +36,6 @@ import {
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
-  getBookingStatusShortLabel,
   getComplexityClass,
   getComplexityLabel,
   getDangerClass,
@@ -414,10 +414,6 @@ const AdminVoyageBookings = () => {
     () => Object.fromEntries(combinedProfiles.map((profile) => [profile.id, profile])),
     [combinedProfiles]
   );
-  const requestLegSet = useMemo(
-    () => new Set(requestLegs.map((link) => `${link.booking_request_id}:${link.bookable_leg_id}`)),
-    [requestLegs]
-  );
   const activeLegs = useMemo(() => legs.filter(isLegSelectable), [legs]);
 
   const visibleRequests = useMemo(
@@ -664,6 +660,46 @@ const AdminVoyageBookings = () => {
 
   const approveRequest = (requestId: string) => updateRequestStatus(requestId, "admin_approved");
   const rejectRequest = (requestId: string) => updateRequestStatus(requestId, "rejected");
+
+  /** Commits a Gantt-bar drag-resize: nextLegIds is the request's full new leg set. */
+  const resizeBookingLegs = async (requestId: string, nextLegIds: string[]) => {
+    setSaving(true);
+    const { data, error } = await typedSupabase.rpc("admin_update_booking_legs", {
+      _booking_request_id: requestId,
+      _leg_ids: nextLegIds,
+      _allow_over_capacity: false,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      await loadVoyageDetails(selectedVoyageId);
+      return;
+    }
+    const result = Array.isArray(data) ? (data[0] as { over_capacity: boolean } | undefined) : undefined;
+    if (result?.over_capacity) toast.warning("Tratta aggiornata oltre il limite impostato.");
+    await loadVoyageDetails(selectedVoyageId);
+  };
+
+  /** Creates a brand-new single-leg booking from the Gantt table's "+" column pill. */
+  const addPersonToLeg = async (legId: string, profileId: string, partySize: number) => {
+    setSaving(true);
+    const { data, error } = await typedSupabase.rpc("admin_create_voyage_booking", {
+      _voyage_id: selectedVoyageId,
+      _profile_id: profileId,
+      _leg_ids: [legId],
+      _party_size: partySize,
+      _status: "admin_approved",
+      _allow_over_capacity: true,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
+    toast.success(result?.over_capacity ? "Persona aggiunta oltre capienza." : "Persona aggiunta.");
+    await loadVoyageDetails(selectedVoyageId);
+  };
 
   const createManualBooking = async () => {
     if (!selectedVoyageId || !manualProfileId || manualLegIds.length === 0) {
@@ -1551,105 +1587,23 @@ const AdminVoyageBookings = () => {
               Nessuna tratta prenotabile. Usa “Sync tratte” dopo aver creato waypoint pubblici.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-0 text-sm">
-                <thead>
-                  <tr>
-                    <th className="sticky left-0 z-10 min-w-[220px] border-b border-border bg-background/95 p-3 text-left text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                      Persona
-                    </th>
-                    {legs.map((leg) => (
-                      <th key={leg.id} className="min-w-[170px] border-b border-border p-3 text-left align-bottom">
-                        <span className="block text-xs font-medium leading-snug">{getLegLabel(leg, waypointsById, "it")}</span>
-                        <span className="mt-1 block text-[11px] text-muted-foreground">
-                          {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 4} pax
-                        </span>
-                      </th>
-                    ))}
-                    <th className="min-w-[210px] border-b border-border p-3 text-left text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                      Azioni
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRequests.map((request) => {
-                    const profile = profilesById[request.profile_id];
-                    return (
-                      <tr key={request.id}>
-                        <td className="sticky left-0 z-10 border-b border-border/60 bg-background/95 p-3 align-top">
-                          <div className="font-medium">{profile?.name || profile?.email || request.profile_id}</div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {profile?.email || "No email"} · {request.party_size} pax
-                          </div>
-                          <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] ${getBookingStatusClass(request.status)}`}>
-                            {getBookingStatusLabel(request.status, "it")}
-                          </span>
-                        </td>
-                        {legs.map((leg) => {
-                          const active = requestLegSet.has(`${request.id}:${leg.id}`);
-                          return (
-                            <td key={leg.id} className="border-b border-border/60 p-3 align-top">
-                              {active ? (
-                                <span className={`inline-flex min-w-[4rem] justify-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getBookingStatusClass(request.status)}`}>
-                                  {getBookingStatusShortLabel(request.status)}
-                                </span>
-                              ) : (
-                                <span className="inline-flex min-w-[4rem] justify-center rounded-full border border-border/50 bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground">
-                                  -
-                                </span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="border-b border-border/60 p-3 align-top">
-                          <div className="flex flex-wrap gap-2">
-                            {request.status === "requested" || request.status === "waitlisted" ? (
-                              <button
-                                type="button"
-                                onClick={() => void approveRequest(request.id)}
-                                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent"
-                              >
-                                <Check size={13} /> Approva
-                              </button>
-                            ) : null}
-                            {!["cancelled", "rejected", "expired"].includes(request.status) ? (
-                              <button
-                                type="button"
-                                onClick={() => void rejectRequest(request.id)}
-                                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive"
-                              >
-                                <X size={13} /> Rifiuta
-                              </button>
-                            ) : null}
-                            <select
-                              value={request.status}
-                              onChange={(event) => void updateRequestStatus(request.id, event.target.value as VoyageBookingStatus)}
-                              className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none"
-                            >
-                              {statusOptions.map((status) => (
-                                <option key={status} value={status}>
-                                  {getBookingStatusLabel(status, "it")}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <p className="mt-2 text-[11px] text-muted-foreground">
-                            Richiesta: {formatBookingDate(request.requested_at, "it-IT")}
-                          </p>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {visibleRequests.length === 0 && (
-                    <tr>
-                      <td colSpan={legs.length + 2} className="p-8 text-center text-sm text-muted-foreground">
-                        Nessuna richiesta per questo filtro.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <BookingGanttTable
+              legs={legs}
+              waypointsById={waypointsById}
+              requests={visibleRequests}
+              requestLegs={requestLegs}
+              profilesById={profilesById}
+              availableProfiles={combinedProfiles}
+              legCapacity={legCapacity}
+              maxGuests={selectedVoyage?.booking_max_guests || 4}
+              saving={saving}
+              statusOptions={statusOptions}
+              onApprove={(requestId) => void approveRequest(requestId)}
+              onReject={(requestId) => void rejectRequest(requestId)}
+              onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
+              onResize={resizeBookingLegs}
+              onAddPerson={addPersonToLeg}
+            />
           )}
         </section>
 

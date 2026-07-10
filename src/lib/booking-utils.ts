@@ -205,8 +205,8 @@ export function getLocalizedBookingWaypointName(
 ) {
   if (!waypoint) return "";
   return lang === "it"
-    ? waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"
-    : waypoint.name_en || waypoint.name_it || waypoint.name || "Waypoint";
+    ? waypoint.name_it || waypoint.name_en || waypoint.name || "Tappa"
+    : waypoint.name_en || waypoint.name_it || waypoint.name || "Stop";
 }
 
 export function formatBookingDate(value?: string | null, locale = "it-IT") {

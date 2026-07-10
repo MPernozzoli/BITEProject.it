@@ -1,11 +1,15 @@
 /**
  * POST /api/payments/bunq/request
  *
- * Creates a Bunq security-deposit ("caparra") payment request for a booking the caller
- * owns. The amount is recomputed server-side from the leg complexity (never trusted from
- * the client). Returns the shareable bunq.me link the user is redirected to.
+ * Creates a Bunq security-deposit ("caparra") payment request. The payer is either:
+ *   - the lead (booking owner): pays deposit × party_size when payment_mode = lead_pays_all,
+ *     otherwise just their own share; or
+ *   - a guest participant (payment_mode = each_pays_own): pays their own single share.
  *
- * Body: { bookingRequestId: string }
+ * The amount is always recomputed server-side from the leg complexity — never trusted from
+ * the client. Returns the shareable bunq.me link the payer is redirected to.
+ *
+ * Body: { bookingRequestId: string, participantId?: string }
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
 import { randomUUID } from "node:crypto";
@@ -14,8 +18,9 @@ import { bunqConfigured, environment } from "../../../src/server/bunq/client";
 import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests";
 import {
   perPersonDepositEur,
-  totalDepositEur,
+  depositForPayerEur,
   type DepositLeg,
+  type PaymentMode,
 } from "../../../src/lib/booking-deposit";
 import {
   bearerToken,
@@ -35,6 +40,15 @@ function siteUrl(): string {
   ).replace(/\/$/, "");
 }
 
+type ParticipantRow = {
+  id: string;
+  booking_request_id: string;
+  profile_id: string | null;
+  email: string;
+  is_lead: boolean;
+  status: string;
+};
+
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {
   if (req.method !== "POST") {
     sendJson(res, 405, { error: "method_not_allowed" });
@@ -48,9 +62,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   }
 
   let bookingRequestId: string;
+  let participantId: string | null;
   try {
-    const body = await readJsonBody<{ bookingRequestId?: string }>(req);
+    const body = await readJsonBody<{ bookingRequestId?: string; participantId?: string }>(req);
     bookingRequestId = String(body.bookingRequestId ?? "").trim();
+    participantId = body.participantId ? String(body.participantId).trim() : null;
     if (!bookingRequestId) {
       sendJson(res, 400, { error: "missing_booking_request_id" });
       return;
@@ -74,33 +90,82 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       return;
     }
     const user = userData.user;
+    const userEmail = (user.email ?? "").toLowerCase();
 
     const db = createServiceClient();
 
-    // 2. Load the booking request and verify ownership + state.
+    // 2. Load the booking request.
     const { data: request, error: requestError } = await db
       .from("voyage_booking_requests")
-      .select("id, profile_id, party_size, status, voyage_id")
+      .select("id, profile_id, party_size, status, payment_mode")
       .eq("id", bookingRequestId)
       .maybeSingle();
     if (requestError) throw new Error(requestError.message);
-    if (!request || (request as { profile_id: string }).profile_id !== user.id) {
+    if (!request) {
       sendJson(res, 404, { error: "booking_not_found" });
       return;
     }
+    const bookingOwnerId = (request as { profile_id: string }).profile_id;
     const bookingStatus = (request as { status: string }).status;
+    const partySize = Math.max(1, Number((request as { party_size: number }).party_size) || 1);
+    const paymentMode = ((request as { payment_mode?: string }).payment_mode ?? "lead_pays_all") as PaymentMode;
     if (!ACTIVE_STATUSES.includes(bookingStatus)) {
       sendJson(res, 409, { error: "booking_not_active", status: bookingStatus });
       return;
     }
-    const partySize = Math.max(1, Number((request as { party_size: number }).party_size) || 1);
 
-    // 3. Idempotency: reuse an existing deposit for this booking.
-    const { data: existing } = await db
+    // 3. Resolve the payer (lead or guest) and authorize.
+    let payer: ParticipantRow | null = null;
+    if (participantId) {
+      const { data: p } = await db
+        .from("voyage_booking_participants")
+        .select("id, booking_request_id, profile_id, email, is_lead, status")
+        .eq("id", participantId)
+        .maybeSingle();
+      payer = (p as ParticipantRow | null) ?? null;
+      if (!payer || payer.booking_request_id !== bookingRequestId) {
+        sendJson(res, 404, { error: "participant_not_found" });
+        return;
+      }
+      const matchesCaller =
+        payer.profile_id === user.id || payer.email.toLowerCase() === userEmail;
+      if (!matchesCaller) {
+        sendJson(res, 403, { error: "not_your_participation" });
+        return;
+      }
+      // A guest must have accepted the conditions before paying.
+      if (!payer.is_lead && payer.status !== "accepted") {
+        sendJson(res, 409, { error: "participation_not_accepted" });
+        return;
+      }
+    } else {
+      // Lead flow: the caller must own the booking.
+      if (bookingOwnerId !== user.id) {
+        sendJson(res, 404, { error: "booking_not_found" });
+        return;
+      }
+      const { data: lead } = await db
+        .from("voyage_booking_participants")
+        .select("id, booking_request_id, profile_id, email, is_lead, status")
+        .eq("booking_request_id", bookingRequestId)
+        .eq("is_lead", true)
+        .maybeSingle();
+      payer = (lead as ParticipantRow | null) ?? null; // null for solo (pax=1) bookings
+    }
+
+    const isLead = payer?.is_lead ?? true;
+    const payerParticipantId = payer?.id ?? null;
+
+    // 4. Idempotency: reuse an existing deposit for this exact payer.
+    let existingQuery = db
       .from("voyage_booking_deposits")
       .select("id, status, share_url, amount_cents, per_person_cents")
       .eq("booking_request_id", bookingRequestId)
-      .in("status", ["pending", "paid"])
+      .in("status", ["pending", "paid"]);
+    existingQuery = payerParticipantId
+      ? existingQuery.eq("participant_id", payerParticipantId)
+      : existingQuery.is("participant_id", null);
+    const { data: existing } = await existingQuery
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -126,7 +191,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       }
     }
 
-    // 4. Recompute the authoritative amount from the leg complexity.
+    // 5. Recompute the authoritative amount from the leg complexity.
     const { data: legLinks, error: legLinkError } = await db
       .from("voyage_booking_request_legs")
       .select("bookable_leg_id")
@@ -148,13 +213,15 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const legs = (legRows ?? []) as DepositLeg[];
 
     const perPersonEur = perPersonDepositEur(legs);
-    const totalEur = totalDepositEur(legs, partySize);
-    if (totalEur <= 0) {
+    const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize });
+    if (amountEur <= 0) {
       sendJson(res, 409, { error: "zero_deposit" });
       return;
     }
+    // The number of persons this single deposit covers (for the stored party_size).
+    const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
 
-    // 5. Create the Bunq payment request.
+    // 6. Create the Bunq payment request.
     const reference = `DEP-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
     const description = `Deposito cauzionale viaggio BITE — ${reference}`;
     const counterpartyEmail = user.email;
@@ -164,19 +231,20 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     }
 
     const created = await createBunqPaymentRequest({
-      amountEur: totalEur,
+      amountEur,
       description,
       counterpartyEmail,
       redirectUrl: `${siteUrl()}/bookings?deposit=processing`,
     });
 
-    // 6. Persist the deposit row.
+    // 7. Persist the deposit row.
     const { error: insertError } = await db.from("voyage_booking_deposits").insert({
       booking_request_id: bookingRequestId,
+      participant_id: payerParticipantId,
       environment: environment(),
       per_person_cents: Math.round(perPersonEur * 100),
-      party_size: partySize,
-      amount_cents: Math.round(totalEur * 100),
+      party_size: coveredPersons,
+      amount_cents: Math.round(amountEur * 100),
       currency: "EUR",
       status: "pending",
       bunq_request_id: created.id,
@@ -187,9 +255,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
     sendJson(res, 200, {
       shareUrl: created.shareUrl,
-      amountEur: totalEur,
+      amountEur,
       perPersonEur,
-      partySize,
+      partySize: coveredPersons,
       reference,
     });
   } catch (error) {

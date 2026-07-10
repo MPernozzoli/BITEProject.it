@@ -50,6 +50,24 @@ export function totalDepositEur(legs: DepositLeg[], partySize: number): number {
   return perPersonDepositEur(legs) * Math.max(1, Math.floor(partySize) || 1);
 }
 
+export type PaymentMode = "lead_pays_all" | "each_pays_own";
+
+/**
+ * Deposit charged to a single payer given the payment mode:
+ *  - the lead in "lead_pays_all" covers the whole party (× party size);
+ *  - everyone else (the lead in "each_pays_own", or a guest) pays for one.
+ */
+export function depositForPayerEur(
+  legs: DepositLeg[],
+  opts: { isLead: boolean; paymentMode: PaymentMode; partySize: number },
+): number {
+  const perPerson = perPersonDepositEur(legs);
+  const multiplier = opts.isLead && opts.paymentMode === "lead_pays_all"
+    ? Math.max(1, Math.floor(opts.partySize) || 1)
+    : 1;
+  return perPerson * multiplier;
+}
+
 /** Whether the per-person deposit hit the cap (useful to explain the €250 ceiling in the UI). */
 export function isDepositCapped(legs: DepositLeg[]): boolean {
   const rawSum = legs.reduce((acc, leg) => acc + legDepositEur(leg), 0);

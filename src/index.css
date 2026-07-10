@@ -1083,6 +1083,66 @@ html {
   line-height: 1.42;
 }
 
+.voyage-popup__module-title--inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.voyage-popup__help {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.voyage-popup__help-trigger {
+  display: inline-flex;
+  height: 22px;
+  width: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(168 42% 74% / 0.95);
+  border-radius: 999px;
+  background: hsl(0 0% 100% / 0.78);
+  color: hsl(168 64% 24%);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+
+.voyage-popup__help-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: none;
+  width: min(250px, 72vw);
+  border: 1px solid hsl(166 34% 80% / 0.95);
+  border-radius: 13px;
+  background: hsl(0 0% 100% / 0.96);
+  box-shadow: 0 18px 42px hsl(220 28% 10% / 0.16);
+  color: hsl(220 18% 28%);
+  padding: 10px 11px;
+  font-size: 11px;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+.voyage-popup__help:hover .voyage-popup__help-tooltip,
+.voyage-popup__help:focus-within .voyage-popup__help-tooltip {
+  display: grid;
+  gap: 4px;
+}
+
+.voyage-popup__help-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .voyage-popup__module--media {
   position: relative;
   display: grid;

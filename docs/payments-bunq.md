@@ -60,3 +60,32 @@ Migration `supabase/migrations/20260710120500_bunq_deposits.sql`:
 To go live: set the production Bunq credentials, flip `BUNQ_SANDBOX=false`, and register the
 webhook URL (`/api/payments/bunq/webhook`) as a Bunq NotificationFilter for
 `REQUEST`/`MUTATION`/`PAYMENT` events.
+
+## Multi-person bookings (participants)
+
+When a booking is for more than one person, after creating the request the lead is sent to
+`/bookings/:id/participants` to:
+
+1. enter each co-traveller's first name, last name and email;
+2. choose the payment mode — **pago per tutti** (`lead_pays_all`: the lead pays deposit ×
+   party size, guests only accept the terms) or **pago per me** (`each_pays_own`: the lead
+   pays their own share, each guest pays their own on acceptance);
+3. send the invitations and pay their own share.
+
+Each guest receives the `voyage-participant-invite` email and, from `/bookings`, sees a
+**pending invitation**: they accept the same conditions (and pay their deposit if
+`each_pays_own`) or decline. Seats are held from booking time; guests that don't complete
+before `expires_at` (7 days) are released by `expire_pending_booking_participants()`.
+
+Tables & functions: `voyage_booking_participants`, `voyage_booking_requests.payment_mode`,
+`voyage_booking_deposits.participant_id`; RPCs `set_booking_participants`,
+`accept_booking_participation`, `decline_booking_participation`, `get_my_participations`,
+`expire_pending_booking_participants`. Endpoints: `/api/bookings/invite`,
+`/api/payments/bunq/request` (now `participantId`-aware).
+
+**Follow-ups before production:**
+- Redeploy the `send-transactional-email` edge function so the new invite template is picked up.
+- Schedule `expire_pending_booking_participants()` (pg_cron or a cron edge function) — it is
+  granted to `service_role` and is not called automatically yet.
+- The Bunq webhook is not signature-verified (as in the reference implementation); add
+  verification before production, or rely on the authoritative `/status` re-check.

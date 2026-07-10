@@ -455,11 +455,11 @@ const Journal = () => {
       toast.info(
         lang === "it"
           ? direction === "from"
-            ? "Punto di partenza impostato. Clicca un altro waypoint e scegli “Prenota fino a qui”."
-            : "Punto di arrivo impostato. Clicca un altro waypoint e scegli “Prenota da qui”."
+            ? "Punto di partenza impostato. Clicca un'altra tappa e scegli “Prenota fino a qui”."
+            : "Punto di arrivo impostato. Clicca un'altra tappa e scegli “Prenota da qui”."
           : direction === "from"
-            ? "Start point set. Click another waypoint and choose “Book to here”."
-            : "Arrival point set. Click another waypoint and choose “Book from here”."
+            ? "Start point set. Click another stop and choose “Book to here”."
+            : "Arrival point set. Click another stop and choose “Book from here”."
       );
       return;
     }
@@ -469,7 +469,7 @@ const Journal = () => {
     const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
 
     if (rangeLegs.length === 0) {
-      toast.error(lang === "it" ? "Non ci sono tratte prenotabili tra questi waypoint." : "There are no bookable legs between these waypoints.");
+      toast.error(lang === "it" ? "Non ci sono tratte prenotabili tra queste tappe." : "There are no bookable legs between these stops.");
       setBookingRejectedLegIds([]);
       return;
     }
@@ -549,7 +549,17 @@ const Journal = () => {
         _message: bookingMessage.trim() || null,
       });
 
-      if (error) throw error;
+      if (error) {
+        if ((error as { code?: string }).code === "BK001") {
+          toast.error(
+            lang === "it"
+              ? "Hai già una prenotazione per una di queste tratte."
+              : "You already have a booking for one of these legs."
+          );
+          return;
+        }
+        throw error;
+      }
       const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
       toast.success(
         result?.booking_status === "waitlisted"
@@ -557,8 +567,17 @@ const Journal = () => {
           : (lang === "it" ? "Richiesta di prenotazione inviata." : "Booking request sent.")
       );
 
-      // Kick off the Bunq security-deposit payment for the just-created booking.
       const bookingRequestId = result?.booking_request_id;
+
+      // Multi-person bookings go to the participants page (add guests, choose who pays).
+      if (bookingRequestId && Math.max(1, bookingPartySize) > 1) {
+        setBookingConfirmOpen(false);
+        clearBookingSelection();
+        navigate(`/bookings/${bookingRequestId}/participants`);
+        return;
+      }
+
+      // Solo booking: kick off the Bunq security-deposit payment right away.
       if (bookingRequestId) {
         const payment = await startDepositPayment(bookingRequestId);
         if (payment.ok && "shareUrl" in payment) {
@@ -996,8 +1015,8 @@ const Journal = () => {
                 {bookingAnchor && selectedBookingLegs.length === 0 ? (
                   <div className="rounded-[18px] border border-dashed border-emerald-300/70 bg-emerald-50/75 px-3 py-2 text-xs text-emerald-800">
                     {lang === "it"
-                      ? "Waypoint impostato. Clicca un altro waypoint sulla stessa rotta per completare la selezione."
-                      : "Waypoint set. Click another waypoint on the same route to complete the selection."}
+                      ? "Tappa impostata. Clicca un'altra tappa sulla stessa rotta per completare la selezione."
+                      : "Stop set. Click another stop on the same route to complete the selection."}
                   </div>
                 ) : null}
 
