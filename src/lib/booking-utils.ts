@@ -1,4 +1,5 @@
 import type { Language } from "@/lib/i18n";
+import { getDangerReasonLabels } from "@/lib/danger-reasons";
 
 export type VoyageBookingStatus =
   | "requested"
@@ -75,6 +76,8 @@ export interface BookableLeg {
   is_bookable: boolean;
   /** Manual external-hazard rating, 0 (minimo) … 3 (consistente). */
   danger_level?: number | null;
+  /** Specific hazards behind the danger rating (see {@link DangerReasonKey}), e.g. "piracy". */
+  danger_reasons?: string[] | null;
   /** Manual flag: open-sea passage (>12 nm offshore); feeds auto complexity. */
   open_sea?: boolean | null;
   /** Manual complexity override, 1 … 5; null means use the auto value. */
@@ -456,7 +459,10 @@ function joinReasonsList(items: string[], lang: Language | "it" | "en" = "it") {
  * manually overridden, since the auto factors may no longer explain it.
  */
 export function getComplexityReasons(
-  leg: Pick<BookableLeg, "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start">,
+  leg: Pick<
+    BookableLeg,
+    "complexity_override" | "danger_level" | "danger_reasons" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+  >,
   lang: Language | "it" | "en" = "it"
 ): string[] {
   if (!isLegComplexityAuto(leg as BookableLeg)) return [];
@@ -466,8 +472,15 @@ export function getComplexityReasons(
   const danger = getLegDangerLevel(leg);
 
   if (danger >= DANGER_COMPLEXITY_THRESHOLD) {
+    const dangerLabels = getDangerReasonLabels(leg.danger_reasons, lang);
     reasons.push(
-      it ? "livello di pericolo segnalato come elevato per questa tratta" : "a danger level flagged as high for this leg"
+      dangerLabels.length > 0
+        ? it
+          ? `un livello di pericolo elevato (${dangerLabels.join(", ")})`
+          : `a danger level flagged as high (${dangerLabels.join(", ")})`
+        : it
+          ? "livello di pericolo segnalato come elevato per questa tratta"
+          : "a danger level flagged as high for this leg"
     );
   }
   if (leg.open_sea) {
@@ -498,7 +511,12 @@ export function getComplexityReasons(
 export function getComplexityExplanation(
   leg: Pick<
     BookableLeg,
-    "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+    | "complexity_override"
+    | "danger_level"
+    | "danger_reasons"
+    | "open_sea"
+    | "starts_at_window_start"
+    | "ends_at_window_start"
   >,
   lang: Language | "it" | "en" = "it"
 ): string {

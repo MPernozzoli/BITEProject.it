@@ -50,6 +50,7 @@ import {
   isLegComplexityAuto,
   isLegSelectable,
 } from "@/lib/booking-utils";
+import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -517,6 +518,12 @@ const AdminVoyageBookings = () => {
     void persistLegIndicators(leg.id, { open_sea: !leg.open_sea });
   };
 
+  const toggleLegDangerReason = (leg: BookableLeg, key: DangerReasonKey) => {
+    const current = leg.danger_reasons ?? [];
+    const next = current.includes(key) ? current.filter((existing) => existing !== key) : [...current, key];
+    void persistLegIndicators(leg.id, { danger_reasons: next });
+  };
+
   const toggleLegEditing = (legId: string) => {
     setEditableLegIds((current) => {
       const next = new Set(current);
@@ -586,6 +593,7 @@ const AdminVoyageBookings = () => {
               ends_at_window_end: leg.ends_at_window_end || null,
               is_bookable: Boolean(leg.is_bookable),
               danger_level: getLegDangerLevel(leg),
+              danger_reasons: leg.danger_reasons ?? [],
               open_sea: Boolean(leg.open_sea),
               complexity_override: leg.complexity_override ?? null,
             })
@@ -1395,6 +1403,31 @@ const AdminVoyageBookings = () => {
                           Mare aperto{leg.open_sea ? " ✓" : ""}
                         </button>
                       </div>
+                      {getLegDangerLevel(leg) > 0 && (
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Motivi:</span>
+                          {DANGER_REASONS.map((reason) => {
+                            const active = (leg.danger_reasons ?? []).includes(reason.key);
+                            const Icon = reason.icon;
+                            return (
+                              <button
+                                key={reason.key}
+                                type="button"
+                                onClick={() => toggleLegDangerReason(leg, reason.key)}
+                                title={reason.label_it}
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                                  active
+                                    ? "border-red-300/70 bg-red-100/70 text-red-800"
+                                    : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                <Icon size={11} />
+                                {reason.label_it}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       {isEditingLeg && (
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="block">
