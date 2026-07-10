@@ -22,6 +22,22 @@ type ComplexityLegFactors = Pick<
   | "ends_at_window_start"
 >;
 
+/** Small icon(s) for the leg's specific hazard tags, meant to sit right next to "Pericolo: <livello>". */
+const DangerReasonIcons = ({ leg, lang }: { leg?: ComplexityLegFactors; lang: Language | "it" | "en" }) => {
+  if (!leg?.danger_reasons?.length) return null;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {leg.danger_reasons.map((key) => {
+        const reason = getDangerReasonDef(key);
+        if (!reason) return null;
+        const Icon = reason.icon;
+        const label = lang === "it" ? reason.label_it : reason.label_en;
+        return <Icon key={key} size={12} strokeWidth={2.4} aria-label={label} title={label} />;
+      })}
+    </span>
+  );
+};
+
 interface ComplexityIndicatorProps {
   level: number;
   lang: Language | "it" | "en";
@@ -89,9 +105,10 @@ const ComplexityIndicator = ({
 
           {variant === "badge" && dangerLevel > 0 && (
             <span
-              className={`inline-flex items-center rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
+              className={`inline-flex items-center gap-1 rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
             >
               {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
+              <DangerReasonIcons leg={leg} lang={lang} />
             </span>
           )}
         </span>
@@ -111,26 +128,9 @@ const ComplexityIndicator = ({
             {getComplexityTitle(lang)} · {getComplexityLabel(level, lang)}
           </span>
           {dangerLevel > 0 && (
-            <span className="mb-1 block text-[11px] font-medium text-foreground/90">
+            <span className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground/90">
               {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
-            </span>
-          )}
-          {dangerLevel > 0 && leg?.danger_reasons && leg.danger_reasons.length > 0 && (
-            <span className="mb-1.5 flex flex-wrap gap-1">
-              {leg.danger_reasons.map((key) => {
-                const reason = getDangerReasonDef(key);
-                if (!reason) return null;
-                const Icon = reason.icon;
-                return (
-                  <span
-                    key={key}
-                    className="inline-flex items-center gap-1 rounded-full border border-red-300/60 bg-red-50/80 px-1.5 py-0.5 text-[10px] font-medium text-red-800"
-                  >
-                    <Icon size={11} strokeWidth={2.4} aria-hidden />
-                    {italian ? reason.label_it : reason.label_en}
-                  </span>
-                );
-              })}
+              <DangerReasonIcons leg={leg} lang={lang} />
             </span>
           )}
           <span className="block text-muted-foreground">

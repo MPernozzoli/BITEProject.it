@@ -472,15 +472,8 @@ export function getComplexityReasons(
   const danger = getLegDangerLevel(leg);
 
   if (danger >= DANGER_COMPLEXITY_THRESHOLD) {
-    const dangerLabels = getDangerReasonLabels(leg.danger_reasons, lang);
     reasons.push(
-      dangerLabels.length > 0
-        ? it
-          ? `un livello di pericolo elevato (${dangerLabels.join(", ")})`
-          : `a danger level flagged as high (${dangerLabels.join(", ")})`
-        : it
-          ? "livello di pericolo segnalato come elevato per questa tratta"
-          : "a danger level flagged as high for this leg"
+      it ? "livello di pericolo segnalato come elevato per questa tratta" : "a danger level flagged as high for this leg"
     );
   }
   if (leg.open_sea) {
@@ -525,22 +518,32 @@ export function getComplexityExplanation(
     ? "È una stima orientativa: la complessità reale in mare dipende da condizioni non prevedibili in anticipo (meteo, stato del mare, traffico marittimo) e può variare."
     : "It's a rough estimate: real complexity at sea depends on conditions that can't be predicted in advance (weather, sea state, traffic) and may vary.";
 
+  // Specific hazard tags (orcas, piracy, …) are always spelled out when present, regardless
+  // of whether the numeric danger level was high enough to also bump the complexity score.
+  const dangerLabels = getDangerReasonLabels(leg.danger_reasons, lang);
+  const dangerSentence =
+    dangerLabels.length > 0
+      ? it
+        ? `Pericolo segnalato per: ${joinReasonsList(dangerLabels, lang)}.`
+        : `Flagged danger: ${joinReasonsList(dangerLabels, lang)}.`
+      : "";
+
   if (!isLegComplexityAuto(leg as BookableLeg)) {
-    return it
-      ? `Livello impostato manualmente dall'organizzatore. ${shortDisclaimer}`
-      : `Level set manually by the organizer. ${shortDisclaimer}`;
+    const manualLine = it ? "Livello impostato manualmente dall'organizzatore." : "Level set manually by the organizer.";
+    return [manualLine, dangerSentence, shortDisclaimer].filter(Boolean).join(" ");
   }
 
   const reasons = getComplexityReasons(leg, lang);
-  if (reasons.length === 0) {
-    return it
-      ? `Tratta breve e senza fattori di rischio particolari. ${shortDisclaimer}`
-      : `A short leg with no particular risk factors. ${shortDisclaimer}`;
-  }
+  const introLine =
+    reasons.length === 0
+      ? it
+        ? "Tratta breve e senza fattori di rischio particolari."
+        : "A short leg with no particular risk factors."
+      : it
+        ? `Complessità più alta perché ${joinReasonsList(reasons, lang)}.`
+        : `Higher complexity because ${joinReasonsList(reasons, lang)}.`;
 
-  const list = joinReasonsList(reasons, lang);
-  const intro = it ? `Complessità più alta perché ${list}.` : `Higher complexity because ${list}.`;
-  return `${intro} ${shortDisclaimer}`;
+  return [introLine, dangerSentence, shortDisclaimer].filter(Boolean).join(" ");
 }
 
 export function getLegDangerLevel(leg: Pick<BookableLeg, "danger_level">) {
