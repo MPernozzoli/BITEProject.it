@@ -329,7 +329,7 @@ const Navbar = () => {
                 <DropdownMenuItem asChild>
                   <Link to="/bookings" className="flex items-center gap-2">
                     <CalendarCheck size={14} />
-                    <span>{lang === "it" ? "Imbarchi" : "Bookings"}</span>
+                    <span>{lang === "it" ? "Imbarchi" : "Boardings"}</span>
                   </Link>
                 </DropdownMenuItem>
                 {isAdmin && (
@@ -427,7 +427,7 @@ const Navbar = () => {
                 <DropdownMenuItem asChild>
                   <Link to="/bookings" className="flex items-center gap-2">
                     <CalendarCheck size={14} />
-                    <span>{lang === "it" ? "Imbarchi" : "Bookings"}</span>
+                    <span>{lang === "it" ? "Imbarchi" : "Boardings"}</span>
                   </Link>
                 </DropdownMenuItem>
                 {isAdmin && (
@@ -593,7 +593,7 @@ const Navbar = () => {
                       >
                         <span className="flex items-center gap-3">
                           <CalendarCheck size={16} />
-                          {lang === "it" ? "Imbarchi" : "Bookings"}
+                          {lang === "it" ? "Imbarchi" : "Boardings"}
                         </span>
                         <ArrowRight size={16} className="text-slate-500" />
                       </Link>

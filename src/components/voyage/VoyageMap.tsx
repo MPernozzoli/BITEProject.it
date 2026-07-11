@@ -45,7 +45,7 @@ interface VoyageMapProps {
   selectedRouteVoyageId?: string | null;
   bookingLegsByVoyage?: Record<string, BookableLegAvailability[]>;
   bookingSelectionAnchor?: { voyageId: string; waypointId: string } | null;
-  onWaypointBookingAction?: (voyageId: string, waypointId: string, direction: "from" | "to") => void;
+  onParticipate?: (voyageId: string) => void;
   flyToWaypointRef?: MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
@@ -306,7 +306,7 @@ const VoyageMap = ({
   selectedRouteVoyageId: controlledRouteVoyageId,
   bookingLegsByVoyage = {},
   bookingSelectionAnchor = null,
-  onWaypointBookingAction,
+  onParticipate,
   flyToWaypointRef,
   lang,
   initialFitReady = true,
@@ -352,8 +352,8 @@ const VoyageMap = ({
   highlightedVoyageIdRef.current = highlightedVoyageId;
   const langRef = useRef(lang);
   langRef.current = lang;
-  const onWaypointBookingActionRef = useRef(onWaypointBookingAction);
-  onWaypointBookingActionRef.current = onWaypointBookingAction;
+  const onParticipateRef = useRef(onParticipate);
+  onParticipateRef.current = onParticipate;
   const bookingSelectionAnchorRef = useRef(bookingSelectionAnchor);
   bookingSelectionAnchorRef.current = bookingSelectionAnchor;
 
@@ -1042,25 +1042,22 @@ const VoyageMap = ({
         : "";
       const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
       const complexityChip = meta.outboundLeg ? buildComplexityChipMarkup(meta.outboundLeg, L) : "";
-      const canBookFrom = meta.isBookableVoyage && meta.hasOutboundAvailability;
-      const canBookTo = meta.isBookableVoyage && meta.hasInboundAvailability;
-      const hasBookingAction = canBookFrom || canBookTo;
+      const canParticipate = meta.isBookableVoyage && (meta.hasOutboundAvailability || meta.hasInboundAvailability);
       // A leg is "completed" once every leg touching this stop is in the past — at that point
       // the complexity estimate and booking module are no longer relevant and must not show.
       const isPastCompleted = meta.hasAnyBookingLeg && !meta.hasCurrentLegFromHere;
       const bookingHint = !meta.hasAnyBookingLeg
-        ? `<p class="voyage-popup__hint">${L === "it" ? "Prenotazioni non ancora aperte per questa tappa." : "Bookings are not open for this stop yet."}</p>`
-        : !canBookFrom && !canBookTo
-          ? `<p class="voyage-popup__hint">${L === "it" ? "Scegli un'altra tappa sulla stessa rotta per verificare le tratte disponibili." : "Choose another stop on the same route to check available legs."}</p>`
+        ? `<p class="voyage-popup__hint">${L === "it" ? "Le adesioni non sono ancora aperte per questa tappa." : "Joining isn't open yet for this stop."}</p>`
+        : !canParticipate
+          ? `<p class="voyage-popup__hint">${L === "it" ? "Al momento non risultano posti disponibili su questa tratta." : "There are currently no seats available on this leg."}</p>`
           : "";
       const bookableBlock = meta.isBookableVoyage && !isPastCompleted
         ? buildPopupModule(
             "booking",
-            L === "it" ? "Viaggio prenotabile" : "Bookable voyage",
+            L === "it" ? "Viaggio aperto alle adesioni" : "Open to join",
             `${complexityChip}`
-            + `${hasBookingAction ? `<div class="voyage-popup__actions">
-              <button type="button" class="voyage-popup__action" data-booking-direction="from" ${canBookFrom ? "" : "disabled"}>${L === "it" ? "Prenota da qui" : "Book from here"}</button>
-              <button type="button" class="voyage-popup__action" data-booking-direction="to" ${canBookTo ? "" : "disabled"}>${L === "it" ? "Prenota fino a qui" : "Book to here"}</button>
+            + `${canParticipate ? `<div class="voyage-popup__actions">
+              <button type="button" class="voyage-popup__action" data-participate="1">${L === "it" ? "Partecipa" : "Join"}</button>
             </div>` : ""}`
             + bookingHint
           )
@@ -1090,12 +1087,11 @@ const VoyageMap = ({
       }
       const p = popupRef.current;
       p.setLngLat(coords).setHTML(popupHtml).addTo(map);
-      p.getElement().querySelectorAll<HTMLButtonElement>("[data-booking-direction]").forEach((button) => {
+      p.getElement().querySelectorAll<HTMLButtonElement>("[data-participate]").forEach((button) => {
         button.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          const direction = button.dataset.bookingDirection === "to" ? "to" : "from";
-          onWaypointBookingActionRef.current?.(meta.voyageId, meta.waypoint.id, direction);
+          onParticipateRef.current?.(meta.voyageId);
         });
       });
       const popupRoot = p.getElement();

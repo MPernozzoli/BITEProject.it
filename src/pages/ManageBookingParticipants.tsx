@@ -63,7 +63,7 @@ const ManageBookingParticipants = () => {
       .maybeSingle();
 
     if (error || !request) {
-      toast.error(lang === "it" ? "Prenotazione non trovata." : "Booking not found.");
+      toast.error(lang === "it" ? "Partecipazione non trovata." : "Participation not found.");
       navigate("/bookings");
       return;
     }
@@ -209,12 +209,12 @@ const ManageBookingParticipants = () => {
             {lang === "it" ? "Partecipanti al viaggio" : "Voyage participants"}
           </p>
           <h1 className="editorial-heading text-3xl">
-            {voyage ? getLocalizedBookingVoyageName(voyage, lang) : lang === "it" ? "Prenotazione" : "Booking"}
+            {voyage ? getLocalizedBookingVoyageName(voyage, lang) : lang === "it" ? "Partecipazione" : "Participation"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {lang === "it"
-              ? `Hai prenotato per ${partySize} persone. Inserisci i dati degli altri ${partySize - 1} partecipanti.`
-              : `You booked for ${partySize} people. Enter the details of the other ${partySize - 1} participants.`}
+              ? `Hai aderito per ${partySize} persone. Inserisci i dati degli altri ${partySize - 1} partecipanti.`
+              : `You joined for ${partySize} people. Enter the details of the other ${partySize - 1} participants.`}
           </p>
         </header>
 

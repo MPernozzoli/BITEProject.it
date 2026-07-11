@@ -170,7 +170,7 @@ export const capacityBlockingStatuses = new Set<VoyageBookingStatus>([
 export function getBookingStatusLabel(status: VoyageBookingStatus, lang: Language | "it" | "en" = "it") {
   const italian = lang === "it";
   const labels: Record<VoyageBookingStatus, string> = {
-    requested: italian ? "Prenotato" : "Requested",
+    requested: italian ? "Richiesta inviata" : "Requested",
     waitlisted: italian ? "Waiting list" : "Waitlisted",
     admin_approved: italian ? "Da confermare" : "Ready to confirm",
     user_confirmed: italian ? "Confermato" : "Confirmed",

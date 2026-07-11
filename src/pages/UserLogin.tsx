@@ -11,6 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { validateSessionOrSignOut } from "@/lib/supabase-auth";
+import { fetchIsProfileComplete } from "@/lib/profile-completeness";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
@@ -296,6 +297,15 @@ const UserLogin = () => {
   const emailReady = !!normalizeEmail(emailInput);
   const nameReady = authMode === "login" || !!nameInput.trim();
 
+  const completeAuthNavigation = async (userId: string) => {
+    const complete = await fetchIsProfileComplete(userId);
+    if (complete) {
+      navigate(redirectTo, { replace: true });
+    } else {
+      navigate("/complete-profile", { state: { from: redirectTo }, replace: true });
+    }
+  };
+
   useEffect(() => {
     const storedMethod = window.localStorage.getItem(LAST_AUTH_METHOD_STORAGE_KEY);
     if (storedMethod === "google" || storedMethod === "email" || storedMethod === "passkey") {
@@ -309,13 +319,15 @@ const UserLogin = () => {
     void (async () => {
       const { session } = await validateSessionOrSignOut();
       if (!cancelled && session) {
-        navigate(redirectTo, { replace: true });
+        await completeAuthNavigation(session.user.id);
       }
     })();
 
     return () => {
       cancelled = true;
     };
+    // completeAuthNavigation intentionally excluded: it is stable in effect (recreated each render but not depended on for identity)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, redirectTo]);
 
   useEffect(() => {
@@ -444,7 +456,7 @@ const UserLogin = () => {
         }
       }
 
-      navigate(redirectTo, { replace: true });
+      await completeAuthNavigation(session.user.id);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : ui.errors.verifyGeneric;
@@ -519,7 +531,7 @@ const UserLogin = () => {
 
       localStorage.setItem(LAST_AUTH_METHOD_STORAGE_KEY, "passkey");
       setLastUsedMethod("passkey");
-      navigate(redirectTo, { replace: true });
+      await completeAuthNavigation(data.session.user.id);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : ui.errors.passkey;
       setError(message);

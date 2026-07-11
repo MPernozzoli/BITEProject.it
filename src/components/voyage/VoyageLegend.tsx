@@ -44,7 +44,7 @@ interface VoyageLegendProps {
   onWaypointClick?: (waypoint: VoyageWaypoint) => void;
   onArticleClick?: (article: GeoArticle) => void;
   bookingLegs?: BookableLegAvailability[];
-  onWaypointBookingAction?: (voyageId: string, waypointId: string, direction: "from" | "to") => void;
+  onParticipate?: (voyageId: string) => void;
   /** Titoli storia da `stories` (opzionale; caricati dal parent). */
   storyTitlesById?: Record<string, VoyageLegendStoryTitles>;
 }
@@ -139,7 +139,7 @@ const VoyageLegend = ({
   onWaypointClick,
   onArticleClick,
   bookingLegs = [],
-  onWaypointBookingAction,
+  onParticipate,
   storyTitlesById,
 }: VoyageLegendProps) => {
   const visibleWaypoints = useMemo(
@@ -297,8 +297,6 @@ const VoyageLegend = ({
   const endLabel = formatDate(voyage.end_date, lang);
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
   const isWater = voyage.type === "water";
-  const firstVisibleWaypoint = visibleWaypoints[0] || null;
-  const lastVisibleWaypoint = visibleWaypoints[visibleWaypoints.length - 1] || null;
   const voyageIsBookable = isVoyageBookableNow(voyage);
   const hasBookableLegs = bookingLegs.length > 0;
   const hasAvailableLegs = bookingLegs.some((leg) => leg.available);
@@ -338,7 +336,7 @@ const VoyageLegend = ({
           {voyageIsBookable ? (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-50/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-800">
               <TicketCheck size={10} />
-              {lang === "it" ? "Prenotabile" : "Bookable"}
+              {lang === "it" ? "Adesioni aperte" : "Open to join"}
             </span>
           ) : null}
         </div>
@@ -410,12 +408,12 @@ const VoyageLegend = ({
               <p className="mt-1 text-[12px] leading-relaxed text-emerald-900/75">
                 {!hasBookableLegs
                   ? (lang === "it"
-                    ? "Prenotazioni non ancora aperte per le singole tratte."
-                    : "Bookings are not open for individual legs yet.")
+                    ? "Le adesioni non sono ancora aperte per le singole tratte."
+                    : "Joining isn't open yet for individual legs.")
                   : hasAvailableLegs
                     ? (lang === "it"
-                      ? "Scegli una tappa di partenza o di arrivo, poi completa la selezione sulla mappa."
-                      : "Choose a starting or arrival stop, then complete the selection on the map.")
+                      ? "Premi «Partecipa» per scegliere le tue tappe e i dettagli."
+                      : "Tap “Join” to choose your stops and details.")
                     : (lang === "it"
                       ? "Le tratte esistono, ma al momento non risultano posti disponibili."
                       : "Legs exist, but no seats are currently available.")}
@@ -425,27 +423,11 @@ const VoyageLegend = ({
           <div className="flex shrink-0 flex-wrap gap-2 sm:pl-1">
             <button
               type="button"
-              disabled={!hasAvailableLegs || !firstVisibleWaypoint || !onWaypointBookingAction}
-              onClick={() => {
-                if (!firstVisibleWaypoint) return;
-                onWaypointBookingAction?.(voyage.id, firstVisibleWaypoint.id, "from");
-                onWaypointClick?.(firstVisibleWaypoint);
-              }}
-              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-3.5 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-emerald-700/25 disabled:shadow-none"
+              disabled={!hasAvailableLegs || !onParticipate}
+              onClick={() => onParticipate?.(voyage.id)}
+              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-4 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-emerald-700/25 disabled:shadow-none"
             >
-              {lang === "it" ? "Prenota da qui" : "Book from here"}
-            </button>
-            <button
-              type="button"
-              disabled={!hasAvailableLegs || !lastVisibleWaypoint || !onWaypointBookingAction}
-              onClick={() => {
-                if (!lastVisibleWaypoint) return;
-                onWaypointBookingAction?.(voyage.id, lastVisibleWaypoint.id, "to");
-                onWaypointClick?.(lastVisibleWaypoint);
-              }}
-              className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3.5 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
-            >
-              {lang === "it" ? "Prenota fino a qui" : "Book to here"}
+              {lang === "it" ? "Partecipa" : "Join"}
             </button>
           </div>
         </div>

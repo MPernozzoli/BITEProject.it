@@ -10,6 +10,7 @@ import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
+import { HERO_READY_EVENT } from "@/lib/hero-ready-event";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
@@ -289,6 +290,16 @@ const Index = () => {
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
   const shouldRenderHeroBackgroundImage = !heroMedia && Boolean(heroBackgroundImage);
+
+  // Nothing to paint (no video, no fallback image) once the hero data has actually
+  // settled — tell the boot splash to stop waiting instead of hanging until its safety timeout.
+  useEffect(() => {
+    if (heroMedia || heroBackgroundImage) return;
+    if (isPublicContentLoading) return;
+    if (!publicContent && liveHeroVideoPool === undefined) return;
+    window.dispatchEvent(new Event(HERO_READY_EVENT));
+  }, [heroMedia, heroBackgroundImage, isPublicContentLoading, publicContent, liveHeroVideoPool]);
+
   const heroPriorityMedia = useMemo(() => {
     const candidates = [
       heroMedia,
@@ -548,6 +559,11 @@ const Index = () => {
     video.pause();
   };
 
+  // First frame of the active hero video actually painted — safe to stop showing the boot splash.
+  const handleHeroVideoLoadedData = () => {
+    window.dispatchEvent(new Event(HERO_READY_EVENT));
+  };
+
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
@@ -578,6 +594,7 @@ const Index = () => {
         playsInline
         preload={mode === "active" || shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
+        onLoadedData={mode === "active" ? handleHeroVideoLoadedData : undefined}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
         <source src={playbackSrc} type={media.mimeType ?? "video/mp4"} />
@@ -950,7 +967,7 @@ const Index = () => {
         ]}
       />
       <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-[#0b1a2c]">
           {shouldRenderHeroBackgroundImage ? (
             <img
               key={heroBackgroundImage}
@@ -961,6 +978,7 @@ const Index = () => {
               loading="eager"
               decoding="async"
               fetchPriority="high"
+              onLoad={() => window.dispatchEvent(new Event(HERO_READY_EVENT))}
             />
           ) : null}
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}

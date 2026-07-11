@@ -52,8 +52,8 @@ interface BookingCondition {
 const BOOKING_CONDITIONS: BookingCondition[] = [
   {
     id: "indicative-dates",
-    it: "Ho compreso che le date indicate al momento della prenotazione sono puramente indicative e possono variare per esigenze tecniche, organizzative o meteorologiche.",
-    en: "I understand that the dates shown at the time of booking are purely indicative and may change for technical, organisational or weather-related reasons.",
+    it: "Ho compreso che le date indicate al momento dell'adesione sono puramente indicative e possono variare per esigenze tecniche, organizzative o meteorologiche.",
+    en: "I understand that the dates shown at the time of joining are purely indicative and may change for technical, organisational or weather-related reasons.",
   },
   {
     id: "risks-liability",
@@ -193,7 +193,7 @@ const BookingConfirmDialog = ({
       <DialogContent className="max-h-[90vh] gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="space-y-1 px-6 pt-6">
           <DialogTitle className="text-lg">
-            {lang === "it" ? "Conferma la prenotazione" : "Confirm your booking"}
+            {lang === "it" ? "Conferma la partecipazione" : "Confirm your participation"}
           </DialogTitle>
           <DialogDescription>
             {lang === "it"
@@ -358,8 +358,8 @@ const BookingConfirmDialog = ({
                 ? "Conferma e versa il contributo"
                 : "Confirm & pay contribution"
               : lang === "it"
-                ? "Conferma prenotazione"
-                : "Confirm booking"}
+                ? "Conferma partecipazione"
+                : "Confirm participation"}
           </Button>
         </DialogFooter>
       </DialogContent>

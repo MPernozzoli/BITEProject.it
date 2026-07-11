@@ -106,10 +106,10 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     robots: "noindex, nofollow",
   },
   "/bookings": {
-    title: { en: "My Bookings | BITE", it: "Le mie prenotazioni | BITE" },
+    title: { en: "My Voyages | BITE", it: "Le mie partecipazioni | BITE" },
     description: {
-      en: "Manage your BITE voyage bookings.",
-      it: "Gestisci le tue prenotazioni BITE.",
+      en: "Manage the voyages you've joined on BITE.",
+      it: "Gestisci le tue partecipazioni ai viaggi BITE.",
     },
     robots: "noindex, nofollow",
   },

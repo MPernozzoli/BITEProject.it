@@ -248,7 +248,7 @@ const UserBookings = () => {
       return false;
     }
     if (!isVoyageBookableNow(selectedVoyage)) {
-      toast.error(lang === "it" ? "Questo viaggio non è più prenotabile." : "This voyage is no longer bookable.");
+      toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
       return false;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
@@ -284,8 +284,8 @@ const UserBookings = () => {
       if ((error as { code?: string }).code === "BK001") {
         toast.error(
           lang === "it"
-            ? "Hai già una prenotazione per una di queste tratte."
-            : "You already have a booking for one of these legs."
+            ? "Hai già aderito a una di queste tratte."
+            : "You've already joined one of these legs."
         );
       } else {
         toast.error(error.message);
@@ -295,7 +295,7 @@ const UserBookings = () => {
     const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
     toast.success(
       result?.booking_status === "waitlisted"
-        ? lang === "it" ? "Posti pieni: sei in waiting list." : "Fully booked: you are on the waiting list."
+        ? lang === "it" ? "Posti pieni: sei in lista d'attesa." : "Fully booked: you are on the waiting list."
         : lang === "it" ? "Richiesta inviata." : "Request sent."
     );
 
@@ -318,14 +318,14 @@ const UserBookings = () => {
       if (!payment.ok && "notConfigured" in payment) {
         toast.info(
           lang === "it"
-            ? "Prenotazione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
-            : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
+            ? "Adesione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+            : "You're in! Contribution payment is not active yet: we'll send you the link shortly."
         );
       } else if (!payment.ok) {
         toast.info(
           lang === "it"
-            ? "Prenotazione registrata. Puoi completare il pagamento con bonifico."
-            : "Booking saved. You can complete the payment by bank transfer."
+            ? "Adesione registrata. Puoi completare il pagamento con bonifico."
+            : "You're in! You can complete the payment by bank transfer."
         );
         setBankTransfer({ bookingRequestId });
       }
@@ -344,19 +344,19 @@ const UserBookings = () => {
     setSaving(false);
     if (error) toast.error(error.message);
     else {
-      toast.success(lang === "it" ? "Booking confermato." : "Booking confirmed.");
+      toast.success(lang === "it" ? "Partecipazione confermata." : "Participation confirmed.");
       await loadData();
     }
   };
 
   const cancelBooking = async (requestId: string) => {
-    if (!confirm(lang === "it" ? "Annullare questo booking?" : "Cancel this booking?")) return;
+    if (!confirm(lang === "it" ? "Annullare questa partecipazione?" : "Cancel this participation?")) return;
     setSaving(true);
     const { error } = await typedSupabase.rpc("cancel_voyage_booking", { _booking_request_id: requestId });
     setSaving(false);
     if (error) toast.error(error.message);
     else {
-      toast.success(lang === "it" ? "Booking annullato." : "Booking cancelled.");
+      toast.success(lang === "it" ? "Partecipazione annullata." : "Participation cancelled.");
       await loadData();
     }
   };
@@ -552,7 +552,7 @@ const UserBookings = () => {
               </div>
               {bookableVoyages.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {lang === "it" ? "Nessun viaggio prenotabile al momento." : "No bookable voyages right now."}
+                  {lang === "it" ? "Nessun viaggio aperto alle adesioni al momento." : "No voyages open to join right now."}
                 </p>
               ) : (
                 <div className="space-y-4">
@@ -581,8 +581,8 @@ const UserBookings = () => {
                     {selectedVoyageLegs.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         {lang === "it"
-                          ? "Le tratte prenotabili non sono ancora state generate."
-                          : "Bookable legs have not been generated yet."}
+                          ? "Le tratte non sono ancora state generate."
+                          : "Legs have not been generated yet."}
                       </p>
                     ) : (
                       selectedVoyageLegs.map((leg) => (

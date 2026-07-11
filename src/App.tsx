@@ -59,6 +59,7 @@ const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
+const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const UserBookings = lazy(() => import("./pages/UserBookings"));
 const ManageBookingParticipants = lazy(() => import("./pages/ManageBookingParticipants"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
@@ -168,6 +169,7 @@ const App = () => {
                     {/* Auth, profile, and admin routes — shared across the main site and admin subdomain */}
                     <Route path="/login" element={<UserLogin />} />
                     <Route path="/signup" element={<UserLogin />} />
+                    <Route path="/complete-profile" element={<CompleteProfile />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
                     <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />

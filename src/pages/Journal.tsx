@@ -449,37 +449,25 @@ const Journal = () => {
     setBookingPartySize(1);
   }, []);
 
-  const handleWaypointBookingAction = useCallback((voyageId: string, waypointId: string, direction: "from" | "to") => {
+  const handleParticipate = useCallback((voyageId: string) => {
     const voyageLegs = bookingLegsByVoyage[voyageId] || [];
     const voyageWaypoints = waypointsMap[voyageId] || [];
     const waypointIds = voyageWaypoints.map((waypoint) => waypoint.id);
+    if (waypointIds.length < 2) return;
 
     setFocusedVoyageId(voyageId);
-    setSelectedRouteVoyageId(voyageId);
+    // Il pannello di adesione prende il posto della legenda, che qui sotto si chiude.
+    setSelectedRouteVoyageId(null);
 
-    if (!bookingAnchor || bookingAnchor.voyageId !== voyageId) {
-      setBookingAnchor({ voyageId, waypointId });
+    const fromWaypointId = waypointIds[0];
+    const toWaypointId = waypointIds[waypointIds.length - 1];
+    setBookingAnchor({ voyageId, waypointId: fromWaypointId });
+
+    const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
+    if (rangeLegs.length === 0) {
       setSelectedBookingLegIds([]);
       setBookingRejectedLegIds([]);
-      toast.info(
-        lang === "it"
-          ? direction === "from"
-            ? "Punto di partenza impostato. Clicca un'altra tappa e scegli “Prenota fino a qui”."
-            : "Punto di arrivo impostato. Clicca un'altra tappa e scegli “Prenota da qui”."
-          : direction === "from"
-            ? "Start point set. Click another stop and choose “Book to here”."
-            : "Arrival point set. Click another stop and choose “Book from here”."
-      );
-      return;
-    }
-
-    const fromWaypointId = direction === "to" ? bookingAnchor.waypointId : waypointId;
-    const toWaypointId = direction === "to" ? waypointId : bookingAnchor.waypointId;
-    const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
-
-    if (rangeLegs.length === 0) {
-      toast.error(lang === "it" ? "Non ci sono tratte prenotabili tra queste tappe." : "There are no bookable legs between these stops.");
-      setBookingRejectedLegIds([]);
+      toast.error(lang === "it" ? "Non ci sono tratte disponibili per questo viaggio." : "There are no open legs for this voyage.");
       return;
     }
 
@@ -490,17 +478,16 @@ const Journal = () => {
     setSelectedBookingLegIds(availableLegs.map((leg) => leg.id));
     setBookingRejectedLegIds(rejectedLegs.map((leg) => leg.id));
 
-    if (rejectedLegs.length > 0) {
-      toast.error(
+    if (availableLegs.length === 0) {
+      toast.error(lang === "it" ? "Al momento non ci sono posti disponibili su queste tratte." : "There are currently no seats available on these legs.");
+    } else if (rejectedLegs.length > 0) {
+      toast.info(
         lang === "it"
-          ? "Alcune tratte non hanno disponibilità: ho selezionato solo quelle ancora prenotabili."
-          : "Some legs have no availability: only available legs were selected."
+          ? "Alcune tratte non hanno disponibilità: puoi toglierle dalla selezione."
+          : "Some legs have no availability: you can remove them from the selection."
       );
-      return;
     }
-
-    toast.success(lang === "it" ? "Tratte selezionate per la prenotazione." : "Booking legs selected.");
-  }, [bookingAnchor, bookingLegsByVoyage, bookingPartySize, lang, waypointsMap]);
+  }, [bookingLegsByVoyage, bookingPartySize, lang, waypointsMap]);
 
   const toggleBookingLeg = useCallback((legId: string) => {
     const leg = bookingLegsById[legId];
@@ -530,7 +517,7 @@ const Journal = () => {
 
     const selectedBookingVoyage = voyages.find((voyage) => voyage.id === bookingAnchor.voyageId);
     if (!isVoyageBookableNow(selectedBookingVoyage)) {
-      toast.error(lang === "it" ? "Questo viaggio non è più prenotabile." : "This voyage is no longer bookable.");
+      toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
       clearBookingSelection();
       return;
     }
@@ -562,8 +549,8 @@ const Journal = () => {
         if ((error as { code?: string }).code === "BK001") {
           toast.error(
             lang === "it"
-              ? "Hai già una prenotazione per una di queste tratte."
-              : "You already have a booking for one of these legs."
+              ? "Hai già aderito a una di queste tratte."
+              : "You've already joined one of these legs."
           );
           return;
         }
@@ -572,8 +559,8 @@ const Journal = () => {
       const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
       toast.success(
         result?.booking_status === "waitlisted"
-          ? (lang === "it" ? "Richiesta inviata in waiting list." : "Request sent to the waiting list.")
-          : (lang === "it" ? "Richiesta di prenotazione inviata." : "Booking request sent.")
+          ? (lang === "it" ? "Richiesta inviata in lista d'attesa." : "Request sent to the waiting list.")
+          : (lang === "it" ? "Richiesta di partecipazione inviata." : "Request to join sent.")
       );
 
       const bookingRequestId = result?.booking_request_id;
@@ -596,14 +583,14 @@ const Journal = () => {
         if (!payment.ok && "notConfigured" in payment) {
           toast.info(
             lang === "it"
-              ? "Prenotazione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
-              : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
+              ? "Adesione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+              : "You're in! Contribution payment is not active yet: we'll send you the link shortly."
           );
         } else if (!payment.ok) {
           toast.info(
             lang === "it"
-              ? "Prenotazione registrata. Puoi completare il pagamento con bonifico."
-              : "Booking saved. You can complete the payment by bank transfer."
+              ? "Adesione registrata. Puoi completare il pagamento con bonifico."
+              : "You're in! You can complete the payment by bank transfer."
           );
           setBankTransfer({ bookingRequestId });
         }
@@ -616,8 +603,8 @@ const Journal = () => {
       await refetchBookingLegs();
       toast.error(
         lang === "it"
-          ? "Prenotazione non riuscita: almeno una tratta potrebbe non avere più posti."
-          : "Booking failed: at least one leg may no longer have seats."
+          ? "Adesione non riuscita: almeno una tratta potrebbe non avere più posti."
+          : "Couldn't join: at least one leg may no longer have seats."
       );
       console.error("[Journal] request_voyage_booking failed", error);
     } finally {
@@ -958,7 +945,7 @@ const Journal = () => {
             selectedRouteVoyageId={selectedRouteVoyageId}
             bookingLegsByVoyage={bookingLegsByVoyage}
             bookingSelectionAnchor={bookingAnchor}
-            onWaypointBookingAction={handleWaypointBookingAction}
+            onParticipate={handleParticipate}
             presenceMarkers={mapPresenceMarkers}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}
@@ -992,7 +979,7 @@ const Journal = () => {
                   onClose={() => setSelectedRouteVoyageId(null)}
                   onArticleClick={handleArticleClick}
                   bookingLegs={bookingLegsByVoyage[selectedRouteVoyageId] || []}
-                  onWaypointBookingAction={handleWaypointBookingAction}
+                  onParticipate={handleParticipate}
                   storyTitlesById={voyageLegendStoryTitlesById}
                   onWaypointClick={(wp) => {
                     const wps = waypointsMap[selectedRouteVoyageId] || [];
@@ -1021,7 +1008,7 @@ const Journal = () => {
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {lang === "it" ? "Prenotazione viaggio" : "Voyage booking"}
+                      {lang === "it" ? "Partecipa al viaggio" : "Join the voyage"}
                     </p>
                     <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
                       {bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : (lang === "it" ? "Selezione" : "Selection")}
@@ -1040,8 +1027,8 @@ const Journal = () => {
                 {bookingAnchor && selectedBookingLegs.length === 0 ? (
                   <div className="rounded-[18px] border border-dashed border-emerald-300/70 bg-emerald-50/75 px-3 py-2 text-xs text-emerald-800">
                     {lang === "it"
-                      ? "Tappa impostata. Clicca un'altra tappa sulla stessa rotta per completare la selezione."
-                      : "Stop set. Click another stop on the same route to complete the selection."}
+                      ? "Al momento non ci sono tratte disponibili su questo viaggio."
+                      : "There are currently no open legs on this voyage."}
                   </div>
                 ) : null}
 
@@ -1178,7 +1165,7 @@ const Journal = () => {
                   >
                     {bookingSubmitting ? <Loader2 size={14} className="animate-spin" /> : <TicketCheck size={14} />}
                     {session?.user
-                      ? (lang === "it" ? "Prenota" : "Book")
+                      ? (lang === "it" ? "Partecipa" : "Join")
                       : (lang === "it" ? "Accedi" : "Sign in")}
                   </button>
                 </div>
