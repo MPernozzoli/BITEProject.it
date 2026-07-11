@@ -19,6 +19,7 @@ import {
   type ParticipantInput,
 } from "@/lib/booking-participants";
 import { startDepositPayment } from "@/lib/booking-payment";
+import BankTransferDialog from "@/components/booking/BankTransferDialog";
 
 type QueryResult<T> = Promise<{ data: T | null; error: { message?: string } | null }>;
 type QueryBuilder<T> = QueryResult<T> & {
@@ -46,6 +47,7 @@ const ManageBookingParticipants = () => {
   const [guests, setGuests] = useState<ParticipantInput[]>([]);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("lead_pays_all");
   const [submitting, setSubmitting] = useState(false);
+  const [bankTransferOpen, setBankTransferOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!session?.user.id || !id) return;
@@ -178,14 +180,13 @@ const ManageBookingParticipants = () => {
             ? "Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
             : "Contribution payment is not active yet: we'll send you the link shortly."
         );
-      } else if (!payment.ok && payment.error === "bunq_amount_exceeds_single_transaction_limit") {
-        toast.info(
-          lang === "it"
-            ? "Ti invieremo i dati per procedere con bonifico."
-            : "We'll send you bank transfer details."
-        );
+        navigate("/bookings");
+      } else if (!payment.ok) {
+        // Keep the user here so they can complete the contribution by bank transfer.
+        setBankTransferOpen(true);
+      } else {
+        navigate("/bookings");
       }
-      navigate("/bookings");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error");
     } finally {
@@ -315,6 +316,19 @@ const ManageBookingParticipants = () => {
           {lang === "it" ? "Invia inviti e versa il contributo" : "Send invites & pay contribution"}
         </button>
       </div>
+
+      <BankTransferDialog
+        open={bankTransferOpen}
+        onOpenChange={(open) => {
+          setBankTransferOpen(open);
+          if (!open) navigate("/bookings");
+        }}
+        bookingRequestId={id}
+        onConfirmed={() => {
+          setBankTransferOpen(false);
+          navigate("/bookings");
+        }}
+      />
     </div>
   );
 };

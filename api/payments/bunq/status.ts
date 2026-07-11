@@ -9,7 +9,11 @@
  */
 import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase.js";
 import { bunqConfigured } from "../../../src/server/bunq/client.js";
-import { getBunqPaymentRequest, isPaidStatus } from "../../../src/server/bunq/payment-requests.js";
+import {
+  findIncomingPaymentByReference,
+  getBunqPaymentRequest,
+  isPaidStatus,
+} from "../../../src/server/bunq/payment-requests.js";
 import {
   bearerToken,
   firstQueryParam,
@@ -83,7 +87,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
     let depositQuery = db
       .from("voyage_booking_deposits")
-      .select("id, status, amount_cents, bunq_request_id")
+      .select("id, status, amount_cents, bunq_request_id, payment_method, reference")
       .eq("booking_request_id", bookingRequestId);
     if (participantId) depositQuery = depositQuery.eq("participant_id", participantId);
     const { data: deposit } = await depositQuery
@@ -101,13 +105,20 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       status: string;
       amount_cents: number;
       bunq_request_id: number | null;
+      payment_method: "bunq_link" | "bank_transfer";
+      reference: string;
     };
 
     // If still pending, ask Bunq whether the payer has settled it.
-    if (row.status === "pending" && row.bunq_request_id && bunqConfigured()) {
+    if (row.status === "pending" && bunqConfigured()) {
       try {
-        const live = await getBunqPaymentRequest(row.bunq_request_id);
-        if (isPaidStatus(live.status)) {
+        const settled =
+          row.payment_method === "bunq_link" && row.bunq_request_id
+            ? isPaidStatus((await getBunqPaymentRequest(row.bunq_request_id)).status)
+            : row.payment_method === "bank_transfer"
+              ? await findIncomingPaymentByReference(row.reference, row.amount_cents / 100)
+              : false;
+        if (settled) {
           await db
             .from("voyage_booking_deposits")
             .update({

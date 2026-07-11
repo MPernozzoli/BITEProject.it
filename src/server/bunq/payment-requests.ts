@@ -78,3 +78,29 @@ export async function getBunqPaymentRequest(requestId: number): Promise<{
 export function isPaidStatus(status: string): boolean {
   return status.toUpperCase() === "ACCEPTED";
 }
+
+type BunqPaymentListResponse = Array<{
+  Payment: {
+    id: number;
+    description: string;
+    amount: { value: string; currency: string };
+  };
+}>;
+
+/**
+ * Scans the account's recent incoming payments for one whose description carries the given
+ * reference — used to reconcile manual bank transfers, which have no request-inquiry to poll.
+ */
+export async function findIncomingPaymentByReference(
+  reference: string,
+  minAmountEur: number,
+): Promise<boolean> {
+  const result = await bunqRequest<BunqPaymentListResponse>(`${accountPath()}/payment?count=50`);
+  const target = reference.toUpperCase();
+  return result.some(({ Payment: payment }) => {
+    if (!payment?.description?.toUpperCase().includes(target)) return false;
+    const amount = Number(payment.amount?.value ?? 0);
+    // Incoming transfers post as a positive amount; require it to cover the expected share.
+    return amount >= minAmountEur - 0.01;
+  });
+}

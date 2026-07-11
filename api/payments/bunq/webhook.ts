@@ -13,7 +13,7 @@ import { createServiceClient } from "../../../src/server/bunq/supabase.js";
 import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../src/server/bunq/client.js";
 import { readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 
-const REFERENCE_PATTERN = /\b(?:CON|DEP)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
+const REFERENCE_PATTERN = /\b(?:CON|DEP|BON)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
 
 type BunqNotificationPayload = {
   NotificationUrl?: {

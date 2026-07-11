@@ -1,20 +1,18 @@
 /**
- * POST /api/payments/bunq/request
+ * POST /api/payments/bunq/bank-transfer
  *
- * Creates a Bunq voyage-contribution payment request. The payer is either:
- *   - the lead (booking owner): pays contribution × party_size when payment_mode = lead_pays_all,
- *     otherwise just their own share; or
- *   - a guest participant (payment_mode = each_pays_own): pays their own single share.
- *
- * The amount is always recomputed server-side from the leg complexity — never trusted from
- * the client. Returns the shareable bunq.me link the payer is redirected to.
+ * Alternative to the Bunq online payment link: returns the fixed bank details plus a unique,
+ * recognizable causale (reference) the payer must include in their transfer. The amount is
+ * recomputed server-side exactly like the online flow. Reconciliation happens against the
+ * same Bunq account — see /api/payments/bunq/status (live poll) and /api/payments/bunq/webhook
+ * (event push), both of which match incoming transfers by this reference.
  *
  * Body: { bookingRequestId: string, participantId?: string }
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
 import { randomUUID } from "node:crypto";
-import { bunqConfigured, environment } from "../../../src/server/bunq/client.js";
-import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
+import { environment } from "../../../src/server/bunq/client.js";
+import { BANK_TRANSFER_DETAILS } from "../../../src/server/bunq/bank-details.js";
 import {
   DepositHttpError,
   findExistingDeposit,
@@ -28,14 +26,6 @@ import {
   type NodeRequest,
   type NodeResponse,
 } from "../../../src/server/http.js";
-
-function siteUrl(): string {
-  return (
-    process.env.PUBLIC_SITE_URL ||
-    process.env.VITE_SITE_URL ||
-    "https://biteproject.it"
-  ).replace(/\/$/, "");
-}
 
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {
   if (req.method !== "POST") {
@@ -64,24 +54,20 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     return;
   }
 
-  if (!bunqConfigured()) {
-    sendJson(res, 503, { error: "not_configured" });
-    return;
-  }
-
   try {
     const { db, user } = await resolveCaller(token);
 
-    // Idempotency: reuse an existing Bunq-link payment row for this exact payer.
-    const existing = await findExistingDeposit(db, bookingRequestId, participantId, "bunq_link");
+    // Idempotency: resend the same causale/amount for this exact payer instead of minting a new one.
+    const existing = await findExistingDeposit(db, bookingRequestId, participantId, "bank_transfer");
     if (existing) {
       if (existing.status === "paid") {
         sendJson(res, 200, { alreadyPaid: true });
         return;
       }
-      if (existing.status === "pending" && existing.share_url) {
+      if (existing.status === "pending") {
         sendJson(res, 200, {
-          shareUrl: existing.share_url,
+          ...BANK_TRANSFER_DETAILS,
+          reference: existing.reference,
           amountEur: existing.amount_cents / 100,
           perPersonEur: existing.per_person_cents / 100,
           partySize: existing.party_size,
@@ -91,47 +77,39 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     }
 
     const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, counterpartyEmail } = resolved;
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
 
-    const reference = `CON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
-    const description = `Quota spese viaggio BITE — ${reference}`;
-
-    const created = await createBunqPaymentRequest({
-      amountEur,
-      description,
-      counterpartyEmail,
-      redirectUrl: `${siteUrl()}/bookings?deposit=processing`,
-    });
+    const reference = `BON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
 
     const { error: insertError } = await db.from("voyage_booking_deposits").insert({
       booking_request_id: bookingRequestId,
       participant_id: payerParticipantId,
       environment: environment(),
-      payment_method: "bunq_link",
+      payment_method: "bank_transfer",
       per_person_cents: Math.round(perPersonEur * 100),
       party_size: coveredPersons,
       amount_cents: Math.round(amountEur * 100),
       currency: "EUR",
       status: "pending",
-      bunq_request_id: created.id,
-      share_url: created.shareUrl,
+      bunq_request_id: null,
+      share_url: null,
       reference,
     });
     if (insertError) throw new Error(insertError.message);
 
     sendJson(res, 200, {
-      shareUrl: created.shareUrl,
+      ...BANK_TRANSFER_DETAILS,
+      reference,
       amountEur,
       perPersonEur,
       partySize: coveredPersons,
-      reference,
     });
   } catch (error) {
     if (error instanceof DepositHttpError) {
       sendJson(res, error.status, error.body);
       return;
     }
-    console.error("[bunq/request] failed", error);
-    sendJson(res, 500, { error: "bunq_request_failed" });
+    console.error("[bunq/bank-transfer] failed", error);
+    sendJson(res, 500, { error: "bank_transfer_request_failed" });
   }
 }

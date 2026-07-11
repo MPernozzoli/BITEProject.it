@@ -16,6 +16,7 @@ import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -106,6 +107,9 @@ const Journal = () => {
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
+  const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+    null
+  );
   const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -596,15 +600,12 @@ const Journal = () => {
               : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
           );
         } else if (!payment.ok) {
-          toast.error(
-            payment.error === "bunq_amount_exceeds_single_transaction_limit"
-              ? lang === "it"
-                ? "Prenotazione registrata. Ti invieremo i dati per procedere con bonifico."
-                : "Booking saved. We'll send you bank transfer details."
-              : lang === "it"
-                ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del contributo. Riprova dalle tue prenotazioni."
-                : "Booking saved, but we couldn't start the contribution payment. Retry from your bookings."
+          toast.info(
+            lang === "it"
+              ? "Prenotazione registrata. Puoi completare il pagamento con bonifico."
+              : "Booking saved. You can complete the payment by bank transfer."
           );
+          setBankTransfer({ bookingRequestId });
         }
       }
 
@@ -1204,6 +1205,19 @@ const Journal = () => {
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             submitting={bookingSubmitting}
             onConfirm={() => void submitBookingFromLogbook()}
+          />
+
+          <BankTransferDialog
+            open={bankTransfer !== null}
+            onOpenChange={(open) => {
+              if (!open) setBankTransfer(null);
+            }}
+            bookingRequestId={bankTransfer?.bookingRequestId ?? ""}
+            participantId={bankTransfer?.participantId}
+            onConfirmed={() => {
+              setBankTransfer(null);
+              void refetchBookingLegs();
+            }}
           />
 
           {/* Floating controls — top right */}

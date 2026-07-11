@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import {
@@ -79,6 +80,9 @@ const UserBookings = () => {
   const [myParticipations, setMyParticipations] = useState<MyParticipation[]>([]);
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+  const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+    null
+  );
 
   const loadData = useCallback(async () => {
     if (!session?.user.id) {
@@ -318,15 +322,12 @@ const UserBookings = () => {
             : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
         );
       } else if (!payment.ok) {
-        toast.error(
-          payment.error === "bunq_amount_exceeds_single_transaction_limit"
-            ? lang === "it"
-              ? "Prenotazione registrata. Ti invieremo i dati per procedere con bonifico."
-              : "Booking saved. We'll send you bank transfer details."
-            : lang === "it"
-              ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del contributo. Riprova dalle tue prenotazioni."
-              : "Booking saved, but we couldn't start the contribution payment. Please retry from your bookings."
+        toast.info(
+          lang === "it"
+            ? "Prenotazione registrata. Puoi completare il pagamento con bonifico."
+            : "Booking saved. You can complete the payment by bank transfer."
         );
+        setBankTransfer({ bookingRequestId });
       }
     }
 
@@ -398,12 +399,16 @@ const UserBookings = () => {
               ? "Invito accettato. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
               : "Invitation accepted. Contribution payment is not active yet: we'll send you the link shortly."
           );
-        } else if (!payment.ok && payment.error === "bunq_amount_exceeds_single_transaction_limit") {
+        } else if (!payment.ok) {
           toast.info(
             lang === "it"
-              ? "Invito accettato. Ti invieremo i dati per procedere con bonifico."
-              : "Invitation accepted. We'll send you bank transfer details."
+              ? "Invito accettato. Puoi completare il pagamento con bonifico."
+              : "Invitation accepted. You can complete the payment by bank transfer."
           );
+          setBankTransfer({
+            bookingRequestId: acceptTarget.booking_request_id,
+            participantId: acceptTarget.participant_id,
+          });
         }
       } else {
         toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
@@ -516,6 +521,20 @@ const UserBookings = () => {
           requiresPayment={acceptTarget?.requires_payment ?? false}
           submitting={acceptSubmitting}
           onConfirm={() => void handleAcceptConfirm()}
+        />
+
+        <BankTransferDialog
+          open={bankTransfer !== null}
+          onOpenChange={(open) => {
+            if (!open) setBankTransfer(null);
+          }}
+          bookingRequestId={bankTransfer?.bookingRequestId ?? ""}
+          participantId={bankTransfer?.participantId}
+          onConfirmed={() => {
+            setBankTransfer(null);
+            void loadData();
+            void loadParticipations();
+          }}
         />
 
         {busy ? (
