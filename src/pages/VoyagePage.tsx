@@ -245,7 +245,7 @@ const VoyagePage = () => {
                 <Navigation size={18} />
               </div>
               <div>
-                <h2 className="editorial-heading text-2xl md:text-3xl">{lang === "it" ? "Waypoint" : "Waypoints"}</h2>
+                <h2 className="editorial-heading text-2xl md:text-3xl">{lang === "it" ? "Tappe" : "Stops"}</h2>
                 <p className="text-sm text-muted-foreground">{publicWaypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
               </div>
             </div>
@@ -325,8 +325,8 @@ const VoyagePage = () => {
               {publicWaypoints.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   {lang === "it"
-                    ? "Nessun waypoint pubblico ancora disponibile per questa rotta."
-                    : "No public waypoints are available for this route yet."}
+                    ? "Nessuna tappa pubblica ancora disponibile per questa rotta."
+                    : "No public stops are available for this route yet."}
                 </p>
               )}
             </div>

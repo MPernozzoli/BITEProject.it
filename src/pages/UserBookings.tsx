@@ -636,6 +636,7 @@ const UserBookings = () => {
                 .map((id) => legsById[id])
                 .filter(Boolean)
                 .map((leg) => getLegLabel(leg, waypointsById, lang))}
+              legs={selectedLegIds.map((id) => legsById[id]).filter(Boolean)}
               partySize={Math.max(1, Number.parseInt(partySize, 10) || 1)}
               message={message}
               requiresPayment

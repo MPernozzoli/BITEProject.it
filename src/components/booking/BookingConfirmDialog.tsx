@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, TicketCheck } from "lucide-react";
+import { AlertTriangle, Loader2, TicketCheck } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
   Dialog,
@@ -12,6 +12,21 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { formatDepositEur } from "@/lib/booking-deposit";
+import {
+  getComplexityLabel,
+  getLegComplexity,
+  getLegDangerLevel,
+  type BookableLeg,
+} from "@/lib/booking-utils";
+import { getDangerReasonDef, getDangerReasonLabels } from "@/lib/danger-reasons";
+
+/** Complexity level at/above which the confirm dialog surfaces the challenging-leg warning. */
+const CHALLENGING_COMPLEXITY_THRESHOLD = 4;
+
+type ConfirmDialogLeg = Pick<
+  BookableLeg,
+  "complexity_override" | "danger_level" | "danger_reasons" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+>;
 
 /**
  * Booking conditions the user must explicitly accept before a request is sent.
@@ -91,6 +106,8 @@ interface BookingConfirmDialogProps {
   voyageName?: string;
   /** Human-readable labels of the selected legs. */
   legLabels?: string[];
+  /** The selected legs, used to surface a warning when any is notably complex or dangerous. */
+  legs?: ConfirmDialogLeg[];
   partySize: number;
   message?: string;
   /** When true, shows the deposit conditions + payment box (Bunq flow). */
@@ -111,6 +128,7 @@ const BookingConfirmDialog = ({
   lang,
   voyageName,
   legLabels = [],
+  legs = [],
   partySize,
   message,
   requiresPayment = false,
@@ -124,6 +142,22 @@ const BookingConfirmDialog = ({
     () => BOOKING_CONDITIONS.filter((condition) => requiresPayment || !condition.paymentOnly),
     [requiresPayment]
   );
+
+  // Surfaced whenever at least one selected leg is genuinely demanding — high danger level
+  // or "Impegnativa"/"Molto difficile" complexity — so it's not buried under fine print.
+  const hazardSummary = useMemo(() => {
+    if (legs.length === 0) return null;
+    let maxComplexity = 0;
+    let maxDanger = 0;
+    const reasonKeys = new Set<string>();
+    for (const leg of legs) {
+      maxComplexity = Math.max(maxComplexity, getLegComplexity(leg));
+      maxDanger = Math.max(maxDanger, getLegDangerLevel(leg));
+      (leg.danger_reasons ?? []).forEach((key) => reasonKeys.add(key));
+    }
+    if (maxComplexity < CHALLENGING_COMPLEXITY_THRESHOLD && maxDanger === 0) return null;
+    return { maxComplexity, maxDanger, reasonKeys: Array.from(reasonKeys) };
+  }, [legs]);
 
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
 
@@ -173,6 +207,45 @@ const BookingConfirmDialog = ({
                 <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                   {lang === "it" ? "Nota" : "Note"}: {message.trim()}
                 </p>
+              )}
+            </div>
+          )}
+
+          {hazardSummary && (
+            <div className="mb-4 rounded-2xl border border-orange-300/70 bg-orange-50/70 p-4 text-sm dark:border-orange-400/30 dark:bg-orange-400/10">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} className="shrink-0 text-orange-700 dark:text-orange-300" />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-800 dark:text-orange-300">
+                  {lang === "it" ? "Tratta impegnativa" : "Challenging leg"}
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-orange-900/90 dark:text-orange-100/80">
+                {lang === "it"
+                  ? `Hai selezionato almeno una tratta di complessità "${getComplexityLabel(hazardSummary.maxComplexity, lang)}".`
+                  : `You've selected at least one leg rated "${getComplexityLabel(hazardSummary.maxComplexity, lang)}" complexity.`}
+                {hazardSummary.reasonKeys.length > 0
+                  ? lang === "it"
+                    ? ` Motivo: ${getDangerReasonLabels(hazardSummary.reasonKeys, lang).join(", ")}.`
+                    : ` Reason: ${getDangerReasonLabels(hazardSummary.reasonKeys, lang).join(", ")}.`
+                  : ""}
+              </p>
+              {hazardSummary.reasonKeys.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {hazardSummary.reasonKeys.map((key) => {
+                    const reason = getDangerReasonDef(key);
+                    if (!reason) return null;
+                    const Icon = reason.icon;
+                    return (
+                      <span
+                        key={key}
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-300/70 bg-white/70 px-2 py-1 text-[11px] font-medium text-orange-800 dark:bg-white/10 dark:text-orange-200"
+                      >
+                        <Icon size={12} strokeWidth={2.4} aria-hidden />
+                        {lang === "it" ? reason.label_it : reason.label_en}
+                      </span>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}

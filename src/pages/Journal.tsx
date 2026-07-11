@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Loader2, X, TicketCheck } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, AlertTriangle, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Loader2, X, TicketCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
@@ -35,10 +35,15 @@ import {
   type BookableLegAvailability,
   type BookingRequest,
   type BookingWaypoint,
+  getComplexityLabel,
+  getLegComplexity,
+  getLegDangerLevel,
   getLegLabel,
   getLegRangeBetweenWaypoints,
   isVoyageBookableNow,
 } from "@/lib/booking-utils";
+import { getDangerReasonDef, getDangerReasonLabels } from "@/lib/danger-reasons";
+import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 
 type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
 type SupabaseRpcClient = {
@@ -839,6 +844,22 @@ const Journal = () => {
     () => bookingRejectedLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
     [bookingLegsById, bookingRejectedLegIds]
   );
+  // Surfaced whenever a selected leg is genuinely demanding — "Impegnativa"/"Molto difficile"
+  // complexity or a flagged danger — right where the user is building the selection, not
+  // just buried in the final confirm dialog.
+  const bookingHazardSummary = useMemo(() => {
+    if (selectedBookingLegs.length === 0) return null;
+    let maxComplexity = 0;
+    let maxDanger = 0;
+    const reasonKeys = new Set<string>();
+    for (const leg of selectedBookingLegs) {
+      maxComplexity = Math.max(maxComplexity, getLegComplexity(leg));
+      maxDanger = Math.max(maxDanger, getLegDangerLevel(leg));
+      (leg.danger_reasons ?? []).forEach((key) => reasonKeys.add(key));
+    }
+    if (maxComplexity < 4 && maxDanger === 0) return null;
+    return { maxComplexity, maxDanger, reasonKeys: Array.from(reasonKeys) };
+  }, [selectedBookingLegs]);
   const selectedBookingWaypointsById = useMemo<Record<string, BookingWaypoint>>(
     () => Object.fromEntries((bookingAnchor ? waypointsMap[bookingAnchor.voyageId] || [] : []).map((waypoint) => [
       waypoint.id,
@@ -1048,8 +1069,16 @@ const Journal = () => {
                 {selectedBookingLegs.length > 0 ? (
                   <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
                     {selectedBookingLegs.map((leg) => (
-                      <div key={leg.id} className="flex items-center justify-between gap-3 rounded-[18px] border border-emerald-200/70 bg-emerald-50/75 px-3 py-2 text-xs">
-                        <span className="min-w-0 truncate text-foreground">{getLegLabel(leg, selectedBookingWaypointsById, lang)}</span>
+                      <div key={leg.id} className="flex items-center gap-3 rounded-[18px] border border-emerald-200/70 bg-emerald-50/75 px-3 py-2 text-xs">
+                        <span className="min-w-0 flex-1 truncate text-foreground">{getLegLabel(leg, selectedBookingWaypointsById, lang)}</span>
+                        <ComplexityIndicator
+                          variant="dot"
+                          compact
+                          level={getLegComplexity(leg)}
+                          dangerLevel={getLegDangerLevel(leg)}
+                          leg={leg}
+                          lang={lang}
+                        />
                         <span className="shrink-0 text-emerald-800">{leg.remaining}/{leg.capacity}</span>
                         <button
                           type="button"
@@ -1063,6 +1092,35 @@ const Journal = () => {
                     ))}
                   </div>
                 ) : null}
+
+                {bookingHazardSummary && (
+                  <div className="mt-3 rounded-[18px] border border-orange-200/75 bg-orange-50/80 px-3 py-2 text-xs text-orange-900">
+                    <p className="flex items-center gap-1.5 font-medium text-orange-800">
+                      <AlertTriangle size={13} className="shrink-0" />
+                      {lang === "it"
+                        ? `Tratta ${getComplexityLabel(bookingHazardSummary.maxComplexity, lang).toLowerCase()}`
+                        : `${getComplexityLabel(bookingHazardSummary.maxComplexity, lang)} leg`}
+                    </p>
+                    {bookingHazardSummary.reasonKeys.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {bookingHazardSummary.reasonKeys.map((key) => {
+                          const reason = getDangerReasonDef(key);
+                          if (!reason) return null;
+                          const Icon = reason.icon;
+                          return (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1 rounded-full border border-orange-300/70 bg-white/70 px-1.5 py-0.5 text-[10.5px] font-medium text-orange-800"
+                            >
+                              <Icon size={11} strokeWidth={2.4} aria-hidden />
+                              {lang === "it" ? reason.label_it : reason.label_en}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {rejectedBookingLegs.length > 0 ? (
                   <div className="mt-3 rounded-[18px] border border-red-200/75 bg-red-50/80 px-3 py-2 text-xs text-red-800">
@@ -1129,6 +1187,7 @@ const Journal = () => {
             lang={lang}
             voyageName={bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : undefined}
             legLabels={selectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang))}
+            legs={selectedBookingLegs}
             partySize={bookingPartySize}
             message={bookingMessage}
             requiresPayment

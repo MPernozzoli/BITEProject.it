@@ -50,8 +50,8 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
   "/voyages": {
     title: { en: "Voyages | BITE", it: "Rotte | BITE" },
     description: {
-      en: "Browse public routes with departures, arrivals, dates, and waypoints from aboard S/Y Spritz.",
-      it: "Naviga le rotte pubbliche con partenze, arrivi, date e waypoint da bordo di S/Y Spritz.",
+      en: "Browse public routes with departures, arrivals, dates, and stops from aboard S/Y Spritz.",
+      it: "Naviga le rotte pubbliche con partenze, arrivi, date e tappe da bordo di S/Y Spritz.",
     },
   },
   "/links": {
@@ -192,8 +192,8 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
     return {
       title: { en: "Voyage Route | BITE", it: "Rotta del viaggio | BITE" },
       description: {
-        en: "Public route page with departure, arrival, waypoints, and voyage dates.",
-        it: "Pagina rotta pubblica con partenza, arrivo, waypoint e date del viaggio.",
+        en: "Public route page with departure, arrival, stops, and voyage dates.",
+        it: "Pagina rotta pubblica con partenza, arrivo, tappe e date del viaggio.",
       },
     };
   }

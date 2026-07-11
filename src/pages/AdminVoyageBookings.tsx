@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -48,7 +48,6 @@ import {
   getLocalizedBookingVoyageName,
   getWaypointStopUiMode,
   isLegComplexityAuto,
-  isLegSelectable,
 } from "@/lib/booking-utils";
 import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
 
@@ -212,11 +211,6 @@ const AdminVoyageBookings = () => {
   const [voyageStatusFilter, setVoyageStatusFilter] = useState<Set<BookingVoyage["status"]>>(
     () => new Set(["planned", "active"])
   );
-  const [manualProfileId, setManualProfileId] = useState("");
-  const [manualLegIds, setManualLegIds] = useState<string[]>([]);
-  const [manualPartySize, setManualPartySize] = useState("1");
-  const [manualStatus, setManualStatus] = useState<VoyageBookingStatus>("admin_approved");
-  const [manualNotes, setManualNotes] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -415,8 +409,6 @@ const AdminVoyageBookings = () => {
     () => Object.fromEntries(combinedProfiles.map((profile) => [profile.id, profile])),
     [combinedProfiles]
   );
-  const activeLegs = useMemo(() => legs.filter(isLegSelectable), [legs]);
-
   const visibleRequests = useMemo(
     () => requests.filter((request) => statusFilter === "all" || request.status === statusFilter),
     [requests, statusFilter]
@@ -436,10 +428,6 @@ const AdminVoyageBookings = () => {
     return map;
   }, [legs, requestLegs, requests]);
 
-  const selectedManualPartySize = Math.max(1, Number.parseInt(manualPartySize, 10) || 1);
-  const manualOverCapacity = manualLegIds.some(
-    (legId) => (legCapacity[legId] || 0) + selectedManualPartySize > (selectedVoyage?.booking_max_guests || 4)
-  );
   const planningSpeedKn = Math.max(0.1, Number(selectedVoyage?.booking_planning_speed_kn ?? 5) || 5);
   const publicPlanningWaypoints = useMemo(
     () =>
@@ -470,12 +458,6 @@ const AdminVoyageBookings = () => {
       const alreadyCounted = capacityBlockingStatuses.has(request.status) ? request.party_size : 0;
       return (legCapacity[legId] || 0) - alreadyCounted + request.party_size > (selectedVoyage?.booking_max_guests || 4);
     });
-  };
-
-  const toggleManualLeg = (legId: string) => {
-    setManualLegIds((current) =>
-      current.includes(legId) ? current.filter((id) => id !== legId) : [...current, legId]
-    );
   };
 
   const updateSelectedVoyagePlanning = (patch: Partial<BookingVoyage>) => {
@@ -706,37 +688,6 @@ const AdminVoyageBookings = () => {
     }
     const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
     toast.success(result?.over_capacity ? "Persona aggiunta oltre capienza." : "Persona aggiunta.");
-    await loadVoyageDetails(selectedVoyageId);
-  };
-
-  const createManualBooking = async () => {
-    if (!selectedVoyageId || !manualProfileId || manualLegIds.length === 0) {
-      toast.error("Seleziona persona e almeno una tratta.");
-      return;
-    }
-    if (manualOverCapacity && !confirm("Questo inserimento supera il limite persone per almeno una tratta. Procedere comunque?")) {
-      return;
-    }
-    setSaving(true);
-    const { data, error } = await typedSupabase.rpc("admin_create_voyage_booking", {
-      _voyage_id: selectedVoyageId,
-      _profile_id: manualProfileId,
-      _leg_ids: manualLegIds,
-      _party_size: selectedManualPartySize,
-      _status: manualStatus,
-      _message: null,
-      _admin_notes: manualNotes || (manualOverCapacity ? "Inserimento manuale oltre capienza." : null),
-      _allow_over_capacity: true,
-    });
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
-    toast.success(result?.over_capacity ? "Persona aggiunta oltre capienza." : "Persona aggiunta al booking.");
-    setManualLegIds([]);
-    setManualNotes("");
     await loadVoyageDetails(selectedVoyageId);
   };
 
@@ -1473,118 +1424,6 @@ const AdminVoyageBookings = () => {
                 })}
                 {legs.length === 0 && <p className="text-sm text-muted-foreground">Nessuna tratta: abilita il booking e usa “Salva e ricalcola”.</p>}
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="glass-panel rounded-[30px] p-5 md:p-6">
-          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <UserPlus size={18} className="text-accent" />
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Inserimento manuale</p>
-                <h2 className="editorial-heading text-2xl">Aggiungi persona alle tratte</h2>
-              </div>
-            </div>
-            {manualOverCapacity && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/70 bg-amber-100/70 px-3 py-1.5 text-xs text-amber-800">
-                <AlertTriangle size={14} /> Supera il limite impostato
-              </span>
-            )}
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1fr_120px_180px]">
-            <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Persona</label>
-              <select
-                value={manualProfileId}
-                onChange={(event) => setManualProfileId(event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              >
-                <option value="">Seleziona utente registrato</option>
-                {combinedProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name || profile.email || profile.id}
-                    {profile.email ? ` · ${profile.email}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Pax</label>
-              <input
-                type="number"
-                min="1"
-                value={manualPartySize}
-                onChange={(event) => setManualPartySize(event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Stato</label>
-              <select
-                value={manualStatus}
-                onChange={(event) => setManualStatus(event.target.value as VoyageBookingStatus)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              >
-                <option value="admin_approved">Da confermare</option>
-                <option value="user_confirmed">Confermato</option>
-                <option value="requested">Prenotato</option>
-                <option value="waitlisted">Waiting list</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_260px]">
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Tratte attive</p>
-              {activeLegs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nessuna tratta attiva e prenotabile per questo viaggio.</p>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {activeLegs.map((leg) => {
-                    const selected = manualLegIds.includes(leg.id);
-                    const nextCount = (legCapacity[leg.id] || 0) + (selected ? selectedManualPartySize : 0);
-                    const full = nextCount > (selectedVoyage?.booking_max_guests || 4);
-                    return (
-                      <label key={leg.id} className="flex gap-3 rounded-[18px] border border-border/70 p-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleManualLeg(leg.id)}
-                          className="mt-1 h-4 w-4 accent-[hsl(var(--accent))]"
-                        />
-                        <span>
-                          <span className="block text-foreground">{getLegLabel(leg, waypointsById, "it")}</span>
-                          <span className={full ? "mt-1 block text-xs text-amber-700" : "mt-1 block text-xs text-muted-foreground"}>
-                            {legCapacity[leg.id] || 0}/{selectedVoyage?.booking_max_guests || 4} pax
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Note admin</span>
-                <textarea
-                  value={manualNotes}
-                  onChange={(event) => setManualNotes(event.target.value)}
-                  rows={4}
-                  className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void createManualBooking()}
-                disabled={saving || !manualProfileId || manualLegIds.length === 0 || activeLegs.length === 0}
-                className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={15} /> : <Plus size={15} />}
-                Aggiungi al booking
-              </button>
             </div>
           </div>
         </section>

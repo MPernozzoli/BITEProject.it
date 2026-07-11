@@ -398,52 +398,55 @@ const VoyageLegend = ({
       )}
 
       {voyageIsBookable ? (
-        <div className="mb-3 rounded-[18px] border border-emerald-200/80 bg-emerald-50/82 p-3 font-sans shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-3 flex flex-col gap-3 rounded-[18px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50/95 to-white/70 p-3.5 font-sans shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <TicketCheck size={16} />
+            </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-800">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800">
                 {lang === "it" ? "Puoi partecipare a questo viaggio" : "You can join this voyage"}
               </p>
-              <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/75">
+              <p className="mt-1 text-[12px] leading-relaxed text-emerald-900/75">
                 {!hasBookableLegs
                   ? (lang === "it"
                     ? "Prenotazioni non ancora aperte per le singole tratte."
                     : "Bookings are not open for individual legs yet.")
                   : hasAvailableLegs
                     ? (lang === "it"
-                      ? "Scegli un waypoint di partenza o arrivo, poi completa la selezione sulla mappa."
-                      : "Choose a start or arrival waypoint, then complete the selection on the map.")
+                      ? "Scegli una tappa di partenza o di arrivo, poi completa la selezione sulla mappa."
+                      : "Choose a starting or arrival stop, then complete the selection on the map.")
                     : (lang === "it"
                       ? "Le tratte esistono, ma al momento non risultano posti disponibili."
                       : "Legs exist, but no seats are currently available.")}
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={!hasAvailableLegs || !firstVisibleWaypoint || !onWaypointBookingAction}
-                onClick={() => {
-                  if (!firstVisibleWaypoint) return;
-                  onWaypointBookingAction?.(voyage.id, firstVisibleWaypoint.id, "from");
-                  onWaypointClick?.(firstVisibleWaypoint);
-                }}
-                className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
-              >
-                {lang === "it" ? "Prenota da inizio" : "Book from start"}
-              </button>
-              <button
-                type="button"
-                disabled={!hasAvailableLegs || !lastVisibleWaypoint || !onWaypointBookingAction}
-                onClick={() => {
-                  if (!lastVisibleWaypoint) return;
-                  onWaypointBookingAction?.(voyage.id, lastVisibleWaypoint.id, "to");
-                  onWaypointClick?.(lastVisibleWaypoint);
-                }}
-                className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
-              >
-                {lang === "it" ? "Prenota fino ad arrivo" : "Book to arrival"}
-              </button>
-            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:pl-1">
+            <button
+              type="button"
+              disabled={!hasAvailableLegs || !firstVisibleWaypoint || !onWaypointBookingAction}
+              onClick={() => {
+                if (!firstVisibleWaypoint) return;
+                onWaypointBookingAction?.(voyage.id, firstVisibleWaypoint.id, "from");
+                onWaypointClick?.(firstVisibleWaypoint);
+              }}
+              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-3.5 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-emerald-700/25 disabled:shadow-none"
+            >
+              {lang === "it" ? "Prenota da qui" : "Book from here"}
+            </button>
+            <button
+              type="button"
+              disabled={!hasAvailableLegs || !lastVisibleWaypoint || !onWaypointBookingAction}
+              onClick={() => {
+                if (!lastVisibleWaypoint) return;
+                onWaypointBookingAction?.(voyage.id, lastVisibleWaypoint.id, "to");
+                onWaypointClick?.(lastVisibleWaypoint);
+              }}
+              className="inline-flex items-center justify-center rounded-full border border-emerald-400/80 bg-white/80 px-3.5 py-2 text-[11px] font-semibold text-emerald-800 transition hover:bg-white disabled:cursor-not-allowed disabled:border-emerald-200 disabled:text-emerald-900/35"
+            >
+              {lang === "it" ? "Prenota fino a qui" : "Book to here"}
+            </button>
           </div>
         </div>
       ) : null}

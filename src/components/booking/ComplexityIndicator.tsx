@@ -22,17 +22,35 @@ type ComplexityLegFactors = Pick<
   | "ends_at_window_start"
 >;
 
-/** Small icon(s) for the leg's specific hazard tags, meant to sit right next to "Pericolo: <livello>". */
-const DangerReasonIcons = ({ leg, lang }: { leg?: ComplexityLegFactors; lang: Language | "it" | "en" }) => {
+/**
+ * Icon(s) for the leg's specific hazard tags. `withLabel` spells the reason out next to the
+ * icon (used inside the tooltip, where there's room to be readable); without it, only the
+ * bare icon shows (used on the compact pill itself — the tooltip carries the label).
+ */
+const DangerReasonIcons = ({
+  leg,
+  lang,
+  withLabel = false,
+}: {
+  leg?: ComplexityLegFactors;
+  lang: Language | "it" | "en";
+  withLabel?: boolean;
+}) => {
   if (!leg?.danger_reasons?.length) return null;
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className={`inline-flex flex-wrap items-center gap-1 ${withLabel ? "gap-x-2 gap-y-1" : ""}`}>
       {leg.danger_reasons.map((key) => {
         const reason = getDangerReasonDef(key);
         if (!reason) return null;
         const Icon = reason.icon;
         const label = lang === "it" ? reason.label_it : reason.label_en;
-        return <Icon key={key} size={12} strokeWidth={2.4} aria-label={label} title={label} />;
+        if (!withLabel) return <Icon key={key} size={12} strokeWidth={2.4} aria-label={label} />;
+        return (
+          <span key={key} className="inline-flex items-center gap-1 text-foreground/80">
+            <Icon size={12} strokeWidth={2.4} aria-hidden />
+            {label}
+          </span>
+        );
       })}
     </span>
   );
@@ -74,44 +92,47 @@ const ComplexityIndicator = ({
   const complexityPrefix = italian ? "Complessità" : "Complexity";
   const dangerPrefix = italian ? "Pericolo" : "Danger";
 
-  const ariaLabel = `${complexityPrefix}: ${getComplexityLabel(level, lang)}`;
+  const ariaLabel =
+    dangerLevel > 0
+      ? `${complexityPrefix}: ${getComplexityLabel(level, lang)} · ${dangerPrefix}: ${getDangerLabel(dangerLevel, lang)}`
+      : `${complexityPrefix}: ${getComplexityLabel(level, lang)}`;
   const badgePadding = compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]";
 
   return (
     <TooltipProvider delayDuration={120}>
       <Tooltip>
-        <span className={`inline-flex items-center gap-1 ${className}`}>
-          <TooltipTrigger asChild>
+        {/* A single trigger element wraps both pills — hovering the danger pill (icons
+            included) opens the same rich tooltip as hovering the complexity pill, instead
+            of relying on the icons' barebones native `title` tooltip. */}
+        <TooltipTrigger asChild>
+          <button type="button" aria-label={ariaLabel} className={`inline-flex cursor-help items-center gap-1 ${className}`}>
             {variant === "dot" ? (
-              <button
-                type="button"
-                aria-label={ariaLabel}
-                className={`inline-flex h-[18px] min-w-[18px] cursor-help items-center justify-center rounded-full border text-[10px] font-bold leading-none ${getComplexityClass(level)} ${
+              <span
+                className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border text-[10px] font-bold leading-none ${getComplexityClass(level)} ${
                   dangerLevel > 0 ? "ring-2 ring-red-400/60" : ""
                 }`}
               >
                 {level}
-              </button>
+              </span>
             ) : (
-              <button
-                type="button"
-                className={`inline-flex cursor-help items-center rounded-full border font-semibold ${badgePadding} ${getComplexityClass(level)}`}
+              <span
+                className={`inline-flex items-center rounded-full border font-semibold ${badgePadding} ${getComplexityClass(level)}`}
               >
                 {complexityPrefix}: {getComplexityLabel(level, lang)}
                 <span aria-hidden className="ml-1 opacity-60">ⓘ</span>
-              </button>
+              </span>
             )}
-          </TooltipTrigger>
 
-          {variant === "badge" && dangerLevel > 0 && (
-            <span
-              className={`inline-flex items-center gap-1 rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
-            >
-              {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
-              <DangerReasonIcons leg={leg} lang={lang} />
-            </span>
-          )}
-        </span>
+            {variant === "badge" && dangerLevel > 0 && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
+              >
+                {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
+                <DangerReasonIcons leg={leg} lang={lang} />
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
         <TooltipContent
           side="top"
           align="center"
@@ -128,9 +149,13 @@ const ComplexityIndicator = ({
             {getComplexityTitle(lang)} · {getComplexityLabel(level, lang)}
           </span>
           {dangerLevel > 0 && (
-            <span className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground/90">
+            <span className="mb-1 block text-[11px] font-medium text-foreground/90">
               {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
-              <DangerReasonIcons leg={leg} lang={lang} />
+              {leg?.danger_reasons && leg.danger_reasons.length > 0 && (
+                <span className="mt-1 flex text-[10.5px] font-normal text-foreground/70">
+                  <DangerReasonIcons leg={leg} lang={lang} withLabel />
+                </span>
+              )}
             </span>
           )}
           <span className="block text-muted-foreground">
