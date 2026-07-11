@@ -7,16 +7,16 @@
  *
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
-import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase";
-import { bunqConfigured } from "../../../src/server/bunq/client";
-import { getBunqPaymentRequest, isPaidStatus } from "../../../src/server/bunq/payment-requests";
+import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase.js";
+import { bunqConfigured } from "../../../src/server/bunq/client.js";
+import { getBunqPaymentRequest, isPaidStatus } from "../../../src/server/bunq/payment-requests.js";
 import {
   bearerToken,
   firstQueryParam,
   sendJson,
   type NodeRequest,
   type NodeResponse,
-} from "../../../src/server/http";
+} from "../../../src/server/http.js";
 
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {
   if (req.method !== "GET") {

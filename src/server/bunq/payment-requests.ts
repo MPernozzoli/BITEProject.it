@@ -1,4 +1,4 @@
-import { bunqRequest, accountPath } from "./client";
+import { bunqRequest, accountPath } from "./client.js";
 
 type BunqPaymentRequestCreateResponse = Array<{
   Id: { id: number };

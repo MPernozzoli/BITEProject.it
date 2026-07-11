@@ -21,7 +21,7 @@ import {
   sign,
   verify,
 } from "node:crypto";
-import { createServiceClient } from "./supabase";
+import { createServiceClient } from "./supabase.js";
 
 const BUNQ_API = "https://api.bunq.com/v1";
 const BUNQ_SANDBOX_API = "https://public-api.sandbox.bunq.com/v1";

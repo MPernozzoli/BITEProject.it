@@ -13,23 +13,23 @@
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
 import { randomUUID } from "node:crypto";
-import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase";
-import { bunqConfigured, environment } from "../../../src/server/bunq/client";
-import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests";
+import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase.js";
+import { bunqConfigured, environment } from "../../../src/server/bunq/client.js";
+import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import {
   BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
   perPersonDepositEur,
   depositForPayerEur,
   type DepositLeg,
   type PaymentMode,
-} from "../../../src/lib/booking-deposit";
+} from "../../../src/lib/booking-deposit.js";
 import {
   bearerToken,
   readJsonBody,
   sendJson,
   type NodeRequest,
   type NodeResponse,
-} from "../../../src/server/http";
+} from "../../../src/server/http.js";
 
 const ACTIVE_STATUSES = ["requested", "waitlisted", "admin_approved", "user_confirmed"];
 

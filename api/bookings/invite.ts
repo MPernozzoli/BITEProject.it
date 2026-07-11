@@ -8,15 +8,15 @@
  * Body: { bookingRequestId: string, resend?: boolean }
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
-import { createAuthClient, createServiceClient } from "../../src/server/bunq/supabase";
-import { perPersonDepositEur, type DepositLeg } from "../../src/lib/booking-deposit";
+import { createAuthClient, createServiceClient } from "../../src/server/bunq/supabase.js";
+import { perPersonDepositEur, type DepositLeg } from "../../src/lib/booking-deposit.js";
 import {
   bearerToken,
   readJsonBody,
   sendJson,
   type NodeRequest,
   type NodeResponse,
-} from "../../src/server/http";
+} from "../../src/server/http.js";
 
 function siteUrl(): string {
   return (process.env.PUBLIC_SITE_URL || process.env.VITE_SITE_URL || "https://biteproject.it").replace(/\/$/, "");

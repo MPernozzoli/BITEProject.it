@@ -1,5 +1,5 @@
-import type { Language } from "@/lib/i18n";
-import { getDangerReasonLabels } from "@/lib/danger-reasons";
+import type { Language } from "./i18n.js";
+import { getDangerReasonLabels } from "./danger-reasons.js";
 
 export type VoyageBookingStatus =
   | "requested"

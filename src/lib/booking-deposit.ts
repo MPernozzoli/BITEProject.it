@@ -12,7 +12,7 @@
  * The contribution covers navigation and vessel operating expenses during the crossing.
  * Food expenses remain managed on board during the voyage and are not included here.
  */
-import { getLegDangerLevel, legHasNightNavigation, type BookableLeg } from "./booking-utils";
+import { getLegDangerLevel, legHasNightNavigation, type BookableLeg } from "./booking-utils.js";
 
 export const CONTRIBUTION_FIXED_MINIMUM_EUR = 20;
 export const DEFAULT_CONTRIBUTION_PER_NM_EUR = 0.9;

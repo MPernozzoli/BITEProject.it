@@ -9,9 +9,9 @@
  * Note: the /status endpoint independently re-checks Bunq, so the flow is resilient even if
  * this webhook is not configured in the Bunq dashboard.
  */
-import { createServiceClient } from "../../../src/server/bunq/supabase";
-import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../src/server/bunq/client";
-import { readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http";
+import { createServiceClient } from "../../../src/server/bunq/supabase.js";
+import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../src/server/bunq/client.js";
+import { readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 
 const REFERENCE_PATTERN = /\b(?:CON|DEP)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
 
