@@ -96,6 +96,7 @@ async function queueEmail(params: {
   supabaseUrl: string
   serviceRoleKey: string
   recipientEmail: string
+  templateName: string
   idempotencyKey: string
   templateData: Record<string, unknown>
 }) {
@@ -106,7 +107,7 @@ async function queueEmail(params: {
       Authorization: `Bearer ${params.serviceRoleKey}`,
     },
     body: JSON.stringify({
-      templateName: 'voyage-booking-notification',
+      templateName: params.templateName,
       recipientEmail: params.recipientEmail,
       idempotencyKey: params.idempotencyKey,
       templateData: params.templateData,
@@ -155,17 +156,29 @@ Deno.serve(async (req) => {
   if (!pending.length) return jsonResponse({ success: true, queued: 0, failed: 0 })
 
   const requestIds = [...new Set(pending.map((row) => row.booking_request_id))]
-  const profileIds = [...new Set(pending.map((row) => row.recipient_profile_id))]
 
-  const [{ data: bookings }, { data: profiles }] = await Promise.all([
-    supabase.from('voyage_booking_requests').select('id, voyage_id, profile_id, party_size, message').in('id', requestIds),
-    supabase.from('profiles').select('id, name, email, preferred_language').in('id', profileIds),
-  ])
+  const { data: bookings } = await supabase
+    .from('voyage_booking_requests')
+    .select('id, voyage_id, profile_id, party_size, message')
+    .in('id', requestIds)
 
   const bookingRows = (bookings ?? []) as BookingRow[]
+  const bookingById = new Map(bookingRows.map((row) => [row.id, row]))
+
+  const profileIds = [
+    ...new Set([
+      ...pending.map((row) => row.recipient_profile_id),
+      ...bookingRows.map((row) => row.profile_id),
+    ]),
+  ]
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, name, email, preferred_language')
+    .in('id', profileIds)
+
   const profileRows = (profiles ?? []) as ProfileRow[]
   const voyageIds = [...new Set(bookingRows.map((row) => row.voyage_id))]
-  const bookingById = new Map(bookingRows.map((row) => [row.id, row]))
   const profileById = new Map(profileRows.map((row) => [row.id, row]))
 
   const [{ data: voyages }, { data: requestLegs }] = await Promise.all([
@@ -232,22 +245,39 @@ Deno.serve(async (req) => {
         return `${from} -> ${to}`
       })
 
+    const isAdminEvent = notification.event_type.startsWith('admin_')
+    const traveler = isAdminEvent ? profileById.get(booking.profile_id) : null
+
     try {
       await queueEmail({
         supabaseUrl,
         serviceRoleKey,
         recipientEmail: profile.email,
+        templateName: isAdminEvent ? 'voyage-booking-admin-notification' : 'voyage-booking-notification',
         idempotencyKey: `voyage-booking:${notification.id}`,
-        templateData: {
-          language,
-          recipientName: profile.name,
-          eventType: notification.event_type,
-          voyageName: localizedName(voyage, language),
-          legs: legLabels,
-          partySize: booking.party_size,
-          bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
-          message: booking.message,
-        },
+        templateData: isAdminEvent
+          ? {
+              language,
+              recipientName: profile.name,
+              eventType: notification.event_type,
+              voyageName: localizedName(voyage, language),
+              legs: legLabels,
+              partySize: booking.party_size,
+              travelerName: traveler?.name ?? null,
+              travelerEmail: traveler?.email ?? null,
+              bookingUrl: `${PUBLIC_SITE_URL}/admin/bookings?voyage=${booking.voyage_id}`,
+              message: booking.message,
+            }
+          : {
+              language,
+              recipientName: profile.name,
+              eventType: notification.event_type,
+              voyageName: localizedName(voyage, language),
+              legs: legLabels,
+              partySize: booking.party_size,
+              bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
+              message: booking.message,
+            },
       })
 
       queued += 1
