@@ -93,6 +93,11 @@ const statusOptions: VoyageBookingStatus[] = [
   "expired",
 ];
 
+const duplicateBookingStatuses = new Set<VoyageBookingStatus>([
+  ...capacityBlockingStatuses,
+  "waitlisted",
+]);
+
 const toDateTimeLocalValue = (value?: string | null) => {
   if (!value) return "";
   const date = new Date(value);
@@ -670,24 +675,61 @@ const AdminVoyageBookings = () => {
     await loadVoyageDetails(selectedVoyageId);
   };
 
-  /** Creates a brand-new single-leg booking from the Gantt table's "+" column pill. */
-  const addPersonToLeg = async (legId: string, profileId: string, partySize: number) => {
-    setSaving(true);
-    const { data, error } = await typedSupabase.rpc("admin_create_voyage_booking", {
-      _voyage_id: selectedVoyageId,
-      _profile_id: profileId,
-      _leg_ids: [legId],
-      _party_size: partySize,
-      _status: "admin_approved",
-      _allow_over_capacity: true,
-    });
-    setSaving(false);
-    if (error) {
-      toast.error(error.message);
+  /** Creates brand-new single-leg bookings from the Gantt table's "+" column pill. */
+  const addPeopleToLeg = async (legId: string, profileIds: string[]) => {
+    const uniqueProfileIds = [...new Set(profileIds)];
+    if (uniqueProfileIds.length === 0) return;
+
+    const remainingSeats = Math.max(0, (selectedVoyage?.booking_max_guests || 4) - (legCapacity[legId] || 0));
+    if (uniqueProfileIds.length > remainingSeats) {
+      toast.error("Hai selezionato più persone dei posti disponibili su questa tratta.");
       return;
     }
-    const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
-    toast.success(result?.over_capacity ? "Persona aggiunta oltre capienza." : "Persona aggiunta.");
+
+    const duplicateProfileId = uniqueProfileIds.find((profileId) =>
+      requests.some((request) => {
+        if (request.profile_id !== profileId || !duplicateBookingStatuses.has(request.status)) return false;
+        return requestLegs.some(
+          (link) => link.booking_request_id === request.id && link.bookable_leg_id === legId
+        );
+      })
+    );
+    if (duplicateProfileId) {
+      toast.error("Una delle persone selezionate è già presente su questa tratta.");
+      return;
+    }
+
+    setSaving(true);
+    const results = await Promise.all(
+      uniqueProfileIds.map((profileId) =>
+        typedSupabase.rpc("admin_create_voyage_booking", {
+          _voyage_id: selectedVoyageId,
+          _profile_id: profileId,
+          _leg_ids: [legId],
+          _party_size: 1,
+          _status: "admin_approved",
+          _allow_over_capacity: false,
+        })
+      )
+    );
+    setSaving(false);
+    const error = results.find((result) => result.error)?.error;
+    if (error) {
+      toast.error(error.message);
+      await loadVoyageDetails(selectedVoyageId);
+      return;
+    }
+    const overCapacity = results.some(({ data }) => {
+      const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
+      return Boolean(result?.over_capacity);
+    });
+    toast.success(
+      overCapacity
+        ? "Persone aggiunte oltre capienza."
+        : uniqueProfileIds.length === 1
+          ? "Persona aggiunta."
+          : `${uniqueProfileIds.length} persone aggiunte.`
+    );
     await loadVoyageDetails(selectedVoyageId);
   };
 
@@ -1474,7 +1516,7 @@ const AdminVoyageBookings = () => {
               onReject={(requestId) => void rejectRequest(requestId)}
               onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
               onResize={resizeBookingLegs}
-              onAddPerson={addPersonToLeg}
+              onAddPeople={addPeopleToLeg}
             />
           )}
         </section>

@@ -85,8 +85,8 @@ const BOOKING_CONDITIONS: BookingCondition[] = [
   {
     id: "cancellation-policy",
     paymentOnly: true,
-    it: "Ho compreso che, se l'importo supera 500 euro, il pagamento tramite Bunq potrebbe non essere disponibile in un'unica transazione e potranno essere forniti i dati per un bonifico.",
-    en: "I understand that, if the amount exceeds EUR 500, Bunq payment may not be available as a single transaction and bank transfer details may be provided instead.",
+    it: "Ho compreso che il contributo potrà essere versato tramite link di pagamento o tramite bonifico, secondo le modalità che verranno indicate dopo la conferma.",
+    en: "I understand that the contribution may be paid by payment link or bank transfer, according to the instructions provided after confirmation.",
   },
   {
     id: "physical-fitness",
@@ -304,8 +304,8 @@ const BookingConfirmDialog = ({
               )}
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
                 {lang === "it"
-                  ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico. Se il totale supera 500 euro, Bunq non consente una singola transazione tramite API: ti forniremo i dati per procedere con bonifico."
-                  : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility. If the total exceeds EUR 500, Bunq does not allow a single API transaction: we will provide bank transfer details."}
+                  ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico."
+                  : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility."}
               </p>
             </div>
           )}

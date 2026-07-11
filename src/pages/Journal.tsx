@@ -599,8 +599,8 @@ const Journal = () => {
           toast.error(
             payment.error === "bunq_amount_exceeds_single_transaction_limit"
               ? lang === "it"
-                ? "Prenotazione registrata. L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
-                : "Booking saved. The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
+                ? "Prenotazione registrata. Ti invieremo i dati per procedere con bonifico."
+                : "Booking saved. We'll send you bank transfer details."
               : lang === "it"
                 ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del contributo. Riprova dalle tue prenotazioni."
                 : "Booking saved, but we couldn't start the contribution payment. Retry from your bookings."

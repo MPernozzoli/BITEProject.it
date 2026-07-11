@@ -181,8 +181,8 @@ const ManageBookingParticipants = () => {
       } else if (!payment.ok && payment.error === "bunq_amount_exceeds_single_transaction_limit") {
         toast.info(
           lang === "it"
-            ? "L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
-            : "The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
+            ? "Ti invieremo i dati per procedere con bonifico."
+            : "We'll send you bank transfer details."
         );
       }
       navigate("/bookings");

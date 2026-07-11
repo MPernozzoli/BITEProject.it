@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import ProfileAvatar from "@/components/ProfileAvatar";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   type BookableLeg,
   type BookingProfile,
@@ -7,6 +18,7 @@ import {
   type BookingRequestLeg,
   type BookingWaypoint,
   type VoyageBookingStatus,
+  capacityBlockingStatuses,
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
@@ -35,8 +47,8 @@ interface BookingGanttTableProps {
   onStatusChange: (requestId: string, status: VoyageBookingStatus) => void;
   /** Persist a request's leg range after a drag-resize; nextLegIds is the full new set. */
   onResize: (requestId: string, nextLegIds: string[]) => Promise<void>;
-  /** Create a brand-new single-leg booking from a column's "+" pill. */
-  onAddPerson: (legId: string, profileId: string, partySize: number) => Promise<void>;
+  /** Create brand-new single-leg bookings from a column's "+" pill. */
+  onAddPeople: (legId: string, profileIds: string[]) => Promise<void>;
 }
 
 /** A contiguous run of leg-column indices a booking occupies. */
@@ -79,6 +91,20 @@ interface DragState {
   previewEnd: number;
 }
 
+const duplicateBlockingStatuses = new Set<VoyageBookingStatus>([
+  ...capacityBlockingStatuses,
+  "waitlisted",
+]);
+
+const getProfileLabel = (profile: BookingProfile) => profile.name || profile.email || "Profilo senza nome";
+
+const getProfileInitials = (profile: BookingProfile) => {
+  const source = getProfileLabel(profile).trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return source.slice(0, 2).toUpperCase() || "?";
+};
+
 const BookingGanttTable = ({
   legs,
   waypointsById,
@@ -94,7 +120,7 @@ const BookingGanttTable = ({
   onReject,
   onStatusChange,
   onResize,
-  onAddPerson,
+  onAddPeople,
 }: BookingGanttTableProps) => {
   const legIndexById = useMemo(() => {
     const map = new Map<string, number>();
@@ -118,9 +144,37 @@ const BookingGanttTable = ({
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
   const [addPersonLegId, setAddPersonLegId] = useState<string | null>(null);
-  const [addPersonProfileId, setAddPersonProfileId] = useState("");
-  const [addPersonPartySize, setAddPersonPartySize] = useState("1");
+  const [addPersonProfileIds, setAddPersonProfileIds] = useState<string[]>([]);
   const [addPersonBusy, setAddPersonBusy] = useState(false);
+  const [addPersonPickerOpen, setAddPersonPickerOpen] = useState(false);
+
+  const uniqueAvailableProfiles = useMemo(() => {
+    const map = new Map<string, BookingProfile>();
+    const seenIdentities = new Set<string>();
+    for (const profile of availableProfiles) {
+      if (!profile.id || map.has(profile.id)) continue;
+      const identity = (profile.email || profile.name || profile.id).trim().toLowerCase();
+      if (identity && seenIdentities.has(identity)) continue;
+      map.set(profile.id, profile);
+      if (identity) seenIdentities.add(identity);
+    }
+    return [...map.values()].sort((a, b) =>
+      getProfileLabel(a).localeCompare(getProfileLabel(b), "it", { sensitivity: "base" })
+    );
+  }, [availableProfiles]);
+
+  const activeProfileIdsByLeg = useMemo(() => {
+    const requestById = new Map(requests.map((request) => [request.id, request]));
+    const map = new Map<string, Set<string>>();
+    for (const link of requestLegs) {
+      const request = requestById.get(link.booking_request_id);
+      if (!request || !duplicateBlockingStatuses.has(request.status)) continue;
+      const profilesForLeg = map.get(link.bookable_leg_id) || new Set<string>();
+      profilesForLeg.add(request.profile_id);
+      map.set(link.bookable_leg_id, profilesForLeg);
+    }
+    return map;
+  }, [requestLegs, requests]);
 
   useEffect(() => {
     if (!drag) return;
@@ -195,16 +249,17 @@ const BookingGanttTable = ({
 
   const openAddPerson = (legId: string) => {
     setAddPersonLegId(legId);
-    setAddPersonProfileId("");
-    setAddPersonPartySize("1");
+    setAddPersonProfileIds([]);
+    setAddPersonPickerOpen(false);
   };
 
   const submitAddPerson = async () => {
-    if (!addPersonLegId || !addPersonProfileId) return;
+    if (!addPersonLegId || addPersonProfileIds.length === 0) return;
     setAddPersonBusy(true);
-    await onAddPerson(addPersonLegId, addPersonProfileId, Math.max(1, Number.parseInt(addPersonPartySize, 10) || 1));
+    await onAddPeople(addPersonLegId, addPersonProfileIds);
     setAddPersonBusy(false);
     setAddPersonLegId(null);
+    setAddPersonPickerOpen(false);
   };
 
   return (
@@ -218,6 +273,17 @@ const BookingGanttTable = ({
           {legs.map((leg) => {
             const occupied = legCapacity[leg.id] || 0;
             const full = occupied >= maxGuests;
+            const remainingSeats = Math.max(0, maxGuests - occupied);
+            const alreadyOnLeg = activeProfileIdsByLeg.get(leg.id) || new Set<string>();
+            const selectableProfiles = uniqueAvailableProfiles.filter((profile) => !alreadyOnLeg.has(profile.id));
+            const selectedProfiles = selectableProfiles.filter((profile) => addPersonProfileIds.includes(profile.id));
+            const toggleSelectedProfile = (profileId: string) => {
+              setAddPersonProfileIds((current) => {
+                if (current.includes(profileId)) return current.filter((id) => id !== profileId);
+                if (current.length >= remainingSeats) return current;
+                return [...current, profileId];
+              });
+            };
             return (
               <div key={leg.id} className="min-w-0 border-l border-border p-3 align-bottom">
                 <span className="block text-xs font-medium leading-snug">{getLegLabel(leg, waypointsById, "it")}</span>
@@ -235,41 +301,114 @@ const BookingGanttTable = ({
                   </button>
                 </div>
                 {addPersonLegId === leg.id && (
-                  <div className="absolute z-20 mt-2 w-64 rounded-[16px] border border-border bg-background p-3 shadow-xl">
+                  <div className="absolute z-20 mt-2 w-80 rounded-[16px] border border-border bg-background p-3 shadow-xl">
                     <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                       Aggiungi su {getLegLabel(leg, waypointsById, "it")}
                     </p>
-                    <select
-                      value={addPersonProfileId}
-                      onChange={(event) => setAddPersonProfileId(event.target.value)}
-                      className="mb-2 w-full border border-border bg-background/80 px-2 py-1.5 text-xs focus:border-accent focus:outline-none"
-                    >
-                      <option value="">Seleziona persona</option>
-                      {availableProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name || profile.email}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="1"
-                      value={addPersonPartySize}
-                      onChange={(event) => setAddPersonPartySize(event.target.value)}
-                      className="mb-2 w-full border border-border bg-background/80 px-2 py-1.5 text-xs focus:border-accent focus:outline-none"
-                    />
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      {remainingSeats > 0 ? `${remainingSeats} posti disponibili` : "Tratta al completo"}
+                    </p>
+                    <Popover open={addPersonPickerOpen} onOpenChange={setAddPersonPickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          disabled={remainingSeats === 0}
+                          className="mb-2 h-auto min-h-11 w-full justify-between gap-2 border-border bg-background/80 px-2 py-2 text-left text-xs font-normal hover:bg-background"
+                        >
+                          {selectedProfiles.length > 0 ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="flex -space-x-2">
+                                {selectedProfiles.slice(0, 3).map((profile) => (
+                                  <span
+                                    key={profile.id}
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-background bg-accent/10 text-[10px] font-semibold text-accent"
+                                  >
+                                    <ProfileAvatar
+                                      name={getProfileLabel(profile)}
+                                      avatarUrl={profile.avatar_url}
+                                      fallback={<span>{getProfileInitials(profile)}</span>}
+                                    />
+                                  </span>
+                                ))}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium">
+                                  {selectedProfiles.length === 1
+                                    ? getProfileLabel(selectedProfiles[0])
+                                    : `${selectedProfiles.length} persone selezionate`}
+                                </span>
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">Cerca persone...</span>
+                          )}
+                          <ChevronsUpDown size={14} className="shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-80 p-0">
+                        <Command>
+                          <CommandInput placeholder="Cerca per nome o email..." />
+                          <CommandList>
+                            <CommandEmpty>Nessuna persona trovata.</CommandEmpty>
+                            <CommandGroup>
+                              {selectableProfiles.map((profile) => (
+                                <CommandItem
+                                  key={profile.id}
+                                  value={`${getProfileLabel(profile)} ${profile.email || ""} ${profile.id}`}
+                                  onSelect={() => {
+                                    toggleSelectedProfile(profile.id);
+                                  }}
+                                  disabled={!addPersonProfileIds.includes(profile.id) && addPersonProfileIds.length >= remainingSeats}
+                                  className="gap-2"
+                                >
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+                                    <ProfileAvatar
+                                      name={getProfileLabel(profile)}
+                                      avatarUrl={profile.avatar_url}
+                                      fallback={<span>{getProfileInitials(profile)}</span>}
+                                    />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-medium">{getProfileLabel(profile)}</span>
+                                    {profile.email && (
+                                      <span className="block truncate text-[11px] text-muted-foreground">
+                                        {profile.email}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                      addPersonProfileIds.includes(profile.id)
+                                        ? "border-accent bg-accent text-accent-foreground"
+                                        : "border-border"
+                                    }`}
+                                  >
+                                    {addPersonProfileIds.includes(profile.id) && <Check size={12} />}
+                                  </span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => void submitAddPerson()}
-                        disabled={addPersonBusy || !addPersonProfileId}
+                        disabled={addPersonBusy || addPersonProfileIds.length === 0}
                         className="glass-chip inline-flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-foreground hover:text-accent disabled:opacity-50"
                       >
-                        <Check size={12} /> Aggiungi
+                        <Check size={12} /> Aggiungi {addPersonProfileIds.length || ""}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setAddPersonLegId(null)}
+                        onClick={() => {
+                          setAddPersonLegId(null);
+                          setAddPersonPickerOpen(false);
+                        }}
                         className="glass-chip inline-flex items-center justify-center px-2 py-1.5 text-[11px] text-muted-foreground"
                       >
                         <X size={12} />
