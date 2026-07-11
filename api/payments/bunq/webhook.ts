@@ -1,7 +1,7 @@
 /**
  * POST /api/payments/bunq/webhook
  *
- * Receives Bunq notification callbacks and settles the matching deposit. Reconciles by the
+ * Receives Bunq notification callbacks and settles the matching contribution. Reconciles by the
  * request-inquiry id (REQUEST/REQUEST_INQUIRY events) or by the reference embedded in the
  * payment description (PAYMENT/MUTATION events). Always answers 200 quickly so Bunq does
  * not retry a delivered-but-unmatched event.
@@ -13,7 +13,7 @@ import { createServiceClient } from "../../../src/server/bunq/supabase";
 import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../src/server/bunq/client";
 import { readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http";
 
-const REFERENCE_PATTERN = /\bDEP-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
+const REFERENCE_PATTERN = /\b(?:CON|DEP)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
 
 type BunqNotificationPayload = {
   NotificationUrl?: {

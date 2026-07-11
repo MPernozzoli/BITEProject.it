@@ -16,7 +16,7 @@ import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
-import { perPersonDepositEur, totalDepositEur, isDepositCapped } from "@/lib/booking-deposit";
+import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
@@ -582,7 +582,7 @@ const Journal = () => {
         return;
       }
 
-      // Solo booking: kick off the Bunq security-deposit payment right away.
+      // Solo booking: kick off the Bunq voyage-contribution payment right away.
       if (bookingRequestId) {
         const payment = await startDepositPayment(bookingRequestId);
         if (payment.ok && "shareUrl" in payment) {
@@ -592,14 +592,18 @@ const Journal = () => {
         if (!payment.ok && "notConfigured" in payment) {
           toast.info(
             lang === "it"
-              ? "Prenotazione registrata. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
-              : "Booking saved. Deposit payment is not active yet: we'll send you the link shortly."
+              ? "Prenotazione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+              : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
           );
         } else if (!payment.ok) {
           toast.error(
-            lang === "it"
-              ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del deposito. Riprova dalle tue prenotazioni."
-              : "Booking saved, but we couldn't start the deposit payment. Retry from your bookings."
+            payment.error === "bunq_amount_exceeds_single_transaction_limit"
+              ? lang === "it"
+                ? "Prenotazione registrata. L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
+                : "Booking saved. The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
+              : lang === "it"
+                ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del contributo. Riprova dalle tue prenotazioni."
+                : "Booking saved, but we couldn't start the contribution payment. Retry from your bookings."
           );
         }
       }
@@ -1191,9 +1195,13 @@ const Journal = () => {
             partySize={bookingPartySize}
             message={bookingMessage}
             requiresPayment
-            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs)}
-            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize)}
-            depositCapped={isDepositCapped(selectedBookingLegs)}
+            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, {
+              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
+            })}
+            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, {
+              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
+            })}
+            contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             submitting={bookingSubmitting}
             onConfirm={() => void submitBookingFromLogbook()}
           />

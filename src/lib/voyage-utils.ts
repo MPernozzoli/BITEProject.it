@@ -1081,6 +1081,7 @@ export interface Voyage {
   booking_enabled?: boolean;
   booking_max_guests?: number;
   booking_planning_speed_kn?: number;
+  booking_contribution_per_nm_eur?: number;
   departure_window_start?: string | null;
   departure_window_end?: string | null;
   status: VoyageStatus;

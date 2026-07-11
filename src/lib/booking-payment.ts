@@ -7,7 +7,7 @@ export type StartDepositResult =
   | { ok: false; error: string };
 
 /**
- * Ask the backend to create a Bunq deposit payment request for a freshly-created booking.
+ * Ask the backend to create a Bunq contribution payment request for a freshly-created booking.
  * On success returns the bunq.me share URL the caller should redirect the user to.
  */
 export async function startDepositPayment(

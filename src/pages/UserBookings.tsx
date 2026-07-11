@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
-import { perPersonDepositEur, totalDepositEur, isDepositCapped } from "@/lib/booking-deposit";
+import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import {
   listMyParticipations,
@@ -89,7 +89,7 @@ const UserBookings = () => {
     const [voyagesRes, requestsRes] = await Promise.all([
       typedSupabase
         .from("voyages")
-        .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,start_date,end_date")
+        .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
         .eq("booking_enabled", true)
         .eq("is_published", true)
         .order("start_date", { ascending: true, nullsFirst: false }),
@@ -113,7 +113,7 @@ const UserBookings = () => {
     if (missingVoyageIds.length) {
       const { data: archivedVoyages, error: archivedVoyagesError } = await typedSupabase
         .from("voyages")
-        .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,start_date,end_date")
+        .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
         .in("id", missingVoyageIds);
       if (archivedVoyagesError) {
         toast.error(archivedVoyagesError.message);
@@ -303,7 +303,7 @@ const UserBookings = () => {
       return;
     }
 
-    // Solo booking: kick off the Bunq security-deposit payment right away.
+    // Solo booking: kick off the Bunq voyage-contribution payment right away.
     if (bookingRequestId) {
       const payment = await startDepositPayment(bookingRequestId);
       if (payment.ok && "shareUrl" in payment) {
@@ -314,14 +314,18 @@ const UserBookings = () => {
       if (!payment.ok && "notConfigured" in payment) {
         toast.info(
           lang === "it"
-            ? "Prenotazione registrata. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
-            : "Booking saved. Deposit payment is not active yet: we'll send you the link shortly."
+            ? "Prenotazione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+            : "Booking saved. Contribution payment is not active yet: we'll send you the link shortly."
         );
       } else if (!payment.ok) {
         toast.error(
-          lang === "it"
-            ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del deposito. Riprova dalle tue prenotazioni."
-            : "Booking saved, but we couldn't start the deposit payment. Please retry from your bookings."
+          payment.error === "bunq_amount_exceeds_single_transaction_limit"
+            ? lang === "it"
+              ? "Prenotazione registrata. L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
+              : "Booking saved. The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
+            : lang === "it"
+              ? "Prenotazione registrata, ma non è stato possibile avviare il pagamento del contributo. Riprova dalle tue prenotazioni."
+              : "Booking saved, but we couldn't start the contribution payment. Please retry from your bookings."
         );
       }
     }
@@ -391,8 +395,14 @@ const UserBookings = () => {
         if (!payment.ok && "notConfigured" in payment) {
           toast.info(
             lang === "it"
-              ? "Invito accettato. Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
-              : "Invitation accepted. Deposit payment is not active yet: we'll send you the link shortly."
+              ? "Invito accettato. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+              : "Invitation accepted. Contribution payment is not active yet: we'll send you the link shortly."
+          );
+        } else if (!payment.ok && payment.error === "bunq_amount_exceeds_single_transaction_limit") {
+          toast.info(
+            lang === "it"
+              ? "Invito accettato. L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
+              : "Invitation accepted. The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
           );
         }
       } else {
@@ -466,8 +476,8 @@ const UserBookings = () => {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {p.requires_payment
                         ? lang === "it"
-                          ? "Accetta le condizioni e versa il tuo deposito per confermare il posto."
-                          : "Accept the terms and pay your deposit to confirm your seat."
+                          ? "Accetta le condizioni e versa la tua quota di contributo per confermare la partecipazione."
+                          : "Accept the terms and pay your contribution share to confirm participation."
                         : lang === "it"
                           ? "Accetta le condizioni per confermare la partecipazione."
                           : "Accept the terms to confirm your participation."}
@@ -641,15 +651,15 @@ const UserBookings = () => {
               message={message}
               requiresPayment
               depositPerPersonEur={perPersonDepositEur(
-                selectedLegIds.map((id) => legsById[id]).filter(Boolean)
+                selectedLegIds.map((id) => legsById[id]).filter(Boolean),
+                { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
               )}
               depositTotalEur={totalDepositEur(
                 selectedLegIds.map((id) => legsById[id]).filter(Boolean),
-                Math.max(1, Number.parseInt(partySize, 10) || 1)
+                Math.max(1, Number.parseInt(partySize, 10) || 1),
+                { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
               )}
-              depositCapped={isDepositCapped(
-                selectedLegIds.map((id) => legsById[id]).filter(Boolean)
-              )}
+              contributionPerNmEur={selectedVoyage?.booking_contribution_per_nm_eur}
               submitting={saving}
               onConfirm={() => void submitRequest()}
             />

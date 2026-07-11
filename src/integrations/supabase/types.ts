@@ -1770,6 +1770,7 @@ export type Database = {
         Row: {
           cached_geometry: Json | null
           booking_enabled: boolean
+          booking_contribution_per_nm_eur: number
           booking_max_guests: number
           booking_planning_speed_kn: number
           created_at: string
@@ -1798,6 +1799,7 @@ export type Database = {
         Insert: {
           cached_geometry?: Json | null
           booking_enabled?: boolean
+          booking_contribution_per_nm_eur?: number
           booking_max_guests?: number
           booking_planning_speed_kn?: number
           created_at?: string
@@ -1826,6 +1828,7 @@ export type Database = {
         Update: {
           cached_geometry?: Json | null
           booking_enabled?: boolean
+          booking_contribution_per_nm_eur?: number
           booking_max_guests?: number
           booking_planning_speed_kn?: number
           created_at?: string

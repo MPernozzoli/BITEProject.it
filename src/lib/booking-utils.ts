@@ -20,6 +20,7 @@ export interface BookingVoyage {
   booking_enabled?: boolean;
   booking_max_guests?: number;
   booking_planning_speed_kn?: number;
+  booking_contribution_per_nm_eur?: number;
   departure_window_start?: string | null;
   departure_window_end?: string | null;
   start_date: string | null;
@@ -55,10 +56,10 @@ export const STOP_NIGHTS_PRESETS = [1, 2, 3] as const;
 export const STOP_DEPARTURE_PRESETS = ["07:30", "19:00"] as const;
 /** Default departure time for a "nights" stop: the morning after arrival. */
 export const DEFAULT_STOP_DEPARTURE_TIME = "07:30";
-/** Default departure time for a stop preceding an open-sea leg (sailed overnight). */
+/** Default departure time for a stop preceding an offshore leg (typically sailed overnight). */
 export const OPEN_SEA_STOP_DEPARTURE_TIME = "19:00";
 
-/** Suggested default departure time for a new stop, based on whether the outbound leg is open-sea. */
+/** Suggested default departure time for a new stop, based on whether the outbound leg is offshore. */
 export function getDefaultStopDepartureTime(outboundLegIsOpenSea: boolean) {
   return outboundLegIsOpenSea ? OPEN_SEA_STOP_DEPARTURE_TIME : DEFAULT_STOP_DEPARTURE_TIME;
 }
@@ -74,11 +75,13 @@ export interface BookableLeg {
   ends_at_window_start: string | null;
   ends_at_window_end: string | null;
   is_bookable: boolean;
+  /** Planned straight-line distance for contribution calculation, in nautical miles. */
+  planned_nautical_miles?: number | null;
   /** Manual external-hazard rating, 0 (minimo) … 3 (consistente). */
   danger_level?: number | null;
   /** Specific hazards behind the danger rating (see {@link DangerReasonKey}), e.g. "piracy". */
   danger_reasons?: string[] | null;
-  /** Manual flag: open-sea passage (>12 nm offshore); feeds auto complexity. */
+  /** Manual flag: offshore navigation (>12 nm from coast); feeds auto complexity and contribution modifiers. */
   open_sea?: boolean | null;
   /** Manual complexity override, 1 … 5; null means use the auto value. */
   complexity_override?: number | null;
@@ -477,7 +480,7 @@ export function getComplexityReasons(
     );
   }
   if (leg.open_sea) {
-    reasons.push(it ? "naviga in mare aperto, lontano dalla costa" : "sails in open sea, far from the coast");
+    reasons.push(it ? "include navigazione d'altura, lontano dalla costa" : "includes offshore navigation, far from the coast");
   }
   if (duration != null && duration > 40) {
     reasons.push(
@@ -498,7 +501,7 @@ export function getComplexityReasons(
 
 /**
  * Full tooltip explanation for a leg's complexity: a sentence naming the specific factors
- * behind it (open sea, duration, night navigation, danger level) when available, falling
+ * behind it (offshore navigation, duration, night navigation, danger level) when available, falling
  * back to a generic line, followed by the short "this is only an estimate" disclaimer.
  */
 export function getComplexityExplanation(
@@ -596,7 +599,7 @@ export function legHasNightNavigation(
 }
 
 /**
- * Auto complexity (1–5) from duration, night navigation, open-sea and danger. Danger at or
+ * Auto complexity (1–5) from duration, night navigation, offshore navigation and danger. Danger at or
  * above {@link DANGER_COMPLEXITY_THRESHOLD} pins the leg to the maximum.
  */
 export function computeAutoLegComplexity(leg: BookableLeg): number {

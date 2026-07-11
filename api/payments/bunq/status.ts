@@ -1,7 +1,7 @@
 /**
  * GET /api/payments/bunq/status?bookingRequestId=...
  *
- * Returns the deposit status for a booking the caller owns. When the stored status is
+ * Returns the payment status for a booking the caller owns. When the stored status is
  * still "pending", it re-checks the live Bunq request-inquiry and settles it if the payer
  * has paid — so the flow works even without webhooks configured.
  *

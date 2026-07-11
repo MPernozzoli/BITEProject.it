@@ -1,21 +1,35 @@
-# Bunq security-deposit ("caparra") payments
+# Bunq voyage-contribution payments
 
-The booking flow charges a **refundable security deposit** via Bunq before a seat is held.
-It is **not** a ticket or fare — see the disclaimer copy in
-`src/components/booking/BookingConfirmDialog.tsx`.
+The booking flow charges a **fair-share contribution to voyage out-of-pocket costs** via
+Bunq before participation is confirmed. BITE is not presented as a charter, tourism
+business, transport service, or other commercial activity: the copy must consistently frame
+the voyage as a private trip the crew is already making, open to people who want to join by
+fairly sharing part of the actual costs. Food expenses are managed on board during the voyage
+and are not included in this amount.
 
 ## Amount
 
 Computed server-side (never trusted from the client) in `src/lib/booking-deposit.ts`:
 
-- €50 per bookable leg by default.
-- €100 per leg that is **open-sea** or has **high complexity** (effective complexity ≥ 4).
-- Per-person amounts sum across the selected legs, **capped at €250 per person**.
+- Fixed minimum: €20 per person, applied once regardless of the number of selected legs.
+- Variable part: planned nautical miles for each selected leg × the voyage's configurable
+  `booking_contribution_per_nm_eur` coefficient. Default: €0.90/NM.
+- Leg modifiers apply additively to the variable part only:
+  - night navigation: +10%;
+  - offshore navigation ("navigazione d'altura", stored as `open_sea`): +20%;
+  - dangerous navigation (`danger_level > 0`): +20%.
+- Per-person amounts sum across the selected legs, with no per-person cap.
 - Total charged = per-person amount **× party size**.
+- UI copy should describe the amount as the participant's fair-share contribution to actual
+  voyage costs, not as a fare, ticket price, service price, or charter fee.
+- Bunq API payments are limited to €500 per single transaction. `/request` returns
+  `409 bunq_amount_exceeds_single_transaction_limit` when the payer amount is above €500,
+  so the client can route the user to bank-transfer instructions instead of creating an
+  invalid Bunq request.
 
 ## Flow
 
-1. User accepts the conditions in the confirmation modal and presses *Conferma e paga il deposito*.
+1. User accepts the conditions in the confirmation modal and presses *Conferma e versa il contributo*.
 2. The booking request is created via the existing `request_voyage_booking` RPC.
 3. The client calls `POST /api/payments/bunq/request` with the new `bookingRequestId` and the
    user's Supabase access token.
@@ -24,10 +38,10 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
 5. The user is redirected to Bunq to pay.
 6. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
    as a fallback, by `GET /api/payments/bunq/status?bookingRequestId=...`, which re-checks the
-   live request-inquiry status. Either path flips the deposit to `paid`.
+   live request-inquiry status. Either path flips the stored payment row to `paid`.
 
 If Bunq env vars are missing, `/request` returns `503 not_configured`, the booking is still
-created, and the user sees a "deposit link to follow" message — nothing breaks.
+created, and the user sees a "contribution link to follow" message — nothing breaks.
 
 ## Server code
 
@@ -41,7 +55,8 @@ created, and the user sees a "deposit link to follow" message — nothing breaks
 Migration `supabase/migrations/20260710120500_bunq_deposits.sql`:
 
 - `bunq_api_contexts` — encrypted Bunq context per environment (service-role only).
-- `voyage_booking_deposits` — one deposit per booking request (amount, status, Bunq id, share URL).
+- `voyage_booking_deposits` — existing storage table for one contribution payment per booking request
+  or participant (amount, status, Bunq id, share URL).
 
 ## Required environment variables (Vercel)
 
@@ -67,13 +82,13 @@ When a booking is for more than one person, after creating the request the lead 
 `/bookings/:id/participants` to:
 
 1. enter each co-traveller's first name, last name and email;
-2. choose the payment mode — **pago per tutti** (`lead_pays_all`: the lead pays deposit ×
+2. choose the payment mode — **pago per tutti** (`lead_pays_all`: the lead pays contribution ×
    party size, guests only accept the terms) or **pago per me** (`each_pays_own`: the lead
    pays their own share, each guest pays their own on acceptance);
 3. send the invitations and pay their own share.
 
 Each guest receives the `voyage-participant-invite` email and, from `/bookings`, sees a
-**pending invitation**: they accept the same conditions (and pay their deposit if
+**pending invitation**: they accept the same conditions (and pay their contribution if
 `each_pays_own`) or decline. Seats are held from booking time; guests that don't complete
 before `expires_at` (7 days) are released by `expire_pending_booking_participants()`.
 

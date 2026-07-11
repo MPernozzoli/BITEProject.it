@@ -83,6 +83,7 @@ interface VoyageFormState {
   booking_enabled: boolean;
   booking_max_guests: string;
   booking_planning_speed_kn: string;
+  booking_contribution_per_nm_eur: string;
   dates_tbd: boolean;
   start_date: string;
   start_time: string;
@@ -118,6 +119,7 @@ const emptyVoyageForm: VoyageFormState = {
   booking_enabled: false,
   booking_max_guests: "2",
   booking_planning_speed_kn: "5",
+  booking_contribution_per_nm_eur: "0.90",
   dates_tbd: true,
   start_date: "",
   start_time: "",
@@ -489,7 +491,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute", "booking_enabled", "booking_max_guests", "booking_planning_speed_kn"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute", "booking_enabled", "booking_max_guests", "booking_planning_speed_kn", "booking_contribution_per_nm_eur"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -542,6 +544,7 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   booking_enabled: Boolean(voyage?.booking_enabled),
   booking_max_guests: Math.max(1, Number(voyage?.booking_max_guests ?? 4)),
   booking_planning_speed_kn: Math.max(0.1, Number(voyage?.booking_planning_speed_kn ?? 5)),
+  booking_contribution_per_nm_eur: Math.max(0, Number(voyage?.booking_contribution_per_nm_eur ?? 0.9)),
   departure_window_start: (voyage?.departure_window_start ?? null) as string | null,
   departure_window_end: (voyage?.departure_window_end ?? null) as string | null,
   start_date: (voyage?.start_date ?? null) as string | null,
@@ -2415,6 +2418,7 @@ const AdminVoyageManager = ({
         booking_enabled: Boolean(voyage.booking_enabled),
         booking_max_guests: String(Math.max(1, Number(voyage.booking_max_guests ?? 4))),
         booking_planning_speed_kn: String(Math.max(0.1, Number(voyage.booking_planning_speed_kn ?? 5))),
+        booking_contribution_per_nm_eur: String(Math.max(0, Number(voyage.booking_contribution_per_nm_eur ?? 0.9))),
         dates_tbd: hasVoyageDatesTbd(voyage),
         start_date: voyage.start_date || "",
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
@@ -2453,6 +2457,10 @@ const AdminVoyageManager = ({
     const endFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
     const bookingMaxGuests = Math.max(1, parseNonNegativeInteger(voyageForm.booking_max_guests) || 2);
     const bookingPlanningSpeedKn = Math.max(0.1, Number.parseFloat(voyageForm.booking_planning_speed_kn) || 5);
+    const parsedContributionPerNm = Number.parseFloat(voyageForm.booking_contribution_per_nm_eur);
+    const bookingContributionPerNmEur = Number.isFinite(parsedContributionPerNm)
+      ? Math.max(0, parsedContributionPerNm)
+      : 0.9;
     const legacyName = nameEn || nameIt || "Untitled voyage";
     const legacyDescription = descriptionEn || descriptionIt || null;
     const data: TablesInsert<"voyages"> = {
@@ -2468,6 +2476,7 @@ const AdminVoyageManager = ({
       booking_enabled: voyageForm.booking_enabled,
       booking_max_guests: bookingMaxGuests,
       booking_planning_speed_kn: bookingPlanningSpeedKn,
+      booking_contribution_per_nm_eur: bookingContributionPerNmEur,
       start_date: datesTbd ? null : voyageForm.start_date || null,
       start_time: datesTbd ? null : voyageForm.start_time || null,
       start_date_flex_days: datesTbd ? 0 : startFlexDays,
@@ -3319,7 +3328,7 @@ const AdminVoyageManager = ({
                 </span>
               </label>
               {voyageForm.booking_enabled && (
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div>
                     <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
                       Persone max
@@ -3349,6 +3358,24 @@ const AdminVoyageManager = ({
                       }
                       className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      €/NM contributo
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={voyageForm.booking_contribution_per_nm_eur}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_contribution_per_nm_eur: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                    <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
+                      Default 0,90 euro per miglio nautico pianificato.
+                    </p>
                   </div>
                 </div>
               )}

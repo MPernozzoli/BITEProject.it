@@ -28,14 +28,14 @@ const COPY = {
     intro: (name: string, inviter: string, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
       const by = inviter ? `${inviter} ti ha` : 'Ti hanno'
-      return `${prefix}${by} invitato a partecipare a ${voyageName}. Per prendere parte al viaggio devi avere un tuo account sul portale BITE.`
+      return `${prefix}${by} invitato a partecipare a ${voyageName}. BITE non è un charter o un'attività commerciale: è un viaggio privato con condivisione equa delle spese vive. Per prendere parte al viaggio devi avere un tuo account sul portale BITE.`
     },
     steps: 'Cosa fare',
     stepRegister: 'Accedi o iscriviti al portale con questa email.',
     stepAccept: 'Apri le tue prenotazioni, accetta l\'invito e le condizioni di partecipazione.',
-    stepPay: 'Versa il tuo deposito cauzionale per confermare il posto.',
-    noPay: 'Per questo viaggio il deposito è già coperto da chi ti ha invitato: dovrai solo accettare le condizioni.',
-    deposit: 'Deposito cauzionale',
+    stepPay: 'Versa la tua quota equa di contributo alle spese vive del viaggio per confermare la partecipazione.',
+    noPay: 'Per questo viaggio il contributo è già coperto da chi ti ha invitato: dovrai solo accettare le condizioni.',
+    deposit: 'Quota contributo viaggio',
     cta: 'Vai alle prenotazioni',
     voyageFallback: 'un viaggio',
     legsTitle: 'Tratte',
@@ -48,14 +48,14 @@ const COPY = {
     intro: (name: string, inviter: string, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
       const by = inviter ? `${inviter} has` : 'You have been'
-      return `${prefix}${by} invited you to join ${voyageName}. To take part you need your own account on the BITE portal.`
+      return `${prefix}${by} invited you to join ${voyageName}. BITE is not a charter or a commercial activity: it is a private voyage with fair sharing of out-of-pocket costs. To take part you need your own account on the BITE portal.`
     },
     steps: 'What to do',
     stepRegister: 'Sign in or register on the portal with this email.',
     stepAccept: 'Open your bookings, accept the invitation and the participation terms.',
-    stepPay: 'Pay your security deposit to confirm your seat.',
-    noPay: 'For this voyage your deposit is already covered by whoever invited you: you only need to accept the terms.',
-    deposit: 'Security deposit',
+    stepPay: 'Pay your fair-share contribution to the voyage out-of-pocket costs to confirm participation.',
+    noPay: 'For this voyage your contribution is already covered by whoever invited you: you only need to accept the terms.',
+    deposit: 'Voyage contribution share',
     cta: 'Go to bookings',
     voyageFallback: 'a voyage',
     legsTitle: 'Legs',

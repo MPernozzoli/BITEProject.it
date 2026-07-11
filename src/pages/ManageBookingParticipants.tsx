@@ -75,7 +75,7 @@ const ManageBookingParticipants = () => {
     setGuests(Array.from({ length: size - 1 }, () => ({ first_name: "", last_name: "", email: "" })));
 
     const { data: voyageRow } = await q<BookingVoyage>("voyages")
-      .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,start_date,end_date")
+      .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
       .eq("id", request.voyage_id)
       .maybeSingle();
     setVoyage(voyageRow ?? null);
@@ -87,7 +87,7 @@ const ManageBookingParticipants = () => {
     if (legIds.length) {
       const { data: legRows } = await q<DepositLeg[]>("voyage_bookable_legs")
         .select(
-          "open_sea, complexity_override, danger_level, starts_at_window_start, starts_at_window_end, ends_at_window_start, ends_at_window_end"
+          "planned_nautical_miles, open_sea, danger_level, starts_at_window_start, ends_at_window_start"
         )
         .in("id", legIds);
       setLegs((legRows ?? []) as DepositLeg[]);
@@ -102,14 +102,15 @@ const ManageBookingParticipants = () => {
     void load();
   }, [load]);
 
-  const perPerson = useMemo(() => perPersonDepositEur(legs), [legs]);
+  const contributionPerNmEur = voyage?.booking_contribution_per_nm_eur;
+  const perPerson = useMemo(() => perPersonDepositEur(legs, { contributionPerNmEur }), [contributionPerNmEur, legs]);
   const leadPaysAllTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }),
-    [legs, partySize]
+    () => depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }, { contributionPerNmEur }),
+    [contributionPerNmEur, legs, partySize]
   );
   const leadPaysMeTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }),
-    [legs, partySize]
+    () => depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, { contributionPerNmEur }),
+    [contributionPerNmEur, legs, partySize]
   );
 
   const updateGuest = (index: number, field: keyof ParticipantInput, value: string) => {
@@ -174,8 +175,14 @@ const ManageBookingParticipants = () => {
       if (!payment.ok && "notConfigured" in payment) {
         toast.info(
           lang === "it"
-            ? "Il pagamento del deposito non è ancora attivo: ti invieremo il link a breve."
-            : "Deposit payment is not active yet: we'll send you the link shortly."
+            ? "Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+            : "Contribution payment is not active yet: we'll send you the link shortly."
+        );
+      } else if (!payment.ok && payment.error === "bunq_amount_exceeds_single_transaction_limit") {
+        toast.info(
+          lang === "it"
+            ? "L'importo supera il limite Bunq per singola transazione: ti invieremo i dati per il bonifico."
+            : "The amount exceeds Bunq's single-transaction limit: we'll send you bank transfer details."
         );
       }
       navigate("/bookings");
@@ -212,8 +219,8 @@ const ManageBookingParticipants = () => {
 
         <div className="glass-panel rounded-[24px] border border-amber-300/50 bg-amber-50/50 p-4 text-xs leading-relaxed text-amber-900 dark:bg-amber-400/10 dark:text-amber-100/90">
           {lang === "it"
-            ? "Ogni partecipante dovrà avere un proprio account sul portale BITE per prendere parte al viaggio. Riceverà un invito via email per iscriversi (o accedere), accettare le condizioni ed eventualmente pagare il proprio deposito."
-            : "Each participant must have their own account on the BITE portal to take part. They will receive an email invitation to register (or sign in), accept the terms and, if applicable, pay their own deposit."}
+            ? "BITE non è un charter o un'attività commerciale: è un viaggio privato con condivisione equa delle spese vive. Ogni partecipante dovrà avere un proprio account sul portale BITE per prendere parte al viaggio, accettare le condizioni ed eventualmente versare la propria quota di contributo."
+            : "BITE is not a charter or a commercial activity: it is a private voyage with fair sharing of out-of-pocket costs. Each participant must have their own BITE portal account to take part, accept the terms and, if applicable, pay their own contribution share."}
         </div>
 
         <section className="glass-panel space-y-4 rounded-[28px] p-5 md:p-6">
@@ -247,12 +254,12 @@ const ManageBookingParticipants = () => {
 
         <section className="glass-panel space-y-3 rounded-[28px] p-5 md:p-6">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Wallet size={16} /> {lang === "it" ? "Pagamento del deposito" : "Deposit payment"}
+            <Wallet size={16} /> {lang === "it" ? "Pagamento del contributo" : "Contribution payment"}
           </div>
           <p className="text-xs text-muted-foreground">
             {lang === "it"
-              ? `Deposito cauzionale: ${formatDepositEur(perPerson, "it")} a persona.`
-              : `Security deposit: ${formatDepositEur(perPerson, "en")} per person.`}
+              ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona.`
+              : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person.`}
           </p>
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${
@@ -291,8 +298,8 @@ const ManageBookingParticipants = () => {
               <span className="font-medium text-foreground">{lang === "it" ? "Pago solo per me" : "I pay for myself only"}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {lang === "it"
-                  ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")} per te. Ogni altro partecipante pagherà il proprio deposito accettando l'invito.`
-                  : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} for yourself now. Each other participant pays their own deposit when accepting.`}
+                  ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")} per te. Ogni altro partecipante verserà il proprio contributo accettando l'invito.`
+                  : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} for yourself now. Each other participant pays their own contribution when accepting.`}
               </span>
             </span>
           </label>
@@ -305,7 +312,7 @@ const ManageBookingParticipants = () => {
           className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:text-accent disabled:opacity-50"
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-          {lang === "it" ? "Invia inviti e paga il deposito" : "Send invites & pay deposit"}
+          {lang === "it" ? "Invia inviti e versa il contributo" : "Send invites & pay contribution"}
         </button>
       </div>
     </div>

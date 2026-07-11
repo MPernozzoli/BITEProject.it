@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, TicketCheck } from "lucide-react";
+import { AlertTriangle, Info, Loader2, TicketCheck } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
   Dialog,
@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import {
   getComplexityLabel,
   getLegComplexity,
@@ -25,12 +26,18 @@ const CHALLENGING_COMPLEXITY_THRESHOLD = 4;
 
 type ConfirmDialogLeg = Pick<
   BookableLeg,
-  "complexity_override" | "danger_level" | "danger_reasons" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+  | "complexity_override"
+  | "danger_level"
+  | "danger_reasons"
+  | "open_sea"
+  | "planned_nautical_miles"
+  | "starts_at_window_start"
+  | "ends_at_window_start"
 >;
 
 /**
  * Booking conditions the user must explicitly accept before a request is sent.
- * `paymentOnly` conditions are shown only when a deposit / Bunq payment flow is
+ * `paymentOnly` conditions are shown only when a contribution / Bunq payment flow is
  * part of the booking (pass `requiresPayment` to the dialog).
  */
 interface BookingCondition {
@@ -64,16 +71,22 @@ const BOOKING_CONDITIONS: BookingCondition[] = [
     en: "I understand that this is not a holiday: I will be required to take an active part in handling the boat, including cleaning, helming, sail trimming and watch shifts, including at night.",
   },
   {
+    id: "private-cost-sharing",
+    paymentOnly: true,
+    it: "Ho compreso che BITE non è un charter, un'attività turistica o un servizio commerciale: è un viaggio privato che l'equipaggio deve comunque effettuare, aperto a persone che vogliono partecipare condividendo in modo equo una parte delle spese vive.",
+    en: "I understand that BITE is not a charter, a tourism business or a commercial service: it is a private voyage the crew is already making, open to people who want to join by fairly sharing part of the out-of-pocket costs.",
+  },
+  {
     id: "deposit-nature",
     paymentOnly: true,
-    it: "Ho compreso che l'importo richiesto è un deposito cauzionale, restituito al termine del viaggio: non è un biglietto, non è una quota di partecipazione e non dà diritto al viaggio né all'erogazione di alcun servizio. Il pagamento non garantisce la partecipazione.",
-    en: "I understand that the amount requested is a refundable security deposit, returned at the end of the voyage: it is not a ticket, not a participation fee, and grants no right to the voyage or to any service. Payment does not guarantee participation.",
+    it: "Ho compreso che l'importo richiesto è la mia quota equa di contributo alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Non include le spese alimentari, che saranno gestite a bordo durante il viaggio.",
+    en: "I understand that the requested amount is my fair-share contribution to navigation and vessel operating expenses during the crossing. It does not include food expenses, which will be managed on board during the voyage.",
   },
   {
     id: "cancellation-policy",
     paymentOnly: true,
-    it: "Ho compreso che il deposito viene trattenuto solo se non mi presento alla partenza o se annullo con meno di 14 giorni di preavviso; se sono gli organizzatori ad annullare o a modificare le date impedendomi di partecipare, il deposito mi sarà restituito.",
-    en: "I understand that the deposit is withheld only if I do not show up at departure or if I cancel with less than 14 days' notice; if the organisers cancel or change the dates in a way that prevents me from taking part, the deposit will be returned to me.",
+    it: "Ho compreso che, se l'importo supera 500 euro, il pagamento tramite Bunq potrebbe non essere disponibile in un'unica transazione e potranno essere forniti i dati per un bonifico.",
+    en: "I understand that, if the amount exceeds EUR 500, Bunq payment may not be available as a single transaction and bank transfer details may be provided instead.",
   },
   {
     id: "physical-fitness",
@@ -110,14 +123,14 @@ interface BookingConfirmDialogProps {
   legs?: ConfirmDialogLeg[];
   partySize: number;
   message?: string;
-  /** When true, shows the deposit conditions + payment box (Bunq flow). */
+  /** When true, shows the contribution conditions + payment box (Bunq flow). */
   requiresPayment?: boolean;
-  /** Per-person deposit (EUR), shown when requiresPayment. */
+  /** Per-person contribution (EUR), shown when requiresPayment. */
   depositPerPersonEur?: number;
-  /** Total deposit charged (per-person × pax), shown when requiresPayment. */
+  /** Total contribution charged (per-person × pax), shown when requiresPayment. */
   depositTotalEur?: number;
-  /** Whether the per-person amount hit the €250 cap (surfaces the ceiling note). */
-  depositCapped?: boolean;
+  /** Configurable EUR per planned nautical mile for this voyage. */
+  contributionPerNmEur?: number | null;
   submitting?: boolean;
   onConfirm: () => void;
 }
@@ -134,7 +147,7 @@ const BookingConfirmDialog = ({
   requiresPayment = false,
   depositPerPersonEur,
   depositTotalEur,
-  depositCapped = false,
+  contributionPerNmEur,
   submitting = false,
   onConfirm,
 }: BookingConfirmDialogProps) => {
@@ -158,6 +171,10 @@ const BookingConfirmDialog = ({
     if (maxComplexity < CHALLENGING_COMPLEXITY_THRESHOLD && maxDanger === 0) return null;
     return { maxComplexity, maxDanger, reasonKeys: Array.from(reasonKeys) };
   }, [legs]);
+  const contributionExplanation = useMemo(
+    () => getContributionExplanation(legs, { contributionPerNmEur, lang: lang === "en" ? "en" : "it" }),
+    [contributionPerNmEur, lang, legs]
+  );
 
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
 
@@ -254,7 +271,25 @@ const BookingConfirmDialog = ({
             <div className="mb-4 rounded-2xl border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
-                  {lang === "it" ? "Deposito cauzionale" : "Security deposit"}
+                  {lang === "it"
+                    ? "Quota di contributo alle spese vive del viaggio"
+                    : "Fair-share contribution to voyage costs"}
+                  <TooltipProvider delayDuration={120}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="ml-1 inline-flex align-middle text-amber-900/70 hover:text-amber-950 dark:text-amber-200/80"
+                          aria-label={lang === "it" ? "Come viene calcolato il contributo" : "How the contribution is calculated"}
+                        >
+                          <Info size={13} aria-hidden />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[13000] w-[min(340px,82vw)] rounded-xl border-border/70 bg-popover/95 p-3 text-left text-[11px] font-normal leading-relaxed shadow-xl backdrop-blur">
+                        {contributionExplanation}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </span>
                 <span className="text-lg font-bold text-amber-900 dark:text-amber-200">
                   {formatDepositEur(depositTotalEur, lang === "it" ? "it" : "en")}
@@ -265,13 +300,12 @@ const BookingConfirmDialog = ({
                   {lang === "it"
                     ? `${formatDepositEur(depositPerPersonEur, "it")} a persona × ${partySize} persone`
                     : `${formatDepositEur(depositPerPersonEur, "en")} per person × ${partySize} guests`}
-                  {depositCapped ? (lang === "it" ? " (tetto di €250 a persona)" : " (€250 per-person cap)") : ""}
                 </p>
               )}
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
                 {lang === "it"
-                  ? "Questo importo è un deposito cauzionale, non un biglietto: serve solo come impegno a partecipare davvero al viaggio ed evitare che un posto resti occupato da chi poi non si presenta. Non costituisce alcun diritto al viaggio né all'erogazione di servizi e ti verrà restituito al termine del viaggio. Le spese effettive (vitto, attività, ecc.) saranno calcolate e divise tra l'equipaggio durante il viaggio, tramite strumenti come Splitwise. Il viaggio di andata/ritorno e ogni spesa connessa sono a tuo carico. Prenotando più tratte gli importi si sommano fino a un massimo di €250 a persona. Il deposito viene trattenuto solo in caso di mancata presentazione o annullamento con meno di 14 giorni di preavviso; se siamo noi ad annullare o a cambiare le date impedendoti di partecipare, viene sempre rimborsato."
-                  : "This amount is a refundable security deposit, not a ticket: it only serves as a commitment to genuinely take part in the voyage and to prevent a seat being held by someone who then does not show up. It grants no right to the voyage or to any service, and it will be returned to you at the end of the voyage. The actual costs (food, activities, etc.) will be calculated and split among the crew during the voyage, using tools such as Splitwise. Travel to and from the boat and any related expenses are your responsibility. Booking multiple legs sums the amounts up to a maximum of €250 per person. The deposit is withheld only in case of a no-show or cancellation with less than 14 days' notice; if we cancel or change the dates in a way that prevents you from taking part, it is always refunded."}
+                  ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico. Se il totale supera 500 euro, Bunq non consente una singola transazione tramite API: ti forniremo i dati per procedere con bonifico."
+                  : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility. If the total exceeds EUR 500, Bunq does not allow a single API transaction: we will provide bank transfer details."}
               </p>
             </div>
           )}
@@ -321,8 +355,8 @@ const BookingConfirmDialog = ({
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <TicketCheck size={16} />}
             {requiresPayment
               ? lang === "it"
-                ? "Conferma e paga il deposito"
-                : "Confirm & pay deposit"
+                ? "Conferma e versa il contributo"
+                : "Confirm & pay contribution"
               : lang === "it"
                 ? "Conferma prenotazione"
                 : "Confirm booking"}

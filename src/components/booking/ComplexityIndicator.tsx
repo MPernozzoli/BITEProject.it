@@ -63,7 +63,7 @@ interface ComplexityIndicatorProps {
   dangerLevel?: number;
   /**
    * The leg the estimate is for. When provided, the tooltip explains the specific factors
-   * behind the level (open sea, duration, night navigation, danger) instead of a generic
+   * behind the level (offshore navigation, duration, night navigation, danger) instead of a generic
    * disclaimer.
    */
   leg?: ComplexityLegFactors;

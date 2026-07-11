@@ -63,7 +63,7 @@ describe("computeAutoLegComplexity", () => {
     expect(computeAutoLegComplexity(dayLeg("2026-09-10T06:00:00Z", 42))).toBe(4);
   });
 
-  it("adds one for open-sea passages", () => {
+  it("adds one for offshore passages", () => {
     expect(computeAutoLegComplexity(dayLeg("2026-09-10T06:00:00Z", 6, { open_sea: true }))).toBe(2);
   });
 

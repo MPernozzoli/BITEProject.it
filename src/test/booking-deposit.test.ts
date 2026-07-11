@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { type BookableLeg } from "@/lib/booking-utils";
 import {
-  DEPOSIT_COMPLEX_EUR,
-  DEPOSIT_NORMAL_EUR,
-  DEPOSIT_PER_PERSON_CAP_EUR,
+  CONTRIBUTION_FIXED_MINIMUM_EUR,
+  DEFAULT_CONTRIBUTION_PER_NM_EUR,
   depositForPayerEur,
-  isDepositCapped,
   legDepositEur,
   perPersonDepositEur,
   totalDepositEur,
@@ -22,60 +20,74 @@ const makeLeg = (partial: Partial<BookableLeg>): BookableLeg => ({
   ends_at_window_start: null,
   ends_at_window_end: null,
   is_bookable: true,
+  planned_nautical_miles: 10,
   ...partial,
 });
 
 describe("booking deposit", () => {
-  it("charges the normal amount for a simple leg", () => {
-    expect(legDepositEur(makeLeg({}))).toBe(DEPOSIT_NORMAL_EUR);
+  it("charges planned nautical miles at the default coefficient", () => {
+    expect(legDepositEur(makeLeg({ planned_nautical_miles: 10 }))).toBe(9);
   });
 
-  it("charges the higher amount for an open-sea leg", () => {
-    expect(legDepositEur(makeLeg({ open_sea: true }))).toBe(DEPOSIT_COMPLEX_EUR);
+  it("uses a custom per-NM coefficient", () => {
+    expect(legDepositEur(makeLeg({ planned_nautical_miles: 10 }), { contributionPerNmEur: 1.25 })).toBe(12.5);
   });
 
-  it("charges the higher amount when complexity is overridden to high (>= 4)", () => {
-    expect(legDepositEur(makeLeg({ complexity_override: 4 }))).toBe(DEPOSIT_COMPLEX_EUR);
-    expect(legDepositEur(makeLeg({ complexity_override: 3 }))).toBe(DEPOSIT_NORMAL_EUR);
+  it("adds the offshore modifier for navigazione d'altura", () => {
+    expect(legDepositEur(makeLeg({ planned_nautical_miles: 10, open_sea: true }))).toBe(10.8);
   });
 
-  it("sums per-person amounts across legs", () => {
-    const legs = [makeLeg({}), makeLeg({ open_sea: true })];
-    expect(perPersonDepositEur(legs)).toBe(DEPOSIT_NORMAL_EUR + DEPOSIT_COMPLEX_EUR);
+  it("adds the night-navigation modifier", () => {
+    const leg = makeLeg({
+      planned_nautical_miles: 10,
+      starts_at_window_start: "2026-09-10T21:00:00Z",
+      ends_at_window_start: "2026-09-11T02:00:00Z",
+    });
+    expect(legDepositEur(leg)).toBe(9.9);
   });
 
-  it("caps the per-person amount at €250", () => {
-    const legs = [
-      makeLeg({ open_sea: true }),
-      makeLeg({ open_sea: true }),
-      makeLeg({ open_sea: true }),
-    ]; // 3 × €100 = €300 → capped
-    expect(perPersonDepositEur(legs)).toBe(DEPOSIT_PER_PERSON_CAP_EUR);
-    expect(isDepositCapped(legs)).toBe(true);
+  it("adds the dangerous-navigation modifier for any danger level", () => {
+    expect(legDepositEur(makeLeg({ planned_nautical_miles: 10, danger_level: 1 }))).toBe(10.8);
+  });
+
+  it("combines modifiers additively on the variable part", () => {
+    const leg = makeLeg({
+      planned_nautical_miles: 10,
+      open_sea: true,
+      danger_level: 2,
+      starts_at_window_start: "2026-09-10T21:00:00Z",
+      ends_at_window_start: "2026-09-11T02:00:00Z",
+    });
+    expect(legDepositEur(leg)).toBe(13.5);
+  });
+
+  it("adds the fixed minimum once per person", () => {
+    const legs = [makeLeg({ planned_nautical_miles: 10 }), makeLeg({ planned_nautical_miles: 20 })];
+    expect(perPersonDepositEur(legs)).toBe(CONTRIBUTION_FIXED_MINIMUM_EUR + (30 * DEFAULT_CONTRIBUTION_PER_NM_EUR));
   });
 
   it("multiplies the per-person amount by the party size", () => {
-    const legs = [makeLeg({}), makeLeg({})]; // €50 + €50 = €100 per person
-    expect(totalDepositEur(legs, 3)).toBe(300); // €100 × 3
+    const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €20 + €9 = €29 per person
+    expect(totalDepositEur(legs, 3)).toBe(87);
   });
 
   it("treats party size < 1 as 1", () => {
-    expect(totalDepositEur([makeLeg({})], 0)).toBe(DEPOSIT_NORMAL_EUR);
+    expect(totalDepositEur([makeLeg({ planned_nautical_miles: 10 })], 0)).toBe(29);
   });
 
   it("charges the lead the whole party in lead_pays_all", () => {
-    const legs = [makeLeg({})]; // €50 per person
-    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize: 3 })).toBe(150);
+    const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €29 per person
+    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize: 3 })).toBe(87);
   });
 
   it("charges the lead only their share in each_pays_own", () => {
-    const legs = [makeLeg({})];
-    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize: 3 })).toBe(DEPOSIT_NORMAL_EUR);
+    const legs = [makeLeg({ planned_nautical_miles: 10 })];
+    expect(depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize: 3 })).toBe(29);
   });
 
   it("charges a guest only their own share regardless of mode", () => {
-    const legs = [makeLeg({ open_sea: true })]; // €100 per person
-    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "lead_pays_all", partySize: 4 })).toBe(DEPOSIT_COMPLEX_EUR);
-    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "each_pays_own", partySize: 4 })).toBe(DEPOSIT_COMPLEX_EUR);
+    const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €29 per person
+    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "lead_pays_all", partySize: 4 })).toBe(29);
+    expect(depositForPayerEur(legs, { isLead: false, paymentMode: "each_pays_own", partySize: 4 })).toBe(29);
   });
 });

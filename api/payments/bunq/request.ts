@@ -1,8 +1,8 @@
 /**
  * POST /api/payments/bunq/request
  *
- * Creates a Bunq security-deposit ("caparra") payment request. The payer is either:
- *   - the lead (booking owner): pays deposit × party_size when payment_mode = lead_pays_all,
+ * Creates a Bunq voyage-contribution payment request. The payer is either:
+ *   - the lead (booking owner): pays contribution × party_size when payment_mode = lead_pays_all,
  *     otherwise just their own share; or
  *   - a guest participant (payment_mode = each_pays_own): pays their own single share.
  *
@@ -17,6 +17,7 @@ import { createAuthClient, createServiceClient } from "../../../src/server/bunq/
 import { bunqConfigured, environment } from "../../../src/server/bunq/client";
 import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests";
 import {
+  BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
   perPersonDepositEur,
   depositForPayerEur,
   type DepositLeg,
@@ -97,7 +98,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     // 2. Load the booking request.
     const { data: request, error: requestError } = await db
       .from("voyage_booking_requests")
-      .select("id, profile_id, party_size, status, payment_mode")
+      .select("id, profile_id, voyage_id, party_size, status, payment_mode")
       .eq("id", bookingRequestId)
       .maybeSingle();
     if (requestError) throw new Error(requestError.message);
@@ -106,6 +107,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       return;
     }
     const bookingOwnerId = (request as { profile_id: string }).profile_id;
+    const voyageId = (request as { voyage_id: string }).voyage_id;
     const bookingStatus = (request as { status: string }).status;
     const partySize = Math.max(1, Number((request as { party_size: number }).party_size) || 1);
     const paymentMode = ((request as { payment_mode?: string }).payment_mode ?? "lead_pays_all") as PaymentMode;
@@ -156,7 +158,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const isLead = payer?.is_lead ?? true;
     const payerParticipantId = payer?.id ?? null;
 
-    // 4. Idempotency: reuse an existing deposit for this exact payer.
+    // 4. Idempotency: reuse an existing payment row for this exact payer.
     let existingQuery = db
       .from("voyage_booking_deposits")
       .select("id, status, share_url, amount_cents, per_person_cents")
@@ -206,24 +208,42 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const { data: legRows, error: legError } = await db
       .from("voyage_bookable_legs")
       .select(
-        "open_sea, complexity_override, danger_level, starts_at_window_start, starts_at_window_end, ends_at_window_start, ends_at_window_end",
+        "planned_nautical_miles, open_sea, danger_level, starts_at_window_start, ends_at_window_start",
       )
       .in("id", legIds);
     if (legError) throw new Error(legError.message);
     const legs = (legRows ?? []) as DepositLeg[];
 
-    const perPersonEur = perPersonDepositEur(legs);
-    const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize });
+    const { data: voyageRow, error: voyageError } = await db
+      .from("voyages")
+      .select("booking_contribution_per_nm_eur")
+      .eq("id", voyageId)
+      .maybeSingle();
+    if (voyageError) throw new Error(voyageError.message);
+    const contributionPerNmEur = Number(
+      (voyageRow as { booking_contribution_per_nm_eur?: number } | null)?.booking_contribution_per_nm_eur ?? 0.9,
+    );
+
+    const perPersonEur = perPersonDepositEur(legs, { contributionPerNmEur });
+    const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, { contributionPerNmEur });
     if (amountEur <= 0) {
       sendJson(res, 409, { error: "zero_deposit" });
       return;
     }
-    // The number of persons this single deposit covers (for the stored party_size).
+    if (amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR) {
+      sendJson(res, 409, {
+        error: "bunq_amount_exceeds_single_transaction_limit",
+        amountEur,
+        maxSingleTransactionEur: BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
+      });
+      return;
+    }
+    // The number of persons this single payment covers (for the stored party_size).
     const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
 
     // 6. Create the Bunq payment request.
-    const reference = `DEP-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
-    const description = `Deposito cauzionale viaggio BITE — ${reference}`;
+    const reference = `CON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+    const description = `Quota spese viaggio BITE — ${reference}`;
     const counterpartyEmail = user.email;
     if (!counterpartyEmail) {
       sendJson(res, 409, { error: "missing_user_email" });
@@ -237,7 +257,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       redirectUrl: `${siteUrl()}/bookings?deposit=processing`,
     });
 
-    // 7. Persist the deposit row.
+    // 7. Persist the payment row.
     const { error: insertError } = await db.from("voyage_booking_deposits").insert({
       booking_request_id: bookingRequestId,
       participant_id: payerParticipantId,

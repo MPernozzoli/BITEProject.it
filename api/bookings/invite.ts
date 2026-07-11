@@ -106,9 +106,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const paymentMode = (request as { payment_mode?: string }).payment_mode ?? "lead_pays_all";
     const requiresPayment = paymentMode === "each_pays_own";
 
-    // 2. Gather email context: voyage name, inviter name, per-person deposit.
+    // 2. Gather email context: voyage name, inviter name, per-person contribution.
     const [{ data: voyage }, { data: inviter }] = await Promise.all([
-      db.from("voyages").select("name, name_it, name_en").eq("id", voyageId).maybeSingle(),
+      db.from("voyages").select("name, name_it, name_en, booking_contribution_per_nm_eur").eq("id", voyageId).maybeSingle(),
       db.from("profiles").select("name, preferred_language").eq("id", user.id).maybeSingle(),
     ]);
     const voyageName =
@@ -117,6 +117,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       "";
     const inviterName = (inviter as { name?: string } | null)?.name || "";
     const language = (inviter as { preferred_language?: string } | null)?.preferred_language === "en" ? "en" : "it";
+    const contributionPerNmEur = Number(
+      (voyage as { booking_contribution_per_nm_eur?: number } | null)?.booking_contribution_per_nm_eur ?? 0.9,
+    );
 
     let depositEur = 0;
     if (requiresPayment) {
@@ -129,10 +132,10 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         const { data: legRows } = await db
           .from("voyage_bookable_legs")
           .select(
-            "open_sea, complexity_override, danger_level, starts_at_window_start, starts_at_window_end, ends_at_window_start, ends_at_window_end",
+            "planned_nautical_miles, open_sea, danger_level, starts_at_window_start, ends_at_window_start",
           )
           .in("id", legIds);
-        depositEur = perPersonDepositEur((legRows ?? []) as DepositLeg[]);
+        depositEur = perPersonDepositEur((legRows ?? []) as DepositLeg[], { contributionPerNmEur });
       }
     }
 

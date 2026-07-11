@@ -1244,7 +1244,7 @@ const AdminVoyageBookings = () => {
                             </div>
                             <div>
                               <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                                Ripartenza{outboundLeg?.open_sea ? " · mare aperto → default 19:00" : ""}
+                                Ripartenza{outboundLeg?.open_sea ? " · navigazione d'altura → default 19:00" : ""}
                               </span>
                               <div className="flex items-center gap-2">
                                 <input
@@ -1344,14 +1344,14 @@ const AdminVoyageBookings = () => {
                         <button
                           type="button"
                           onClick={() => toggleLegOpenSea(leg)}
-                          title="Mare aperto (>12 nm dalla costa): aumenta la complessità"
+                          title="Navigazione d'altura (>12 nm dalla costa): aumenta complessità e contributo"
                           className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                             leg.open_sea
                               ? "border-indigo-300/70 bg-indigo-100/70 text-indigo-800"
                               : "border-border/70 bg-background text-muted-foreground"
                           }`}
                         >
-                          Mare aperto{leg.open_sea ? " ✓" : ""}
+                          Navigazione d'altura{leg.open_sea ? " ✓" : ""}
                         </button>
                       </div>
                       {getLegDangerLevel(leg) > 0 && (
