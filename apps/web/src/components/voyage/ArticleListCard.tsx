@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { format } from "date-fns";
-import { MapPin, Eye, Heart, User } from "lucide-react";
+import { MapPin, Eye, Heart, User, Check } from "lucide-react";
 import { getArticleDisplayLocationLabel, type GeoArticle, type VoyageWaypoint } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
@@ -58,8 +58,12 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                 style={thumbStyle || undefined}
               />
               {isRead && (
-                <span className="absolute top-1 left-1 bg-background/80 backdrop-blur-sm p-0.5 rounded-sm">
-                  <Eye size={8} className="text-muted-foreground" />
+                <span
+                  className="absolute left-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/80 bg-accent text-background shadow-[0_6px_18px_rgba(15,23,42,0.22)] ring-1 ring-black/5 backdrop-blur-sm"
+                  aria-label={lang === "it" ? "Articolo letto" : "Article read"}
+                  title={lang === "it" ? "Letto" : "Read"}
+                >
+                  <Check size={12} strokeWidth={2.8} />
                 </span>
               )}
             </div>

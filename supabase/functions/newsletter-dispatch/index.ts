@@ -1,6 +1,4 @@
 // deno-lint-ignore-file
-// @ts-nocheck — references tables (newsletter_messages, newsletter_deliveries, newsletter_events)
-// that exist in DB but are not yet in the auto-generated Supabase types
 import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'

@@ -14,6 +14,7 @@ import {
   getBunqPaymentRequest,
   isPaidStatus,
 } from "../../../src/server/bunq/payment-requests.js";
+import { clearBookingPaymentDeadlineIfSettled } from "../../../src/server/bunq/deposit-resolver.js";
 import {
   bearerToken,
   firstQueryParam,
@@ -128,6 +129,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
             })
             .eq("id", row.id)
             .eq("status", "pending");
+          await clearBookingPaymentDeadlineIfSettled(db, bookingRequestId);
           sendJson(res, 200, { status: "paid", amountEur: row.amount_cents / 100 });
           return;
         }

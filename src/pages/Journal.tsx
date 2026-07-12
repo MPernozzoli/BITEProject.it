@@ -467,7 +467,8 @@ const Journal = () => {
     setBookingAnchor({ voyageId, waypointId: fromWaypointId });
 
     const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
-    if (rangeLegs.length === 0) {
+    const candidateLegs = rangeLegs.length > 0 ? rangeLegs : voyageLegs;
+    if (candidateLegs.length === 0) {
       setSelectedBookingLegIds([]);
       setBookingRejectedLegIds([]);
       toast.error(lang === "it" ? "Non ci sono tratte disponibili per questo viaggio." : "There are no open legs for this voyage.");
@@ -475,8 +476,8 @@ const Journal = () => {
     }
 
     const partySize = Math.max(1, bookingPartySize);
-    const availableLegs = rangeLegs.filter((leg) => leg.available && leg.remaining >= partySize);
-    const rejectedLegs = rangeLegs.filter((leg) => !leg.available || leg.remaining < partySize);
+    const availableLegs = candidateLegs.filter((leg) => leg.available && leg.remaining >= partySize);
+    const rejectedLegs = candidateLegs.filter((leg) => !leg.available || leg.remaining < partySize);
 
     setSelectedBookingLegIds(availableLegs.map((leg) => leg.id));
     setBookingRejectedLegIds(rejectedLegs.map((leg) => leg.id));

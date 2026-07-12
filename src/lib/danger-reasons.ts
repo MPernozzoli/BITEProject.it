@@ -1,5 +1,5 @@
 import { CloudFog, Fish, LifeBuoy, Radar, Skull, Waves, Wind, type LucideIcon } from "lucide-react";
-import type { Language } from "./i18n.js";
+import type { Language } from "./language.js";
 
 /** Curated catalog of specific hazards that can justify a leg's danger rating. */
 export type DangerReasonKey =

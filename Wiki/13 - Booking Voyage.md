@@ -21,6 +21,7 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 
 ## Regole di dominio
 - **No doppia prenotazione** della stessa tratta (migrazione `prevent_duplicate_leg_booking`).
+- **Scadenza pending pagamento:** una prenotazione senza pagamento pendente non scade mentre aspetta l'approvazione admin; quando viene creato un deposito Bunq/bonifico `pending`, la deadline è 48 ore ed è gestita da `expire_pending_voyage_booking_payments()` → [[11 - Pagamenti Bunq]].
 - **Max ospiti** per prenotazione (`backfill_voyage_booking_max_guests`).
 - **Tratte prenotabili** con motivi di pericolo (`voyage_bookable_legs_danger_reasons`) → `src/lib/danger-reasons.ts`.
 - **Contributi dinamici** per NM (`dynamic_voyage_contributions`).

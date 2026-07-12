@@ -23,6 +23,8 @@ tags: [comandi, workflow, script, dx]
 ## Testing
 - **Unit/component:** Vitest + Testing Library → `src/test/`, config `vitest.config.ts`.
 - **E2E:** Playwright → `playwright.config.ts`, `playwright-fixture.ts`.
+- **Lint:** ESLint segnala gli `any` come warning progressivi; gli errori bloccanti restano riservati a bug probabili (es. Rules of Hooks, import non supportati, direttive TS unsafe).
+- **Bundle check:** `npm run build` mostra la distribuzione dei chunk Vite. I vendor pesanti sono separati in chunk cacheabili; i warning su dimensioni grezze vanno valutati guardando anche il peso gzip e se il chunk è lazy.
 
 ## Supabase (CLI, se usata)
 - Config progetto in `supabase/config.toml` (project `ekwloweuicrqjjgabfdp`).
@@ -36,7 +38,7 @@ tags: [comandi, workflow, script, dx]
 - **Deploy:** push su `main` → Vercel build (`npm run build`) → [[18 - Deploy e Configurazione]].
 
 ## Note package manager
-Presenti sia lockfile npm sia bun (`bun.lock`, `bun.lockb`). Scegli un solo tool per coerenza CI.
+Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]]

@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { bunqConfigured, environment } from "../../../src/server/bunq/client.js";
 import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import {
+  armBookingPaymentDeadline,
   DepositHttpError,
   findExistingDeposit,
   resolveCaller,
@@ -71,9 +72,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
   try {
     const { db, user } = await resolveCaller(token);
+    const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, counterpartyEmail } = resolved;
 
     // Idempotency: reuse an existing Bunq-link payment row for this exact payer.
-    const existing = await findExistingDeposit(db, bookingRequestId, participantId, "bunq_link");
+    const existing = await findExistingDeposit(db, bookingRequestId, payerParticipantId, "bunq_link");
     if (existing) {
       if (existing.status === "paid") {
         sendJson(res, 200, { alreadyPaid: true });
@@ -89,9 +92,6 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         return;
       }
     }
-
-    const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, counterpartyEmail } = resolved;
 
     const reference = `CON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
     const description = `Quota spese viaggio BITE — ${reference}`;
@@ -118,6 +118,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       reference,
     });
     if (insertError) throw new Error(insertError.message);
+    await armBookingPaymentDeadline(db, bookingRequestId);
 
     sendJson(res, 200, {
       shareUrl: created.shareUrl,

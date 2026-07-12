@@ -500,7 +500,7 @@ export default function AdminEditorialPlanSlotDialog({
                       typeof crypto !== "undefined" && crypto.randomUUID
                         ? crypto.randomUUID()
                         : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-                    const objectPath = `${channelId}/${safe}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
+                    const objectPath = `${channelId}/${safe}-${file.name.replace(/[^\w.-]+/g, "_")}`;
                     const { error: uerr } = await supabase.storage.from("editorial-media").upload(objectPath, file, {
                       upsert: false,
                       contentType: file.type || undefined,

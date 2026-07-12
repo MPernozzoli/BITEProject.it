@@ -15,6 +15,7 @@ import {
 } from "../../lib/booking-deposit.js";
 
 const ACTIVE_STATUSES = ["requested", "waitlisted", "admin_approved", "user_confirmed"];
+const PAYMENT_PENDING_DEADLINE_HOURS = 48;
 
 export type ParticipantRow = {
   id: string;
@@ -50,6 +51,10 @@ export type ResolvedDeposit = {
   counterpartyEmail: string;
 };
 
+function paymentDeadlineIso(base = new Date()): string {
+  return new Date(base.getTime() + PAYMENT_PENDING_DEADLINE_HOURS * 60 * 60 * 1000).toISOString();
+}
+
 /** Verifies the bearer token and returns the caller + a service-role db client. */
 export async function resolveCaller(token: string): Promise<{ db: SupabaseClient; user: User }> {
   const auth = createAuthClient();
@@ -75,7 +80,7 @@ export async function resolveDepositPayer(
 
   const { data: request, error: requestError } = await db
     .from("voyage_booking_requests")
-    .select("id, profile_id, voyage_id, party_size, status, payment_mode")
+    .select("id, profile_id, voyage_id, party_size, status, payment_mode, expires_at")
     .eq("id", bookingRequestId)
     .maybeSingle();
   if (requestError) throw new Error(requestError.message);
@@ -88,6 +93,10 @@ export async function resolveDepositPayer(
   const paymentMode = ((request as { payment_mode?: string }).payment_mode ?? "lead_pays_all") as PaymentMode;
   if (!ACTIVE_STATUSES.includes(bookingStatus)) {
     throw new DepositHttpError(409, { error: "booking_not_active", status: bookingStatus });
+  }
+  const expiresAt = (request as { expires_at?: string | null }).expires_at;
+  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+    throw new DepositHttpError(409, { error: "payment_deadline_expired" });
   }
 
   let payer: ParticipantRow | null = null;
@@ -175,6 +184,44 @@ export async function resolveDepositPayer(
     amountEur,
     counterpartyEmail,
   };
+}
+
+/**
+ * Starts the 48h payment window when a new pending payment is created. Existing deadlines are
+ * kept as-is so polling or retrying the same payment cannot extend the booking hold forever.
+ */
+export async function armBookingPaymentDeadline(db: SupabaseClient, bookingRequestId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("voyage_booking_requests")
+    .update({ expires_at: paymentDeadlineIso(), updated_at: now })
+    .eq("id", bookingRequestId)
+    .in("status", ACTIVE_STATUSES)
+    .is("expires_at", null);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Clears the booking-level payment deadline only after every pending deposit for the booking has
+ * been settled or cancelled. This preserves the deadline for split payments with multiple payers.
+ */
+export async function clearBookingPaymentDeadlineIfSettled(
+  db: SupabaseClient,
+  bookingRequestId: string,
+): Promise<void> {
+  const { count, error: countError } = await db
+    .from("voyage_booking_deposits")
+    .select("id", { count: "exact", head: true })
+    .eq("booking_request_id", bookingRequestId)
+    .eq("status", "pending");
+  if (countError) throw new Error(countError.message);
+  if ((count ?? 0) > 0) return;
+
+  const { error } = await db
+    .from("voyage_booking_requests")
+    .update({ expires_at: null, updated_at: new Date().toISOString() })
+    .eq("id", bookingRequestId);
+  if (error) throw new Error(error.message);
 }
 
 export type ExistingDepositRow = {

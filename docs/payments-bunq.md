@@ -35,10 +35,13 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
    user's Supabase access token.
 4. The function recomputes the amount, creates a Bunq **request-inquiry** and stores a row in
    `voyage_booking_deposits`, then returns the shareable `bunq.me` link.
-5. The user is redirected to Bunq to pay.
-6. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
+5. The booking's payment deadline is armed for 48 hours (`voyage_booking_requests.expires_at`).
+   Bookings waiting only for admin approval do not expire.
+6. The user is redirected to Bunq to pay.
+7. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
    as a fallback, by `GET /api/payments/bunq/status?bookingRequestId=...`, which re-checks the
-   live request-inquiry status. Either path flips the stored payment row to `paid`.
+   live request-inquiry status. Either path flips the stored payment row to `paid` and clears the
+   booking-level payment deadline once no pending deposits remain.
 
 If Bunq env vars are missing, `/request` returns `503 not_configured`, the booking is still
 created, and the user sees a "contribution link to follow" message — nothing breaks.
@@ -57,6 +60,9 @@ Migration `supabase/migrations/20260710120500_bunq_deposits.sql`:
 - `bunq_api_contexts` — encrypted Bunq context per environment (service-role only).
 - `voyage_booking_deposits` — existing storage table for one contribution payment per booking request
   or participant (amount, status, Bunq id, share URL).
+- `expire_pending_voyage_booking_payments()` — service-role RPC scheduled hourly with `pg_cron`;
+  cancels active bookings with pending contribution payments older than 48 hours and marks their
+  pending deposit rows as `cancelled`.
 
 ## Required environment variables (Vercel)
 
@@ -102,5 +108,6 @@ Tables & functions: `voyage_booking_participants`, `voyage_booking_requests.paym
 - Redeploy the `send-transactional-email` edge function so the new invite template is picked up.
 - Schedule `expire_pending_booking_participants()` (pg_cron or a cron edge function) — it is
   granted to `service_role` and is not called automatically yet.
-- The Bunq webhook is not signature-verified (as in the reference implementation); add
-  verification before production, or rely on the authoritative `/status` re-check.
+- Configure `BUNQ_WEBHOOK_SECRET` in Vercel and include it in the Bunq callback URL as
+  `?secret=...` (or send it as `x-bite-bunq-webhook-secret` if using a proxy). The webhook
+  rejects unsigned callbacks before attempting to settle a deposit.

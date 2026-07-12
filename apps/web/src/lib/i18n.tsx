@@ -10,9 +10,9 @@ import {
   swapLangInPath,
   withLang,
 } from "@/lib/seo";
+import type { ExtendedLanguage, Language } from "./language";
 
-export type Language = "en" | "it";
-export type ExtendedLanguage = "en" | "it" | "fr" | "de" | "es" | "pt";
+export type { ExtendedLanguage, Language } from "./language";
 
 export const ALL_LANGUAGES: { code: ExtendedLanguage; label: string }[] = [
   { code: "it", label: "Italiano" },

@@ -99,28 +99,20 @@ export function getContributionExplanation(
   opts: ContributionOptions & { lang?: "it" | "en" } = {},
 ): string {
   const lang = opts.lang ?? "it";
-  const rate = contributionPerNmEur(opts.contributionPerNmEur);
-  const totalNm = roundCurrency(legs.reduce((acc, leg) => acc + plannedNauticalMiles(leg), 0));
-  const nightCount = legs.filter(legHasNightNavigation).length;
-  const offshoreCount = legs.filter((leg) => leg.open_sea === true).length;
-  const dangerousCount = legs.filter((leg) => getLegDangerLevel(leg) > 0).length;
-  const variable = roundCurrency(legs.reduce((acc, leg) => acc + legDepositEur(leg, opts), 0));
+  const selectionLabel =
+    legs.length > 1
+      ? lang === "en"
+        ? "the selected legs"
+        : "le tratte selezionate"
+      : lang === "en"
+        ? "the selected leg"
+        : "la tratta selezionata";
 
   if (lang === "en") {
-    return [
-      `Calculation per person: EUR ${CONTRIBUTION_FIXED_MINIMUM_EUR.toFixed(2)} fixed minimum + planned NM × EUR ${rate.toFixed(2)}/NM.`,
-      `Selected planned distance: ${totalNm.toFixed(2)} NM. Variable share after modifiers: EUR ${variable.toFixed(2)}.`,
-      `Modifiers apply only to each leg's variable part: night navigation +10%, offshore navigation +20%, dangerous navigation +20%. Active modifiers in this selection: night ${nightCount}, offshore ${offshoreCount}, dangerous ${dangerousCount}.`,
-      "The fixed minimum covers costs that do not depend on miles: planning, pre/post cleaning, candidate management, website, briefing and port paperwork. The NM coefficient covers live voyage costs such as fuel, ports and boat consumables such as impellers, oil, running rigging and antifouling.",
-    ].join(" ");
+    return `The contribution is estimated using a mileage coefficient applied to ${selectionLabel}, so the voyage's out-of-pocket costs can be shared evenly among all participants. It is not a ticket price, a service fee or a charter fare.`;
   }
 
-  return [
-    `Calcolo per persona: ${CONTRIBUTION_FIXED_MINIMUM_EUR.toFixed(2)} euro fissi + miglia nautiche pianificate × ${rate.toFixed(2)} euro/NM.`,
-    `Distanza pianificata selezionata: ${totalNm.toFixed(2)} NM. Quota variabile dopo i modificatori: ${variable.toFixed(2)} euro.`,
-    `I modificatori si applicano solo alla parte variabile di ciascuna tratta: navigazione notturna +10%, navigazione d'altura +20%, navigazione pericolosa +20%. Modificatori attivi in questa selezione: notturna ${nightCount}, altura ${offshoreCount}, pericolosa ${dangerousCount}.`,
-    "La quota fissa copre ciò che non dipende dalle miglia percorse: pianificazione, pulizia pre e post, gestione candidature, sito web, briefing e pratiche portuali. Il coefficiente per miglio nautico copre i costi vivi del viaggio come carburante, porti e consumabili della barca, ad esempio giranti, olio, manovre correnti e antivegetativa.",
-  ].join(" ");
+  return `La quota viene stimata usando un coefficiente chilometrico applicato a ${selectionLabel}, così da ripartire in modo uniforme tra tutti i partecipanti le spese vive del viaggio. Non è il prezzo di un biglietto, di un servizio o di un'attività charter.`;
 }
 
 /** Format a EUR amount with the correct locale separators. */

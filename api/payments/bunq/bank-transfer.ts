@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { environment } from "../../../src/server/bunq/client.js";
 import { BANK_TRANSFER_DETAILS } from "../../../src/server/bunq/bank-details.js";
 import {
+  armBookingPaymentDeadline,
   DepositHttpError,
   findExistingDeposit,
   resolveCaller,
@@ -56,9 +57,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
   try {
     const { db, user } = await resolveCaller(token);
+    const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
 
     // Idempotency: resend the same causale/amount for this exact payer instead of minting a new one.
-    const existing = await findExistingDeposit(db, bookingRequestId, participantId, "bank_transfer");
+    const existing = await findExistingDeposit(db, bookingRequestId, payerParticipantId, "bank_transfer");
     if (existing) {
       if (existing.status === "paid") {
         sendJson(res, 200, { alreadyPaid: true });
@@ -75,9 +78,6 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         return;
       }
     }
-
-    const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
 
     const reference = `BON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
 
@@ -96,6 +96,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       reference,
     });
     if (insertError) throw new Error(insertError.message);
+    await armBookingPaymentDeadline(db, bookingRequestId);
 
     sendJson(res, 200, {
       ...BANK_TRANSFER_DETAILS,

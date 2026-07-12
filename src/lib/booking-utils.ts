@@ -1,4 +1,4 @@
-import type { Language } from "./i18n.js";
+import type { Language } from "./language.js";
 import { getDangerReasonLabels } from "./danger-reasons.js";
 
 export type VoyageBookingStatus =

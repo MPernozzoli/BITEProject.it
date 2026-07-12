@@ -45,7 +45,7 @@ tags: [frontend, lib, hooks, logica]
 - `profile-avatar.ts`, `profile-completeness.ts`
 
 ### SEO / i18n / infra
-- `seo.ts`, `i18n.tsx` — traduzioni e rilevamento lingua → [[03 - Routing e i18n]]
+- `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]
 - `pwa.ts` — service worker/PWA
 - `boot-splash-3d.ts` — splash 3D con three.js (untracked, nuovo)
 - `hero-ready-event.ts`, `utils.ts`, `translate-editor-content.ts`

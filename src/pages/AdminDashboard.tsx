@@ -335,14 +335,6 @@ const AdminDashboard = () => {
     toast.success("Story deleted");
   };
 
-  if (authLoading || !session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center pt-24">
-        <p className="text-sm font-sans text-muted-foreground animate-pulse">Verifica accesso...</p>
-      </div>
-    );
-  }
-
   const publishedCount = articles.filter((article) => article.status === "published").length;
   const scheduledCount = articles.filter((article) => article.status === "scheduled").length;
   const draftCount = articles.filter((article) => article.status === "draft").length;
@@ -448,6 +440,14 @@ const AdminDashboard = () => {
     { id: "route" as const, label: "Rotte", icon: Navigation },
     { id: "newsletter" as const, label: "Newsletter", icon: Mail },
   ];
+
+  if (authLoading || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center pt-24">
+        <p className="text-sm font-sans text-muted-foreground animate-pulse">Verifica accesso...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
