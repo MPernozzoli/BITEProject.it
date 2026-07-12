@@ -22,12 +22,9 @@ import {
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import type { Language } from "@/lib/i18n";
 import {
-  getLegComplexity,
-  getLegDangerLevel,
   isVoyageBookableNow,
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
-import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 
 export interface VoyageLegendStoryTitles {
   title_it: string | null;
@@ -44,6 +41,7 @@ interface VoyageLegendProps {
   onWaypointClick?: (waypoint: VoyageWaypoint) => void;
   onArticleClick?: (article: GeoArticle) => void;
   bookingLegs?: BookableLegAvailability[];
+  selectedBookingLegIds?: string[];
   onParticipate?: (voyageId: string) => void;
   /** Titoli storia da `stories` (opzionale; caricati dal parent). */
   storyTitlesById?: Record<string, VoyageLegendStoryTitles>;
@@ -139,6 +137,7 @@ const VoyageLegend = ({
   onWaypointClick,
   onArticleClick,
   bookingLegs = [],
+  selectedBookingLegIds = [],
   onParticipate,
   storyTitlesById,
 }: VoyageLegendProps) => {
@@ -201,14 +200,27 @@ const VoyageLegend = ({
 
   const totalDistance = useMemo(() => segments.reduce((sum, d) => sum + d, 0), [segments]);
 
-  /** Bookable legs keyed by "fromWaypointId:toWaypointId" for per-edge complexity. */
-  const legByWaypointPair = useMemo(() => {
-    const map = new Map<string, BookableLegAvailability>();
-    for (const leg of bookingLegs) {
-      map.set(`${leg.from_waypoint_id}:${leg.to_waypoint_id}`, leg);
-    }
-    return map;
-  }, [bookingLegs]);
+  const selectedBookingLegIdSet = useMemo(
+    () => new Set(selectedBookingLegIds),
+    [selectedBookingLegIds]
+  );
+
+  const waypointIndexById = useMemo(
+    () => new Map(waypoints.map((waypoint, index) => [waypoint.id, index])),
+    [waypoints]
+  );
+
+  const selectedBookingRanges = useMemo(() => {
+    return bookingLegs
+      .filter((leg) => selectedBookingLegIdSet.has(leg.id))
+      .map((leg) => {
+        const fromIndex = waypointIndexById.get(leg.from_waypoint_id);
+        const toIndex = waypointIndexById.get(leg.to_waypoint_id);
+        if (fromIndex == null || toIndex == null) return null;
+        return [Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex)] as const;
+      })
+      .filter(Boolean) as readonly (readonly [number, number])[];
+  }, [bookingLegs, selectedBookingLegIdSet, waypointIndexById]);
 
   /** Ortodromia su tutti i waypoint del viaggio (anche tecnici), ordine `waypoints`. */
   const fullVoyageDistanceNm = useMemo(() => {
@@ -557,9 +569,17 @@ const VoyageLegend = ({
 
             const edgeArts = !isLast ? edgeArticlesByEdge.get(i) : undefined;
             const edgeHasStory = Boolean(edgeArts?.length);
-            const edgeLeg = !isLast
-              ? legByWaypointPair.get(`${wp.id}:${visibleWaypoints[i + 1]?.id ?? ""}`)
-              : undefined;
+            const nextWaypoint = !isLast ? visibleWaypoints[i + 1] : undefined;
+            const edgeStartIndex = waypointIndexById.get(wp.id);
+            const edgeEndIndex = nextWaypoint ? waypointIndexById.get(nextWaypoint.id) : undefined;
+            const edgeIsSelected =
+              edgeStartIndex != null &&
+              edgeEndIndex != null &&
+              selectedBookingRanges.some(([fromIndex, toIndex]) => {
+                const start = Math.min(edgeStartIndex, edgeEndIndex);
+                const end = Math.max(edgeStartIndex, edgeEndIndex);
+                return fromIndex < end && toIndex > start;
+              });
 
             return (
               <Fragment key={wp.id}>
@@ -666,19 +686,19 @@ const VoyageLegend = ({
                       </div>
                     ) : null}
 
-                    {edgeLeg ? (
-                      <div className="pointer-events-auto absolute left-1/2 top-full z-[12] -translate-x-1/2" style={{ marginTop: 4 }}>
-                        <ComplexityIndicator
-                          variant="dot"
-                          level={getLegComplexity(edgeLeg)}
-                          dangerLevel={getLegDangerLevel(edgeLeg)}
-                          leg={edgeLeg}
-                          lang={lang}
-                        />
-                      </div>
+                    {edgeIsSelected ? (
+                      <span className="absolute left-1/2 top-full z-[12] -translate-x-1/2 rounded-full border border-emerald-300/80 bg-emerald-50/95 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-800 shadow-sm" style={{ marginTop: 5 }}>
+                        {lang === "it" ? "Selezionata" : "Selected"}
+                      </span>
                     ) : null}
 
-                    <div className={`h-[2px] w-full rounded-full ${lineBg}`} />
+                    <div
+                      className={`h-[2px] w-full rounded-full transition-all ${
+                        edgeIsSelected
+                          ? "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.18),0_0_16px_rgba(16,185,129,0.42)]"
+                          : lineBg
+                      }`}
+                    />
                   </div>
                 )}
               </Fragment>

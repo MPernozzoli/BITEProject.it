@@ -18,6 +18,8 @@ Campi chiave: `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{publi
 ### 📍 Waypoint / tappe
 `id`, `type`, `title`, `slug`, `summary`, `date.{start,end,event_date,event_time}`, `coordinates`, `route_association.{voyage_id, sequence, visibility_mode, waypoint_type}`, `entities_involved`, `linked_media`, `related_articles`.
 
+Nel backoffice rotte, un waypoint in `auto` viene trattato come narrativo non solo se è partenza/arrivo, ma anche quando viene personalizzato il nome o viene salvata una sosta prevista; il picker può comunque forzarlo manualmente a tecnico.
+
 ### 🔬 Observations
 Note waypoint + scene/overlay mappa con coordinate esplicite. Campi: `observation_kind`, `date.{observed_at, source_published_at}`, `coordinates`, `route_association.{voyage_id, article_slug}`, ecc.
 

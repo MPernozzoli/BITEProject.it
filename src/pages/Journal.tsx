@@ -930,6 +930,7 @@ const Journal = () => {
             selectedRouteVoyageId={selectedRouteVoyageId}
             bookingLegsByVoyage={bookingLegsByVoyage}
             bookingSelectionAnchor={bookingAnchor}
+            selectedBookingLegs={selectedBookingLegs}
             onParticipate={handleParticipate}
             presenceMarkers={mapPresenceMarkers}
             flyToWaypointRef={flyToWaypointRef}
@@ -964,6 +965,7 @@ const Journal = () => {
                   onClose={() => setSelectedRouteVoyageId(null)}
                   onArticleClick={handleArticleClick}
                   bookingLegs={bookingLegsByVoyage[selectedRouteVoyageId] || []}
+                  selectedBookingLegIds={bookingAnchor?.voyageId === selectedRouteVoyageId ? selectedBookingLegIds : []}
                   onParticipate={handleParticipate}
                   storyTitlesById={voyageLegendStoryTitlesById}
                   onWaypointClick={(wp) => {

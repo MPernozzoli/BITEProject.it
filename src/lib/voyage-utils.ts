@@ -128,6 +128,229 @@ export interface GeocodedPlace {
   name: string;
 }
 
+interface ReverseGeocodeOptions {
+  maritime?: boolean;
+  maritimeLabelMode?: "auto" | "city" | "maritime";
+}
+
+interface ReverseGeocodeCandidate {
+  label: string | null;
+  generic: boolean;
+}
+
+interface NearbyNamedPlace {
+  lat: number;
+  lng: number;
+  kind: "bay" | "cape" | "island" | "locality" | "harbour" | "marina" | "city" | "town" | "village" | "settlement";
+  name: string;
+  nameIt: string | null;
+  nameEn: string | null;
+}
+
+const GENERIC_REVERSE_LABELS = new Set([
+  "italia",
+  "italy",
+  "france",
+  "francia",
+  "france métropolitaine",
+  "francia metropolitana",
+  "metropolitan france",
+  "españa",
+  "spain",
+  "greece",
+  "grecia",
+]);
+
+const getNominatimAddress = (data: unknown) => {
+  if (!data || typeof data !== "object") return {};
+  const address = (data as { address?: unknown }).address;
+  return address && typeof address === "object" ? address as Record<string, string | undefined> : {};
+};
+
+const cleanPlaceLabel = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const isGenericReverseLabel = (value: string | null) =>
+  !value || GENERIC_REVERSE_LABELS.has(value.trim().toLowerCase());
+
+const getLocalizedNearbyName = (place: NearbyNamedPlace, lang: Language) => {
+  if (lang === "it") return place.nameIt || place.name || place.nameEn || null;
+  return place.nameEn || place.name || place.nameIt || null;
+};
+
+const isHarbourPlace = (place: NearbyNamedPlace) => place.kind === "harbour" || place.kind === "marina";
+const isSettlementPlace = (place: NearbyNamedPlace) =>
+  place.kind === "city" || place.kind === "town" || place.kind === "village" || place.kind === "settlement";
+const isMaritimeToponym = (place: NearbyNamedPlace) =>
+  place.kind === "bay" || place.kind === "cape" || place.kind === "island" || place.kind === "locality";
+
+const distanceKmTo = (origin: { lat: number; lng: number }, place: NearbyNamedPlace) =>
+  haversineNM(origin.lat, origin.lng, place.lat, place.lng) * 1.852;
+
+const getNearbyPlaceRank = (place: NearbyNamedPlace, origin: { lat: number; lng: number }, maritime: boolean) => {
+  const distanceKm = distanceKmTo(origin, place);
+  const kindPenalty: Record<NearbyNamedPlace["kind"], number> = {
+    bay: maritime ? -4 : 10,
+    cape: maritime ? 3 : 12,
+    island: maritime ? 4 : 12,
+    locality: maritime ? 6 : 14,
+    harbour: maritime ? 0 : 8,
+    marina: maritime ? 0 : 8,
+    city: 0,
+    town: 5,
+    village: 9,
+    settlement: 12,
+  };
+  return distanceKm + kindPenalty[place.kind];
+};
+
+const selectBestSettlement = (places: NearbyNamedPlace[], origin: { lat: number; lng: number }) =>
+  places
+    .filter(isSettlementPlace)
+    .sort((a, b) => getNearbyPlaceRank(a, origin, false) - getNearbyPlaceRank(b, origin, false))[0] || null;
+
+const selectBestMaritimeToponym = (places: NearbyNamedPlace[], origin: { lat: number; lng: number }) =>
+  places
+    .filter(isMaritimeToponym)
+    .sort((a, b) => getNearbyPlaceRank(a, origin, true) - getNearbyPlaceRank(b, origin, true))[0] || null;
+
+const selectMaritimeWaypointLabelPlace = (
+  places: NearbyNamedPlace[],
+  origin: { lat: number; lng: number },
+  maritime: boolean,
+  labelMode: "auto" | "city" | "maritime" = "auto"
+) => {
+  if (!maritime || labelMode === "city") {
+    return selectBestSettlement(places, origin) || places[0] || null;
+  }
+
+  if (labelMode === "maritime") {
+    return selectBestMaritimeToponym(places, origin) || selectBestSettlement(places, origin) || places[0] || null;
+  }
+
+  const nearestHarbourDistanceKm = places
+    .filter(isHarbourPlace)
+    .reduce((nearest, place) => Math.min(nearest, distanceKmTo(origin, place)), Number.POSITIVE_INFINITY);
+  const nearestSettlement = selectBestSettlement(places, origin);
+  const nearestSettlementDistanceKm = nearestSettlement ? distanceKmTo(origin, nearestSettlement) : Number.POSITIVE_INFINITY;
+
+  const looksLikePortStop =
+    nearestHarbourDistanceKm <= 3 ||
+    nearestSettlementDistanceKm <= 1.5 ||
+    (nearestSettlement?.kind === "city" && nearestSettlementDistanceKm <= 5);
+
+  if (looksLikePortStop && nearestSettlement) {
+    return nearestSettlement;
+  }
+
+  return selectBestMaritimeToponym(places, origin) || nearestSettlement || places[0] || null;
+};
+
+const normalizeOverpassPlace = (item: unknown): NearbyNamedPlace | null => {
+  if (!item || typeof item !== "object") return null;
+  const candidate = item as {
+    lat?: number;
+    lon?: number;
+    center?: { lat?: number; lon?: number };
+    tags?: Record<string, string | undefined>;
+  };
+  const tags = candidate.tags || {};
+  const lat = Number(candidate.lat ?? candidate.center?.lat);
+  const lng = Number(candidate.lon ?? candidate.center?.lon);
+  const name = cleanPlaceLabel(tags.name);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) return null;
+
+  const natural = tags.natural;
+  const place = tags.place;
+  let kind: NearbyNamedPlace["kind"] = "settlement";
+  if (natural === "bay" || natural === "strait" || natural === "beach") {
+    kind = "bay";
+  } else if (natural === "cape") {
+    kind = "cape";
+  } else if (natural === "coastline" || natural === "island") {
+    kind = "island";
+  } else if (tags.harbour) {
+    kind = "harbour";
+  } else if (tags.leisure === "marina") {
+    kind = "marina";
+  } else if (place === "city") {
+    kind = "city";
+  } else if (place === "town") {
+    kind = "town";
+  } else if (place === "village") {
+    kind = "village";
+  } else if (place === "locality" || place === "islet" || place === "island") {
+    kind = "locality";
+  }
+
+  return {
+    lat,
+    lng,
+    kind,
+    name,
+    nameIt: cleanPlaceLabel(tags["name:it"]) || null,
+    nameEn: cleanPlaceLabel(tags["name:en"]) || null,
+  };
+};
+
+async function fetchNearbyNamedPlaces(
+  lat: number,
+  lng: number,
+  maritime: boolean
+): Promise<NearbyNamedPlace[]> {
+  const radiusMeters = maritime ? 70000 : 35000;
+  const maritimeSelectors = maritime
+    ? `
+      node(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      way(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      relation(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      node(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      way(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      relation(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      node(around:${radiusMeters},${lat},${lng})["harbour"]["name"];
+      way(around:${radiusMeters},${lat},${lng})["harbour"]["name"];
+      node(around:${radiusMeters},${lat},${lng})["leisure"="marina"]["name"];
+      way(around:${radiusMeters},${lat},${lng})["leisure"="marina"]["name"];
+    `
+    : "";
+  const query = `
+    [out:json][timeout:8];
+    (
+      ${maritimeSelectors}
+      node(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+      way(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+      relation(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+    );
+    out center tags 30;
+  `;
+
+  try {
+    const res = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: new URLSearchParams({ data: query }).toString(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { elements?: unknown[] };
+    const seen = new Set<string>();
+    return (data.elements || [])
+      .map((item) => normalizeOverpassPlace(item))
+      .filter((item): item is NearbyNamedPlace => {
+        if (!item) return false;
+        const key = `${item.kind}:${item.name.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => getNearbyPlaceRank(a, { lat, lng }, maritime) - getNearbyPlaceRank(b, { lat, lng }, maritime))
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
 const normalizeGeocodedPlace = (item: unknown): GeocodedPlace | null => {
   if (!item || typeof item !== "object") return null;
 
@@ -196,46 +419,81 @@ async function reverseGeocodePlaceWithAcceptLanguage(
   lat: number,
   lng: number,
   acceptLanguage: string
-): Promise<string | null> {
+): Promise<ReverseGeocodeCandidate> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lng))}&zoom=12&accept-language=${encodeURIComponent(acceptLanguage)}`,
       { headers: { "User-Agent": BITE_MAPS_USER_AGENT } }
     );
     const data = await res.json();
-    const address = data?.address || {};
-    const parts = [
+    const address = getNominatimAddress(data);
+    const specific = [
       address.harbour,
       address.marina,
+      address.bay,
       address.city,
       address.town,
       address.village,
       address.municipality,
+      address.suburb,
+      address.city_district,
+      cleanPlaceLabel((data as { name?: unknown })?.name),
+    ].map(cleanPlaceLabel).find(Boolean) || null;
+    if (specific && !isGenericReverseLabel(specific)) {
+      return { label: specific, generic: false };
+    }
+
+    const generic = [
       address.county,
       address.state,
-      data?.name,
-    ].filter(Boolean);
-    return parts[0] || data?.display_name?.split(",")?.[0] || null;
+      address.region,
+      address.country,
+      (data as { display_name?: string })?.display_name?.split(",")?.[0],
+    ].map(cleanPlaceLabel).find(Boolean) || null;
+    return { label: generic, generic: true };
   } catch {
-    return null;
+    return { label: null, generic: true };
   }
 }
 
 /** Reverse geocode in English (default for single-language callers). */
 export async function reverseGeocodePlace(lat: number, lng: number): Promise<string | null> {
-  return reverseGeocodePlaceWithAcceptLanguage(lat, lng, "en");
+  return (await reverseGeocodePlaceWithAcceptLanguage(lat, lng, "en")).label;
 }
 
 /** Reverse geocode with separate IT/EN labels from Nominatim (`accept-language`). */
 export async function reverseGeocodePlaceLocalized(
   lat: number,
-  lng: number
+  lng: number,
+  options?: ReverseGeocodeOptions
 ): Promise<{ it: string | null; en: string | null }> {
   const [it, en] = await Promise.all([
     reverseGeocodePlaceWithAcceptLanguage(lat, lng, "it"),
     reverseGeocodePlaceWithAcceptLanguage(lat, lng, "en"),
   ]);
-  return { it, en };
+  const needsNearbyPlace =
+    isGenericReverseLabel(it.label) ||
+    isGenericReverseLabel(en.label) ||
+    it.generic ||
+    en.generic;
+
+  if (needsNearbyPlace) {
+    const nearbyPlaces = await fetchNearbyNamedPlaces(lat, lng, Boolean(options?.maritime));
+    const nearbyPlace = selectMaritimeWaypointLabelPlace(
+      nearbyPlaces,
+      { lat, lng },
+      Boolean(options?.maritime),
+      options?.maritimeLabelMode || "auto"
+    );
+    if (nearbyPlace) {
+      return {
+        it: getLocalizedNearbyName(nearbyPlace, "it"),
+        en: getLocalizedNearbyName(nearbyPlace, "en"),
+      };
+    }
+  }
+
+  return { it: it.label, en: en.label };
 }
 
 export function formatWaypointCoordinateLabel(lat: number, lng: number): string {
@@ -444,12 +702,24 @@ export function getWaypointEffectiveType(
   waypoint: {
     visibility_mode?: VoyageWaypoint["visibility_mode"];
     waypoint_type?: VoyageWaypoint["waypoint_type"];
+    planned_stop_duration_minutes?: number | null;
+    stop_mode?: "legacy" | "hours" | "nights" | null;
+    stop_hours?: number | null;
+    stop_nights?: number | null;
   },
   index: number,
   total: number
 ): "technical" | "narrative" {
   if (waypoint.visibility_mode === "manual") {
     return waypoint.waypoint_type === "narrative" ? "narrative" : "technical";
+  }
+
+  if (
+    Number(waypoint.planned_stop_duration_minutes ?? 0) > 0 ||
+    (waypoint.stop_mode === "hours" && Number(waypoint.stop_hours ?? 0) > 0) ||
+    (waypoint.stop_mode === "nights" && Number(waypoint.stop_nights ?? 0) > 0)
+  ) {
+    return "narrative";
   }
 
   return index === 0 || index === total - 1 ? "narrative" : "technical";

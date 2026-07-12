@@ -33,7 +33,7 @@ tags: [frontend, lib, hooks, logica]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
 - `danger-reasons.ts` — modificatori navigazione pericolosa
-- `voyage-utils.ts`
+- `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). L'admin può forzare il naming città o baia/cala dall'inspector WPT.
 
 ### Mappe → [[14 - Mappe e Layer Geospaziale]]
 - `maplibre.ts`, `map-presence.ts`

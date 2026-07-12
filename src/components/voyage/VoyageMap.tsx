@@ -45,6 +45,7 @@ interface VoyageMapProps {
   selectedRouteVoyageId?: string | null;
   bookingLegsByVoyage?: Record<string, BookableLegAvailability[]>;
   bookingSelectionAnchor?: { voyageId: string; waypointId: string } | null;
+  selectedBookingLegs?: BookableLeg[];
   onParticipate?: (voyageId: string) => void;
   flyToWaypointRef?: MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
@@ -306,6 +307,7 @@ const VoyageMap = ({
   selectedRouteVoyageId: controlledRouteVoyageId,
   bookingLegsByVoyage = {},
   bookingSelectionAnchor = null,
+  selectedBookingLegs = [],
   onParticipate,
   flyToWaypointRef,
   lang,
@@ -774,6 +776,10 @@ const VoyageMap = ({
         const isDimmed = hasComparisonFocus && !isFocused && !isHovered;
         const baseColor = getVoyageStrokeColor(voyage, "base");
         const focusColor = getVoyageStrokeColor(voyage, "focus");
+        const selectedLegsForVoyage = selectedBookingLegs.filter((leg) => leg.voyage_id === voyage.id);
+        const waypointIndexById = selectedLegsForVoyage.length > 0
+          ? new Map(wps.map((waypoint, index) => [waypoint.id, index]))
+          : null;
 
         const routeCoordinates = getVoyageMapLineStringCoordinates(voyage, wps, articlesForMap);
 
@@ -933,6 +939,64 @@ const VoyageMap = ({
           }
         }
 
+        selectedLegsForVoyage.forEach((leg) => {
+          const startIndex = waypointIndexById?.get(leg.from_waypoint_id);
+          const endIndex = waypointIndexById?.get(leg.to_waypoint_id);
+          if (startIndex == null || endIndex == null) return;
+
+          const selectedSegmentCoordinates = getArticleSegmentGeometry(
+            wps,
+            voyage.type,
+            startIndex,
+            endIndex,
+            getCachedGeometryCoordinates(voyage)
+          );
+          if (selectedSegmentCoordinates.length < 2) return;
+
+          const selectedSegmentId = `voyage-booking-selected-${voyage.id}-${leg.id}`;
+          map.addSource(selectedSegmentId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: selectedSegmentCoordinates,
+              },
+              properties: {},
+            },
+          });
+
+          map.addLayer({
+            id: `${selectedSegmentId}-halo`,
+            type: "line",
+            source: selectedSegmentId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": "hsla(151, 82%, 36%, 0.22)",
+              "line-width": Math.max(8, 13 * getVoyageLineWidthScale(voyage)),
+              "line-opacity": 0.95,
+            },
+          });
+
+          map.addLayer({
+            id: selectedSegmentId,
+            type: "line",
+            source: selectedSegmentId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": "hsl(151, 78%, 36%)",
+              "line-width": Math.max(3.4, 6.2 * getVoyageLineWidthScale(voyage)),
+              "line-opacity": 0.98,
+            },
+          });
+        });
+
         /* Waypoint visibili: cluster HTML (effect separato), non layer circle */
 
         if (
@@ -995,6 +1059,7 @@ const VoyageMap = ({
     lang,
     publishedVoyages,
     selectedArticleId,
+    selectedBookingLegs,
     waypointsMap,
   ]);
 

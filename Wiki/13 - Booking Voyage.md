@@ -12,7 +12,7 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 1. Login/registrazione (`/login`, `/signup`) → `UserLogin.tsx`.
 2. Completamento profilo obbligatorio (`/complete-profile`) → `CompleteProfile.tsx`, logica in `src/lib/profile-completeness.ts`.
 3. Selezione viaggio/tratte su `VoyagePage.tsx` → componenti `src/components/booking/`.
-   - Nella mappa del logbook (`Journal.tsx`), il click su **Partecipa** mantiene aperta la `VoyageLegend` in basso e mostra tutte le tratte nella sidebar/bottom sheet articoli tramite `voyage/BookingSidebarPanel.tsx`; le tratte non vengono preselezionate, l'utente sceglie quelle desiderate.
+   - Nella mappa del logbook (`Journal.tsx`), il click su **Partecipa** mantiene aperta la `VoyageLegend` in basso e mostra tutte le tratte nella sidebar/bottom sheet articoli tramite `voyage/BookingSidebarPanel.tsx`; le tratte non vengono preselezionate, l'utente sceglie quelle desiderate. Quando una tratta viene selezionata, viene evidenziata sia su `VoyageMap` sia sulla legenda; i badge di complessità restano nel pannello booking/popup e non nella legenda.
 4. Conferma condizioni + calcolo contributo (`src/lib/booking-deposit.ts`).
 5. Creazione richiesta via RPC `request_voyage_booking` → [[08 - Supabase]].
 6. Pagamento Bunq o bonifico → [[11 - Pagamenti Bunq]].

@@ -29,7 +29,9 @@ tags: [frontend, componenti, ui]
 
 ## Mappe
 - `LazyVoyageMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
-- `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, pax, note e CTA, riusando la shell della sidebar articoli → [[13 - Booking Voyage]]
+- `admin/AdminVoyageManager.tsx` — editor rotte admin con workspace mappa MapLibre; il comando `Fullscreen` usa la Fullscreen API del browser e mantiene un fallback layout `fixed` se l'API non è disponibile.
+- `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, pax, note e CTA, riusando la shell della sidebar articoli; la selezione illumina la tratta su `VoyageMap` e `VoyageLegend` → [[13 - Booking Voyage]]
+- `voyage/VoyageLegend.tsx` — legenda rotta del logbook; mostra distanze, tappe e articoli collegati, ma non i badge di complessità delle tratte prenotabili.
 - `voyage/ArticleListCard.tsx` — card articolo della sidebar `/logbook`, con thumbnail, metadati, autori, contatori e badge circolare per gli articoli già letti.
 
 ## Sottocartelle tematiche

@@ -22,6 +22,10 @@ type AliasRow = {
   alias: string;
 };
 
+type UserRoleRow = {
+  user_id: string;
+};
+
 export type MailAssignment = {
   assignedProfileId: string | null;
   notifyProfileIds: string[];
@@ -43,17 +47,21 @@ export async function resolveMailAssignment(db: SupabaseClient, toAddresses: str
     console.warn("[mail-push] unable to refresh admin aliases", refreshError.message);
   }
 
-  const { data: adminRows, error: adminError } = await db
+  const { data: adminRoleRows, error: adminError } = await db
     .from("user_roles")
-    .select("user_id, profiles!inner(id,email,name)")
+    .select("user_id")
     .eq("role", "admin");
 
   if (adminError) throw adminError;
 
-  const admins = ((adminRows ?? []) as Array<{ user_id: string; profiles: AdminProfileRow | AdminProfileRow[] }>).flatMap((row) => {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    return profile ? [profile] : [];
-  });
+  const adminIds = Array.from(new Set(((adminRoleRows ?? []) as UserRoleRow[]).map((row) => row.user_id).filter(Boolean)));
+  const { data: adminProfiles, error: profileError } = adminIds.length
+    ? await db.from("profiles").select("id,email,name").in("id", adminIds)
+    : { data: [], error: null };
+
+  if (profileError) throw profileError;
+
+  const admins = (adminProfiles ?? []) as AdminProfileRow[];
   const allAdminIds = admins.map((admin) => admin.id);
 
   const candidateAliases = Array.from(new Set(toAddresses.filter(isBiteMailbox).map(localPart).filter(Boolean)));

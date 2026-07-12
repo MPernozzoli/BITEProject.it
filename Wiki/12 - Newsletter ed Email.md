@@ -17,6 +17,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - Package installato: `@pynkstudio/mailapp` da `https://github.com/PynkStudio/pynkstudio-mailapp`; questa app Vite usa API Vercel dedicate invece dei server action Next del package.
 - Console admin: `/admin/mail` (`AdminMail.tsx`) con inbox, inviate, preferite, archivio, spam, compose e webhook Resend → [[10 - API Vercel]].
 - Inbound mail: il webhook risolve alias admin da `admin_email_aliases` (`massimo`, `massimo.pernozzoli`, `mpernozzoli`, ecc. generati da profilo/email admin). Se c'è un match unico assegna e invia push a quell'admin; se non determina l'assegnazione notifica tutti gli admin.
+- Implementazione assegnazione inbound: `src/server/mail-push.ts` carica prima `user_roles.user_id` e poi i profili admin con una query separata su `profiles`; non usare embed PostgREST `user_roles -> profiles` perché `user_roles` non dichiara una FK verso `profiles`.
 
 ## Iscrizione & gestione
 - `newsletter-subscribe` → invia email di conferma (double opt-in)
