@@ -1,11 +1,19 @@
-import { next, rewrite } from "@vercel/functions/middleware";
-
 const PACK_HOSTNAME = "pack.biteproject.it";
 const DATA_HOSTNAME = "data.biteproject.it";
 const ADMIN_HOSTNAME = "admin.biteproject.it";
 const PACK_PREFIX = "/pack";
 const DATA_PREFIX = "/Data";
 const PUBLIC_FILE_RE = /\.[a-z0-9]+$/i;
+
+const next = () =>
+  new Response(null, {
+    headers: { "x-middleware-next": "1" },
+  });
+
+const rewrite = (destination: URL) =>
+  new Response(null, {
+    headers: { "x-middleware-rewrite": destination.toString() },
+  });
 
 /**
  * Crawlers that don't (reliably) execute JavaScript get a prerendered HTML
