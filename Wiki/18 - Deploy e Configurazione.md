@@ -22,6 +22,7 @@ tags: [deploy, vercel, config, env]
 
 ## Edge middleware
 - `apps/web/middleware.ts` — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. `middleware.ts` alla root è un symlink per Vercel.
+- Il middleware Edge importa `next`/`rewrite` da `@vercel/functions/middleware`, non dal barrel `@vercel/functions`, per evitare che Vercel includa API Node non supportate nell'Edge runtime.
 - Gli URL pubblici legacy senza prefisso lingua vengono reindirizzati a `/it/*` o `/en/*` prima del fallback SPA/prerender.
 - I sottodomini `pack.biteproject.it` e `data.biteproject.it` vengono riscritti rispettivamente sui prefissi `/pack` e `/Data`.
 

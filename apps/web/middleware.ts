@@ -1,4 +1,4 @@
-import { next, rewrite } from "@vercel/functions";
+import { next, rewrite } from "@vercel/functions/middleware";
 
 const PACK_HOSTNAME = "pack.biteproject.it";
 const DATA_HOSTNAME = "data.biteproject.it";
