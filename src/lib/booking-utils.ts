@@ -100,6 +100,10 @@ export interface BookingRequest {
   confirmed_at: string | null;
   cancelled_at: string | null;
   updated_at: string;
+  plan_change_status?: "none" | "pending_user_approval" | "auto_accepted";
+  plan_change_metadata?: Record<string, unknown> | null;
+  plan_change_requested_at?: string | null;
+  plan_change_resolved_at?: string | null;
   /** True for the two fixed crew members auto-booked when a voyage's booking goes live. */
   is_crew?: boolean;
 }

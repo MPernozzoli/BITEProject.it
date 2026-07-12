@@ -16,6 +16,7 @@ import { BANK_TRANSFER_DETAILS } from "../../../src/server/bunq/bank-details.js"
 import {
   armBookingPaymentDeadline,
   DepositHttpError,
+  enqueuePaymentPendingNotifications,
   findExistingDeposit,
   resolveCaller,
   resolveDepositPayer,
@@ -96,7 +97,16 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       reference,
     });
     if (insertError) throw new Error(insertError.message);
-    await armBookingPaymentDeadline(db, bookingRequestId);
+    const expiresAt = await armBookingPaymentDeadline(db, bookingRequestId);
+    try {
+      await enqueuePaymentPendingNotifications(resolved, {
+        paymentMethod: "bank_transfer",
+        reference,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("[bunq/bank-transfer] payment notification enqueue failed", error);
+    }
 
     sendJson(res, 200, {
       ...BANK_TRANSFER_DETAILS,

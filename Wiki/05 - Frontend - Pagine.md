@@ -47,6 +47,7 @@ Tutte le pagine sono **lazy-loaded** in `src/App.tsx`.
 | `AdminDashboard.tsx` | `/admin` |
 | `AdminVoyageBookings.tsx` | `/admin/bookings` |
 | `AdminMedia.tsx` | `/admin/media` |
+| `AdminMail.tsx` | `/admin/mail` |
 | `AdminMapPresence.tsx` | `/admin/trackers` |
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |

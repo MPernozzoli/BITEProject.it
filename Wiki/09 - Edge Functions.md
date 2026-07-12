@@ -24,7 +24,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## 🔔 Notifiche & engagement
 - `dispatch-engagement-notifications` — like/commenti/letture
-- `dispatch-voyage-booking-notifications` — notifiche prenotazioni → [[13 - Booking Voyage]]
+- `dispatch-voyage-booking-notifications` — notifiche prenotazioni, pagamenti e cambi planning; per gli eventi admin invia anche Web Push agli admin iscritti → [[13 - Booking Voyage]]
 - `vapid-public-key` — chiave push Web Push
 
 ## 🌐 Layer semantico pubblico → [[15 - Semantic Layer (AI Agents)]]
@@ -48,6 +48,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## Codice condiviso (`_shared/`)
 `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `public-semantic.ts`, `social-oauth-auth.ts`, `system-email-automation.ts`.
+`email-config.ts`, `auth-email-hook` e `send-transactional-email` usano `mail.biteproject.it` come sender domain per le email automatiche; la casella ordinaria admin vive invece su `/api/email/*` in [[10 - API Vercel]].
 
 ## Collegamenti
 - [[08 - Supabase]] · [[10 - API Vercel]] · [[12 - Newsletter ed Email]]

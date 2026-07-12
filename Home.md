@@ -52,7 +52,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 | **Build tool** | Vite 5 (+ SWC) |
 | **UI** | React 18, shadcn/ui, Radix, Tailwind, framer-motion |
 | **Backend** | Supabase (progetto `ekwloweuicrqjjgabfdp`) |
-| **Migrations** | 36 file in `supabase/migrations/` |
+| **Migrations** | 37+ file in `supabase/migrations/` |
 | **Edge Functions** | 28 in `supabase/functions/` |
 | **Pagamenti** | Bunq (request-inquiry) + bonifico bancario |
 | **Mappe** | MapLibre GL + supercluster |

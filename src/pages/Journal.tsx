@@ -479,7 +479,7 @@ const Journal = () => {
     const availableLegs = candidateLegs.filter((leg) => leg.available && leg.remaining >= partySize);
     const rejectedLegs = candidateLegs.filter((leg) => !leg.available || leg.remaining < partySize);
 
-    setSelectedBookingLegIds(availableLegs.map((leg) => leg.id));
+    setSelectedBookingLegIds([]);
     setBookingRejectedLegIds(rejectedLegs.map((leg) => leg.id));
 
     if (availableLegs.length === 0) {
@@ -487,8 +487,8 @@ const Journal = () => {
     } else if (rejectedLegs.length > 0) {
       toast.info(
         lang === "it"
-          ? "Alcune tratte non hanno disponibilità: puoi toglierle dalla selezione."
-          : "Some legs have no availability: you can remove them from the selection."
+          ? "Alcune tratte non hanno disponibilità e non sono selezionabili."
+          : "Some legs have no availability and cannot be selected."
       );
     }
   }, [bookingLegsByVoyage, bookingPartySize, isMobile, lang, waypointsMap]);

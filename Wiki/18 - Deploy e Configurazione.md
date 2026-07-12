@@ -29,6 +29,13 @@ Prefisso Vite `VITE_` (esposte al client):
 
 > ⚠️ I segreti server (Bunq, service role Supabase, chiavi email/VAPID) **non** stanno qui: vanno nelle env di Vercel / secret delle Supabase Functions, mai committati.
 
+Mail admin e invio Resend:
+- `RESEND_API_KEY` in Vercel per `/api/email/send` e webhook enrichment.
+- `RESEND_WEBHOOK_SECRET` in Vercel per verificare `api/webhooks/email/inbound`.
+- `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY`/`VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel per autenticare admin e scrivere lo storico mail.
+- `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` in Vercel per notificare gli admin quando arrivano nuove mail.
+- Le Supabase Edge Functions automatiche usano `mail.biteproject.it` come sender domain.
+
 Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ_WEBHOOK_SECRET`, da configurare in Vercel e nella callback Bunq.
 
 ## Build

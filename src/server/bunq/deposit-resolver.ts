@@ -51,6 +51,14 @@ export type ResolvedDeposit = {
   counterpartyEmail: string;
 };
 
+type BookingNotificationEvent =
+  | "payment_pending"
+  | "payment_received"
+  | "payment_failed"
+  | "payment_expired"
+  | "admin_payment_pending"
+  | "admin_payment_received";
+
 function paymentDeadlineIso(base = new Date()): string {
   return new Date(base.getTime() + PAYMENT_PENDING_DEADLINE_HOURS * 60 * 60 * 1000).toISOString();
 }
@@ -190,15 +198,24 @@ export async function resolveDepositPayer(
  * Starts the 48h payment window when a new pending payment is created. Existing deadlines are
  * kept as-is so polling or retrying the same payment cannot extend the booking hold forever.
  */
-export async function armBookingPaymentDeadline(db: SupabaseClient, bookingRequestId: string): Promise<void> {
+export async function armBookingPaymentDeadline(db: SupabaseClient, bookingRequestId: string): Promise<string | null> {
   const now = new Date().toISOString();
+  const nextExpiresAt = paymentDeadlineIso();
   const { error } = await db
     .from("voyage_booking_requests")
-    .update({ expires_at: paymentDeadlineIso(), updated_at: now })
+    .update({ expires_at: nextExpiresAt, updated_at: now })
     .eq("id", bookingRequestId)
     .in("status", ACTIVE_STATUSES)
     .is("expires_at", null);
   if (error) throw new Error(error.message);
+
+  const { data, error: readError } = await db
+    .from("voyage_booking_requests")
+    .select("expires_at")
+    .eq("id", bookingRequestId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  return (data as { expires_at?: string | null } | null)?.expires_at ?? null;
 }
 
 /**
@@ -250,4 +267,103 @@ export async function findExistingDeposit(
   query = payerParticipantId ? query.eq("participant_id", payerParticipantId) : query.is("participant_id", null);
   const { data } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
   return data as ExistingDepositRow | null;
+}
+
+export async function enqueueBookingNotification(
+  db: SupabaseClient,
+  params: {
+    bookingRequestId: string;
+    recipientProfileId: string;
+    eventType: BookingNotificationEvent | "plan_change_pending";
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { error } = await db.from("voyage_booking_notifications").upsert(
+    {
+      booking_request_id: params.bookingRequestId,
+      recipient_profile_id: params.recipientProfileId,
+      event_type: params.eventType,
+      metadata: params.metadata ?? {},
+      failed_at: null,
+      error_message: null,
+    },
+    { onConflict: "booking_request_id,event_type,recipient_profile_id" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function enqueueAdminBookingNotification(
+  db: SupabaseClient,
+  bookingRequestId: string,
+  eventType: BookingNotificationEvent,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  const { data: admins, error: adminError } = await db.from("user_roles").select("user_id").eq("role", "admin");
+  if (adminError) throw new Error(adminError.message);
+  const rows = (admins ?? [])
+    .map((row) => (row as { user_id?: string | null }).user_id)
+    .filter((userId): userId is string => Boolean(userId))
+    .map((userId) => ({
+      booking_request_id: bookingRequestId,
+      recipient_profile_id: userId,
+      event_type: eventType,
+      metadata,
+      failed_at: null,
+      error_message: null,
+    }));
+  if (!rows.length) return;
+
+  const { error } = await db
+    .from("voyage_booking_notifications")
+    .upsert(rows, { onConflict: "booking_request_id,event_type,recipient_profile_id" });
+  if (error) throw new Error(error.message);
+}
+
+export async function enqueuePaymentPendingNotifications(
+  resolved: ResolvedDeposit,
+  params: {
+    paymentMethod: "bunq_link" | "bank_transfer";
+    reference: string;
+    expiresAt: string | null;
+  },
+): Promise<void> {
+  const metadata = {
+    amount_eur: resolved.amountEur,
+    per_person_eur: resolved.perPersonEur,
+    covered_persons: resolved.coveredPersons,
+    payment_method: params.paymentMethod,
+    payment_reference: params.reference,
+    payment_expires_at: params.expiresAt,
+  };
+  await enqueueBookingNotification(resolved.db, {
+    bookingRequestId: resolved.bookingRequestId,
+    recipientProfileId: resolved.user.id,
+    eventType: "payment_pending",
+    metadata,
+  });
+  await enqueueAdminBookingNotification(resolved.db, resolved.bookingRequestId, "admin_payment_pending", metadata);
+}
+
+export async function enqueuePaymentReceivedNotifications(
+  db: SupabaseClient,
+  params: {
+    bookingRequestId: string;
+    recipientProfileId: string;
+    amountEur: number;
+    paymentMethod?: string | null;
+    reference?: string | null;
+  },
+): Promise<void> {
+  const metadata = {
+    amount_eur: params.amountEur,
+    payment_method: params.paymentMethod,
+    payment_reference: params.reference,
+  };
+  await enqueueBookingNotification(db, {
+    bookingRequestId: params.bookingRequestId,
+    recipientProfileId: params.recipientProfileId,
+    eventType: "payment_received",
+    metadata,
+  });
+  await enqueueAdminBookingNotification(db, params.bookingRequestId, "admin_payment_received", metadata);
 }

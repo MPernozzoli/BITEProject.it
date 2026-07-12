@@ -12,7 +12,7 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 1. Login/registrazione (`/login`, `/signup`) → `UserLogin.tsx`.
 2. Completamento profilo obbligatorio (`/complete-profile`) → `CompleteProfile.tsx`, logica in `src/lib/profile-completeness.ts`.
 3. Selezione viaggio/tratte su `VoyagePage.tsx` → componenti `src/components/booking/`.
-   - Nella mappa del logbook (`Journal.tsx`), il click su **Partecipa** mantiene aperta la `VoyageLegend` in basso e sposta la scelta di tutte le tratte nella sidebar/bottom sheet articoli tramite `voyage/BookingSidebarPanel.tsx`.
+   - Nella mappa del logbook (`Journal.tsx`), il click su **Partecipa** mantiene aperta la `VoyageLegend` in basso e mostra tutte le tratte nella sidebar/bottom sheet articoli tramite `voyage/BookingSidebarPanel.tsx`; le tratte non vengono preselezionate, l'utente sceglie quelle desiderate.
 4. Conferma condizioni + calcolo contributo (`src/lib/booking-deposit.ts`).
 5. Creazione richiesta via RPC `request_voyage_booking` → [[08 - Supabase]].
 6. Pagamento Bunq o bonifico → [[11 - Pagamenti Bunq]].
@@ -25,6 +25,10 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 - **Max ospiti** per prenotazione (`backfill_voyage_booking_max_guests`).
 - **Tratte prenotabili** con motivi di pericolo (`voyage_bookable_legs_danger_reasons`) → `src/lib/danger-reasons.ts`.
 - **Contributi dinamici** per NM (`dynamic_voyage_contributions`).
+- **Ricalcolo planning:** `sync_voyage_bookable_legs` riconcilia le tratte canoniche invece di disattivare soltanto quelle obsolete. Se vengono aggiunti/rimossi waypoint intermedi aggiorna i legami `voyage_booking_request_legs` sulle nuove sottotratte/tratte unite e cancella le legs non piu presenti nel planning. Se cambia un endpoint reale della prenotazione, crea un record `voyage_booking_plan_changes` in attesa di approvazione utente con la proposta di nuovo imbarco/sbarco; le prenotazioni equipaggio (`is_crew`) sono auto-accettate.
+- **Cambio piano booking:** `voyage_booking_plan_changes` accoda automaticamente email `plan_change_pending` quando il cambio richiede approvazione utente. La mail propone nuova tratta, annullamento con rimborso completo o variazione manuale; i record auto-accettati per equipaggio restano `email_status = skipped`.
+- **Email e push booking:** la pipeline `voyage_booking_notifications` → `dispatch-voyage-booking-notifications` → `send-transactional-email` invia conferma richiesta, waitlist, approvazione, conferma utente, cancellazione, rifiuto, promozione waitlist, aggiunta manuale, pagamenti pending/ricevuti/scaduti, cambio planning e notifiche admin. Gli eventi admin (`admin_*`) inviano anche Web Push agli admin con `push_subscriptions` attive; la coda registra `push_sent_at` per evitare duplicati.
+- **Inviti partecipanti:** `/api/bookings/invite` usa il template `voyage-participant-invite` per gli ospiti pending; se il pagamento e separato include il contributo stimato per persona.
 
 ## Lib coinvolte → [[07 - Frontend - Lib e Hooks]]
 `booking-deposit.ts`, `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`, `voyage-utils.ts`, `danger-reasons.ts`.
@@ -32,7 +36,8 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 ## Lato admin → [[16 - Admin]]
 - `AdminVoyageBookings.tsx` (`/admin/bookings`) — gestione prenotazioni
 - `AdminVoyageManager.tsx` — configurazione viaggi/tratte
-- Notifiche: `dispatch-voyage-booking-notifications` → [[12 - Newsletter ed Email]]
+- Notifiche: `dispatch-voyage-booking-notifications` invia email e push admin → [[12 - Newsletter ed Email]]
+- Ricalcolo tratte: `sync_voyage_bookable_legs` aggiorna anche le prenotazioni esistenti e genera audit trail `voyage_booking_plan_changes`.
 
 ## Collegamenti
 - [[11 - Pagamenti Bunq]] · [[10 - API Vercel]] · [[14 - Mappe e Layer Geospaziale]]

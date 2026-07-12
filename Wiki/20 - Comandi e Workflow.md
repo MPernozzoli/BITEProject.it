@@ -39,6 +39,7 @@ tags: [comandi, workflow, script, dx]
 
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
+Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`; l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]]

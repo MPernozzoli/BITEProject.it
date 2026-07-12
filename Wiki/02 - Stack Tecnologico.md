@@ -48,6 +48,9 @@ Vedi [[14 - Mappe e Layer Geospaziale]].
 ## Auth extra
 - **@lovable.dev/cloud-auth-js** — integrazione auth Lovable (`src/integrations/lovable/`)
 
+## Mail
+- **@pynkstudio/mailapp** — package condiviso PynkStudio per struttura e utility mail; in questa repo è installato da tarball GitHub e usato lato server per normalizzazione indirizzi nel modulo admin mail → [[12 - Newsletter ed Email]].
+
 ## Origine
 Progetto generato/gestito con **Lovable** (`lovable-tagger` in dev, cartelle `.lovable/`, `src/integrations/lovable/`).
 

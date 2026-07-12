@@ -11,7 +11,10 @@
  */
 import { createServiceClient } from "../../../src/server/bunq/supabase.js";
 import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../src/server/bunq/client.js";
-import { clearBookingPaymentDeadlineIfSettled } from "../../../src/server/bunq/deposit-resolver.js";
+import {
+  clearBookingPaymentDeadlineIfSettled,
+  enqueuePaymentReceivedNotifications,
+} from "../../../src/server/bunq/deposit-resolver.js";
 import { firstQueryParam, readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 import { timingSafeEqual } from "node:crypto";
 
@@ -57,13 +60,20 @@ async function markPaidByBunqRequestId(requestId: number): Promise<boolean> {
   const db = createServiceClient();
   const { data } = await db
     .from("voyage_booking_deposits")
-    .select("id, booking_request_id")
+    .select("id, booking_request_id, participant_id, amount_cents, payment_method, reference")
     .eq("environment", environment())
     .eq("bunq_request_id", requestId)
     .eq("status", "pending")
     .maybeSingle();
   if (!data) return false;
-  const row = data as { id: string; booking_request_id: string };
+  const row = data as {
+    id: string;
+    booking_request_id: string;
+    participant_id: string | null;
+    amount_cents: number;
+    payment_method: string | null;
+    reference: string | null;
+  };
   await db
     .from("voyage_booking_deposits")
     .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -71,6 +81,7 @@ async function markPaidByBunqRequestId(requestId: number): Promise<boolean> {
     .eq("status", "pending");
   try {
     await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
+    await enqueuePaymentReceivedForDeposit(db, row);
   } catch (error) {
     console.error("[bunq/webhook] clearing payment deadline failed", error);
   }
@@ -81,12 +92,19 @@ async function markPaidByReference(reference: string): Promise<boolean> {
   const db = createServiceClient();
   const { data } = await db
     .from("voyage_booking_deposits")
-    .select("id, booking_request_id")
+    .select("id, booking_request_id, participant_id, amount_cents, payment_method, reference")
     .eq("reference", reference.toUpperCase())
     .eq("status", "pending")
     .maybeSingle();
   if (!data) return false;
-  const row = data as { id: string; booking_request_id: string };
+  const row = data as {
+    id: string;
+    booking_request_id: string;
+    participant_id: string | null;
+    amount_cents: number;
+    payment_method: string | null;
+    reference: string | null;
+  };
   await db
     .from("voyage_booking_deposits")
     .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -94,10 +112,41 @@ async function markPaidByReference(reference: string): Promise<boolean> {
     .eq("status", "pending");
   try {
     await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
+    await enqueuePaymentReceivedForDeposit(db, row);
   } catch (error) {
     console.error("[bunq/webhook] clearing payment deadline failed", error);
   }
   return true;
+}
+
+async function enqueuePaymentReceivedForDeposit(
+  db: ReturnType<typeof createServiceClient>,
+  row: {
+    booking_request_id: string;
+    participant_id: string | null;
+    amount_cents: number;
+    payment_method: string | null;
+    reference: string | null;
+  },
+): Promise<void> {
+  const [{ data: request }, { data: participant }] = await Promise.all([
+    db.from("voyage_booking_requests").select("profile_id").eq("id", row.booking_request_id).maybeSingle(),
+    row.participant_id
+      ? db.from("voyage_booking_participants").select("profile_id").eq("id", row.participant_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const recipientProfileId =
+    (participant as { profile_id?: string | null } | null)?.profile_id ||
+    (request as { profile_id?: string | null } | null)?.profile_id;
+  if (!recipientProfileId) return;
+
+  await enqueuePaymentReceivedNotifications(db, {
+    bookingRequestId: row.booking_request_id,
+    recipientProfileId,
+    amountEur: row.amount_cents / 100,
+    paymentMethod: row.payment_method,
+    reference: row.reference,
+  });
 }
 
 function extractReference(description: string | undefined): string | null {

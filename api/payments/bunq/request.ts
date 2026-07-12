@@ -18,6 +18,7 @@ import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-reque
 import {
   armBookingPaymentDeadline,
   DepositHttpError,
+  enqueuePaymentPendingNotifications,
   findExistingDeposit,
   resolveCaller,
   resolveDepositPayer,
@@ -118,7 +119,16 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       reference,
     });
     if (insertError) throw new Error(insertError.message);
-    await armBookingPaymentDeadline(db, bookingRequestId);
+    const expiresAt = await armBookingPaymentDeadline(db, bookingRequestId);
+    try {
+      await enqueuePaymentPendingNotifications(resolved, {
+        paymentMethod: "bunq_link",
+        reference,
+        expiresAt,
+      });
+    } catch (error) {
+      console.error("[bunq/request] payment notification enqueue failed", error);
+    }
 
     sendJson(res, 200, {
       shareUrl: created.shareUrl,

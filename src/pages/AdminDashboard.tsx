@@ -493,6 +493,21 @@ const AdminDashboard = () => {
                 Media
               </Link>
               <Link
+                to="/admin/mail"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/mail");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Mail"
+              >
+                <Mail size={16} />
+                Mail
+              </Link>
+              <Link
                 to="/admin/trackers"
                 onClick={(event) => {
                   event.preventDefault();

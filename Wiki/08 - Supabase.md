@@ -22,7 +22,7 @@ Supabase è il **backend unico** del progetto.
 | **RPC** | funzioni SQL richiamate dal client (es. `request_voyage_booking`) |
 
 ## Migrazioni (`supabase/migrations/`)
-**36 file**, naming `AAAAMMGGhhmmss_descrizione.sql`. Le più recenti riguardano il dominio booking/pagamenti:
+**37+ file**, naming `AAAAMMGGhhmmss_descrizione.sql`. Le più recenti riguardano booking/pagamenti e la mail app admin:
 
 - `..._prevent_duplicate_leg_booking.sql`
 - `..._backfill_voyage_booking_max_guests.sql`
@@ -39,13 +39,21 @@ Supabase è il **backend unico** del progetto.
 - `..._normalize_duplicate_migration_gaps.sql` — sostituisce due migrazioni duplicate per timestamp e aggiunge i constraint mancanti sulle date flessibili voyage
 - `..._restrict_homepage_media_listing.sql` — limita il listing pubblico di `homepage-media` ai soli media hero usati dalla home
 - `..._restrict_internal_booking_rpc_helpers.sql` — rende service-role-only gli helper interni di manutenzione/promozione waitlist/notifiche booking
+- `..._reconcile_voyage_booking_plan_changes.sql` — rende `sync_voyage_bookable_legs` una riconciliazione completa: aggiorna le prenotazioni sulle nuove tratte canoniche, registra `voyage_booking_plan_changes` e cancella le legs obsolete.
+- `..._voyage_booking_email_flows.sql` — estende gli eventi `voyage_booking_notifications` per pagamenti e cambio planning, attiva trigger email su `voyage_booking_plan_changes` e backfill delle notifiche pending.
+- `..._bite_mailapp.sql` — tabelle `inbound_emails`, `sent_emails`, `email_tracking_events`, `email_spam_senders`, `admin_email_aliases` per `/admin/mail`, con RLS admin e inserimenti server-side via [[10 - API Vercel]].
+- `..._booking_admin_push_notifications.sql` — aggiunge `push_sent_at` a `voyage_booking_notifications` e indicizza gli eventi admin pending per le push.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)
 - `request_voyage_booking` (RPC) — crea richiesta di prenotazione → [[13 - Booking Voyage]]
+- `sync_voyage_bookable_legs` (RPC admin) — ricalcola le tratte prenotabili e riconcilia le prenotazioni esistenti con il planning corrente
+- `voyage_booking_plan_changes` — audit/predisposizione approvazione utente per cambi planning booking → [[13 - Booking Voyage]]
+- `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti e modifiche planning; gli eventi `admin_*` registrano anche `push_sent_at` per Web Push admin → [[12 - Newsletter ed Email]]
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi → [[11 - Pagamenti Bunq]]
+- `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico → [[12 - Newsletter ed Email]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
 ## Hardening remoto applicato

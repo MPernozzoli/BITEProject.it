@@ -16,6 +16,7 @@ tags: [admin, cms, backoffice]
 | `/admin` | `AdminDashboard.tsx` | dashboard |
 | `/admin/bookings` | `AdminVoyageBookings.tsx` | prenotazioni viaggi → [[13 - Booking Voyage]] |
 | `/admin/media` | `AdminMedia.tsx` | libreria media/storage |
+| `/admin/mail` | `AdminMail.tsx` | casella di posta ordinaria `@biteproject.it` e automatiche `@mail.biteproject.it` → [[12 - Newsletter ed Email]] |
 | `/admin/trackers` | `AdminMapPresence.tsx` | presenza su mappa → [[14 - Mappe e Layer Geospaziale]] |
 | `/admin/article/:id` | `ArticleEditor.tsx` | editor articolo (TipTap) |
 | `/profile` | `AdminProfile.tsx` | profilo |
@@ -24,6 +25,7 @@ tags: [admin, cms, backoffice]
 - **Editoriale:** `AdminEditorialPlan`, `AdminEditorialPlanSettingsDialog`, `AdminEditorialPlanSlotDialog` (piano editoriale) → `src/lib/editorial-plan.ts`
 - **Viaggi/rotte:** `AdminVoyageManager`, `AdminRouteManager`, `ArticleMiniMapEditor`, `AdminMapPresenceManager`
 - **Newsletter:** `AdminNewsletterManager` → [[12 - Newsletter ed Email]]
+- **Mail:** `AdminMail.tsx` vive tra le pagine admin perché integra lista, dettaglio e compose su API Vercel.
 - **Altri:** `AdminBadgeManager`, `AdminCollapsibleListFilters`
 - Coda upload media: `src/lib/admin-media-upload-queue.ts`
 
