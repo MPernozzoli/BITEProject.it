@@ -59,10 +59,8 @@ begin
   return v_expired;
 end;
 $$;
-
 revoke execute on function public.expire_pending_voyage_booking_payments() from public, anon, authenticated;
 grant execute on function public.expire_pending_voyage_booking_payments() to service_role;
-
 -- Legacy booking-request deadlines were used for generic holds. From now on `expires_at`
 -- represents only an active payment deadline, so admin-only pending requests must stay open.
 update public.voyage_booking_requests r
@@ -75,7 +73,6 @@ where r.status in ('requested', 'waitlisted', 'admin_approved', 'user_confirmed'
     where d.booking_request_id = r.id
       and d.status = 'pending'
   );
-
 select cron.schedule(
   'expire-pending-voyage-booking-payments',
   '0 * * * *',

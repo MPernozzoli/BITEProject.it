@@ -2,7 +2,6 @@
 -- Keep admin listing/management for logbook-media, but remove anonymous object enumeration.
 
 drop policy if exists "Public read logbook-media" on storage.objects;
-
 drop policy if exists "Admin read logbook-media" on storage.objects;
 create policy "Admin read logbook-media"
   on storage.objects

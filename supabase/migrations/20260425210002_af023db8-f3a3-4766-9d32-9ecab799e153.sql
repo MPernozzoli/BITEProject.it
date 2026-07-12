@@ -1,6 +1,5 @@
 -- Abilita REPLICA IDENTITY FULL per ricevere il payload completo nei messaggi realtime
 ALTER TABLE public.engagement_notifications REPLICA IDENTITY FULL;
-
 -- Aggiungi la tabella alla pubblicazione realtime (idempotente)
 DO $$
 BEGIN
@@ -11,7 +10,6 @@ BEGIN
       NULL;
   END;
 END $$;
-
 -- Rimuovi logbook_articles dalla pubblicazione realtime: il view_count è ora aggiornato
 -- via polling lazy lato client, evitando il costo di una connessione realtime per ogni lettore.
 DO $$

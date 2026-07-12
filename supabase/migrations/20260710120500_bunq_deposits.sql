@@ -14,7 +14,6 @@ create table if not exists public.bunq_api_contexts (
   encrypted_context text not null,
   updated_at timestamptz not null default timezone('utc', now())
 );
-
 alter table public.bunq_api_contexts enable row level security;
 -- No policies: only the service role (which bypasses RLS) may touch this table.
 
@@ -41,19 +40,14 @@ create table if not exists public.voyage_booking_deposits (
   refunded_at timestamptz,
   updated_at timestamptz not null default timezone('utc', now())
 );
-
 create index if not exists voyage_booking_deposits_request_idx
   on public.voyage_booking_deposits(booking_request_id);
-
 create unique index if not exists voyage_booking_deposits_bunq_request_uidx
   on public.voyage_booking_deposits(environment, bunq_request_id)
   where bunq_request_id is not null;
-
 create unique index if not exists voyage_booking_deposits_reference_uidx
   on public.voyage_booking_deposits(reference);
-
 alter table public.voyage_booking_deposits enable row level security;
-
 -- A user may read the deposit(s) attached to their own booking requests.
 drop policy if exists "read own booking deposits" on public.voyage_booking_deposits;
 create policy "read own booking deposits"
@@ -68,6 +62,5 @@ create policy "read own booking deposits"
         and r.profile_id = auth.uid()
     )
   );
-
 -- Inserts/updates happen exclusively through the service role (Vercel functions),
--- which bypasses RLS; no write policies are granted to clients.
+-- which bypasses RLS; no write policies are granted to clients.;

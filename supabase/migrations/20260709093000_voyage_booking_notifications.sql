@@ -22,19 +22,14 @@ create table if not exists public.voyage_booking_notifications (
     )
   )
 );
-
 create unique index if not exists voyage_booking_notifications_once_idx
   on public.voyage_booking_notifications(booking_request_id, event_type);
-
 create index if not exists voyage_booking_notifications_pending_idx
   on public.voyage_booking_notifications(queued_at)
   where processed_at is null and failed_at is null;
-
 alter table public.voyage_booking_notifications enable row level security;
-
 grant select on public.voyage_booking_notifications to authenticated;
 grant insert, update on public.voyage_booking_notifications to service_role;
-
 drop policy if exists "Users read own booking notifications" on public.voyage_booking_notifications;
 create policy "Users read own booking notifications"
   on public.voyage_booking_notifications
@@ -44,7 +39,6 @@ create policy "Users read own booking notifications"
     recipient_profile_id = auth.uid()
     or public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 create or replace function public.enqueue_voyage_booking_notification(
   _booking_request_id uuid,
   _event_type text,
@@ -90,7 +84,6 @@ begin
   return notification_id;
 end;
 $$;
-
 create or replace function public.request_voyage_booking(
   _voyage_id uuid,
   _leg_ids uuid[],
@@ -200,7 +193,6 @@ begin
   return next;
 end;
 $$;
-
 create or replace function public.confirm_voyage_booking(_booking_request_id uuid)
 returns void
 language plpgsql
@@ -223,7 +215,6 @@ begin
   perform public.enqueue_voyage_booking_notification(_booking_request_id, 'user_confirmed');
 end;
 $$;
-
 create or replace function public.promote_waitlisted_voyage_bookings(
   _voyage_id uuid,
   _changed_leg_ids uuid[] default null
@@ -277,7 +268,6 @@ begin
   return promoted_count;
 end;
 $$;
-
 create or replace function public.cancel_voyage_booking(_booking_request_id uuid)
 returns void
 language plpgsql
@@ -316,7 +306,6 @@ begin
   perform public.promote_waitlisted_voyage_bookings(booking_voyage_id, changed_leg_ids);
 end;
 $$;
-
 create or replace function public.admin_set_voyage_booking_status(
   _booking_request_id uuid,
   _status public.voyage_booking_status,
@@ -391,7 +380,6 @@ begin
   return next;
 end;
 $$;
-
 create or replace function public.admin_create_voyage_booking(
   _voyage_id uuid,
   _profile_id uuid,
@@ -485,7 +473,6 @@ begin
   return next;
 end;
 $$;
-
 revoke execute on function public.enqueue_voyage_booking_notification(uuid, text, jsonb) from public, anon;
 grant execute on function public.enqueue_voyage_booking_notification(uuid, text, jsonb) to authenticated, service_role;
 revoke execute on function public.request_voyage_booking(uuid, uuid[], integer, text) from public, anon;

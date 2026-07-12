@@ -18,6 +18,12 @@ type BookingEvent =
   | 'rejected'
   | 'promoted_from_waitlist'
   | 'manual_added'
+  | 'payment_pending'
+  | 'payment_received'
+  | 'payment_failed'
+  | 'payment_expired'
+  | 'plan_change_pending'
+  | 'plan_change_auto_accepted'
 
 interface VoyageBookingNotificationProps {
   language?: string | null
@@ -28,6 +34,13 @@ interface VoyageBookingNotificationProps {
   partySize?: number | null
   bookingUrl?: string | null
   message?: string | null
+  amountEur?: number | null
+  paymentMethod?: string | null
+  paymentReference?: string | null
+  paymentExpiresAt?: string | null
+  changeKind?: string | null
+  oldLegs?: string[] | null
+  proposedLegs?: string[] | null
   unsubscribeUrl?: string | null
 }
 
@@ -44,6 +57,12 @@ const COPY = {
       rejected: 'Richiesta non confermata.',
       promoted_from_waitlist: 'Si e liberato un posto.',
       manual_added: 'Sei stato aggiunto a un booking.',
+      payment_pending: 'Pagamento in sospeso.',
+      payment_received: 'Pagamento ricevuto.',
+      payment_failed: 'Pagamento non riuscito.',
+      payment_expired: 'Pagamento scaduto.',
+      plan_change_pending: 'La pianificazione del viaggio e cambiata.',
+      plan_change_auto_accepted: 'Pianificazione aggiornata.',
     },
     intro: (name: string, eventType: BookingEvent, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
@@ -54,12 +73,24 @@ const COPY = {
       if (eventType === 'cancelled') return `${prefix}il booking per ${voyageName} e stato annullato.`
       if (eventType === 'rejected') return `${prefix}la richiesta per ${voyageName} non e stata confermata.`
       if (eventType === 'manual_added') return `${prefix}sei stato aggiunto manualmente al booking per ${voyageName}.`
+      if (eventType === 'payment_pending') return `${prefix}abbiamo registrato un pagamento in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata per mantenere la prenotazione.`
+      if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto il pagamento per ${voyageName}.`
+      if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
+      if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
+      if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
+      if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri booking',
     voyageFallback: 'questo viaggio',
     legsTitle: 'Tratte',
+    oldLegsTitle: 'Prima',
+    proposedLegsTitle: 'Proposta',
     partySize: 'Persone',
+    amount: 'Importo',
+    paymentMethod: 'Metodo',
+    paymentReference: 'Riferimento',
+    paymentExpiresAt: 'Scadenza',
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
   en: {
@@ -74,6 +105,12 @@ const COPY = {
       rejected: 'Request not confirmed.',
       promoted_from_waitlist: 'A berth became available.',
       manual_added: 'You were added to a booking.',
+      payment_pending: 'Payment pending.',
+      payment_received: 'Payment received.',
+      payment_failed: 'Payment failed.',
+      payment_expired: 'Payment expired.',
+      plan_change_pending: 'The voyage plan changed.',
+      plan_change_auto_accepted: 'Plan updated.',
     },
     intro: (name: string, eventType: BookingEvent, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
@@ -84,12 +121,24 @@ const COPY = {
       if (eventType === 'cancelled') return `${prefix}your booking for ${voyageName} was cancelled.`
       if (eventType === 'rejected') return `${prefix}your request for ${voyageName} was not confirmed.`
       if (eventType === 'manual_added') return `${prefix}you were manually added to the booking for ${voyageName}.`
+      if (eventType === 'payment_pending') return `${prefix}we recorded a pending payment for ${voyageName}. Complete it before the deadline to keep your booking.`
+      if (eventType === 'payment_received') return `${prefix}we received your payment for ${voyageName}.`
+      if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
+      if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
+      if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
+      if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
       return `${prefix}we received your berth request for ${voyageName}.`
     },
     cta: 'Open bookings',
     voyageFallback: 'this voyage',
     legsTitle: 'Legs',
+    oldLegsTitle: 'Before',
+    proposedLegsTitle: 'Proposed',
     partySize: 'People',
+    amount: 'Amount',
+    paymentMethod: 'Method',
+    paymentReference: 'Reference',
+    paymentExpiresAt: 'Deadline',
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
 } as const
@@ -104,8 +153,24 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'rejected',
     'promoted_from_waitlist',
     'manual_added',
+    'payment_pending',
+    'payment_received',
+    'payment_failed',
+    'payment_expired',
+    'plan_change_pending',
+    'plan_change_auto_accepted',
   ]
   return allowed.includes(value as BookingEvent) ? (value as BookingEvent) : 'requested'
+}
+
+function formatDateTime(value: string | null | undefined, language: 'it' | 'en') {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(language === 'it' ? 'it-IT' : 'en-IE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
 
 const VoyageBookingNotificationEmail = ({
@@ -117,6 +182,12 @@ const VoyageBookingNotificationEmail = ({
   partySize,
   bookingUrl,
   message,
+  amountEur,
+  paymentMethod,
+  paymentReference,
+  paymentExpiresAt,
+  oldLegs,
+  proposedLegs,
   unsubscribeUrl,
 }: VoyageBookingNotificationProps) => {
   const lang = resolveEmailLanguage(language)
@@ -124,7 +195,17 @@ const VoyageBookingNotificationEmail = ({
   const normalizedEventType = normalizeEventType(eventType)
   const resolvedVoyageName = voyageName?.trim() || copy.voyageFallback
   const safeLegs = legs?.filter((item) => item?.trim()) ?? []
+  const safeOldLegs = oldLegs?.filter((item) => item?.trim()) ?? []
+  const safeProposedLegs = proposedLegs?.filter((item) => item?.trim()) ?? []
   const resolvedBookingUrl = bookingUrl?.trim() || `${PUBLIC_SITE_URL}/bookings`
+  const amountLabel =
+    typeof amountEur === 'number' && amountEur > 0
+      ? new Intl.NumberFormat(lang === 'it' ? 'it-IT' : 'en-IE', {
+          style: 'currency',
+          currency: 'EUR',
+        }).format(amountEur)
+      : null
+  const paymentExpiresAtLabel = formatDateTime(paymentExpiresAt, lang)
 
   return (
     <EditorialEmailShell
@@ -157,6 +238,28 @@ const VoyageBookingNotificationEmail = ({
         ) : null}
         {message?.trim() ? <EmailBodyText muted>{message.trim()}</EmailBodyText> : null}
       </EmailCard>
+      {amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
+        <EmailCard>
+          {amountLabel ? <EmailBodyText muted>{copy.amount}: {amountLabel}</EmailBodyText> : null}
+          {paymentMethod ? <EmailBodyText muted>{copy.paymentMethod}: {paymentMethod}</EmailBodyText> : null}
+          {paymentReference ? <EmailBodyText muted>{copy.paymentReference}: {paymentReference}</EmailBodyText> : null}
+          {paymentExpiresAtLabel ? <EmailBodyText muted>{copy.paymentExpiresAt}: {paymentExpiresAtLabel}</EmailBodyText> : null}
+        </EmailCard>
+      ) : null}
+      {safeOldLegs.length || safeProposedLegs.length ? (
+        <EmailCard>
+          {safeOldLegs.length ? (
+            <EmailBodyText muted>
+              {copy.oldLegsTitle}: {safeOldLegs.join(' · ')}
+            </EmailBodyText>
+          ) : null}
+          {safeProposedLegs.length ? (
+            <EmailBodyText muted>
+              {copy.proposedLegsTitle}: {safeProposedLegs.join(' · ')}
+            </EmailBodyText>
+          ) : null}
+        </EmailCard>
+      ) : null}
     </EditorialEmailShell>
   )
 }

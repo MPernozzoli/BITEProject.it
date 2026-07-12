@@ -2,7 +2,6 @@
 -- every object in the homepage-media bucket.
 
 drop policy if exists "Public read homepage-media" on storage.objects;
-
 create policy "Public read homepage hero media"
   on storage.objects
   for select

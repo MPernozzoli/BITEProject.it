@@ -4,7 +4,6 @@ CREATE POLICY "Anyone can view published voyages"
   ON public.voyages FOR SELECT
   TO public
   USING (is_published = true);
-
 -- 2. Restrict voyage_waypoints to those linked to a published voyage
 DROP POLICY IF EXISTS "Anyone can view waypoints" ON public.voyage_waypoints;
 CREATE POLICY "Anyone can view published voyage waypoints"
@@ -17,7 +16,6 @@ CREATE POLICY "Anyone can view published voyage waypoints"
         AND voyages.is_published = true
     )
   );
-
 -- 3. Restrict comment_mentions inserts to the comment author
 DROP POLICY IF EXISTS "Authenticated can create mentions" ON public.comment_mentions;
 CREATE POLICY "Users can create mentions for own comments"
@@ -30,7 +28,6 @@ CREATE POLICY "Users can create mentions for own comments"
         AND article_comments.profile_id = auth.uid()
     )
   );
-
 -- 4. Recreate public_profiles view with security_invoker so it does not bypass RLS
 DROP VIEW IF EXISTS public.public_profiles;
 CREATE VIEW public.public_profiles
@@ -53,15 +50,12 @@ SELECT
   social_website,
   social_seapeople
 FROM public.profiles;
-
 GRANT SELECT ON public.public_profiles TO anon, authenticated;
-
 -- 5. Set fixed search_path on the four pgmq wrapper functions
 ALTER FUNCTION public.enqueue_email(text, jsonb) SET search_path = public, pgmq;
 ALTER FUNCTION public.read_email_batch(text, integer, integer) SET search_path = public, pgmq;
 ALTER FUNCTION public.delete_email(text, bigint) SET search_path = public, pgmq;
 ALTER FUNCTION public.move_to_dlq(text, text, bigint, jsonb) SET search_path = public, pgmq;
-
 -- 6. Add admin-only policies for the private hero-horizontal storage bucket
 CREATE POLICY "Admins can read hero-horizontal media"
   ON storage.objects FOR SELECT
@@ -70,7 +64,6 @@ CREATE POLICY "Admins can read hero-horizontal media"
     bucket_id = 'hero-horizontal'
     AND public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 CREATE POLICY "Admins can upload hero-horizontal media"
   ON storage.objects FOR INSERT
   TO authenticated
@@ -78,7 +71,6 @@ CREATE POLICY "Admins can upload hero-horizontal media"
     bucket_id = 'hero-horizontal'
     AND public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 CREATE POLICY "Admins can update hero-horizontal media"
   ON storage.objects FOR UPDATE
   TO authenticated
@@ -86,7 +78,6 @@ CREATE POLICY "Admins can update hero-horizontal media"
     bucket_id = 'hero-horizontal'
     AND public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 CREATE POLICY "Admins can delete hero-horizontal media"
   ON storage.objects FOR DELETE
   TO authenticated

@@ -6,7 +6,6 @@
 
 alter table public.voyages
   add column if not exists booking_contribution_per_nm_eur numeric(8, 2) not null default 0.90;
-
 do $$
 begin
   if not exists (
@@ -17,10 +16,8 @@ begin
       check (booking_contribution_per_nm_eur >= 0);
   end if;
 end $$;
-
 alter table public.voyage_bookable_legs
   add column if not exists planned_nautical_miles numeric(10, 2) not null default 0;
-
 do $$
 begin
   if not exists (
@@ -31,7 +28,6 @@ begin
       check (planned_nautical_miles >= 0);
   end if;
 end $$;
-
 update public.voyage_bookable_legs leg
 set planned_nautical_miles = round(
   greatest(
@@ -52,7 +48,6 @@ where from_wp.id = leg.from_waypoint_id
   and to_wp.lat is not null
   and to_wp.lng is not null
   and coalesce(leg.planned_nautical_miles, 0) = 0;
-
 create or replace function public.sync_voyage_bookable_legs(_voyage_id uuid)
 returns integer
 language plpgsql
@@ -300,11 +295,8 @@ begin
   return affected_count + deactivated_count;
 end;
 $$;
-
 grant execute on function public.sync_voyage_bookable_legs(uuid) to authenticated;
-
 drop function if exists public.get_public_voyage_leg_availability(uuid[]);
-
 create or replace function public.get_public_voyage_leg_availability(_voyage_ids uuid[] default null)
 returns table (
   id uuid,
@@ -391,6 +383,5 @@ as $$
     and (_voyage_ids is null or leg.voyage_id = any(_voyage_ids))
   order by leg.voyage_id, leg.sort_order;
 $$;
-
 revoke execute on function public.get_public_voyage_leg_availability(uuid[]) from public;
 grant execute on function public.get_public_voyage_leg_availability(uuid[]) to anon, authenticated;

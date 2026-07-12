@@ -14,7 +14,6 @@
 
 alter table public.voyage_booking_requests
   add column if not exists payment_mode text not null default 'lead_pays_all';
-
 do $$
 begin
   if not exists (
@@ -25,7 +24,6 @@ begin
       check (payment_mode in ('lead_pays_all', 'each_pays_own'));
   end if;
 end $$;
-
 create table if not exists public.voyage_booking_participants (
   id uuid primary key default gen_random_uuid(),
   booking_request_id uuid not null references public.voyage_booking_requests(id) on delete cascade,
@@ -44,7 +42,6 @@ create table if not exists public.voyage_booking_participants (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
-
 create index if not exists voyage_booking_participants_request_idx
   on public.voyage_booking_participants(booking_request_id);
 create index if not exists voyage_booking_participants_email_idx
@@ -53,16 +50,13 @@ create unique index if not exists voyage_booking_participants_request_email_uidx
   on public.voyage_booking_participants(booking_request_id, lower(email));
 create unique index if not exists voyage_booking_participants_invite_token_uidx
   on public.voyage_booking_participants(invite_token);
-
 -- Deposits can now be attributed to a specific participant (guest pays their own).
 alter table public.voyage_booking_deposits
   add column if not exists participant_id uuid
     references public.voyage_booking_participants(id) on delete set null;
-
 -- --- RLS -----------------------------------------------------------------------------
 
 alter table public.voyage_booking_participants enable row level security;
-
 -- The booking owner (lead) can read every participant on their booking.
 drop policy if exists "lead reads booking participants" on public.voyage_booking_participants;
 create policy "lead reads booking participants"
@@ -75,7 +69,6 @@ create policy "lead reads booking participants"
       where r.id = booking_request_id and r.profile_id = auth.uid()
     )
   );
-
 -- An invited person can read their own participation (matched by profile or email).
 drop policy if exists "guest reads own participation" on public.voyage_booking_participants;
 create policy "guest reads own participation"
@@ -86,7 +79,6 @@ create policy "guest reads own participation"
     profile_id = auth.uid()
     or lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
   );
-
 -- All writes go through the SECURITY DEFINER functions below; no direct client writes.
 
 -- --- RPC: lead sets the guest list + payment mode -------------------------------------
@@ -176,7 +168,6 @@ begin
     order by is_lead desc, created_at asc;
 end;
 $$;
-
 -- --- RPC: invited guest accepts (or declines) participation --------------------------
 
 create or replace function public.accept_booking_participation(_participant_id uuid)
@@ -215,7 +206,6 @@ begin
   return v_row;
 end;
 $$;
-
 create or replace function public.decline_booking_participation(_participant_id uuid)
 returns public.voyage_booking_participants
 language plpgsql
@@ -247,7 +237,6 @@ begin
   return v_row;
 end;
 $$;
-
 -- --- RPC: expire pending guests that never completed ---------------------------------
 
 create or replace function public.expire_pending_booking_participants()
@@ -281,7 +270,6 @@ begin
   return v_expired;
 end;
 $$;
-
 grant execute on function public.set_booking_participants(uuid, text, jsonb) to authenticated;
 grant execute on function public.accept_booking_participation(uuid) to authenticated;
 grant execute on function public.decline_booking_participation(uuid) to authenticated;

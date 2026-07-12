@@ -7,7 +7,6 @@ create type public.voyage_booking_status as enum (
   'rejected',
   'expired'
 );
-
 alter table public.voyages
   add column if not exists booking_enabled boolean not null default false,
   add column if not exists booking_max_guests integer not null default 2,
@@ -24,12 +23,10 @@ alter table public.voyages
       or departure_window_end is null
       or departure_window_start <= departure_window_end
     );
-
 alter table public.voyage_waypoints
   add column if not exists planned_stop_duration_minutes integer not null default 0,
   add constraint voyage_waypoints_stop_duration_nonnegative
     check (planned_stop_duration_minutes >= 0);
-
 create table if not exists public.voyage_bookable_legs (
   id uuid primary key default gen_random_uuid(),
   voyage_id uuid not null references public.voyages(id) on delete cascade,
@@ -46,7 +43,6 @@ create table if not exists public.voyage_bookable_legs (
   constraint voyage_bookable_legs_distinct_waypoints check (from_waypoint_id <> to_waypoint_id),
   unique (voyage_id, from_waypoint_id, to_waypoint_id)
 );
-
 create table if not exists public.voyage_booking_settings (
   voyage_id uuid primary key references public.voyages(id) on delete cascade,
   confirmation_deadline_hours integer not null default 72,
@@ -61,7 +57,6 @@ create table if not exists public.voyage_booking_settings (
   updated_at timestamptz not null default timezone('utc', now()),
   constraint voyage_booking_settings_deadline_positive check (confirmation_deadline_hours > 0)
 );
-
 create table if not exists public.voyage_booking_requests (
   id uuid primary key default gen_random_uuid(),
   voyage_id uuid not null references public.voyages(id) on delete cascade,
@@ -77,14 +72,12 @@ create table if not exists public.voyage_booking_requests (
   updated_at timestamptz not null default timezone('utc', now()),
   constraint voyage_booking_requests_party_size_positive check (party_size > 0)
 );
-
 create table if not exists public.voyage_booking_request_legs (
   booking_request_id uuid not null references public.voyage_booking_requests(id) on delete cascade,
   bookable_leg_id uuid not null references public.voyage_bookable_legs(id) on delete cascade,
   created_at timestamptz not null default timezone('utc', now()),
   primary key (booking_request_id, bookable_leg_id)
 );
-
 create table if not exists public.voyage_booking_tasks (
   id uuid primary key default gen_random_uuid(),
   voyage_id uuid not null references public.voyages(id) on delete cascade,
@@ -97,26 +90,20 @@ create table if not exists public.voyage_booking_tasks (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
-
 create table if not exists public.voyage_booking_task_completions (
   booking_request_id uuid not null references public.voyage_booking_requests(id) on delete cascade,
   task_id uuid not null references public.voyage_booking_tasks(id) on delete cascade,
   completed_at timestamptz not null default timezone('utc', now()),
   primary key (booking_request_id, task_id)
 );
-
 create index if not exists voyage_bookable_legs_voyage_sort_idx
   on public.voyage_bookable_legs(voyage_id, sort_order);
-
 create index if not exists voyage_booking_requests_voyage_status_idx
   on public.voyage_booking_requests(voyage_id, status);
-
 create index if not exists voyage_booking_requests_profile_idx
   on public.voyage_booking_requests(profile_id, requested_at desc);
-
 create index if not exists voyage_booking_request_legs_leg_idx
   on public.voyage_booking_request_legs(bookable_leg_id);
-
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -127,27 +114,22 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists touch_voyage_bookable_legs_updated_at on public.voyage_bookable_legs;
 create trigger touch_voyage_bookable_legs_updated_at
   before update on public.voyage_bookable_legs
   for each row execute function public.touch_updated_at();
-
 drop trigger if exists touch_voyage_booking_settings_updated_at on public.voyage_booking_settings;
 create trigger touch_voyage_booking_settings_updated_at
   before update on public.voyage_booking_settings
   for each row execute function public.touch_updated_at();
-
 drop trigger if exists touch_voyage_booking_requests_updated_at on public.voyage_booking_requests;
 create trigger touch_voyage_booking_requests_updated_at
   before update on public.voyage_booking_requests
   for each row execute function public.touch_updated_at();
-
 drop trigger if exists touch_voyage_booking_tasks_updated_at on public.voyage_booking_tasks;
 create trigger touch_voyage_booking_tasks_updated_at
   before update on public.voyage_booking_tasks
   for each row execute function public.touch_updated_at();
-
 create or replace function public.sync_voyage_bookable_legs(_voyage_id uuid)
 returns integer
 language plpgsql
@@ -238,7 +220,6 @@ begin
   return affected_count;
 end;
 $$;
-
 create or replace function public.request_voyage_booking(
   _voyage_id uuid,
   _leg_ids uuid[],
@@ -335,7 +316,6 @@ begin
   return next;
 end;
 $$;
-
 create or replace function public.confirm_voyage_booking(_booking_request_id uuid)
 returns void
 language plpgsql
@@ -356,7 +336,6 @@ begin
   end if;
 end;
 $$;
-
 create or replace function public.cancel_voyage_booking(_booking_request_id uuid)
 returns void
 language plpgsql
@@ -377,26 +356,22 @@ begin
   end if;
 end;
 $$;
-
 alter table public.voyage_bookable_legs enable row level security;
 alter table public.voyage_booking_settings enable row level security;
 alter table public.voyage_booking_requests enable row level security;
 alter table public.voyage_booking_request_legs enable row level security;
 alter table public.voyage_booking_tasks enable row level security;
 alter table public.voyage_booking_task_completions enable row level security;
-
 grant select on public.voyage_bookable_legs to anon, authenticated;
 grant select on public.voyage_booking_settings to authenticated;
 grant select, update on public.voyage_booking_requests to authenticated;
 grant select on public.voyage_booking_request_legs to authenticated;
 grant select on public.voyage_booking_tasks to authenticated;
 grant select, insert, delete on public.voyage_booking_task_completions to authenticated;
-
 grant execute on function public.sync_voyage_bookable_legs(uuid) to authenticated;
 grant execute on function public.request_voyage_booking(uuid, uuid[], integer, text) to authenticated;
 grant execute on function public.confirm_voyage_booking(uuid) to authenticated;
 grant execute on function public.cancel_voyage_booking(uuid) to authenticated;
-
 create policy "Published bookable legs are readable"
   on public.voyage_bookable_legs
   for select
@@ -408,21 +383,18 @@ create policy "Published bookable legs are readable"
         and v.is_published = true
     )
   );
-
 create policy "Admins manage bookable legs"
   on public.voyage_bookable_legs
   for all
   to authenticated
   using (public.has_role(auth.uid(), 'admin'::public.app_role))
   with check (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 create policy "Admins manage booking settings"
   on public.voyage_booking_settings
   for all
   to authenticated
   using (public.has_role(auth.uid(), 'admin'::public.app_role))
   with check (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 create policy "Voyage booking settings are readable by users"
   on public.voyage_booking_settings
   for select
@@ -436,7 +408,6 @@ create policy "Voyage booking settings are readable by users"
         and v.booking_enabled = true
     )
   );
-
 create policy "Users read own booking requests"
   on public.voyage_booking_requests
   for select
@@ -445,14 +416,12 @@ create policy "Users read own booking requests"
     profile_id = auth.uid()
     or public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 create policy "Admins manage booking requests"
   on public.voyage_booking_requests
   for all
   to authenticated
   using (public.has_role(auth.uid(), 'admin'::public.app_role))
   with check (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 create policy "Users read own booking request legs"
   on public.voyage_booking_request_legs
   for select
@@ -468,14 +437,12 @@ create policy "Users read own booking request legs"
         )
     )
   );
-
 create policy "Admins manage booking request legs"
   on public.voyage_booking_request_legs
   for all
   to authenticated
   using (public.has_role(auth.uid(), 'admin'::public.app_role))
   with check (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 create policy "Booking tasks are readable for bookable voyages"
   on public.voyage_booking_tasks
   for select
@@ -490,14 +457,12 @@ create policy "Booking tasks are readable for bookable voyages"
     )
     or public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 create policy "Admins manage booking tasks"
   on public.voyage_booking_tasks
   for all
   to authenticated
   using (public.has_role(auth.uid(), 'admin'::public.app_role))
   with check (public.has_role(auth.uid(), 'admin'::public.app_role));
-
 create policy "Users manage own task completions"
   on public.voyage_booking_task_completions
   for all

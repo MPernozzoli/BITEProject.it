@@ -1,7 +1,6 @@
 -- Missing piece of 20260417120000_editorial_channels_and_social.sql: the editorial-media
--- storage bucket and its admin-only policies were defined in that migration but never
--- actually created on the remote database (history drift from pre-CLI Lovable migrations).
--- AdminEditorialPlanSlotDialog.tsx actively uploads to this bucket, so the feature was broken.
+-- storage bucket and its admin-only policies were never created on remote, but
+-- AdminEditorialPlanSlotDialog.tsx actively uploads to this bucket.
 
 insert into storage.buckets (id, name, public)
 values ('editorial-media', 'editorial-media', false)
@@ -26,3 +25,4 @@ drop policy if exists "Admin delete editorial-media" on storage.objects;
 create policy "Admin delete editorial-media"
   on storage.objects for delete to authenticated
   using (bucket_id = 'editorial-media' and public.has_role(auth.uid(), 'admin'));
+;

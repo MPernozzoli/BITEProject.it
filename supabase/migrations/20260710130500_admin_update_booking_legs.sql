@@ -79,5 +79,4 @@ begin
   return next;
 end;
 $$;
-
 grant execute on function public.admin_update_booking_legs(uuid, uuid[], boolean) to authenticated;

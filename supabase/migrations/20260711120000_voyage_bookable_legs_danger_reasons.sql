@@ -4,7 +4,6 @@
 -- in sync when adding a new reason.
 alter table public.voyage_bookable_legs
   add column if not exists danger_reasons text[] not null default '{}';
-
 do $$
 begin
   if not exists (

@@ -49,7 +49,6 @@ begin
   return promoted_count;
 end;
 $$;
-
 create or replace function public.cancel_voyage_booking(_booking_request_id uuid)
 returns void
 language plpgsql
@@ -87,7 +86,6 @@ begin
   perform public.promote_waitlisted_voyage_bookings(booking_voyage_id, changed_leg_ids);
 end;
 $$;
-
 create or replace function public.admin_set_voyage_booking_status(
   _booking_request_id uuid,
   _status public.voyage_booking_status,
@@ -158,7 +156,6 @@ begin
   return next;
 end;
 $$;
-
 revoke execute on function public.promote_waitlisted_voyage_bookings(uuid, uuid[]) from public, anon;
 grant execute on function public.promote_waitlisted_voyage_bookings(uuid, uuid[]) to authenticated, service_role;
 revoke execute on function public.cancel_voyage_booking(uuid) from public, anon;

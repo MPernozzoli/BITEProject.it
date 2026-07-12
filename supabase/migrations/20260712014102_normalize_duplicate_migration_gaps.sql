@@ -14,7 +14,6 @@ set
     when end_date_flex_days < 0 then 0
     else end_date_flex_days
   end;
-
 do $$
 begin
   if not exists (
@@ -39,9 +38,7 @@ begin
       check (end_date_flex_days is null or end_date_flex_days >= 0);
   end if;
 end $$;
-
 comment on column public.voyages.start_date_flex_days is
   'Optional flex window in days for planned voyage departure date.';
-
 comment on column public.voyages.end_date_flex_days is
   'Optional flex window in days for planned voyage arrival date.';

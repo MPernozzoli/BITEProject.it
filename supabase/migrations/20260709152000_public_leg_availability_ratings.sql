@@ -2,7 +2,6 @@
 -- logbook map and legend can show a complexity estimate without extra queries.
 -- Adding OUT columns changes the return type, so the function must be dropped first.
 drop function if exists public.get_public_voyage_leg_availability(uuid[]);
-
 create or replace function public.get_public_voyage_leg_availability(_voyage_ids uuid[] default null)
 returns table (
   id uuid,
@@ -87,6 +86,5 @@ as $$
     and (_voyage_ids is null or leg.voyage_id = any(_voyage_ids))
   order by leg.voyage_id, leg.sort_order;
 $$;
-
 revoke execute on function public.get_public_voyage_leg_availability(uuid[]) from public;
 grant execute on function public.get_public_voyage_leg_availability(uuid[]) to anon, authenticated;

@@ -14,7 +14,6 @@ as $$
     coalesce(_starts_at_window_end, _starts_at_window_start, _ends_at_window_end, _ends_at_window_start)
   ))::date
 $$;
-
 create or replace function public.booking_leg_is_current_or_future(
   _starts_at_window_start timestamptz,
   _starts_at_window_end timestamptz,
@@ -39,7 +38,6 @@ as $$
     _ends_at_window_end
   ) >= (timezone('Europe/Rome', now()))::date
 $$;
-
 create or replace function public.deactivate_past_voyage_bookable_legs()
 returns integer
 language plpgsql
@@ -63,7 +61,6 @@ begin
   return affected_count;
 end;
 $$;
-
 create or replace function public.sync_voyage_bookable_legs(_voyage_id uuid)
 returns integer
 language plpgsql
@@ -284,7 +281,6 @@ begin
   return affected_count + deactivated_count;
 end;
 $$;
-
 create or replace function public.request_voyage_booking(
   _voyage_id uuid,
   _leg_ids uuid[],
@@ -392,7 +388,6 @@ begin
   return next;
 end;
 $$;
-
 create or replace function public.admin_booking_over_capacity(
   _voyage_id uuid,
   _leg_ids uuid[],
@@ -430,7 +425,6 @@ as $$
     where coalesce(occupied.occupied_count, 0) + coalesce(_party_size, 0) > voyage_capacity.capacity
   )
 $$;
-
 create or replace function public.admin_set_voyage_booking_status(
   _booking_request_id uuid,
   _status public.voyage_booking_status,
@@ -493,7 +487,6 @@ begin
   return next;
 end;
 $$;
-
 create or replace function public.admin_create_voyage_booking(
   _voyage_id uuid,
   _profile_id uuid,
@@ -582,7 +575,6 @@ begin
   return next;
 end;
 $$;
-
 drop policy if exists "Published bookable legs are readable" on public.voyage_bookable_legs;
 create policy "Published bookable legs are readable"
   on public.voyage_bookable_legs
@@ -597,7 +589,6 @@ create policy "Published bookable legs are readable"
     )
     or public.has_role(auth.uid(), 'admin'::public.app_role)
   );
-
 revoke execute on function public.sync_voyage_bookable_legs(uuid) from public, anon;
 revoke execute on function public.request_voyage_booking(uuid, uuid[], integer, text) from public, anon;
 revoke execute on function public.confirm_voyage_booking(uuid) from public, anon;
@@ -605,7 +596,6 @@ revoke execute on function public.cancel_voyage_booking(uuid) from public, anon;
 revoke execute on function public.deactivate_past_voyage_bookable_legs() from public, anon;
 revoke execute on function public.admin_set_voyage_booking_status(uuid, public.voyage_booking_status, boolean, text) from public, anon;
 revoke execute on function public.admin_create_voyage_booking(uuid, uuid, uuid[], integer, public.voyage_booking_status, text, text, boolean) from public, anon;
-
 grant execute on function public.sync_voyage_bookable_legs(uuid) to authenticated;
 grant execute on function public.request_voyage_booking(uuid, uuid[], integer, text) to authenticated;
 grant execute on function public.confirm_voyage_booking(uuid) to authenticated;
@@ -613,7 +603,6 @@ grant execute on function public.cancel_voyage_booking(uuid) to authenticated;
 grant execute on function public.deactivate_past_voyage_bookable_legs() to authenticated, service_role;
 grant execute on function public.admin_set_voyage_booking_status(uuid, public.voyage_booking_status, boolean, text) to authenticated;
 grant execute on function public.admin_create_voyage_booking(uuid, uuid, uuid[], integer, public.voyage_booking_status, text, text, boolean) to authenticated;
-
 select cron.schedule(
   'deactivate-past-voyage-bookable-legs',
   '0 0 * * *',
@@ -624,5 +613,4 @@ where not exists (
   from cron.job
   where jobname = 'deactivate-past-voyage-bookable-legs'
 );
-
 select public.deactivate_past_voyage_bookable_legs();

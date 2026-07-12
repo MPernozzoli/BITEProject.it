@@ -9,7 +9,13 @@ import {
   resolveEmailLanguage,
 } from './theme.tsx'
 
-type AdminBookingEvent = 'admin_new_booking' | 'admin_cancelled' | 'admin_modified'
+type AdminBookingEvent =
+  | 'admin_new_booking'
+  | 'admin_cancelled'
+  | 'admin_modified'
+  | 'admin_payment_pending'
+  | 'admin_payment_received'
+  | 'admin_plan_change'
 
 interface VoyageBookingAdminNotificationProps {
   language?: string | null
@@ -22,6 +28,10 @@ interface VoyageBookingAdminNotificationProps {
   travelerEmail?: string | null
   bookingUrl?: string | null
   message?: string | null
+  amountEur?: number | null
+  paymentReference?: string | null
+  oldLegs?: string[] | null
+  proposedLegs?: string[] | null
   unsubscribeUrl?: string | null
 }
 
@@ -33,18 +43,28 @@ const COPY = {
       admin_new_booking: 'Nuova richiesta di imbarco.',
       admin_cancelled: 'Un booking e stato annullato.',
       admin_modified: 'Un booking e stato aggiornato.',
+      admin_payment_pending: 'Pagamento booking in sospeso.',
+      admin_payment_received: 'Pagamento booking ricevuto.',
+      admin_plan_change: 'Cambio planning da approvare.',
     },
     intro: (name: string, eventType: AdminBookingEvent, voyageName: string, travelerName: string) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'Un utente'
       if (eventType === 'admin_cancelled') return `${prefix}${traveler} ha annullato la propria prenotazione per ${voyageName}.`
       if (eventType === 'admin_modified') return `${prefix}${traveler} ha aggiornato la propria prenotazione per ${voyageName}.`
+      if (eventType === 'admin_payment_pending') return `${prefix}${traveler} ha avviato un pagamento per ${voyageName}.`
+      if (eventType === 'admin_payment_received') return `${prefix}pagamento ricevuto per la prenotazione di ${traveler} su ${voyageName}.`
+      if (eventType === 'admin_plan_change') return `${prefix}la prenotazione di ${traveler} su ${voyageName} richiede approvazione del cambio planning.`
       return `${prefix}${traveler} ha inviato una nuova richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri gestione booking',
     voyageFallback: 'un viaggio',
     legsTitle: 'Tratte',
+    oldLegsTitle: 'Prima',
+    proposedLegsTitle: 'Proposta',
     partySize: 'Persone',
+    amount: 'Importo',
+    paymentReference: 'Riferimento',
     travelerTitle: 'Richiedente',
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
@@ -55,25 +75,42 @@ const COPY = {
       admin_new_booking: 'New berth request.',
       admin_cancelled: 'A booking was cancelled.',
       admin_modified: 'A booking was updated.',
+      admin_payment_pending: 'Booking payment pending.',
+      admin_payment_received: 'Booking payment received.',
+      admin_plan_change: 'Plan change approval needed.',
     },
     intro: (name: string, eventType: AdminBookingEvent, voyageName: string, travelerName: string) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'A user'
       if (eventType === 'admin_cancelled') return `${prefix}${traveler} cancelled their booking for ${voyageName}.`
       if (eventType === 'admin_modified') return `${prefix}${traveler} updated their booking for ${voyageName}.`
+      if (eventType === 'admin_payment_pending') return `${prefix}${traveler} started a payment for ${voyageName}.`
+      if (eventType === 'admin_payment_received') return `${prefix}payment received for ${traveler}'s booking on ${voyageName}.`
+      if (eventType === 'admin_plan_change') return `${prefix}${traveler}'s booking on ${voyageName} needs plan-change approval.`
       return `${prefix}${traveler} submitted a new berth request for ${voyageName}.`
     },
     cta: 'Open booking management',
     voyageFallback: 'a voyage',
     legsTitle: 'Legs',
+    oldLegsTitle: 'Before',
+    proposedLegsTitle: 'Proposed',
     partySize: 'People',
+    amount: 'Amount',
+    paymentReference: 'Reference',
     travelerTitle: 'Requester',
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
 } as const
 
 function normalizeEventType(value?: string | null): AdminBookingEvent {
-  const allowed: AdminBookingEvent[] = ['admin_new_booking', 'admin_cancelled', 'admin_modified']
+  const allowed: AdminBookingEvent[] = [
+    'admin_new_booking',
+    'admin_cancelled',
+    'admin_modified',
+    'admin_payment_pending',
+    'admin_payment_received',
+    'admin_plan_change',
+  ]
   return allowed.includes(value as AdminBookingEvent) ? (value as AdminBookingEvent) : 'admin_new_booking'
 }
 
@@ -88,6 +125,10 @@ const VoyageBookingAdminNotificationEmail = ({
   travelerEmail,
   bookingUrl,
   message,
+  amountEur,
+  paymentReference,
+  oldLegs,
+  proposedLegs,
   unsubscribeUrl,
 }: VoyageBookingAdminNotificationProps) => {
   const lang = resolveEmailLanguage(language)
@@ -97,6 +138,15 @@ const VoyageBookingAdminNotificationEmail = ({
   const safeLegs = legs?.filter((item) => item?.trim()) ?? []
   const resolvedBookingUrl = bookingUrl?.trim() || `${PUBLIC_SITE_URL}/admin/bookings`
   const resolvedTravelerName = travelerName?.trim() || ''
+  const safeOldLegs = oldLegs?.filter((item) => item?.trim()) ?? []
+  const safeProposedLegs = proposedLegs?.filter((item) => item?.trim()) ?? []
+  const amountLabel =
+    typeof amountEur === 'number' && amountEur > 0
+      ? new Intl.NumberFormat(lang === 'it' ? 'it-IT' : 'en-IE', {
+          style: 'currency',
+          currency: 'EUR',
+        }).format(amountEur)
+      : null
 
   return (
     <EditorialEmailShell
@@ -130,6 +180,18 @@ const VoyageBookingAdminNotificationEmail = ({
         {safeLegs.length ? (
           <EmailBodyText muted>
             {copy.legsTitle}: {safeLegs.join(' · ')}
+          </EmailBodyText>
+        ) : null}
+        {amountLabel ? <EmailBodyText muted>{copy.amount}: {amountLabel}</EmailBodyText> : null}
+        {paymentReference ? <EmailBodyText muted>{copy.paymentReference}: {paymentReference}</EmailBodyText> : null}
+        {safeOldLegs.length ? (
+          <EmailBodyText muted>
+            {copy.oldLegsTitle}: {safeOldLegs.join(' · ')}
+          </EmailBodyText>
+        ) : null}
+        {safeProposedLegs.length ? (
+          <EmailBodyText muted>
+            {copy.proposedLegsTitle}: {safeProposedLegs.join(' · ')}
           </EmailBodyText>
         ) : null}
         {message?.trim() ? <EmailBodyText muted>{message.trim()}</EmailBodyText> : null}

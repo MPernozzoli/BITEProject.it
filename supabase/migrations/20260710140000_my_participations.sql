@@ -50,5 +50,4 @@ as $$
     )
   order by p.created_at desc;
 $$;
-
 grant execute on function public.get_my_participations() to authenticated;

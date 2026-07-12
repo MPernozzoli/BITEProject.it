@@ -38,5 +38,4 @@ begin
   end if;
 end;
 $$;
-
 grant execute on function public.booking_next_departure(timestamptz, text, integer, integer, time, integer) to authenticated;

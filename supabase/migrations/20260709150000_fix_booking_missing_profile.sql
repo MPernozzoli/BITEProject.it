@@ -129,6 +129,5 @@ begin
   return next;
 end;
 $$;
-
 revoke execute on function public.request_voyage_booking(uuid, uuid[], integer, text) from public, anon;
 grant execute on function public.request_voyage_booking(uuid, uuid[], integer, text) to authenticated;

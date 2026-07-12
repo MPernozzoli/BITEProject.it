@@ -13,7 +13,6 @@ alter table public.voyage_waypoints
   add column if not exists stop_hours smallint,
   add column if not exists stop_nights smallint,
   add column if not exists stop_departure_time time;
-
 do $$
 begin
   if not exists (
@@ -24,13 +23,11 @@ begin
       check (stop_mode in ('legacy', 'hours', 'nights'));
   end if;
 end $$;
-
 -- 2. Leg difficulty / danger -------------------------------------------------------------
 alter table public.voyage_bookable_legs
   add column if not exists danger_level smallint not null default 0,
   add column if not exists open_sea boolean not null default false,
   add column if not exists complexity_override smallint;
-
 do $$
 begin
   if not exists (
@@ -48,7 +45,6 @@ begin
       check (complexity_override is null or complexity_override between 1 and 5);
   end if;
 end $$;
-
 -- Helper: given an arrival instant and a waypoint's stop configuration, return the next
 -- departure instant. 'hours' adds a fixed number of hours; 'nights' lands on
 -- arrival_date + N days at the chosen local (Europe/Rome) time; 'legacy' uses the old
@@ -89,9 +85,7 @@ begin
   end if;
 end;
 $$;
-
 grant execute on function public.booking_next_departure(timestamptz, text, integer, integer, time, integer) to authenticated;
-
 -- Rebuild the sync function to source the post-stop departure from booking_next_departure.
 create or replace function public.sync_voyage_bookable_legs(_voyage_id uuid)
 returns integer
@@ -331,5 +325,4 @@ begin
   return affected_count + deactivated_count;
 end;
 $$;
-
 grant execute on function public.sync_voyage_bookable_legs(uuid) to authenticated;

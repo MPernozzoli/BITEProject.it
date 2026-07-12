@@ -218,5 +218,4 @@ begin
   return affected_count + deactivated_count;
 end;
 $$;
-
 grant execute on function public.sync_voyage_bookable_legs(uuid) to authenticated;
