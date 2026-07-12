@@ -7,6 +7,7 @@ import * as THREE from "three";
 
 const OCEAN_VERTEX = /* glsl */ `
   uniform float uTime;
+  uniform float uScroll;
   varying float vHeight;
   varying vec3 vNormal;
   varying vec3 vWorldPos;
@@ -24,18 +25,27 @@ const OCEAN_VERTEX = /* glsl */ `
     vec3 pos = position;
     // PlaneGeometry is rotated flat by the mesh, so local x/y map to world x/z.
     vec2 p = pos.xy;
-    float h = waveHeight(p, uTime);
+    // The water streams past the hull (bow points +x), selling the boat as under way.
+    vec2 q = vec2(p.x + uScroll, p.y);
+    float h = waveHeight(q, uTime);
+
+    // Flattened trough carved into the water behind the transom.
+    float behind = -p.x;
+    float wake = exp(-pow(p.y * 2.4, 2.0))
+               * smoothstep(0.5, 1.3, behind)
+               * exp(-max(behind - 1.0, 0.0) * 0.45) * 0.09;
+    h -= wake;
     pos.z += h;
 
-    float dhdx = 0.32 * 0.35 * cos(p.x * 0.35 + uTime * 0.9)
-               + 0.22 * 0.2  * cos(p.x * 0.2 + p.y * 0.3 + uTime * 0.6)
-               + 0.08 * 0.7  * cos((p.x + p.y) * 0.7 + uTime * 1.3)
-               + 0.05 * 1.8  * cos(p.x * 1.8 - uTime * 1.7)
-               + 0.035 * 2.6 * cos((p.x * 2.6 + p.y * 1.4) + uTime * 2.3);
-    float dhdz = 0.22 * 0.3  * cos(p.x * 0.2 + p.y * 0.3 + uTime * 0.6)
-               + 0.12 * 0.5  * cos(p.y * 0.5 - uTime * 0.4)
-               + 0.08 * 0.7  * cos((p.x + p.y) * 0.7 + uTime * 1.3)
-               + 0.035 * 1.4 * cos((p.x * 2.6 + p.y * 1.4) + uTime * 2.3);
+    float dhdx = 0.32 * 0.35 * cos(q.x * 0.35 + uTime * 0.9)
+               + 0.22 * 0.2  * cos(q.x * 0.2 + q.y * 0.3 + uTime * 0.6)
+               + 0.08 * 0.7  * cos((q.x + q.y) * 0.7 + uTime * 1.3)
+               + 0.05 * 1.8  * cos(q.x * 1.8 - uTime * 1.7)
+               + 0.035 * 2.6 * cos((q.x * 2.6 + q.y * 1.4) + uTime * 2.3);
+    float dhdz = 0.22 * 0.3  * cos(q.x * 0.2 + q.y * 0.3 + uTime * 0.6)
+               + 0.12 * 0.5  * cos(q.y * 0.5 - uTime * 0.4)
+               + 0.08 * 0.7  * cos((q.x + q.y) * 0.7 + uTime * 1.3)
+               + 0.035 * 1.4 * cos((q.x * 2.6 + q.y * 1.4) + uTime * 2.3);
 
     vHeight = h;
     vNormal = normalize(mat3(modelMatrix) * normalize(vec3(-dhdx, -dhdz, 1.0)));
@@ -47,6 +57,7 @@ const OCEAN_VERTEX = /* glsl */ `
 
 const OCEAN_FRAGMENT = /* glsl */ `
   uniform float uTime;
+  uniform float uScroll;
   uniform vec3 uDeepColor;
   uniform vec3 uCrestColor;
   uniform vec3 uMoonDir;
@@ -86,6 +97,21 @@ const OCEAN_FRAGMENT = /* glsl */ `
     float foam = smoothstep(0.62, 0.95, vHeight) * smoothstep(0.6, 0.95, foamNoise);
     color = mix(color, vec3(0.78, 0.86, 0.88), foam * 0.3);
 
+    // Wake: churned water astern plus thin spray arms fanning out in a V.
+    // The noise streams aft with the water (uScroll) while the envelope stays on the hull.
+    float behind = -vWorldPos.x;
+    float lat = abs(vWorldPos.z);
+    float streamNoise = 0.5 * hash(floor(vec2((vWorldPos.x + uScroll) * 7.0, vWorldPos.z * 12.0)))
+                      + 0.5 * hash(floor(vec2((vWorldPos.x + uScroll) * 16.0, vWorldPos.z * 26.0)));
+    float churn = smoothstep(0.38, 0.05, lat) * smoothstep(0.5, 1.1, behind) * exp(-behind * 0.26);
+    float arms = (1.0 - smoothstep(0.0, 0.1, abs(lat - (0.14 + behind * 0.17))))
+               * smoothstep(0.7, 1.2, behind) * exp(-behind * 0.24);
+    float wakeFoam = clamp(churn * 1.5 + arms * 0.9, 0.0, 1.0) * (0.45 + 0.55 * streamNoise);
+    // Bow spray where the stem cuts the water.
+    float bowDist = length(vWorldPos.xz - vec2(1.12, 0.0));
+    float bowFoam = smoothstep(0.36, 0.08, bowDist) * (0.55 + 0.45 * sin(uTime * 5.0 + vWorldPos.z * 14.0));
+    color = mix(color, vec3(0.8, 0.88, 0.9), clamp(wakeFoam + bowFoam, 0.0, 1.0) * 0.6);
+
     // Fade into the CSS radial-gradient sky at the horizon (canvas is transparent).
     float dist = length(vWorldPos.xz - uCameraPos.xz);
     float alpha = 1.0 - smoothstep(18.0, 34.0, dist);
@@ -109,7 +135,7 @@ const STAR_FRAGMENT = /* glsl */ `
   varying float vAlpha;
   void main() {
     float d = smoothstep(0.5, 0.08, length(gl_PointCoord - 0.5));
-    gl_FragColor = vec4(vec3(0.85, 0.92, 0.94), d * vAlpha);
+    gl_FragColor = vec4(vec3(0.85, 0.92, 0.94), d * vAlpha * 0.55);
   }
 `;
 
@@ -382,6 +408,7 @@ export function mountBootSplash3D(): void {
   // ---------------------------------------------------------------- Ocean
   const oceanUniforms = {
     uTime: { value: 0 },
+    uScroll: { value: 0 },
     uDeepColor: { value: new THREE.Color("#14304a") },
     uCrestColor: { value: new THREE.Color("#3a6f86") },
     uMoonDir: { value: moonDir },
@@ -508,9 +535,11 @@ export function mountBootSplash3D(): void {
 
   // ---------------------------------------------------------------- Sky
   const moonTexture = makeGlowTexture("rgba(238,247,248,0.95)", "rgba(238,247,248,0)");
-  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture, transparent: true, depthWrite: false }));
+  const moon = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: moonTexture, transparent: true, opacity: 0.66, depthWrite: false })
+  );
   moon.position.set(-9, 8.5, -26);
-  moon.scale.setScalar(7);
+  moon.scale.setScalar(5.8);
   scene.add(moon);
 
   // Soft clouds drifting near the horizon.
@@ -544,7 +573,7 @@ export function mountBootSplash3D(): void {
     starPositions[i * 3 + 1] = 2.5 + Math.random() * 18;
     starPositions[i * 3 + 2] = -8 - Math.random() * 30;
     starPhases[i] = Math.random();
-    starSizes[i] = (1.2 + Math.random() * 2.2) * Math.min(window.devicePixelRatio, 2);
+    starSizes[i] = (1.0 + Math.random() * 1.8) * Math.min(window.devicePixelRatio, 2);
   }
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
@@ -621,15 +650,20 @@ export function mountBootSplash3D(): void {
     oceanUniforms.uTime.value = t;
     starUniforms.uTime.value = t;
 
-    // Ride the same wave field as the shader.
-    const bx = boat.position.x;
-    const bz = boat.position.z;
-    boat.position.y = waveHeight(bx, bz, t) + 0.09;
-    const dx = (waveHeight(bx + 0.6, bz, t) - waveHeight(bx - 0.6, bz, t)) / 1.2;
-    const dz = (waveHeight(bx, bz + 0.6, t) - waveHeight(bx, bz - 0.6, t)) / 1.2;
-    boat.rotation.z = dx * 0.55;
-    boat.rotation.x = -dz * 0.55;
-    boat.rotation.y = Math.sin(t * 0.22) * 0.08;
+    // Under way: the wave field streams past the hull at a steady few knots.
+    const scroll = t * 0.55;
+    oceanUniforms.uScroll.value = scroll;
+
+    // Ride the same (scrolled) wave field as the shader, sampled along the full
+    // hull length so the boat settles into the swell instead of hovering on a point.
+    const hBow = waveHeight(0.85 + scroll, 0, t);
+    const hMid = waveHeight(scroll, 0, t);
+    const hStern = waveHeight(-0.85 + scroll, 0, t);
+    boat.position.y = (hBow + hMid + hStern) / 3 + 0.05;
+    const dz = (waveHeight(scroll, 0.6, t) - waveHeight(scroll, -0.6, t)) / 1.2;
+    boat.rotation.z = Math.atan2(hBow - hStern, 1.7) * 0.7 + 0.02; // pitch with the swell, slight bow-up trim
+    boat.rotation.x = -dz * 0.45 - 0.055; // wave roll plus a steady sailing heel
+    boat.rotation.y = Math.sin(t * 0.22) * 0.06;
 
     // Sails breathe as if catching gusts.
     mainSail.scale.z = 1 + 0.16 * Math.sin(t * 0.7);

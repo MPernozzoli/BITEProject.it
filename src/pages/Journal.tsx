@@ -96,7 +96,7 @@ const Journal = () => {
   const [voyageFilterOpen, setVoyageFilterOpen] = useState(false);
   const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | Voyage["type"]>("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
+  const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("collapsed");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
   const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
@@ -782,7 +782,7 @@ const Journal = () => {
 
   useEffect(() => {
     if (!isMobile) {
-      setMobileSidebarMode("peek");
+      setMobileSidebarMode("collapsed");
       setMobileSidebarDragOffset(0);
     }
   }, [isMobile]);
