@@ -5,6 +5,7 @@ import {
   BookOpen,
   Camera,
   Facebook,
+  Fingerprint,
   Globe,
   Instagram,
   Languages,
@@ -12,6 +13,7 @@ import {
   Link as LinkIcon,
   Mail,
   Save,
+  Trash2,
   UserRound,
   X,
   Youtube,
@@ -105,6 +107,13 @@ type StorySubscriptionRow = {
     title_en: string;
     slug: string;
   } | null;
+};
+
+type PasskeyItem = {
+  id: string;
+  friendly_name?: string;
+  created_at: string;
+  last_used_at?: string;
 };
 
 type ProfileSnapshot = {
@@ -204,6 +213,18 @@ const COPY = {
       pushConfiguredLabel: "Gestione push app",
       pushMissingKey:
         "Configurazione push non completata sul progetto. Manca la chiave pubblica VAPID lato client.",
+      passkeyTitle: "Passkey",
+      passkeyHint:
+        "Aggiungi una passkey per accedere senza codice email, usando Face ID, Touch ID, PIN del dispositivo o una chiave di sicurezza.",
+      passkeyUnsupported:
+        "Questo browser o dispositivo non supporta ancora le passkey.",
+      passkeyInsecure:
+        "Le passkey richiedono HTTPS, tranne su localhost.",
+      passkeyEmpty:
+        "Nessuna passkey registrata per questo account.",
+      passkeyCreatedAt: "Creata",
+      passkeyLastUsedAt: "Ultimo uso",
+      passkeyNeverUsed: "Mai usata",
     },
     newsletter: {
       on: "Iscritta",
@@ -235,6 +256,17 @@ const COPY = {
       saveSuccess: "Profilo aggiornato.",
       saveError: "Impossibile salvare il profilo.",
       dirtyBadge: "Modifiche non salvate",
+      addPasskey: "Aggiungi passkey",
+      addingPasskey: "Aggiunta...",
+      passkeyAdded: "Passkey aggiunta.",
+      passkeyRemoved: "Passkey rimossa.",
+      passkeyError: "Impossibile aggiornare le passkey.",
+      passkeyCancelled: "Operazione passkey annullata.",
+      passkeyDisabled:
+        "Le passkey non risultano abilitate nella configurazione Auth di Supabase.",
+      passkeyConfigError:
+        "Configurazione WebAuthn non valida per questo dominio. Controlla Relying Party ID e Relying Party Origins in Supabase.",
+      removePasskey: "Rimuovi passkey",
     },
     prompt: {
       title: "Hai modifiche non salvate",
@@ -321,6 +353,18 @@ const COPY = {
       pushConfiguredLabel: "App push controls",
       pushMissingKey:
         "Push is not fully configured for this project yet. The public VAPID key is missing on the client.",
+      passkeyTitle: "Passkeys",
+      passkeyHint:
+        "Add a passkey to sign in without an email code, using Face ID, Touch ID, your device PIN, or a security key.",
+      passkeyUnsupported:
+        "This browser or device does not support passkeys yet.",
+      passkeyInsecure:
+        "Passkeys require HTTPS, except on localhost.",
+      passkeyEmpty:
+        "No passkeys registered for this account.",
+      passkeyCreatedAt: "Created",
+      passkeyLastUsedAt: "Last used",
+      passkeyNeverUsed: "Never used",
     },
     newsletter: {
       on: "Subscribed",
@@ -352,6 +396,17 @@ const COPY = {
       saveSuccess: "Profile updated.",
       saveError: "Unable to save the profile.",
       dirtyBadge: "Unsaved changes",
+      addPasskey: "Add passkey",
+      addingPasskey: "Adding...",
+      passkeyAdded: "Passkey added.",
+      passkeyRemoved: "Passkey removed.",
+      passkeyError: "Unable to update passkeys.",
+      passkeyCancelled: "Passkey operation cancelled.",
+      passkeyDisabled:
+        "Passkeys do not appear to be enabled in Supabase Auth configuration.",
+      passkeyConfigError:
+        "Invalid WebAuthn configuration for this domain. Check Relying Party ID and Relying Party Origins in Supabase.",
+      removePasskey: "Remove passkey",
     },
     prompt: {
       title: "You have unsaved changes",
@@ -392,6 +447,10 @@ const AdminProfile = () => {
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const [hasPushSubscription, setHasPushSubscription] = useState(false);
   const [pushStateLoading, setPushStateLoading] = useState(false);
+  const [passkeys, setPasskeys] = useState<PasskeyItem[]>([]);
+  const [passkeysLoading, setPasskeysLoading] = useState(false);
+  const [registeringPasskey, setRegisteringPasskey] = useState(false);
+  const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [preferredLanguage, setPreferredLanguage] = useState<ExtendedLanguage>("it");
   const [secondaryLanguage, setSecondaryLanguage] = useState<string | null>(null);
   const [storySubscriptions, setStorySubscriptions] = useState<
@@ -416,6 +475,8 @@ const AdminProfile = () => {
   const shouldShowMobileAppCard = isMobile || isLikelyMobileDevice();
   const isInstalledApp = isRunningAsInstalledApp();
   const canUseWebPush = supportsWebPush();
+  const supportsPasskeys = typeof window !== "undefined" && Boolean(window.PublicKeyCredential);
+  const isPasskeySecureContext = typeof window !== "undefined" && window.isSecureContext;
   const pushInstallInstructions = getInstallInstructions(mobileOs, lang === "en" ? "en" : "it");
   const [pushPublicKey, setPushPublicKey] = useState<string | undefined>(
     (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined) || undefined
@@ -434,6 +495,11 @@ const AdminProfile = () => {
   }, [pushPublicKey]);
 
   const copy = COPY[lang === "en" ? "en" : "it"];
+  const passkeyUnavailableMessage = !supportsPasskeys
+    ? copy.fields.passkeyUnsupported
+    : !isPasskeySecureContext
+      ? copy.fields.passkeyInsecure
+      : "";
   const isSiteNative = SITE_LANGUAGES.includes(preferredLanguage as "it" | "en");
   const activeSocialCount = Object.values(socials).filter((value) => value.trim()).length;
   const preferredLanguageLabel =
@@ -454,6 +520,15 @@ const AdminProfile = () => {
     notificationPreferences,
   });
   const isDirty = profileLoaded && currentSnapshot !== initialSnapshotRef.current;
+
+  const formatPasskeyDate = useCallback((value?: string) => {
+    if (!value) return "";
+    return new Intl.DateTimeFormat(lang === "en" ? "en" : "it", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(value));
+  }, [lang]);
 
   const socialFields: Array<{
     key: SocialFieldKey;
@@ -810,6 +885,90 @@ const AdminProfile = () => {
     }
   }, [copy.actions.saveError, copy.fields.pushDisabled, persistNotificationSettings, removePushSubscriptionRecord]);
 
+  const loadPasskeys = useCallback(async () => {
+    if (!session?.user) return;
+    setPasskeysLoading(true);
+    try {
+      const { data, error } = await supabase.auth.passkey.list();
+      if (error) {
+        console.error("Passkey list error:", error);
+        return;
+      }
+      setPasskeys(data || []);
+    } catch (error) {
+      console.error("Passkey list error:", error);
+    } finally {
+      setPasskeysLoading(false);
+    }
+  }, [session?.user]);
+
+  const handleRegisterPasskey = useCallback(async () => {
+    if (passkeyUnavailableMessage) {
+      toast.error(passkeyUnavailableMessage);
+      return;
+    }
+
+    setRegisteringPasskey(true);
+    try {
+      const { error } = await supabase.auth.registerPasskey();
+      if (error) throw error;
+      toast.success(copy.actions.passkeyAdded);
+      await loadPasskeys();
+    } catch (error) {
+      console.error("Passkey registration error:", error);
+      const errorLike = error as { code?: string; message?: string; name?: string };
+      const message = errorLike?.message || "";
+      const code = errorLike?.code || "";
+      const lowered = `${code} ${message} ${errorLike?.name || ""}`.toLowerCase();
+
+      if (
+        code === "ERROR_INVALID_RP_ID" ||
+        code === "ERROR_INVALID_DOMAIN" ||
+        lowered.includes("rp id") ||
+        lowered.includes("relying party") ||
+        lowered.includes("origin") ||
+        lowered.includes("securityerror")
+      ) {
+        toast.error(`${copy.actions.passkeyConfigError} Origin: ${window.location.origin}`);
+      } else if (lowered.includes("passkey_disabled") || lowered.includes("passkey") && lowered.includes("disabled")) {
+        toast.error(copy.actions.passkeyDisabled);
+      } else if (
+        code === "ERROR_CEREMONY_ABORTED" ||
+        lowered.includes("notallowederror") ||
+        lowered.includes("cancel")
+      ) {
+        toast.error(copy.actions.passkeyCancelled);
+      } else {
+        toast.error(message || copy.actions.passkeyError);
+      }
+    } finally {
+      setRegisteringPasskey(false);
+    }
+  }, [
+    copy.actions.passkeyAdded,
+    copy.actions.passkeyCancelled,
+    copy.actions.passkeyConfigError,
+    copy.actions.passkeyDisabled,
+    copy.actions.passkeyError,
+    loadPasskeys,
+    passkeyUnavailableMessage,
+  ]);
+
+  const handleRemovePasskey = useCallback(async (passkeyId: string) => {
+    setRemovingPasskeyId(passkeyId);
+    try {
+      const { error } = await supabase.auth.passkey.delete({ passkeyId });
+      if (error) throw error;
+      setPasskeys((current) => current.filter((passkey) => passkey.id !== passkeyId));
+      toast.success(copy.actions.passkeyRemoved);
+    } catch (error) {
+      console.error("Passkey delete error:", error);
+      toast.error(error instanceof Error ? error.message : copy.actions.passkeyError);
+    } finally {
+      setRemovingPasskeyId(null);
+    }
+  }, [copy.actions.passkeyError, copy.actions.passkeyRemoved]);
+
   const loadProfile = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
@@ -961,6 +1120,11 @@ const AdminProfile = () => {
     }
     void loadProfile();
   }, [authLoading, loadProfile, navigate, session]);
+
+  useEffect(() => {
+    if (authLoading || !session) return;
+    void loadPasskeys();
+  }, [authLoading, loadPasskeys, session]);
 
   useEffect(() => {
     return () => {
@@ -1604,6 +1768,90 @@ const AdminProfile = () => {
                     </div>
                   </div>
                 )}
+
+                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-2">
+                        <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                          {copy.fields.passkeyTitle}
+                        </p>
+                        <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                          {copy.fields.passkeyHint}
+                        </p>
+                      </div>
+                      <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                        <Fingerprint size={16} className="text-accent" />
+                      </div>
+                    </div>
+
+                    {passkeyUnavailableMessage ? (
+                      <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                        <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+                          {passkeyUnavailableMessage}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-3">
+                          {passkeysLoading ? (
+                            <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
+                              {copy.loading}
+                            </div>
+                          ) : passkeys.length > 0 ? (
+                            passkeys.map((passkey) => (
+                              <div
+                                key={passkey.id}
+                                className="flex items-start justify-between gap-3 rounded-[20px] border border-white/60 bg-white/72 px-4 py-4"
+                              >
+                                <div className="min-w-0 space-y-1">
+                                  <p className="truncate text-sm font-sans font-medium text-foreground">
+                                    {passkey.friendly_name || copy.fields.passkeyTitle}
+                                  </p>
+                                  <p className="text-xs font-sans text-muted-foreground">
+                                    {copy.fields.passkeyCreatedAt}: {formatPasskeyDate(passkey.created_at)}
+                                  </p>
+                                  <p className="text-xs font-sans text-muted-foreground">
+                                    {copy.fields.passkeyLastUsedAt}:{" "}
+                                    {passkey.last_used_at
+                                      ? formatPasskeyDate(passkey.last_used_at)
+                                      : copy.fields.passkeyNeverUsed}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={removingPasskeyId === passkey.id}
+                                  className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => void handleRemovePasskey(passkey.id)}
+                                  title={copy.actions.removePasskey}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
+                              {copy.fields.passkeyEmpty}
+                            </div>
+                          )}
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                          disabled={registeringPasskey}
+                          onClick={() => void handleRegisterPasskey()}
+                        >
+                          <Fingerprint size={14} />
+                          {registeringPasskey ? copy.actions.addingPasskey : copy.actions.addPasskey}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
 
                 <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
                   <div className="flex items-start justify-between gap-4">

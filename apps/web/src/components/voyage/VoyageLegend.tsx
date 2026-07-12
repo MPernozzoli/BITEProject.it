@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Mountain, Ship, X } from "lucide-react";
+import { BookOpen, Mountain, Ship, TicketCheck, X } from "lucide-react";
 import {
   buildVoyageLegendArticlePlan,
   getLocalizedArticleTitle,
@@ -21,6 +21,10 @@ import {
 } from "@/lib/voyage-utils";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import type { Language } from "@/lib/i18n";
+import {
+  isVoyageBookableNow,
+  type BookableLegAvailability,
+} from "@/lib/booking-utils";
 
 export interface VoyageLegendStoryTitles {
   title_it: string | null;
@@ -36,6 +40,9 @@ interface VoyageLegendProps {
   onClose: () => void;
   onWaypointClick?: (waypoint: VoyageWaypoint) => void;
   onArticleClick?: (article: GeoArticle) => void;
+  bookingLegs?: BookableLegAvailability[];
+  selectedBookingLegIds?: string[];
+  onParticipate?: (voyageId: string) => void;
   /** Titoli storia da `stories` (opzionale; caricati dal parent). */
   storyTitlesById?: Record<string, VoyageLegendStoryTitles>;
 }
@@ -129,6 +136,9 @@ const VoyageLegend = ({
   onClose,
   onWaypointClick,
   onArticleClick,
+  bookingLegs = [],
+  selectedBookingLegIds = [],
+  onParticipate,
   storyTitlesById,
 }: VoyageLegendProps) => {
   const visibleWaypoints = useMemo(
@@ -189,6 +199,28 @@ const VoyageLegend = ({
   }, [visibleWaypoints]);
 
   const totalDistance = useMemo(() => segments.reduce((sum, d) => sum + d, 0), [segments]);
+
+  const selectedBookingLegIdSet = useMemo(
+    () => new Set(selectedBookingLegIds),
+    [selectedBookingLegIds]
+  );
+
+  const waypointIndexById = useMemo(
+    () => new Map(waypoints.map((waypoint, index) => [waypoint.id, index])),
+    [waypoints]
+  );
+
+  const selectedBookingRanges = useMemo(() => {
+    return bookingLegs
+      .filter((leg) => selectedBookingLegIdSet.has(leg.id))
+      .map((leg) => {
+        const fromIndex = waypointIndexById.get(leg.from_waypoint_id);
+        const toIndex = waypointIndexById.get(leg.to_waypoint_id);
+        if (fromIndex == null || toIndex == null) return null;
+        return [Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex)] as const;
+      })
+      .filter(Boolean) as readonly (readonly [number, number])[];
+  }, [bookingLegs, selectedBookingLegIdSet, waypointIndexById]);
 
   /** Ortodromia su tutti i waypoint del viaggio (anche tecnici), ordine `waypoints`. */
   const fullVoyageDistanceNm = useMemo(() => {
@@ -277,6 +309,9 @@ const VoyageLegend = ({
   const endLabel = formatDate(voyage.end_date, lang);
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
   const isWater = voyage.type === "water";
+  const voyageIsBookable = isVoyageBookableNow(voyage);
+  const hasBookableLegs = bookingLegs.length > 0;
+  const hasAvailableLegs = bookingLegs.some((leg) => leg.available);
 
   if (visibleWaypoints.length < 2) return null;
 
@@ -310,6 +345,12 @@ const VoyageLegend = ({
             className={`shrink-0 ${isWater ? "text-sky-600" : "text-orange-600"}`}
           />
           <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
+          {voyageIsBookable ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-50/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-800">
+              <TicketCheck size={10} />
+              {lang === "it" ? "Adesioni aperte" : "Open to join"}
+            </span>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-start gap-3">
           {storyIndexLinks.length > 0 ? (
@@ -365,6 +406,44 @@ const VoyageLegend = ({
           ) : null}
         </p>
       )}
+
+      {voyageIsBookable ? (
+        <div className="mb-3 flex flex-col gap-3 rounded-[18px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50/95 to-white/70 p-3.5 font-sans shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <TicketCheck size={16} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800">
+                {lang === "it" ? "Puoi partecipare a questo viaggio" : "You can join this voyage"}
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-emerald-900/75">
+                {!hasBookableLegs
+                  ? (lang === "it"
+                    ? "Le adesioni non sono ancora aperte per le singole tratte."
+                    : "Joining isn't open yet for individual legs.")
+                  : hasAvailableLegs
+                    ? (lang === "it"
+                      ? "Premi «Partecipa» per scegliere le tue tappe e i dettagli."
+                      : "Tap “Join” to choose your stops and details.")
+                    : (lang === "it"
+                      ? "Le tratte esistono, ma al momento non risultano posti disponibili."
+                      : "Legs exist, but no seats are currently available.")}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 sm:pl-1">
+            <button
+              type="button"
+              disabled={!hasAvailableLegs || !onParticipate}
+              onClick={() => onParticipate?.(voyage.id)}
+              className="inline-flex items-center justify-center rounded-full bg-emerald-700 px-4 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-emerald-700/25 disabled:shadow-none"
+            >
+              {lang === "it" ? "Partecipa" : "Join"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {articlePlan.wholeVoyageArticles.length > 0 && (
         <div className="mb-3 space-y-2">
@@ -490,6 +569,17 @@ const VoyageLegend = ({
 
             const edgeArts = !isLast ? edgeArticlesByEdge.get(i) : undefined;
             const edgeHasStory = Boolean(edgeArts?.length);
+            const nextWaypoint = !isLast ? visibleWaypoints[i + 1] : undefined;
+            const edgeStartIndex = waypointIndexById.get(wp.id);
+            const edgeEndIndex = nextWaypoint ? waypointIndexById.get(nextWaypoint.id) : undefined;
+            const edgeIsSelected =
+              edgeStartIndex != null &&
+              edgeEndIndex != null &&
+              selectedBookingRanges.some(([fromIndex, toIndex]) => {
+                const start = Math.min(edgeStartIndex, edgeEndIndex);
+                const end = Math.max(edgeStartIndex, edgeEndIndex);
+                return fromIndex < end && toIndex > start;
+              });
 
             return (
               <Fragment key={wp.id}>
@@ -596,7 +686,19 @@ const VoyageLegend = ({
                       </div>
                     ) : null}
 
-                    <div className={`h-[2px] w-full rounded-full ${lineBg}`} />
+                    {edgeIsSelected ? (
+                      <span className="absolute left-1/2 top-full z-[12] -translate-x-1/2 rounded-full border border-emerald-300/80 bg-emerald-50/95 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-800 shadow-sm" style={{ marginTop: 5 }}>
+                        {lang === "it" ? "Selezionata" : "Selected"}
+                      </span>
+                    ) : null}
+
+                    <div
+                      className={`h-[2px] w-full rounded-full transition-all ${
+                        edgeIsSelected
+                          ? "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.18),0_0_16px_rgba(16,185,129,0.42)]"
+                          : lineBg
+                      }`}
+                    />
                   </div>
                 )}
               </Fragment>

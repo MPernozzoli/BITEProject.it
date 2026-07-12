@@ -20,10 +20,8 @@ create table if not exists public.editorial_plan_channels (
     abs((mix_pillar + mix_support + mix_utility) - 100) < 0.02
   )
 );
-
 comment on table public.editorial_plan_channels is
   'Per-channel editorial cadence and mix; replaces singleton settings for new codepaths.';
-
 insert into public.editorial_plan_channels (id, code, label, timezone, horizon_weeks, weekly_count, mix_pillar, mix_support, mix_utility)
 values
   ('11111111-1111-4111-8111-111111110001', 'site', 'Logbook (sito)', 'Europe/Rome', 8, 1, 15, 55, 30),
@@ -32,7 +30,6 @@ values
   ('11111111-1111-4111-8111-111111110004', 'instagram_bite', 'Instagram BITE', 'Europe/Rome', 8, 1, 15, 55, 30),
   ('11111111-1111-4111-8111-111111110005', 'instagram_dogs', 'Instagram cani', 'Europe/Rome', 8, 1, 15, 55, 30)
 on conflict (code) do nothing;
-
 -- Migrate legacy singleton into site channel row
 update public.editorial_plan_channels c
 set
@@ -45,28 +42,22 @@ set
   updated_at = timezone('utc', now())
 from public.editorial_plan_settings s
 where c.code = 'site' and s.id = 'a0000000-0000-4000-8000-000000000001'::uuid;
-
 -- Weekly slots: add channel_id + optional content_format from template
 alter table public.editorial_plan_weekly_slots
   add column if not exists channel_id uuid references public.editorial_plan_channels (id) on delete restrict,
   add column if not exists content_format text;
-
 update public.editorial_plan_weekly_slots
 set channel_id = '11111111-1111-4111-8111-111111110001'::uuid
 where channel_id is null;
-
 alter table public.editorial_plan_weekly_slots
   alter column channel_id set not null;
-
 create unique index if not exists editorial_plan_weekly_slots_channel_dow_time_sort_idx
   on public.editorial_plan_weekly_slots (channel_id, day_of_week, time_of_day, sort_order);
-
 -- Slots: add channel_id, format, counts_toward_mix; replace global unique
 alter table public.editorial_plan_slots
   add column if not exists channel_id uuid references public.editorial_plan_channels (id) on delete restrict,
   add column if not exists content_format text,
   add column if not exists counts_toward_mix boolean not null default true;
-
 update public.editorial_plan_slots
 set
   channel_id = '11111111-1111-4111-8111-111111110001'::uuid,
@@ -75,16 +66,12 @@ set
     else coalesce(counts_toward_mix, true)
   end
 where channel_id is null;
-
 alter table public.editorial_plan_slots
   alter column channel_id set not null;
-
 alter table public.editorial_plan_slots
   drop constraint if exists editorial_plan_slots_date_time_unique;
-
 create unique index if not exists editorial_plan_slots_channel_date_time_uidx
   on public.editorial_plan_slots (channel_id, slot_date, slot_time);
-
 -- Media assets (shared video/photo)
 create table if not exists public.editorial_media_assets (
   id uuid primary key default gen_random_uuid(),
@@ -97,10 +84,8 @@ create table if not exists public.editorial_media_assets (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
-
 comment on table public.editorial_media_assets is
   'Reusable media for social; one asset, many publish_targets.';
-
 -- Publish targets (one row per platform/format/time)
 create table if not exists public.editorial_publish_targets (
   id uuid primary key default gen_random_uuid(),
@@ -121,14 +106,11 @@ create table if not exists public.editorial_publish_targets (
     editorial_plan_slot_id is not null or publish_at is not null
   )
 );
-
 create index if not exists editorial_publish_targets_slot_idx on public.editorial_publish_targets (editorial_plan_slot_id);
 create index if not exists editorial_publish_targets_publish_at_idx on public.editorial_publish_targets (publish_at);
 create index if not exists editorial_publish_targets_batch_idx on public.editorial_publish_targets (syndication_batch_id);
-
 comment on table public.editorial_publish_targets is
   'Per-platform publish event; same asset_id for cross-post; syndication_batch_id groups simultaneous publishes.';
-
 -- OAuth connections (one row per channel that needs its own token)
 create table if not exists public.social_oauth_connections (
   id uuid primary key default gen_random_uuid(),
@@ -142,66 +124,54 @@ create table if not exists public.social_oauth_connections (
   updated_at timestamptz not null default timezone('utc', now()),
   constraint social_oauth_connections_channel_unique unique (channel_id)
 );
-
 comment on table public.social_oauth_connections is
   'OAuth tokens per editorial channel; fill via Edge Function callback (admin-only).';
-
 -- RLS
 alter table public.editorial_plan_channels enable row level security;
 alter table public.editorial_media_assets enable row level security;
 alter table public.editorial_publish_targets enable row level security;
 alter table public.social_oauth_connections enable row level security;
-
 grant select, insert, update, delete on public.editorial_plan_channels to authenticated;
 grant select, insert, update, delete on public.editorial_media_assets to authenticated;
 grant select, insert, update, delete on public.editorial_publish_targets to authenticated;
 grant select, insert, update, delete on public.social_oauth_connections to authenticated;
-
 drop policy if exists "Admins manage editorial_plan_channels" on public.editorial_plan_channels;
 create policy "Admins manage editorial_plan_channels"
   on public.editorial_plan_channels for all to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admins manage editorial_media_assets" on public.editorial_media_assets;
 create policy "Admins manage editorial_media_assets"
   on public.editorial_media_assets for all to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admins manage editorial_publish_targets" on public.editorial_publish_targets;
 create policy "Admins manage editorial_publish_targets"
   on public.editorial_publish_targets for all to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admins manage social_oauth_connections" on public.social_oauth_connections;
 create policy "Admins manage social_oauth_connections"
   on public.social_oauth_connections for all to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 -- Storage bucket for editorial media (private; signed URLs from Edge/admin)
 insert into storage.buckets (id, name, public)
 values ('editorial-media', 'editorial-media', false)
 on conflict (id) do nothing;
-
 -- Admin-only upload/select policies on bucket editorial-media
 drop policy if exists "Admin read editorial-media" on storage.objects;
 create policy "Admin read editorial-media"
   on storage.objects for select to authenticated
   using (bucket_id = 'editorial-media' and public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admin insert editorial-media" on storage.objects;
 create policy "Admin insert editorial-media"
   on storage.objects for insert to authenticated
   with check (bucket_id = 'editorial-media' and public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admin update editorial-media" on storage.objects;
 create policy "Admin update editorial-media"
   on storage.objects for update to authenticated
   using (bucket_id = 'editorial-media' and public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admin delete editorial-media" on storage.objects;
 create policy "Admin delete editorial-media"
   on storage.objects for delete to authenticated

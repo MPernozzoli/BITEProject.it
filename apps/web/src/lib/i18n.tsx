@@ -78,7 +78,7 @@ const translations: Translations = {
 
   // Journal
   "journal.label": { en: "From the Logbook", it: "Dal diario di bordo" },
-  "journal.readmore": { en: "Read More", it: "Leggi tutto" },
+  "journal.readmore": { en: "Read the full entry", it: "Leggi l'intero articolo" },
   "journal.viewall": { en: "View All Entries", it: "Vedi tutte le voci" },
 
   // Route

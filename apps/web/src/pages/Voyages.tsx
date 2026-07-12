@@ -121,7 +121,7 @@ const VoyagesPage = () => {
     applySeo({
       title: "Voyages | BITE",
       description:
-        "Public route archive with departures, arrivals, waypoints, and dates from the voyages aboard S/Y Spritz.",
+        "Public route archive with departures, arrivals, stops, and dates from the voyages aboard S/Y Spritz.",
       pathname: "/voyages",
       type: "collection",
       structuredData: {
@@ -129,7 +129,7 @@ const VoyagesPage = () => {
         "@type": "CollectionPage",
         name: "BITE Voyages",
         description:
-          "Public route archive with departures, arrivals, waypoints, and dates from the voyages aboard S/Y Spritz.",
+          "Public route archive with departures, arrivals, stops, and dates from the voyages aboard S/Y Spritz.",
         url: `${window.location.origin}/voyages`,
         hasPart: voyages.map((voyage) => ({
           "@type": "Trip",
@@ -214,7 +214,7 @@ const VoyagesPage = () => {
                   <div className="flex-shrink-0 text-sm text-muted-foreground md:text-right">
                     {dateRange && <p>{dateRange}</p>}
                     {routeDistance && <p>{routeDistance.value} {routeDistance.unit}</p>}
-                    <p>{publicWaypoints.length} {lang === "it" ? "waypoint pubblici" : "public waypoints"}</p>
+                    <p>{publicWaypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3 md:grid-cols-3">

@@ -3,12 +3,12 @@ tags: [mappe, geo, maplibre, funzionalita]
 ---
 # 14 - Mappe e Layer Geospaziale
 
-⬅️ [[Home]] · sorgente: `src/lib/maplibre.ts`, `src/lib/map-presence.ts`, `src/components/*Map*`
+⬅️ [[Home]] · sorgente: `apps/web/src/lib/maplibre.ts`, `apps/web/src/lib/map-presence.ts`, `apps/web/src/components/*Map*`
 
 ## Stack mappe
 - **maplibre-gl 5** — rendering mappe vettoriali
 - **supercluster** — clustering marker
-- Wrapper: `src/lib/maplibre.ts`
+- Wrapper: `apps/web/src/lib/maplibre.ts`
 
 ## Componenti
 - `LazyVoyageMap.tsx` — mappa rotta viaggio (lazy) → usata da `VoyagePage.tsx`
@@ -19,9 +19,9 @@ tags: [mappe, geo, maplibre, funzionalita]
 - `AdminVoyageManager.tsx` usa `requestFullscreen()` sul workspace mappa per l'editor rotte, ascolta `fullscreenchange` per sincronizzare lo stato UI e forza `map.resize()` dopo il cambio dimensione.
 
 ## Dati geo
-- Coordinate degli articoli: `src/lib/article-map.ts`, `article-map-anchor.ts`
-- Presenza sulla mappa (tracker): `src/lib/map-presence.ts`, pagina `AdminMapPresence.tsx` (`/admin/trackers`)
-- Naming waypoint admin: `src/lib/voyage-utils.ts` usa Nominatim per il reverse geocoding e, se il risultato è troppo generico per coordinate in mare, cerca con Overpass toponimi vicini. Se il marker sembra una fermata costiera/portuale usa il nome città secco; se è più al largo preferisce il nome reale di baia/cala/località/capo/isola. Nell'inspector WPT delle rotte acqua c'è anche il controllo manuale `Auto / Città / Baia o toponimo`.
+- Coordinate degli articoli: `apps/web/src/lib/article-map.ts`, `article-map-anchor.ts`
+- Presenza sulla mappa (tracker): `apps/web/src/lib/map-presence.ts`, pagina `AdminMapPresence.tsx` (`/admin/trackers`)
+- Naming waypoint admin: `apps/web/src/lib/voyage-utils.ts` usa Nominatim per il reverse geocoding e, se il risultato è troppo generico per coordinate in mare, cerca con Overpass toponimi vicini. Se il marker sembra una fermata costiera/portuale usa il nome città secco; se è più al largo preferisce il nome reale di baia/cala/località/capo/isola. Nell'inspector WPT delle rotte acqua c'è anche il controllo manuale `Auto / Città / Baia o toponimo`.
 
 ## Principi (da doc architettura)
 - Una rotta **non deve mai** esistere solo come immagine renderizzata.

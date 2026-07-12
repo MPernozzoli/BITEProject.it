@@ -1,8 +1,10 @@
 import { Suspense, lazy, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { I18nProvider } from "@/lib/i18n";
@@ -18,8 +20,6 @@ import {
 } from "@/components/LegacyLangRedirect";
 import { isCurrentAdminHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
-
-const BITE_HOME_URL = "https://biteproject.it/";
 
 const createAppQueryClient = () =>
   new QueryClient({
@@ -54,9 +54,15 @@ const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
+const AdminMedia = lazy(() => import("./pages/AdminMedia"));
+const AdminMail = lazy(() => import("./pages/AdminMail"));
+const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
+const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
+const UserBookings = lazy(() => import("./pages/UserBookings"));
+const ManageBookingParticipants = lazy(() => import("./pages/ManageBookingParticipants"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const StoryPage = lazy(() => import("./pages/StoryPage"));
 const VoyagesPage = lazy(() => import("./pages/Voyages"));
@@ -69,21 +75,27 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 
 const RouteFallback = () => (
-  <div className="min-h-screen flex items-center justify-center pt-24">
-    <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading...</p>
-  </div>
+  <div className="min-h-screen bg-background" aria-hidden="true" />
 );
 
 /** Root redirect: / → /it or /en based on persisted preference / browser. */
 const RootLangRedirect = () => {
   const location = useLocation();
   if (isCurrentAdminHostname()) {
-    window.location.replace(BITE_HOME_URL);
-    return null;
+    return <Navigate to="/admin" replace />;
   }
 
   const lang = detectPreferredLang();
   return <Navigate to={withLang(lang, "/") + location.search + location.hash} replace />;
+};
+
+/** Keeps public/marketing routes off the admin subdomain (e.g. admin.biteproject.it/logbook). */
+const RequireMainHost = () => {
+  if (isCurrentAdminHostname()) {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return <Outlet />;
 };
 
 /** Localized routes used identically under /it and /en prefixes. */
@@ -112,6 +124,8 @@ const App = () => {
     <>
       <Toaster />
       <Sonner />
+      <Analytics />
+      <SpeedInsights />
       <BrowserRouter>
         <I18nProvider>
           <AuthProvider>
@@ -119,43 +133,53 @@ const App = () => {
               <Layout>
                 <Suspense fallback={<RouteFallback />}>
                   <Routes>
-                    {/* Root → redirect to /it or /en based on user preference */}
+                    {/* Root → redirect to /it or /en based on user preference (or /admin on the admin subdomain) */}
                     <Route path="/" element={<RootLangRedirect />} />
 
-                    {/* Localized public routes under /it and /en */}
-                    <Route path="/it/*" element={<LocalizedRoutes />} />
-                    <Route path="/en/*" element={<LocalizedRoutes />} />
+                    {/* Marketing/public site — kept off the admin subdomain */}
+                    <Route element={<RequireMainHost />}>
+                      {/* Localized public routes under /it and /en */}
+                      <Route path="/it/*" element={<LocalizedRoutes />} />
+                      <Route path="/en/*" element={<LocalizedRoutes />} />
 
-                    {/* Legacy URL redirects → preserve external/social links */}
-                    <Route path="/about" element={<LegacyLangRedirect to="/crew" />} />
-                    <Route path="/crew" element={<LegacyLangRedirect to="/crew" />} />
-                    <Route path="/manifesto" element={<LegacyLangRedirect to="/manifesto" />} />
-                    <Route path="/logbook" element={<LegacyLangRedirect to="/logbook" />} />
-                    <Route path="/voyages" element={<LegacyLangRedirect to="/voyages" />} />
-                    <Route path="/voyages/:voyageRef" element={<LegacyVoyageRedirect />} />
-                    <Route path="/logbook/story/:slug" element={<LegacyStoryRedirect />} />
-                    <Route path="/logbook/:slug" element={<LegacyArticleRedirect />} />
-                    <Route path="/links" element={<LegacyLangRedirect to="/links" />} />
-                    <Route path="/linktree" element={<LegacyLangRedirect to="/links" />} />
-                    <Route path="/route" element={<LegacyLangRedirect to="/logbook" />} />
-                    <Route path="/collaborations" element={<LegacyLangRedirect to="/collaborations" />} />
-                    <Route path="/contact" element={<LegacyLangRedirect to="/contact" />} />
+                      {/* Legacy URL redirects → preserve external/social links */}
+                      <Route path="/about" element={<LegacyLangRedirect to="/crew" />} />
+                      <Route path="/crew" element={<LegacyLangRedirect to="/crew" />} />
+                      <Route path="/manifesto" element={<LegacyLangRedirect to="/manifesto" />} />
+                      <Route path="/logbook" element={<LegacyLangRedirect to="/logbook" />} />
+                      <Route path="/voyages" element={<LegacyLangRedirect to="/voyages" />} />
+                      <Route path="/voyages/:voyageRef" element={<LegacyVoyageRedirect />} />
+                      <Route path="/logbook/story/:slug" element={<LegacyStoryRedirect />} />
+                      <Route path="/logbook/:slug" element={<LegacyArticleRedirect />} />
+                      <Route path="/links" element={<LegacyLangRedirect to="/links" />} />
+                      <Route path="/linktree" element={<LegacyLangRedirect to="/links" />} />
+                      <Route path="/route" element={<LegacyLangRedirect to="/logbook" />} />
+                      <Route path="/collaborations" element={<LegacyLangRedirect to="/collaborations" />} />
+                      <Route path="/contact" element={<LegacyLangRedirect to="/contact" />} />
 
-                    {/* Non-localized routes (auth, profile, admin, legal, system) */}
-                    <Route path="/profile/:id" element={<PublicProfile />} />
+                      <Route path="/profile/:id" element={<PublicProfile />} />
+                      <Route path="/bookings" element={<UserBookings />} />
+                    <Route path="/bookings/:id/participants" element={<ManageBookingParticipants />} />
+                      <Route path="/unsubscribe" element={<Unsubscribe />} />
+                      <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
+                      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                      <Route path="/cookie-policy" element={<CookiePolicy />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Route>
+
+                    {/* Auth, profile, and admin routes — shared across the main site and admin subdomain */}
                     <Route path="/login" element={<UserLogin />} />
                     <Route path="/signup" element={<UserLogin />} />
+                    <Route path="/complete-profile" element={<CompleteProfile />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />
+                    <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
+                    <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />
                     <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                     <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
                     <Route path="/profile" element={<AdminProfile />} />
-                    <Route path="/unsubscribe" element={<Unsubscribe />} />
-                    <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
-                    <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                    <Route path="/cookie-policy" element={<CookiePolicy />} />
-                    <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </Layout>

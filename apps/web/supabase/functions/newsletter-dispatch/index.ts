@@ -912,5 +912,32 @@ Deno.serve(async (req) => {
     console.error('Failed to invoke engagement notification dispatch', error)
   }
 
+  // Kick the email queue worker so freshly enqueued messages are sent right
+  // away instead of waiting for the next scheduled cron / contact-form send.
+  // Mirrors the inline dispatch pattern in contact-form-submit.
+  if (summary.campaignsQueued > 0 || summary.automationsQueued > 0) {
+    try {
+      const dispatcherResponse = await fetch(
+        `${supabaseUrl}/functions/v1/process-email-queue`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+        }
+      )
+
+      if (!dispatcherResponse.ok) {
+        console.warn(
+          'Inline email dispatch failed (emails will be sent by cron)',
+          await dispatcherResponse.text()
+        )
+      }
+    } catch (error) {
+      console.warn('Inline email dispatch error (emails will be sent by cron)', error)
+    }
+  }
+
   return jsonResponse({ success: true, ...summary })
 })

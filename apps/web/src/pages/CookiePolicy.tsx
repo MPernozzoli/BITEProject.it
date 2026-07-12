@@ -12,10 +12,10 @@ const CookiePolicy = () => {
       title="Cookie Policy"
       intro={
         isIt
-          ? "Questa Cookie Policy spiega cosa sono i cookie, quali categorie di strumenti usa BITE su biteproject.it e per quali finalità. Il sito utilizza esclusivamente cookie e strumenti simili necessari al funzionamento del servizio, alla sicurezza, all'autenticazione e ad alcune funzionalità richieste dall'utente."
-          : "This Cookie Policy explains what cookies are, which categories of tools BITE uses on biteproject.it, and for which purposes. The site only uses cookies and similar technologies needed for service operation, security, authentication, and user-requested features."
+          ? "Questa Cookie Policy spiega cosa sono i cookie, quali categorie di strumenti usa BITE su biteproject.it e per quali finalità. Il sito utilizza esclusivamente cookie e strumenti simili necessari al funzionamento del servizio, alla sicurezza, all'autenticazione, alla partecipazione ai viaggi, ai pagamenti di contributo spese e ad alcune funzionalità richieste dall'utente."
+          : "This Cookie Policy explains what cookies are, which categories of tools BITE uses on biteproject.it, and for which purposes. The site only uses cookies and similar technologies needed for service operation, security, authentication, voyage participation, shared-cost contribution payments, and user-requested features."
       }
-      lastUpdated={isIt ? "Ultimo aggiornamento: 29 marzo 2026" : "Last updated: March 29, 2026"}
+      lastUpdated={isIt ? "Ultimo aggiornamento: 12 luglio 2026" : "Last updated: July 12, 2026"}
     >
       <LegalSection title={isIt ? "Cosa sono i cookie" : "What Cookies Are"}>
         <p>
@@ -39,13 +39,28 @@ const CookiePolicy = () => {
           </li>
           <li>
             {isIt
-              ? "strumenti di autenticazione e mantenimento sessione, necessari a consentire login, accesso all'area community, commenti, like e gestione del profilo;"
-              : "authentication and session tools needed to enable sign-in, community access, comments, likes, and profile management;"}
+              ? "strumenti di autenticazione e mantenimento sessione, anche su cookie tecnici gestiti dal browser, necessari a consentire login, accesso all'area community, commenti, like, gestione del profilo, partecipazione ai viaggi e area prenotazioni;"
+              : "authentication and session tools, including technical browser cookies, needed to enable sign-in, community access, comments, likes, profile management, voyage participation, and the bookings area;"}
           </li>
           <li>
             {isIt
-              ? "strumenti tecnici di memoria locale, usati per funzioni richieste dall'utente, come la gestione della sessione sul dispositivo e il conteggio interno delle letture effettive degli articoli;"
-              : "technical local storage tools used for features requested by the user, such as device session handling and internal counting of actual article reads;"}
+              ? "strumenti tecnici di memoria locale, usati per funzioni richieste dall'utente, come preferenza lingua, gestione della sessione sul dispositivo, sincronizzazione temporanea delle preferenze newsletter e conteggio interno delle letture effettive degli articoli;"
+              : "technical local storage tools used for features requested by the user, such as language preference, device session handling, temporary synchronization of newsletter preferences, and internal counting of actual article reads;"}
+          </li>
+          <li>
+            {isIt
+              ? "strumenti tecnici di prenotazione e pagamento, necessari a mantenere la richiesta di partecipazione, verificare lo stato del contributo spese, mostrare i dettagli di bonifico o reindirizzare verso il pagamento Bunq;"
+              : "technical booking and payment tools needed to keep the participation request, verify shared-cost contribution status, show bank transfer details, or redirect to Bunq payment;"}
+          </li>
+          <li>
+            {isIt
+              ? "strumenti di interfaccia strettamente funzionali, come lo stato della sidebar o altre preferenze locali necessarie a mantenere coerente l'esperienza sul dispositivo;"
+              : "strictly functional interface tools, such as sidebar state or other local preferences needed to keep the device experience consistent;"}
+          </li>
+          <li>
+            {isIt
+              ? "strumenti di Web Push, usati solo se abiliti le notifiche sul dispositivo e necessari a salvare la sottoscrizione del browser."
+              : "Web Push tools, used only if you enable device notifications and needed to save the browser subscription."}
           </li>
           <li>
             {isIt
@@ -69,13 +84,28 @@ const CookiePolicy = () => {
           </li>
           <li>
             {isIt
-              ? "memorizzare scelte o preferenze strettamente tecniche relative all'uso del sito;"
-              : "to store choices or strictly technical preferences relating to site use;"}
+              ? "memorizzare scelte o preferenze strettamente tecniche relative all'uso del sito, inclusa la lingua e alcune preferenze di interfaccia;"
+              : "to store choices or strictly technical preferences relating to site use, including language and some interface preferences;"}
           </li>
           <li>
             {isIt
               ? "abilitare il corretto funzionamento di commenti, like, profilo personale e altre funzioni della community;"
               : "to enable the correct functioning of comments, likes, personal profile features, and other community functions;"}
+          </li>
+          <li>
+            {isIt
+              ? "abilitare richieste di partecipazione ai viaggi, gestione degli invitati, accettazione o rifiuto degli inviti, task pre-partenza e area personale delle prenotazioni;"
+              : "to enable voyage participation requests, invited participant management, invitation acceptance or decline, pre-departure tasks, and the personal bookings area;"}
+          </li>
+          <li>
+            {isIt
+              ? "creare, mostrare e verificare pagamenti del contributo spese tramite Bunq o bonifico, senza memorizzare credenziali bancarie nel browser;"
+              : "to create, display, and verify shared-cost contribution payments through Bunq or bank transfer, without storing banking credentials in the browser;"}
+          </li>
+          <li>
+            {isIt
+              ? "registrare e gestire la sottoscrizione Web Push quando l'utente abilita le notifiche;"
+              : "to register and manage the Web Push subscription when the user enables notifications;"}
           </li>
           <li>
             {isIt
@@ -112,13 +142,23 @@ const CookiePolicy = () => {
           </li>
           <li>
             {isIt
+              ? "Bunq, solo quando l'utente avvia o verifica un pagamento online del contributo spese;"
+              : "Bunq, only when the user starts or verifies an online shared-cost contribution payment;"}
+          </li>
+          <li>
+            {isIt
               ? "Google, solo se l'utente sceglie il login Google o interagisce con contenuti YouTube;"
               : "Google, only if the user chooses Google login or interacts with YouTube content;"}
           </li>
           <li>
             {isIt
-              ? "CARTO e OpenStreetMap, per le funzionalità cartografiche presenti in alcune pagine."
-              : "CARTO and OpenStreetMap, for map features available on some pages."}
+              ? "CARTO e OpenStreetMap, per le funzionalità cartografiche presenti in alcune pagine;"
+              : "CARTO and OpenStreetMap, for map features available on some pages;"}
+          </li>
+          <li>
+            {isIt
+              ? "servizi Web Push del browser o del sistema operativo, solo se abiliti le notifiche."
+              : "browser or operating-system Web Push services, only if you enable notifications."}
           </li>
         </ul>
         <p>
@@ -130,17 +170,17 @@ const CookiePolicy = () => {
 
       <LegalSection title={isIt ? "Durata" : "Duration"}>
         <p>
-          {isIt
-            ? "I cookie e gli strumenti tecnici usati dal sito possono avere durata limitata alla sessione oppure durata persistente, in funzione della loro finalità. Gli strumenti di sicurezza hanno generalmente durata breve; gli strumenti di sessione restano attivi fino al logout o alla scadenza tecnica; gli strumenti di memoria locale possono restare salvati nel browser finché l'utente non cancella i dati del sito."
-            : "Technical cookies and similar tools used by the site may be session-based or persistent, depending on their purpose. Security tools generally have a short duration; session tools remain active until logout or technical expiry; local storage tools may remain saved in the browser until the user clears site data."}
+            {isIt
+            ? "I cookie e gli strumenti tecnici usati dal sito possono avere durata limitata alla sessione oppure durata persistente, in funzione della loro finalità. Gli strumenti di sicurezza hanno generalmente durata breve; gli strumenti di sessione restano attivi fino al logout o alla scadenza tecnica; la preferenza lingua può durare fino a 12 mesi; gli strumenti di memoria locale e le sottoscrizioni push possono restare salvati nel browser finché l'utente non cancella i dati del sito o disattiva la funzione."
+            : "Technical cookies and similar tools used by the site may be session-based or persistent, depending on their purpose. Security tools generally have a short duration; session tools remain active until logout or technical expiry; language preference may last up to 12 months; local storage tools and push subscriptions may remain saved in the browser until the user clears site data or disables the feature."}
         </p>
       </LegalSection>
 
       <LegalSection title={isIt ? "Come gestire o disattivare i cookie" : "How to Manage or Disable Cookies"}>
         <p>
           {isIt
-            ? "L'utente può gestire, limitare o cancellare cookie e altri dati locali direttamente dalle impostazioni del proprio browser. La disattivazione degli strumenti tecnici può però compromettere o impedire il corretto funzionamento del sito, del login, della sessione utente e delle funzioni community."
-            : "Users can manage, restrict, or delete cookies and other local data directly through their browser settings. However, disabling technical tools may compromise or prevent the correct functioning of the site, sign-in, user session handling, and community features."}
+            ? "L'utente può gestire, limitare o cancellare cookie e altri dati locali direttamente dalle impostazioni del proprio browser. La disattivazione degli strumenti tecnici può però compromettere o impedire il corretto funzionamento del sito, del login, della sessione utente, delle funzioni community, della partecipazione ai viaggi, dei pagamenti del contributo spese e delle notifiche push abilitate."
+            : "Users can manage, restrict, or delete cookies and other local data directly through their browser settings. However, disabling technical tools may compromise or prevent the correct functioning of the site, sign-in, user session handling, community features, voyage participation, shared-cost contribution payments, and enabled push notifications."}
         </p>
       </LegalSection>
 

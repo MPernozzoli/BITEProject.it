@@ -5,13 +5,10 @@ do $$ begin
 exception
   when duplicate_object then null;
 end $$;
-
 alter table public.logbook_articles
   add column if not exists editorial_type public.article_editorial_type;
-
 comment on column public.logbook_articles.editorial_type is
   'Internal editorial pillar for planning (admin-only); distinct from public category.';
-
 -- Singleton settings row (fixed id for app convenience).
 create table if not exists public.editorial_plan_settings (
   id uuid primary key default 'a0000000-0000-4000-8000-000000000001'::uuid,
@@ -28,10 +25,8 @@ create table if not exists public.editorial_plan_settings (
     abs((mix_pillar + mix_support + mix_utility) - 100) < 0.02
   )
 );
-
 comment on table public.editorial_plan_settings is
   'Singleton editorial cadence and mix targets (admin-only).';
-
 create table if not exists public.editorial_plan_weekly_slots (
   id uuid primary key default gen_random_uuid(),
   day_of_week smallint not null
@@ -40,10 +35,8 @@ create table if not exists public.editorial_plan_weekly_slots (
   sort_order integer not null default 0,
   created_at timestamptz not null default timezone('utc', now())
 );
-
 comment on table public.editorial_plan_weekly_slots is
   'Recurring weekly publication slots (0=Sunday .. 6=Saturday, same as JS getDay).';
-
 create table if not exists public.editorial_plan_slots (
   id uuid primary key default gen_random_uuid(),
   slot_date date not null,
@@ -59,21 +52,16 @@ create table if not exists public.editorial_plan_slots (
   updated_at timestamptz not null default timezone('utc', now()),
   constraint editorial_plan_slots_date_time_unique unique (slot_date, slot_time)
 );
-
 comment on table public.editorial_plan_slots is
   'Concrete editorial calendar slots; suggested_type is planning hint, override_type forces display.';
-
 create index if not exists editorial_plan_slots_slot_date_idx on public.editorial_plan_slots (slot_date);
 create index if not exists editorial_plan_slots_assigned_article_idx on public.editorial_plan_slots (assigned_article_id);
-
 alter table public.editorial_plan_settings enable row level security;
 alter table public.editorial_plan_weekly_slots enable row level security;
 alter table public.editorial_plan_slots enable row level security;
-
 grant select, insert, update, delete on public.editorial_plan_settings to authenticated;
 grant select, insert, update, delete on public.editorial_plan_weekly_slots to authenticated;
 grant select, insert, update, delete on public.editorial_plan_slots to authenticated;
-
 drop policy if exists "Admins manage editorial_plan_settings" on public.editorial_plan_settings;
 create policy "Admins manage editorial_plan_settings"
   on public.editorial_plan_settings
@@ -81,7 +69,6 @@ create policy "Admins manage editorial_plan_settings"
   to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admins manage editorial_plan_weekly_slots" on public.editorial_plan_weekly_slots;
 create policy "Admins manage editorial_plan_weekly_slots"
   on public.editorial_plan_weekly_slots
@@ -89,7 +76,6 @@ create policy "Admins manage editorial_plan_weekly_slots"
   to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 drop policy if exists "Admins manage editorial_plan_slots" on public.editorial_plan_slots;
 create policy "Admins manage editorial_plan_slots"
   on public.editorial_plan_slots
@@ -97,7 +83,6 @@ create policy "Admins manage editorial_plan_slots"
   to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 -- Seed singleton + one Monday 09:00 slot (JS Monday = 1).
 insert into public.editorial_plan_settings (id, weekly_count, mix_pillar, mix_support, mix_utility, timezone, horizon_weeks)
 values (
@@ -110,7 +95,6 @@ values (
   8
 )
 on conflict (id) do nothing;
-
 insert into public.editorial_plan_weekly_slots (day_of_week, time_of_day, sort_order)
 select 1, time '09:00', 0
 where not exists (select 1 from public.editorial_plan_weekly_slots limit 1);

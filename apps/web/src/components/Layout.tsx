@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { stripLangPrefix } from "@/lib/seo";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import SeoManager from "./SeoManager";
@@ -9,8 +10,10 @@ import SeoManager from "./SeoManager";
 const Layout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
-  const hideNavbar = pathname === "/links";
-  const isLogbookIndex = pathname === "/logbook";
+  const strippedPath = stripLangPrefix(pathname);
+  const hideNavbar = strippedPath === "/links";
+  const isLogbookIndex = strippedPath === "/logbook";
+  const hideFooter = isLogbookIndex;
   const hideFooterMobileLogbook = isLogbookIndex && isMobile;
 
   useEffect(() => {
@@ -46,7 +49,7 @@ const Layout = ({ children }: { children: ReactNode }) => {
       >
         {children}
       </main>
-      {hideFooterMobileLogbook ? null : <Footer />}
+      {hideFooter ? null : <Footer />}
     </div>
   );
 };

@@ -83,8 +83,16 @@ const extractImagesFromRichContent = (content) => {
 
 const loadEnvFile = async () => {
   const envPath = path.join(projectRoot, ".env");
-  const envContents = await readFile(envPath, "utf8");
-  const env = {};
+  let envContents = "";
+  try {
+    envContents = await readFile(envPath, "utf8");
+  } catch {
+    // No .env file (e.g. Vercel CI) — fall back to process env below.
+  }
+  const env = {
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
+    VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
 
   for (const rawLine of envContents.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -154,13 +162,14 @@ const buildSitemapXml = (urls) => {
 };
 
 /** Expand one logical bilingual entry into one <url> per language with hreflang alternates. */
-const expandBilingual = (path, lastmod, images = []) => {
+const expandBilingual = (path, lastmod, images = [], localizedPaths) => {
+  const pathFor = (l) => (localizedPaths && localizedPaths[l]) || path;
   const alternates = [
-    ...LANGS.map((l) => ({ hreflang: l, href: `${SITE_URL}${withLang(l, path)}` })),
-    { hreflang: "x-default", href: `${SITE_URL}${withLang(DEFAULT_LANG, path)}` },
+    ...LANGS.map((l) => ({ hreflang: l, href: `${SITE_URL}${withLang(l, pathFor(l))}` })),
+    { hreflang: "x-default", href: `${SITE_URL}${withLang(DEFAULT_LANG, pathFor(DEFAULT_LANG))}` },
   ];
   return LANGS.map((lang) => ({
-    loc: `${SITE_URL}${withLang(lang, path)}`,
+    loc: `${SITE_URL}${withLang(lang, pathFor(lang))}`,
     lastmod,
     images,
     alternates,
@@ -182,12 +191,19 @@ const generateSitemap = async () => {
     const [articles, stories, voyages] = await Promise.all([
       fetchSupabaseRows(
         "logbook_articles",
-        "slug,title_en,title_it,published_at,updated_at,cover_image,content_en,content_it",
+        "slug,slug_it,slug_en,title_en,title_it,published_at,updated_at,cover_image,content_en,content_it",
         "&status=eq.published&order=published_at.desc.nullslast"
       ),
-      fetchSupabaseRows("stories", "slug,title_en,title_it,updated_at,cover_image", "&order=updated_at.desc.nullslast"),
-      fetchSupabaseRows("voyages", "id,name,updated_at", "&order=sort_order.asc"),
+      fetchSupabaseRows("stories", "slug,slug_it,slug_en,title_en,title_it,updated_at,cover_image", "&order=updated_at.desc.nullslast"),
+      fetchSupabaseRows("voyages", "id,name,updated_at", "&is_published=eq.true&order=sort_order.asc"),
     ]);
+
+    const slugFor = (row, l) => {
+      const own = l === "it" ? row.slug_it : row.slug_en;
+      const other = l === "it" ? row.slug_en : row.slug_it;
+      const candidate = (own && String(own).trim()) || (other && String(other).trim()) || row.slug;
+      return candidate;
+    };
 
     articleUrls = Array.from(
       new Map(
@@ -225,7 +241,8 @@ const generateSitemap = async () => {
               expandBilingual(
                 `/logbook/${article.slug}`,
                 toIsoDate(article.updated_at || article.published_at),
-                images
+                images,
+                { it: `/logbook/${slugFor(article, "it")}`, en: `/logbook/${slugFor(article, "en")}` }
               ),
             ];
           })
@@ -249,7 +266,8 @@ const generateSitemap = async () => {
                       caption: story.title_en || story.title_it || "Story cover image",
                     },
                   ]
-                : []
+                : [],
+              { it: `/logbook/story/${slugFor(story, "it")}`, en: `/logbook/story/${slugFor(story, "en")}` }
             ),
           ])
       ).values()

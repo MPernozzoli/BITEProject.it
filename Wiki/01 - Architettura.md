@@ -35,7 +35,7 @@ Browser ──► Vercel (SPA + edge middleware.ts) ──► index.html + bundl
 - **Amount trust server-side**: importi di pagamento e regole di sicurezza sono ricalcolati lato server, mai fidati dal client (vedi [[11 - Pagamenti Bunq]]).
 - **Cache client persistente**: React Query con `PersistQueryClientProvider` su `localStorage` (chiave `bite-query-cache-v1`), solo per query marcate `meta.persist`.
 - **Lazy loading** di tutte le pagine per ridurre il bundle iniziale.
-- **Separazione host**: il codice riconosce il sottodominio admin (`isCurrentAdminHostname()` in `src/lib/admin-host.ts`) e reindirizza di conseguenza.
+- **Separazione host**: il codice riconosce il sottodominio admin (`isCurrentAdminHostname()` in `apps/web/src/lib/admin-host.ts`) e reindirizza di conseguenza.
 - **Monorepo leggero**: la web app principale + sotto-app `apps/pack` e `apps/data` — vedi [[19 - Sub-App (pack e data)]].
 
 ## Collegamenti

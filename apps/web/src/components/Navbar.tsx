@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
-import { ArrowRight, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
+import { ArrowRight, CalendarCheck, LogIn, LogOut, Menu, Shield, User, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import ProfileNotificationsMenu from "@/components/ProfileNotificationsMenu";
+import { getAdminUrl, getMainSiteUrl, isCurrentAdminHostname } from "@/lib/admin-host";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -118,6 +119,8 @@ const Navbar = () => {
     setProfile(null);
     navigate("/");
   };
+
+  const onAdminHost = isCurrentAdminHostname();
 
   const isLinkActive = (to: string) =>
     location.pathname === to || location.pathname.startsWith(`${to}/`);
@@ -248,21 +251,25 @@ const Navbar = () => {
 
         {/* Desktop Nav */}
         <div className="hidden lg:flex items-center gap-7">
-          {links.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={cn(
-                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
-                navTextClass,
-                isLinkActive(link.to)
-                  ? "nav-chip-light font-medium"
-                  : "text-slate-700/80 hover:text-slate-900",
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const className = cn(
+              "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
+              navTextClass,
+              isLinkActive(link.to)
+                ? "nav-chip-light font-medium"
+                : "text-slate-700/80 hover:text-slate-900",
+            );
+
+            return onAdminHost ? (
+              <a key={link.to} href={getMainSiteUrl(link.to)} className={className}>
+                {link.label}
+              </a>
+            ) : (
+              <Link key={link.to} to={link.to} className={className}>
+                {link.label}
+              </Link>
+            );
+          })}
 
           <div className="mx-1 h-5 w-px bg-slate-300/80" />
 
@@ -325,14 +332,20 @@ const Navbar = () => {
                     <span>{lang === "it" ? "Profilo" : "Profile"}</span>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/bookings" className="flex items-center gap-2">
+                    <CalendarCheck size={14} />
+                    <span>{lang === "it" ? "Imbarchi" : "Boardings"}</span>
+                  </Link>
+                </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2">
+                    <a href={getAdminUrl("/admin")} className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
                         ⚙
                       </span>
                       <span>Dashboard</span>
-                    </Link>
+                    </a>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={toggleLanguage}>
@@ -417,14 +430,20 @@ const Navbar = () => {
                     <span>{lang === "it" ? "Profilo" : "Profile"}</span>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/bookings" className="flex items-center gap-2">
+                    <CalendarCheck size={14} />
+                    <span>{lang === "it" ? "Imbarchi" : "Boardings"}</span>
+                  </Link>
+                </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2">
+                    <a href={getAdminUrl("/admin")} className="flex items-center gap-2">
                       <span className="w-3.5 h-3.5 text-center text-[10px] leading-[14px]">
                         ⚙
                       </span>
                       <span>Dashboard</span>
-                    </Link>
+                    </a>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={toggleLanguage}>
@@ -488,18 +507,14 @@ const Navbar = () => {
               <div className="flex flex-col gap-3">
                 {links.map((link) => {
                   const active = isLinkActive(link.to);
-
-                  return (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      className={cn(
-                        "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
-                        active
-                          ? "nav-chip-light border-white/80 text-slate-950 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.34)]"
-                          : "border-white/70 bg-white/48 text-slate-800 hover:border-white hover:bg-white/70",
-                      )}
-                    >
+                  const className = cn(
+                    "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
+                    active
+                      ? "nav-chip-light border-white/80 text-slate-950 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.34)]"
+                      : "border-white/70 bg-white/48 text-slate-800 hover:border-white hover:bg-white/70",
+                  );
+                  const content = (
+                    <>
                       <div className="min-w-0">
                         <p
                           className={cn(
@@ -529,6 +544,16 @@ const Navbar = () => {
                       >
                         <ArrowRight size={18} />
                       </span>
+                    </>
+                  );
+
+                  return onAdminHost ? (
+                    <a key={link.to} href={getMainSiteUrl(link.to)} className={className}>
+                      {content}
+                    </a>
+                  ) : (
+                    <Link key={link.to} to={link.to} className={className}>
+                      {content}
                     </Link>
                   );
                 })}
@@ -574,9 +599,20 @@ const Navbar = () => {
                         <ArrowRight size={16} className="text-slate-500" />
                       </Link>
 
+                      <Link
+                        to="/bookings"
+                        className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
+                      >
+                        <span className="flex items-center gap-3">
+                          <CalendarCheck size={16} />
+                          {lang === "it" ? "Imbarchi" : "Boardings"}
+                        </span>
+                        <ArrowRight size={16} className="text-slate-500" />
+                      </Link>
+
                       {isAdmin && (
-                        <Link
-                          to="/admin"
+                        <a
+                          href={getAdminUrl("/admin")}
                           className="flex items-center justify-between rounded-2xl border border-white/75 bg-white/50 px-4 py-3 font-sans text-sm text-slate-800 transition-colors hover:bg-white/75"
                         >
                           <span className="flex items-center gap-3">
@@ -584,7 +620,7 @@ const Navbar = () => {
                             Dashboard
                           </span>
                           <ArrowRight size={16} className="text-slate-500" />
-                        </Link>
+                        </a>
                       )}
 
                       <button

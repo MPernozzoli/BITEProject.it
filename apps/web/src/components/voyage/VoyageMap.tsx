@@ -10,9 +10,22 @@ import {
   getPublicVoyageWaypoints,
   getVisibleStopsLegendHeading,
   getVoyageMapLineStringCoordinates,
+  normalizeWaypointMedia,
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import {
+  getComplexityExplanation,
+  getComplexityLabel,
+  getComplexityTitle,
+  getDangerLabel,
+  getLegComplexity,
+  getLegDangerLevel,
+  isLegCurrentOrFuture,
+  isVoyageBookableNow,
+  type BookableLeg,
+  type BookableLegAvailability,
+} from "@/lib/booking-utils";
 import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
@@ -30,6 +43,10 @@ interface VoyageMapProps {
   onArticleClick?: (article: GeoArticle) => void;
   onVoyageSelect?: (voyageId: string | null) => void;
   selectedRouteVoyageId?: string | null;
+  bookingLegsByVoyage?: Record<string, BookableLegAvailability[]>;
+  bookingSelectionAnchor?: { voyageId: string; waypointId: string } | null;
+  selectedBookingLegs?: BookableLeg[];
+  onParticipate?: (voyageId: string) => void;
   flyToWaypointRef?: MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
@@ -44,6 +61,68 @@ const escapePopupHtml = (value: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+const buildPopupModule = (tone: "article" | "booking" | "media" | "story", label: string, body: string) => `
+  <section class="voyage-popup__module voyage-popup__module--${tone}">
+    <div class="voyage-popup__module-kicker">${escapePopupHtml(label)}</div>
+    ${body}
+  </section>
+`;
+
+const buildPopupMediaModule = (waypoint: VoyageWaypoint, label: string) => {
+  const media = normalizeWaypointMedia(waypoint.media).find((item) => item.kind === "image" || item.kind === "video");
+  if (!media) return "";
+
+  const mediaName = media.name ? `<span class="voyage-popup__media-caption">${escapePopupHtml(media.name)}</span>` : "";
+  const url = escapePopupHtml(media.url);
+
+  if (media.kind === "video") {
+    return buildPopupModule(
+      "media",
+      label,
+      `<video class="voyage-popup__media" src="${url}" muted playsinline preload="metadata"></video>${mediaName}`
+    );
+  }
+
+  return buildPopupModule(
+    "media",
+    label,
+    `<img class="voyage-popup__media" src="${url}" alt="${escapePopupHtml(media.name || label)}" loading="lazy" />${mediaName}`
+  );
+};
+
+const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, explanation: string) => {
+  const helpLabel = lang === "it" ? "Spiegazione complessità" : "Complexity explanation";
+  return `
+    <span class="voyage-popup__help">
+      <button type="button" class="voyage-popup__help-trigger" aria-label="${escapePopupHtml(helpLabel)}" aria-describedby="voyage-popup-complexity-help">?</button>
+      <span id="voyage-popup-complexity-help" role="tooltip" class="voyage-popup__help-tooltip">
+        <span class="voyage-popup__help-title">${escapePopupHtml(label)}</span>
+        <span>${escapePopupHtml(explanation)}</span>
+      </span>
+    </span>
+  `;
+};
+
+/**
+ * Compact, color-coded complexity chip meant to live inside the booking module — the
+ * complexity estimate only matters to someone deciding whether to book this leg.
+ */
+const buildComplexityChipMarkup = (leg: BookableLeg, lang: "en" | "it") => {
+  const level = getLegComplexity(leg);
+  const danger = getLegDangerLevel(leg);
+  const label = getComplexityLabel(level, lang);
+  const helpTitle = `${getComplexityTitle(lang)} · ${label}`;
+  return `
+    <div class="voyage-popup__complexity">
+      <span class="voyage-popup__complexity-dot voyage-popup__complexity-dot--${level}">${level}</span>
+      <span class="voyage-popup__complexity-label">${escapePopupHtml(label)}${
+        danger > 0 ? ` · ${escapePopupHtml(getDangerLabel(danger, lang))}` : ""
+      }</span>
+      ${buildComplexityHelpMarkup(lang, helpTitle, getComplexityExplanation(leg, lang))}
+    </div>
+  `;
+};
 
 const clampWaypointIndex = (value: number, max: number) => Math.max(0, Math.min(value, max));
 
@@ -226,6 +305,10 @@ const VoyageMap = ({
   onArticleClick,
   onVoyageSelect,
   selectedRouteVoyageId: controlledRouteVoyageId,
+  bookingLegsByVoyage = {},
+  bookingSelectionAnchor = null,
+  selectedBookingLegs = [],
+  onParticipate,
   flyToWaypointRef,
   lang,
   initialFitReady = true,
@@ -236,6 +319,7 @@ const VoyageMap = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const waypointPopupPersistentRef = useRef(false);
   const presenceMarkersRef = useRef<maplibregl.Marker[]>([]);
   const presencePopupRef = useRef<maplibregl.Popup | null>(null);
   const lineLayerHandlersRef = useRef<Record<string, {
@@ -270,6 +354,10 @@ const VoyageMap = ({
   highlightedVoyageIdRef.current = highlightedVoyageId;
   const langRef = useRef(lang);
   langRef.current = lang;
+  const onParticipateRef = useRef(onParticipate);
+  onParticipateRef.current = onParticipate;
+  const bookingSelectionAnchorRef = useRef(bookingSelectionAnchor);
+  bookingSelectionAnchorRef.current = bookingSelectionAnchor;
 
   const publishedVoyages = useMemo(() => voyages.filter((v) => v.is_published), [voyages]);
   const articlesForMap = useMemo(
@@ -295,6 +383,14 @@ const VoyageMap = ({
       fillColor: string;
       /** Colore tratto principale del percorso (come layer `voyage-line-*`). */
       routeStrokeColor: string;
+      isBookableVoyage: boolean;
+      hasOutboundAvailability: boolean;
+      hasInboundAvailability: boolean;
+      hasAnyBookingLeg: boolean;
+      /** Whether any leg touching this waypoint (outbound or inbound) is still current/future, i.e. not past/completed. */
+      hasCurrentLegFromHere: boolean;
+      /** The leg departing from this waypoint, if any (only set when that leg is still current/future). */
+      outboundLeg: BookableLeg | null;
     };
     const items: Item[] = [];
     for (const voyage of publishedVoyages) {
@@ -324,6 +420,26 @@ const VoyageMap = ({
             : associatedArticle.title_it || associatedArticle.title_en
           : "";
         const routeStrokeColor = getVoyageStrokeColor(voyage, "base");
+        const voyageIsBookable = isVoyageBookableNow(voyage);
+        const voyageBookingLegs = voyageIsBookable ? bookingLegsByVoyage[voyage.id] || [] : [];
+        const waypointIndexById = new Map(wps.map((waypoint, index) => [waypoint.id, index]));
+        const hasOutboundAvailability = voyageBookingLegs.some((leg) => {
+          const startIndex = waypointIndexById.get(leg.from_waypoint_id);
+          return leg.available && startIndex != null && startIndex >= safeIndex;
+        });
+        const hasInboundAvailability = voyageBookingLegs.some((leg) => {
+          const endIndex = waypointIndexById.get(leg.to_waypoint_id);
+          return leg.available && endIndex != null && endIndex <= safeIndex;
+        });
+        const hasCurrentLegFromHere = voyageBookingLegs.some((leg) => {
+          if (!isLegCurrentOrFuture(leg)) return false;
+          const startIndex = waypointIndexById.get(leg.from_waypoint_id);
+          const endIndex = waypointIndexById.get(leg.to_waypoint_id);
+          return (startIndex != null && startIndex >= safeIndex) || (endIndex != null && endIndex <= safeIndex);
+        });
+        const outboundLeg = voyageBookingLegs.find(
+          (leg) => leg.from_waypoint_id === w.id && isLegCurrentOrFuture(leg)
+        );
         items.push({
           key: `${voyage.id}:${w.id}`,
           lng: w.lng,
@@ -335,11 +451,17 @@ const VoyageMap = ({
           articleTitle,
           fillColor,
           routeStrokeColor,
+          isBookableVoyage: voyageIsBookable,
+          hasOutboundAvailability,
+          hasInboundAvailability,
+          hasAnyBookingLeg: voyageBookingLegs.length > 0,
+          hasCurrentLegFromHere,
+          outboundLeg: outboundLeg ?? null,
         });
       }
     }
     return items;
-  }, [publishedVoyages, waypointsMap, articlesForMap, lang]);
+  }, [publishedVoyages, waypointsMap, articlesForMap, lang, bookingLegsByVoyage]);
 
   const waypointClusterIndexRef = useRef<Supercluster | null>(null);
   const mapWaypointsByKeyRef = useRef<Map<string, (typeof mapWaypointClusterInputs)[0]>>(new Map());
@@ -437,6 +559,7 @@ const VoyageMap = ({
       console.error("Failed to initialize voyage map", error);
       popupRef.current?.remove();
       popupRef.current = null;
+      waypointPopupPersistentRef.current = false;
       clearPresenceMarkers();
       if (mapRef.current) {
         clearInteractiveLayerHandlers(mapRef.current);
@@ -653,6 +776,10 @@ const VoyageMap = ({
         const isDimmed = hasComparisonFocus && !isFocused && !isHovered;
         const baseColor = getVoyageStrokeColor(voyage, "base");
         const focusColor = getVoyageStrokeColor(voyage, "focus");
+        const selectedLegsForVoyage = selectedBookingLegs.filter((leg) => leg.voyage_id === voyage.id);
+        const waypointIndexById = selectedLegsForVoyage.length > 0
+          ? new Map(wps.map((waypoint, index) => [waypoint.id, index]))
+          : null;
 
         const routeCoordinates = getVoyageMapLineStringCoordinates(voyage, wps, articlesForMap);
 
@@ -812,6 +939,64 @@ const VoyageMap = ({
           }
         }
 
+        selectedLegsForVoyage.forEach((leg) => {
+          const startIndex = waypointIndexById?.get(leg.from_waypoint_id);
+          const endIndex = waypointIndexById?.get(leg.to_waypoint_id);
+          if (startIndex == null || endIndex == null) return;
+
+          const selectedSegmentCoordinates = getArticleSegmentGeometry(
+            wps,
+            voyage.type,
+            startIndex,
+            endIndex,
+            getCachedGeometryCoordinates(voyage)
+          );
+          if (selectedSegmentCoordinates.length < 2) return;
+
+          const selectedSegmentId = `voyage-booking-selected-${voyage.id}-${leg.id}`;
+          map.addSource(selectedSegmentId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: selectedSegmentCoordinates,
+              },
+              properties: {},
+            },
+          });
+
+          map.addLayer({
+            id: `${selectedSegmentId}-halo`,
+            type: "line",
+            source: selectedSegmentId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": "hsla(151, 82%, 36%, 0.22)",
+              "line-width": Math.max(8, 13 * getVoyageLineWidthScale(voyage)),
+              "line-opacity": 0.95,
+            },
+          });
+
+          map.addLayer({
+            id: selectedSegmentId,
+            type: "line",
+            source: selectedSegmentId,
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": "hsl(151, 78%, 36%)",
+              "line-width": Math.max(3.4, 6.2 * getVoyageLineWidthScale(voyage)),
+              "line-opacity": 0.98,
+            },
+          });
+        });
+
         /* Waypoint visibili: cluster HTML (effect separato), non layer circle */
 
         if (
@@ -867,12 +1052,14 @@ const VoyageMap = ({
     };
   }, [
     articlesForMap,
+    bookingLegsByVoyage,
     clearInteractiveLayerHandlers,
     highlightedVoyageId,
     hoveredRouteVoyageId,
     lang,
     publishedVoyages,
     selectedArticleId,
+    selectedBookingLegs,
     waypointsMap,
   ]);
 
@@ -904,43 +1091,74 @@ const VoyageMap = ({
 
     const showWaypointPopup = (
       coords: [number, number],
-      sequenceHeading: string,
-      name: string,
-      articleTitle: string,
-      routeColor: string
+      meta: (typeof mapWaypointClusterInputs)[0],
+      persist = false
     ) => {
-      if (!name && !sequenceHeading) return;
+      if (!meta.name && !meta.sequenceHeading) return;
+      waypointPopupPersistentRef.current = persist;
       const L = langRef.current;
-      const seqBlock = sequenceHeading
-        ? `<div style="margin:0 0 8px;">
-            <span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:${routeColor};background:linear-gradient(135deg,hsla(0,0%,100%,0.95),hsl(210,25%,97%));border:1px solid ${routeColor};box-shadow:0 1px 2px rgba(15,23,42,0.05);">${escapePopupHtml(sequenceHeading)}</span>
-          </div>`
+      const routeColor = meta.routeStrokeColor;
+      const articleBlock = meta.articleTitle
+        ? buildPopupModule(
+            "article",
+            L === "it" ? "Articolo" : "Article",
+            `<div class="voyage-popup__module-title">${escapePopupHtml(meta.articleTitle)}</div>`
+          )
         : "";
-      const articleBlock = articleTitle
-        ? `<div style="margin-top:11px;padding-top:11px;border-top:1px solid hsl(220,14%,91%);">
-            <span style="display:block;font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:hsl(220,10%,52%);margin-bottom:4px;">${L === "it" ? "Articolo" : "Article"}</span>
-            <span style="font-size:11px;line-height:1.45;color:hsl(220,14%,34%);">${escapePopupHtml(articleTitle)}</span>
-          </div>`
+      const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
+      const complexityChip = meta.outboundLeg ? buildComplexityChipMarkup(meta.outboundLeg, L) : "";
+      const canParticipate = meta.isBookableVoyage && (meta.hasOutboundAvailability || meta.hasInboundAvailability);
+      // A leg is "completed" once every leg touching this stop is in the past — at that point
+      // the complexity estimate and booking module are no longer relevant and must not show.
+      const isPastCompleted = meta.hasAnyBookingLeg && !meta.hasCurrentLegFromHere;
+      const bookingHint = !meta.hasAnyBookingLeg
+        ? `<p class="voyage-popup__hint">${L === "it" ? "Le adesioni non sono ancora aperte per questa tappa." : "Joining isn't open yet for this stop."}</p>`
+        : !canParticipate
+          ? `<p class="voyage-popup__hint">${L === "it" ? "Al momento non risultano posti disponibili su questa tratta." : "There are currently no seats available on this leg."}</p>`
+          : "";
+      const bookableBlock = meta.isBookableVoyage && !isPastCompleted
+        ? buildPopupModule(
+            "booking",
+            L === "it" ? "Viaggio aperto alle adesioni" : "Open to join",
+            `${complexityChip}`
+            + `${canParticipate ? `<div class="voyage-popup__actions">
+              <button type="button" class="voyage-popup__action" data-participate="1">${L === "it" ? "Partecipa" : "Join"}</button>
+            </div>` : ""}`
+            + bookingHint
+          )
         : "";
       const popupHtml = `
-        <div style="font-family:var(--font-sans),ui-sans-serif,system-ui,sans-serif;padding:14px 16px 15px;min-width:172px;max-width:280px;border-radius:16px;background:linear-gradient(165deg,hsl(0,0%,100%) 0%,hsl(210,40%,99.2%) 100%);box-shadow:0 14px 44px rgba(15,23,42,0.13),0 0 0 1px rgba(15,23,42,0.05);border-left:4px solid ${routeColor};">
-          ${seqBlock}
-          <div style="font-size:13px;font-weight:600;line-height:1.38;color:hsl(220,28%,14%);letter-spacing:-0.015em;">${escapePopupHtml(name || "—")}</div>
-          ${articleBlock}
+        <div class="voyage-popup" style="--voyage-popup-accent:${routeColor};">
+          <div class="voyage-popup__header">
+            ${meta.sequenceHeading ? `<span class="voyage-popup__badge">${escapePopupHtml(meta.sequenceHeading)}</span>` : ""}
+            <div class="voyage-popup__title">${escapePopupHtml(meta.name || "—")}</div>
+          </div>
+          <div class="voyage-popup__body">
+            ${mediaBlock}
+            ${articleBlock}
+            ${bookableBlock}
+          </div>
         </div>
       `;
       if (!popupRef.current) {
         popupRef.current = new maplibregl.Popup({
           offset: 14,
-          closeButton: false,
+          closeButton: true,
           closeOnClick: false,
           closeOnMove: false,
-          maxWidth: "300px",
+          maxWidth: "340px",
           className: "voyage-waypoint-popup",
         });
       }
       const p = popupRef.current;
       p.setLngLat(coords).setHTML(popupHtml).addTo(map);
+      p.getElement().querySelectorAll<HTMLButtonElement>("[data-participate]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onParticipateRef.current?.(meta.voyageId);
+        });
+      });
       const popupRoot = p.getElement();
       if (popupRoot?.parentElement) {
         popupRoot.parentElement.appendChild(popupRoot);
@@ -1009,6 +1227,9 @@ const VoyageMap = ({
         const isDimmed = Boolean(
           markerFocusVoyageId && meta.voyageId !== markerFocusVoyageId
         );
+        const isBookingAnchor =
+          bookingSelectionAnchorRef.current?.voyageId === meta.voyageId &&
+          bookingSelectionAnchorRef.current?.waypointId === meta.waypoint.id;
         const size = 17;
         const el = document.createElement("div");
         el.style.cssText = `cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ${MAP_MARKER_EASE};`;
@@ -1016,9 +1237,9 @@ const VoyageMap = ({
         const dot = document.createElement("div");
         dot.style.cssText = `
           width:${size}px;height:${size}px;border-radius:50%;
-          border:1.5px solid hsl(0,0%,100%);
+          border:${isBookingAnchor ? "3px" : meta.isBookableVoyage ? "2.5px" : "1.5px"} solid ${isBookingAnchor ? "hsl(142,72%,35%)" : meta.isBookableVoyage ? "hsl(152,58%,44%)" : "hsl(0,0%,100%)"};
           background:${meta.fillColor};
-          box-shadow:0 1px 5px rgba(15,23,42,0.14);
+          box-shadow:${isBookingAnchor ? "0 0 0 4px hsla(142,72%,35%,0.2),0 2px 9px rgba(15,23,42,0.18)" : meta.isBookableVoyage ? "0 0 0 4px hsla(152,58%,44%,0.16),0 2px 8px rgba(15,23,42,0.16)" : "0 1px 5px rgba(15,23,42,0.14)"};
           transition:transform 0.2s ${MAP_MARKER_EASE};
         `;
         el.appendChild(dot);
@@ -1034,15 +1255,23 @@ const VoyageMap = ({
           el.style.opacity = "1";
           const wrap = markerWrap();
           if (wrap) wrap.style.zIndex = "80";
-          showWaypointPopup(coords, meta.sequenceHeading, meta.name, meta.articleTitle, meta.routeStrokeColor);
+          showWaypointPopup(coords, meta, false);
         });
         el.addEventListener("mouseleave", () => {
           dot.style.transform = "scale(1)";
           if (isDimmed) el.style.opacity = "0.38";
           const wrap = markerWrap();
           if (wrap) wrap.style.zIndex = "";
-          popupRef.current?.remove();
-          popupRef.current = null;
+          if (!waypointPopupPersistentRef.current) {
+            popupRef.current?.remove();
+            popupRef.current = null;
+          }
+        });
+        el.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dot.style.transform = "scale(1.12)";
+          showWaypointPopup(coords, meta, true);
         });
 
         waypointMarkersRef.current.push(
@@ -1090,7 +1319,7 @@ const VoyageMap = ({
 
   useEffect(() => {
     runWaypointMarkersSyncRef.current();
-  }, [highlightedVoyageId, hoveredRouteVoyageId]);
+  }, [bookingSelectionAnchor, highlightedVoyageId, hoveredRouteVoyageId]);
 
   // Articoli sulla mappa: Supercluster + marker (stesso stile di prima)
   useEffect(() => {

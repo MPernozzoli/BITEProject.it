@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Compass, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, Compass, Fingerprint, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
 import boatHarbor from "@/assets/boat-harbor.webp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,16 +11,30 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { validateSessionOrSignOut } from "@/lib/supabase-auth";
+import { fetchIsProfileComplete } from "@/lib/profile-completeness";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
 type AuthStep = "email" | "verify";
-type AuthMethod = "google" | "email";
+type AuthMethod = "google" | "email" | "passkey";
 
 const OTP_LENGTH = 8;
 const LAST_AUTH_METHOD_STORAGE_KEY = "bite_last_auth_method";
 const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const AUTH_ROUTES = new Set(["/login", "/signup"]);
+
+const normalizeInternalRedirect = (value: string | null | undefined) => {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (parsed.origin !== window.location.origin) return "";
+    if (AUTH_ROUTES.has(parsed.pathname)) return "";
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "";
+  }
+};
 
 const AUTH_COPY = {
   it: {
@@ -88,6 +102,7 @@ const AUTH_COPY = {
         "Default attivo. Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
       divider: "oppure",
       google: "Continua con Google",
+      passkey: "Accedi con passkey",
       emailMethod: "Continua via email",
       lastUsed: "Ultimo usato",
       oauthHint: "Google usa lo stesso accesso rapido del codice email.",
@@ -121,6 +136,8 @@ const AUTH_COPY = {
       sessionNotReady: "Sessione non pronta. Riprova tra un secondo.",
       verifyGeneric: "Errore durante la verifica",
       oauth: "Errore durante l'accesso con Google",
+      passkey: "Errore durante l'accesso con passkey",
+      passkeyUnsupported: "Questo browser o dispositivo non supporta ancora le passkey.",
       loginMissingAccount: "Non troviamo un account associato a questa email. Prova con Registrati.",
     },
   },
@@ -189,6 +206,7 @@ const AUTH_COPY = {
         "Enabled by default. You will receive editorial updates and periodic digests, and you can unsubscribe anytime.",
       divider: "or",
       google: "Continue with Google",
+      passkey: "Sign in with passkey",
       emailMethod: "Continue with email",
       lastUsed: "Last used",
       oauthHint: "Google uses the same fast access flow as the email code.",
@@ -222,6 +240,8 @@ const AUTH_COPY = {
       sessionNotReady: "Session is not ready yet. Try again in a second.",
       verifyGeneric: "Error while verifying the code",
       oauth: "Error while signing in with Google",
+      passkey: "Error while signing in with passkey",
+      passkeyUnsupported: "This browser or device does not support passkeys yet.",
       loginMissingAccount: "We couldn't find an account for this email. Try Sign up instead.",
     },
   },
@@ -265,11 +285,11 @@ const UserLogin = () => {
   const location = useLocation();
 
   const authMode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
-  const requestedRedirect = (location.state as { from?: string } | null)?.from;
-  const redirectTo =
-    requestedRedirect && !["/login", "/signup"].includes(requestedRedirect)
-      ? requestedRedirect
-      : "/profile";
+  const searchParams = new URLSearchParams(location.search);
+  const stateRedirect = normalizeInternalRedirect((location.state as { from?: string } | null)?.from);
+  const queryRedirect = normalizeInternalRedirect(searchParams.get("redirect"));
+  const homeRedirect = lang === "en" ? "/en" : "/it";
+  const redirectTo = stateRedirect || queryRedirect || homeRedirect;
   const ui = AUTH_COPY[lang === "it" ? "it" : "en"];
   const heroContent = ui.hero[authMode];
   const formContent = ui.form[authMode];
@@ -277,9 +297,18 @@ const UserLogin = () => {
   const emailReady = !!normalizeEmail(emailInput);
   const nameReady = authMode === "login" || !!nameInput.trim();
 
+  const completeAuthNavigation = async (userId: string) => {
+    const complete = await fetchIsProfileComplete(userId);
+    if (complete) {
+      navigate(redirectTo, { replace: true });
+    } else {
+      navigate("/complete-profile", { state: { from: redirectTo }, replace: true });
+    }
+  };
+
   useEffect(() => {
     const storedMethod = window.localStorage.getItem(LAST_AUTH_METHOD_STORAGE_KEY);
-    if (storedMethod === "google" || storedMethod === "email") {
+    if (storedMethod === "google" || storedMethod === "email" || storedMethod === "passkey") {
       setLastUsedMethod(storedMethod);
     }
   }, []);
@@ -290,13 +319,15 @@ const UserLogin = () => {
     void (async () => {
       const { session } = await validateSessionOrSignOut();
       if (!cancelled && session) {
-        navigate(redirectTo, { replace: true });
+        await completeAuthNavigation(session.user.id);
       }
     })();
 
     return () => {
       cancelled = true;
     };
+    // completeAuthNavigation intentionally excluded: it is stable in effect (recreated each render but not depended on for identity)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, redirectTo]);
 
   useEffect(() => {
@@ -425,7 +456,7 @@ const UserLogin = () => {
         }
       }
 
-      navigate(redirectTo, { replace: true });
+      await completeAuthNavigation(session.user.id);
     } catch (caughtError) {
       const message =
         caughtError instanceof Error ? caughtError.message : ui.errors.verifyGeneric;
@@ -452,8 +483,9 @@ const UserLogin = () => {
       window.localStorage.removeItem(PENDING_SIGNUP_NEWSLETTER_KEY);
     }
 
+    const oauthReturnPath = `/login?redirect=${encodeURIComponent(redirectTo)}`;
     const { error: oauthError } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: new URL(oauthReturnPath, window.location.origin).toString(),
     });
 
     if (oauthError) {
@@ -467,6 +499,45 @@ const UserLogin = () => {
     }
 
     setLoading(false);
+  };
+
+  const handlePasskeyAuth = async () => {
+    if (!window.PublicKeyCredential) {
+      setError(ui.errors.passkeyUnsupported);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data, error: passkeyError } = await supabase.auth.signInWithPasskey();
+
+      if (passkeyError) {
+        setError(passkeyError.message || ui.errors.passkey);
+        return;
+      }
+
+      if (!data?.session) {
+        setError(ui.errors.sessionNotReady);
+        return;
+      }
+
+      if (!rememberMe) {
+        localStorage.setItem("bite_ephemeral_session", "true");
+      } else {
+        localStorage.removeItem("bite_ephemeral_session");
+      }
+
+      localStorage.setItem(LAST_AUTH_METHOD_STORAGE_KEY, "passkey");
+      setLastUsedMethod("passkey");
+      await completeAuthNavigation(data.session.user.id);
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : ui.errors.passkey;
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const featureCards =
@@ -564,7 +635,7 @@ const UserLogin = () => {
               <div className="space-y-4">
                 <div className="inline-flex w-full rounded-full border border-white/80 bg-white/70 p-1 shadow-[0_20px_40px_-30px_hsl(var(--navy)/0.35)]">
                   <Link
-                    to="/login"
+                    to={{ pathname: "/login", search: location.search }}
                     state={location.state}
                     className={cn(
                       "flex-1 rounded-full px-4 py-2.5 text-center text-sm font-medium transition-colors",
@@ -576,7 +647,7 @@ const UserLogin = () => {
                     {ui.form.tabs.login}
                   </Link>
                   <Link
-                    to="/signup"
+                    to={{ pathname: "/signup", search: location.search }}
                     state={location.state}
                     className={cn(
                       "flex-1 rounded-full px-4 py-2.5 text-center text-sm font-medium transition-colors",
@@ -633,6 +704,27 @@ const UserLogin = () => {
                         )}
                       </span>
                     </Button>
+                    {authMode === "login" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePasskeyAuth}
+                        disabled={loading}
+                        className="h-12 w-full rounded-full border-white/85 bg-white/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-white"
+                      >
+                        <span className="flex w-full items-center justify-between gap-3">
+                          <span className="flex items-center gap-3">
+                            <Fingerprint className="h-5 w-5 text-accent" />
+                            <span>{ui.form.passkey}</span>
+                          </span>
+                          {lastUsedMethod === "passkey" && (
+                            <span className="rounded-full border border-white/80 bg-white/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              {ui.form.lastUsed}
+                            </span>
+                          )}
+                        </span>
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-3 pt-2">

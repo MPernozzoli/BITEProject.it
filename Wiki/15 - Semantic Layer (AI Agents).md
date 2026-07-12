@@ -12,7 +12,7 @@ Un **layer tecnico machine-readable** (JSON, GeoJSON, `llms.txt`) che espone la 
 
 ## Strategia dominio
 - **Nessun hostname separato.** Target pulito: `biteproject.it/llms.txt` + JSON/GeoJSON same-origin sotto `/data/`.
-- `/llms.txt` e `/llms-full.txt` sono serviti same-origin da Vercel (`api/llms.ts`) come proxy della function `public-llms`; `robots.txt` non li blocca.
+- `/llms.txt` e `/llms-full.txt` sono serviti same-origin da Vercel (`apps/web/api/llms.ts`) come proxy della function `public-llms`; `robots.txt` non li blocca.
 - Implementazione attuale (dettaglio tecnico) tramite Supabase functions → [[09 - Edge Functions]]:
   - `public-llms` → feed `llms.txt`
   - `public-semantic` → oggetti JSON

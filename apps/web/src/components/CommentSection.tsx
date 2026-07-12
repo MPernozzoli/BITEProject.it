@@ -25,6 +25,28 @@ interface CommentSectionProps {
   onFocusHandled?: () => void;
 }
 
+const PENDING_COMMENT_DRAFT_KEY = "bite_pending_comment_draft";
+
+type PendingCommentDraft = {
+  articleId: string;
+  parentId: string | null;
+  text: string;
+};
+
+const readPendingDraft = (articleId: string): PendingCommentDraft | null => {
+  try {
+    const raw = window.localStorage.getItem(PENDING_COMMENT_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingCommentDraft>;
+    if (parsed?.articleId !== articleId || typeof parsed.text !== "string" || !parsed.text.trim()) {
+      return null;
+    }
+    return { articleId, parentId: parsed.parentId ?? null, text: parsed.text };
+  } catch {
+    return null;
+  }
+};
+
 const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: CommentSectionProps) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -40,7 +62,24 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
   useEffect(() => {
     checkSession();
     fetchComments();
+
+    const draft = readPendingDraft(articleId);
+    if (draft) {
+      window.localStorage.removeItem(PENDING_COMMENT_DRAFT_KEY);
+      if (draft.parentId) {
+        setReplyTo(draft.parentId);
+        setReplyText(draft.text);
+      } else {
+        setNewComment(draft.text);
+      }
+    }
   }, [articleId]);
+
+  const saveDraftAndRedirect = (parentId: string | null, text: string) => {
+    const draft: PendingCommentDraft = { articleId, parentId, text };
+    window.localStorage.setItem(PENDING_COMMENT_DRAFT_KEY, JSON.stringify(draft));
+    navigate("/login", { state: { from: window.location.pathname } });
+  };
 
   useEffect(() => {
     const {
@@ -117,7 +156,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
     const currentUserId = session?.user?.id || userId;
 
     if (!currentUserId) {
-      navigate("/login", { state: { from: window.location.pathname } });
+      saveDraftAndRedirect(parentId, content);
       return;
     }
 
@@ -180,12 +219,6 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
     fetchComments();
   };
 
-  const handleCommentAction = () => {
-    if (!userId) {
-      navigate("/login", { state: { from: window.location.pathname } });
-    }
-  };
-
   useEffect(() => {
     if (!focusCommentId || loading) return;
 
@@ -234,10 +267,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
                 {comment.likes_count > 0 && comment.likes_count}
               </button>
               <button
-                onClick={() => {
-                  if (!userId) { handleCommentAction(); return; }
-                  setReplyTo(replyTo === comment.id ? null : comment.id);
-                }}
+                onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Reply size={12} /> Rispondi
@@ -282,8 +312,8 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
         Commenti {comments.length > 0 && `(${comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)})`}
       </h3>
 
-      {userId ? (
-        <div className="glass-panel rounded-[28px] p-4 flex gap-3 mb-8">
+      <div className="mb-8">
+        <div className="glass-panel rounded-[28px] p-4 flex gap-3">
           <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">
             <textarea
               value={newComment}
@@ -303,14 +333,12 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
             <Send size={14} />
           </button>
         </div>
-      ) : (
-        <button
-          onClick={handleCommentAction}
-          className="mb-8 text-sm font-sans text-accent hover:text-foreground transition-colors underline"
-        >
-          Accedi per commentare
-        </button>
-      )}
+        {!userId && (
+          <p className="mt-2 text-xs font-sans text-muted-foreground">
+            Accedi per pubblicare il commento: il testo scritto non andrà perso.
+          </p>
+        )}
+      </div>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Caricamento commenti...</p>

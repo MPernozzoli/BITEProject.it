@@ -19,24 +19,18 @@ create table if not exists public.logbook_map_markers (
     )
   )
 );
-
 comment on table public.logbook_map_markers is
   'Manual map markers for the public logbook map, currently used for boat and crew presence.';
-
 comment on column public.logbook_map_markers.is_onboard is
   'Crew-only flag: when true the crew marker is hidden and the boat marker switches to the onboard variant.';
-
 alter table public.logbook_map_markers enable row level security;
-
 grant select on public.logbook_map_markers to anon, authenticated;
 grant insert, update, delete on public.logbook_map_markers to authenticated;
-
 drop policy if exists "Logbook map markers are publicly readable" on public.logbook_map_markers;
 create policy "Logbook map markers are publicly readable"
   on public.logbook_map_markers
   for select
   using (true);
-
 drop policy if exists "Admins manage logbook map markers" on public.logbook_map_markers;
 create policy "Admins manage logbook map markers"
   on public.logbook_map_markers
@@ -44,7 +38,6 @@ create policy "Admins manage logbook map markers"
   to authenticated
   using (public.has_role(auth.uid(), 'admin'))
   with check (public.has_role(auth.uid(), 'admin'));
-
 insert into public.logbook_map_markers (
   id,
   label_it,

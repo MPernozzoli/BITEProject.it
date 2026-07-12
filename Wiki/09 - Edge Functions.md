@@ -3,7 +3,7 @@ tags: [backend, edge-functions, serverless, supabase]
 ---
 # 09 - Edge Functions
 
-⬅️ [[Home]] · sorgente: `supabase/functions/` · config JWT in `supabase/config.toml`
+⬅️ [[Home]] · sorgente: `apps/web/supabase/functions/` · config JWT in `apps/web/supabase/config.toml`
 
 28 funzioni serverless Supabase (Deno). Raggruppate per dominio:
 

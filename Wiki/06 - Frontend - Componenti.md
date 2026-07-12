@@ -3,7 +3,7 @@ tags: [frontend, componenti, ui]
 ---
 # 06 - Frontend - Componenti
 
-⬅️ [[Home]] · sorgente: `src/components/`
+⬅️ [[Home]] · sorgente: `apps/web/src/components/`
 
 ## Componenti di layout & navigazione
 - `Layout.tsx` — shell dell'app (header + footer + main)
@@ -32,7 +32,7 @@ tags: [frontend, componenti, ui]
 - `admin/AdminVoyageManager.tsx` — editor rotte admin con workspace mappa MapLibre; il comando `Fullscreen` usa la Fullscreen API del browser e mantiene un fallback layout `fixed` se l'API non è disponibile.
 - `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, pax, note e CTA, riusando la shell della sidebar articoli; la selezione illumina la tratta su `VoyageMap` e `VoyageLegend` → [[13 - Booking Voyage]]
 - `voyage/VoyageLegend.tsx` — legenda rotta del logbook; mostra distanze, tappe e articoli collegati, ma non i badge di complessità delle tratte prenotabili.
-- `voyage/ArticleListCard.tsx` — card articolo della sidebar `/logbook`, con thumbnail, metadati, autori, contatori e badge circolare per gli articoli già letti.
+- `voyage/ArticleListCard.tsx` — card articolo della sidebar `/logbook`, con thumbnail, metadati, autori, contatori e icona occhiali senza box per gli articoli già letti.
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.

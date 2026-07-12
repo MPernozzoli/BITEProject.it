@@ -1,4 +1,5 @@
 export const ADMIN_HOSTNAME = "admin.biteproject.it";
+export const MAIN_HOSTNAME = "biteproject.it";
 
 export const isAdminHostname = (hostname: string) =>
   hostname === ADMIN_HOSTNAME || hostname.startsWith(`${ADMIN_HOSTNAME}.`);
@@ -20,4 +21,18 @@ export const getAdminUrl = (path = "/admin") => {
   }
 
   return `${protocol}//${ADMIN_HOSTNAME}${port ? `:${port}` : ""}${normalizedPath}`;
+};
+
+/** Points marketing/public-site links (e.g. header nav) at the main site while on the admin subdomain. */
+export const getMainSiteUrl = (path = "/") => {
+  if (typeof window === "undefined") return path;
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const { protocol, hostname, port } = window.location;
+
+  if (!isAdminHostname(hostname)) {
+    return normalizedPath;
+  }
+
+  return `${protocol}//${MAIN_HOSTNAME}${port ? `:${port}` : ""}${normalizedPath}`;
 };

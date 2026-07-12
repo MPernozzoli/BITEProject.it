@@ -928,6 +928,8 @@ export type Database = {
           published_at: string | null
           scheduled_at: string | null
           slug: string
+          slug_en: string | null
+          slug_it: string | null
           status: Database["public"]["Enums"]["article_status"]
           story_id: string | null
           title_en: string
@@ -966,6 +968,8 @@ export type Database = {
           published_at?: string | null
           scheduled_at?: string | null
           slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
           title_en?: string
@@ -1004,6 +1008,8 @@ export type Database = {
           published_at?: string | null
           scheduled_at?: string | null
           slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
           title_en?: string
@@ -1507,6 +1513,8 @@ export type Database = {
           description_it: string | null
           id: string
           slug: string
+          slug_en: string | null
+          slug_it: string | null
           title_en: string
           title_it: string
           updated_at: string
@@ -1518,6 +1526,8 @@ export type Database = {
           description_it?: string | null
           id?: string
           slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string
@@ -1529,6 +1539,8 @@ export type Database = {
           description_it?: string | null
           id?: string
           slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           title_en?: string
           title_it?: string
           updated_at?: string
@@ -1684,7 +1696,12 @@ export type Database = {
           name: string | null
           name_en: string | null
           name_it: string | null
+          planned_stop_duration_minutes: number
           sort_order: number
+          stop_departure_time: string | null
+          stop_hours: number | null
+          stop_mode: string
+          stop_nights: number | null
           visibility_mode: string
           voyage_id: string
           waypoint_type: string
@@ -1704,7 +1721,12 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          planned_stop_duration_minutes?: number
           sort_order?: number
+          stop_departure_time?: string | null
+          stop_hours?: number | null
+          stop_mode?: string
+          stop_nights?: number | null
           visibility_mode?: string
           voyage_id: string
           waypoint_type?: string
@@ -1724,7 +1746,12 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          planned_stop_duration_minutes?: number
           sort_order?: number
+          stop_departure_time?: string | null
+          stop_hours?: number | null
+          stop_mode?: string
+          stop_nights?: number | null
           visibility_mode?: string
           voyage_id?: string
           waypoint_type?: string
@@ -1742,10 +1769,16 @@ export type Database = {
       voyages: {
         Row: {
           cached_geometry: Json | null
+          booking_enabled: boolean
+          booking_contribution_per_nm_eur: number
+          booking_max_guests: number
+          booking_planning_speed_kn: number
           created_at: string
           description: string | null
           description_en: string | null
           description_it: string | null
+          departure_window_end: string | null
+          departure_window_start: string | null
           end_date: string | null
           end_date_flex_days: number | null
           end_time: string | null
@@ -1765,10 +1798,16 @@ export type Database = {
         }
         Insert: {
           cached_geometry?: Json | null
+          booking_enabled?: boolean
+          booking_contribution_per_nm_eur?: number
+          booking_max_guests?: number
+          booking_planning_speed_kn?: number
           created_at?: string
           description?: string | null
           description_en?: string | null
           description_it?: string | null
+          departure_window_end?: string | null
+          departure_window_start?: string | null
           end_date?: string | null
           end_date_flex_days?: number | null
           end_time?: string | null
@@ -1788,10 +1827,16 @@ export type Database = {
         }
         Update: {
           cached_geometry?: Json | null
+          booking_enabled?: boolean
+          booking_contribution_per_nm_eur?: number
+          booking_max_guests?: number
+          booking_planning_speed_kn?: number
           created_at?: string
           description?: string | null
           description_en?: string | null
           description_it?: string | null
+          departure_window_end?: string | null
+          departure_window_start?: string | null
           end_date?: string | null
           end_date_flex_days?: number | null
           end_time?: string | null

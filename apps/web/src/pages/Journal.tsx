@@ -2,8 +2,9 @@ import { useI18n } from "@/lib/i18n";
 import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -11,9 +12,14 @@ import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
+import BookingSidebarPanel from "@/components/voyage/BookingSidebarPanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
+import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import BankTransferDialog from "@/components/booking/BankTransferDialog";
+import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
+import { startDepositPayment } from "@/lib/booking-payment";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
@@ -27,6 +33,20 @@ import {
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import {
+  type BookableLegAvailability,
+  type BookingRequest,
+  type BookingWaypoint,
+  getLegLabel,
+  getLegRangeBetweenWaypoints,
+  isVoyageBookableNow,
+} from "@/lib/booking-utils";
+
+type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
+type SupabaseRpcClient = {
+  rpc: <T = unknown>(fn: string, args?: Record<string, unknown>) => Promise<SupabaseRpcResponse<T>>;
+};
+const bookingRpcClient = supabase as unknown as SupabaseRpcClient;
 
 const getVoyageTypeIconClassName = (voyageType: Voyage["type"]) =>
   voyageType === "water" ? "text-sky-700" : "text-orange-700";
@@ -56,7 +76,8 @@ const Journal = () => {
   const MOBILE_SIDEBAR_HANDLE = 34;
   const MOBILE_SHEET_SWIPE_THRESHOLD = 48;
   const { t, lang } = useI18n();
-  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { session, isAdmin } = useAuth();
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -71,10 +92,20 @@ const Journal = () => {
   const [voyageFilterOpen, setVoyageFilterOpen] = useState(false);
   const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | Voyage["type"]>("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("peek");
+  const [mobileSidebarMode, setMobileSidebarMode] = useState<"peek" | "expanded" | "collapsed">("collapsed");
   const [mobileSidebarDragOffset, setMobileSidebarDragOffset] = useState(0);
   const [hideMapChromeOnScroll, setHideMapChromeOnScroll] = useState(false);
   const [selectedRouteVoyageId, setSelectedRouteVoyageId] = useState<string | null>(null);
+  const [bookingAnchor, setBookingAnchor] = useState<{ voyageId: string; waypointId: string } | null>(null);
+  const [selectedBookingLegIds, setSelectedBookingLegIds] = useState<string[]>([]);
+  const [bookingRejectedLegIds, setBookingRejectedLegIds] = useState<string[]>([]);
+  const [bookingPartySize, setBookingPartySize] = useState(1);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
+  const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+    null
+  );
   const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
   const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -250,6 +281,46 @@ const Journal = () => {
     return map;
   }, [allWaypoints]);
 
+  const bookableVoyageIds = useMemo(
+    () => voyages.filter(isVoyageBookableNow).map((voyage) => voyage.id),
+    [voyages]
+  );
+  const bookableVoyageIdsKey = useMemo(() => [...bookableVoyageIds].sort().join(","), [bookableVoyageIds]);
+
+  const { data: bookingLegs = [], refetch: refetchBookingLegs } = useQuery({
+    queryKey: ["public-voyage-leg-availability", bookableVoyageIdsKey],
+    enabled: bookableVoyageIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await bookingRpcClient.rpc<BookableLegAvailability[]>("get_public_voyage_leg_availability", {
+        _voyage_ids: bookableVoyageIds,
+      });
+      if (error) {
+        console.warn("[Journal] get_public_voyage_leg_availability unavailable", error);
+        return [] as BookableLegAvailability[];
+      }
+      return ((data || []) as BookableLegAvailability[]).sort((a, b) => {
+        if (a.voyage_id === b.voyage_id) return a.sort_order - b.sort_order;
+        return a.voyage_id.localeCompare(b.voyage_id);
+      });
+    },
+    staleTime: 1000 * 30,
+  });
+
+  const bookingLegsByVoyage = useMemo(() => {
+    const map: Record<string, BookableLegAvailability[]> = {};
+    bookingLegs.forEach((leg) => {
+      if (!map[leg.voyage_id]) map[leg.voyage_id] = [];
+      map[leg.voyage_id].push(leg);
+    });
+    Object.values(map).forEach((legs) => legs.sort((a, b) => a.sort_order - b.sort_order));
+    return map;
+  }, [bookingLegs]);
+
+  const bookingLegsById = useMemo(
+    () => Object.fromEntries(bookingLegs.map((leg) => [leg.id, leg])),
+    [bookingLegs]
+  );
+
   // Filter articles
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return articles;
@@ -365,6 +436,197 @@ const Journal = () => {
     setPanelProfileId(null);
     setVoyageFilterOpen(false);
   }, []);
+
+  const clearBookingSelection = useCallback(() => {
+    setBookingAnchor(null);
+    setSelectedBookingLegIds([]);
+    setBookingRejectedLegIds([]);
+    setBookingMessage("");
+    setBookingPartySize(1);
+  }, []);
+
+  const handleParticipate = useCallback((voyageId: string) => {
+    const voyageLegs = bookingLegsByVoyage[voyageId] || [];
+    const voyageWaypoints = waypointsMap[voyageId] || [];
+    const waypointIds = voyageWaypoints.map((waypoint) => waypoint.id);
+    if (waypointIds.length < 2) return;
+
+    setFocusedVoyageId(voyageId);
+    setSelectedRouteVoyageId(voyageId);
+    setPanelArticle(null);
+    setPanelProfileId(null);
+    setHideMapChromeOnScroll(false);
+    if (isMobile) {
+      setMobileSidebarMode("expanded");
+    } else {
+      setSidebarOpen(true);
+    }
+
+    const fromWaypointId = waypointIds[0];
+    const toWaypointId = waypointIds[waypointIds.length - 1];
+    setBookingAnchor({ voyageId, waypointId: fromWaypointId });
+
+    const rangeLegs = getLegRangeBetweenWaypoints(waypointIds, voyageLegs, fromWaypointId, toWaypointId);
+    const candidateLegs = rangeLegs.length > 0 ? rangeLegs : voyageLegs;
+    if (candidateLegs.length === 0) {
+      setSelectedBookingLegIds([]);
+      setBookingRejectedLegIds([]);
+      toast.error(lang === "it" ? "Non ci sono tratte disponibili per questo viaggio." : "There are no open legs for this voyage.");
+      return;
+    }
+
+    const partySize = Math.max(1, bookingPartySize);
+    const availableLegs = candidateLegs.filter((leg) => leg.available && leg.remaining >= partySize);
+    const rejectedLegs = candidateLegs.filter((leg) => !leg.available || leg.remaining < partySize);
+
+    setSelectedBookingLegIds([]);
+    setBookingRejectedLegIds(rejectedLegs.map((leg) => leg.id));
+
+    if (availableLegs.length === 0) {
+      toast.error(lang === "it" ? "Al momento non ci sono posti disponibili su queste tratte." : "There are currently no seats available on these legs.");
+    } else if (rejectedLegs.length > 0) {
+      toast.info(
+        lang === "it"
+          ? "Alcune tratte non hanno disponibilità e non sono selezionabili."
+          : "Some legs have no availability and cannot be selected."
+      );
+    }
+  }, [bookingLegsByVoyage, bookingPartySize, isMobile, lang, waypointsMap]);
+
+  const toggleBookingLeg = useCallback((legId: string) => {
+    const leg = bookingLegsById[legId];
+    if (!leg) return;
+    if (!leg.available || leg.remaining < bookingPartySize) {
+      toast.error(lang === "it" ? "Questa tratta non ha posti disponibili." : "This leg has no available seats.");
+      setBookingRejectedLegIds((current) => [...new Set([...current, legId])]);
+      return;
+    }
+
+    setSelectedBookingLegIds((current) =>
+      current.includes(legId) ? current.filter((id) => id !== legId) : [...current, legId]
+    );
+    setBookingRejectedLegIds((current) => current.filter((id) => id !== legId));
+  }, [bookingLegsById, bookingPartySize, lang]);
+
+  const submitBookingFromLogbook = useCallback(async () => {
+    if (!session?.user) {
+      navigate("/login", { state: { from: `/${lang}/logbook` } });
+      return;
+    }
+
+    if (!bookingAnchor || selectedBookingLegIds.length === 0) {
+      toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+      return;
+    }
+
+    const selectedBookingVoyage = voyages.find((voyage) => voyage.id === bookingAnchor.voyageId);
+    if (!isVoyageBookableNow(selectedBookingVoyage)) {
+      toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
+      clearBookingSelection();
+      return;
+    }
+
+    const selectedLegs = selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean);
+    const unavailableLegs = selectedLegs.filter((leg) => !leg.available || leg.remaining < bookingPartySize);
+    if (unavailableLegs.length > 0) {
+      setBookingRejectedLegIds(unavailableLegs.map((leg) => leg.id));
+      setSelectedBookingLegIds(selectedLegs.filter((leg) => leg.available && leg.remaining >= bookingPartySize).map((leg) => leg.id));
+      toast.error(
+        lang === "it"
+          ? "La disponibilità è cambiata: ho lasciato selezionate solo le tratte ancora disponibili."
+          : "Availability changed: only still-available legs remain selected."
+      );
+      return;
+    }
+
+    setBookingSubmitting(true);
+    try {
+      type RequestBookingRow = { booking_request_id?: string; booking_status?: BookingRequest["status"] };
+      const { data, error } = await bookingRpcClient.rpc<RequestBookingRow[] | RequestBookingRow>("request_voyage_booking", {
+        _voyage_id: bookingAnchor.voyageId,
+        _leg_ids: selectedBookingLegIds,
+        _party_size: Math.max(1, bookingPartySize),
+        _message: bookingMessage.trim() || null,
+      });
+
+      if (error) {
+        if ((error as { code?: string }).code === "BK001") {
+          toast.error(
+            lang === "it"
+              ? "Hai già aderito a una di queste tratte."
+              : "You've already joined one of these legs."
+          );
+          return;
+        }
+        throw error;
+      }
+      const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
+      toast.success(
+        result?.booking_status === "waitlisted"
+          ? (lang === "it" ? "Richiesta inviata in lista d'attesa." : "Request sent to the waiting list.")
+          : (lang === "it" ? "Richiesta di partecipazione inviata." : "Request to join sent.")
+      );
+
+      const bookingRequestId = result?.booking_request_id;
+
+      // Multi-person bookings go to the participants page (add guests, choose who pays).
+      if (bookingRequestId && Math.max(1, bookingPartySize) > 1) {
+        setBookingConfirmOpen(false);
+        clearBookingSelection();
+        navigate(`/bookings/${bookingRequestId}/participants`);
+        return;
+      }
+
+      // Solo booking: kick off the Bunq voyage-contribution payment right away.
+      if (bookingRequestId) {
+        const payment = await startDepositPayment(bookingRequestId);
+        if (payment.ok && "shareUrl" in payment) {
+          window.location.href = payment.shareUrl;
+          return;
+        }
+        if (!payment.ok && "notConfigured" in payment) {
+          toast.info(
+            lang === "it"
+              ? "Adesione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
+              : "You're in! Contribution payment is not active yet: we'll send you the link shortly."
+          );
+        } else if (!payment.ok) {
+          toast.info(
+            lang === "it"
+              ? "Adesione registrata. Puoi completare il pagamento con bonifico."
+              : "You're in! You can complete the payment by bank transfer."
+          );
+          setBankTransfer({ bookingRequestId });
+        }
+      }
+
+      setBookingConfirmOpen(false);
+      clearBookingSelection();
+      void refetchBookingLegs();
+    } catch (error: unknown) {
+      await refetchBookingLegs();
+      toast.error(
+        lang === "it"
+          ? "Adesione non riuscita: almeno una tratta potrebbe non avere più posti."
+          : "Couldn't join: at least one leg may no longer have seats."
+      );
+      console.error("[Journal] request_voyage_booking failed", error);
+    } finally {
+      setBookingSubmitting(false);
+    }
+  }, [
+    bookingAnchor,
+    bookingLegsById,
+    bookingMessage,
+    bookingPartySize,
+    clearBookingSelection,
+    lang,
+    navigate,
+    refetchBookingLegs,
+    selectedBookingLegIds,
+    session?.user,
+    voyages,
+  ]);
 
   const handleProfilePreviewOpen = useCallback((profileId: string) => {
     setPanelProfileId(profileId);
@@ -524,7 +786,7 @@ const Journal = () => {
 
   useEffect(() => {
     if (!isMobile) {
-      setMobileSidebarMode("peek");
+      setMobileSidebarMode("collapsed");
       setMobileSidebarDragOffset(0);
     }
   }, [isMobile]);
@@ -565,6 +827,38 @@ const Journal = () => {
     if (selectedFocus?.voyageId) return selectedFocus.voyageId;
     return focusedVoyageId;
   }, [focusedVoyageId, selectedArticle]);
+
+  const bookingSummaryVoyage = useMemo(
+    () => voyages.find((voyage) => voyage.id === bookingAnchor?.voyageId) || null,
+    [bookingAnchor?.voyageId, voyages]
+  );
+  const selectedBookingLegs = useMemo(
+    () => selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
+    [bookingLegsById, selectedBookingLegIds]
+  );
+  const selectedBookingWaypointsById = useMemo<Record<string, BookingWaypoint>>(
+    () => Object.fromEntries((bookingAnchor ? waypointsMap[bookingAnchor.voyageId] || [] : []).map((waypoint) => [
+      waypoint.id,
+      {
+        id: waypoint.id,
+        voyage_id: waypoint.voyage_id,
+        name: waypoint.name,
+        name_it: waypoint.name_it,
+        name_en: waypoint.name_en,
+        sort_order: waypoint.sort_order,
+        lat: waypoint.lat,
+        lng: waypoint.lng,
+        waypoint_type: waypoint.waypoint_type as BookingWaypoint["waypoint_type"],
+        visibility_mode: waypoint.visibility_mode as BookingWaypoint["visibility_mode"],
+        planned_stop_duration_minutes: waypoint.planned_stop_duration_minutes,
+        date_start: waypoint.date_start,
+        date_end: waypoint.date_end,
+      } satisfies BookingWaypoint,
+    ])),
+    [bookingAnchor, waypointsMap]
+  );
+  const bookingVoyageLegs = bookingAnchor ? bookingLegsByVoyage[bookingAnchor.voyageId] || [] : [];
+  const bookingSidebarActive = Boolean(bookingAnchor);
 
   const filteredVoyages = useMemo(() => {
     const list =
@@ -620,6 +914,7 @@ const Journal = () => {
 
   return (
     <div className={mapRootClass}>
+      <h1 className="sr-only">{t("journal.page.title")}</h1>
       {viewMode === "map" ? (
         <div className={mapInnerClass}>
           {/* Full-screen map */}
@@ -633,6 +928,10 @@ const Journal = () => {
             onArticleClick={handleArticleClick}
             onVoyageSelect={setSelectedRouteVoyageId}
             selectedRouteVoyageId={selectedRouteVoyageId}
+            bookingLegsByVoyage={bookingLegsByVoyage}
+            bookingSelectionAnchor={bookingAnchor}
+            selectedBookingLegs={selectedBookingLegs}
+            onParticipate={handleParticipate}
             presenceMarkers={mapPresenceMarkers}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}
@@ -665,6 +964,9 @@ const Journal = () => {
                   lang={lang}
                   onClose={() => setSelectedRouteVoyageId(null)}
                   onArticleClick={handleArticleClick}
+                  bookingLegs={bookingLegsByVoyage[selectedRouteVoyageId] || []}
+                  selectedBookingLegIds={bookingAnchor?.voyageId === selectedRouteVoyageId ? selectedBookingLegIds : []}
+                  onParticipate={handleParticipate}
                   storyTitlesById={voyageLegendStoryTitlesById}
                   onWaypointClick={(wp) => {
                     const wps = waypointsMap[selectedRouteVoyageId] || [];
@@ -678,6 +980,40 @@ const Journal = () => {
               </div>
             );
           })()}
+
+          <BookingConfirmDialog
+            open={bookingConfirmOpen}
+            onOpenChange={setBookingConfirmOpen}
+            lang={lang}
+            voyageName={bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : undefined}
+            legLabels={selectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang))}
+            legs={selectedBookingLegs}
+            partySize={bookingPartySize}
+            message={bookingMessage}
+            requiresPayment
+            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, {
+              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
+            })}
+            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, {
+              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
+            })}
+            contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
+            submitting={bookingSubmitting}
+            onConfirm={() => void submitBookingFromLogbook()}
+          />
+
+          <BankTransferDialog
+            open={bankTransfer !== null}
+            onOpenChange={(open) => {
+              if (!open) setBankTransfer(null);
+            }}
+            bookingRequestId={bankTransfer?.bookingRequestId ?? ""}
+            participantId={bankTransfer?.participantId}
+            onConfirmed={() => {
+              setBankTransfer(null);
+              void refetchBookingLegs();
+            }}
+          />
 
           {/* Floating controls — top right */}
           <div
@@ -873,81 +1209,118 @@ const Journal = () => {
             }`}
             style={isMobile ? { height: `${mobileSidebarHeight}px`, transform: `translateY(${mobileSidebarTranslateY}px)` } : undefined}
           >
-            {/* Search inside sidebar */}
-            <div
-              className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
-            >
-              {isMobile && (
-                <div className="mb-3 flex flex-col items-center gap-2">
-                  <div
-                    className="flex w-full flex-col items-center gap-2"
-                    style={{ touchAction: "none" }}
-                    onTouchStart={handleMobileSidebarTouchStart}
-                    onTouchMove={handleMobileSidebarTouchMove}
-                    onTouchEnd={handleMobileSidebarTouchEnd}
-                    onTouchCancel={handleMobileSidebarTouchEnd}
-                  >
-                    <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${mobileSidebarMode !== "expanded" ? "mobile-sheet-handle-hint" : ""}`} />
-                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {mobileSidebarMode === "expanded"
-                        ? (lang === "it" ? "Scorri verso il basso" : "Swipe down")
-                        : (lang === "it" ? "Scorri verso l'alto" : "Swipe up")}
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={lang === "it" ? "Cerca..." : "Search..."}
-                  className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Article list */}
-            <div
-              className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}
-              style={isMobile ? { touchAction: "pan-y" } : undefined}
-            >
-              {isArticlesLoading ? (
-                <div className="p-3 space-y-3">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="animate-pulse flex gap-3">
-                      <div className="w-16 h-16 bg-muted shrink-0" />
-                      <div className="flex-1">
-                        <div className="h-3 bg-muted w-1/3 mb-2" />
-                        <div className="h-4 bg-muted w-3/4 mb-1" />
-                        <div className="h-3 bg-muted w-1/2" />
+            {bookingSidebarActive ? (
+              <BookingSidebarPanel
+                voyage={bookingSummaryVoyage}
+                legs={bookingVoyageLegs}
+                waypointsById={selectedBookingWaypointsById}
+                selectedLegIds={selectedBookingLegIds}
+                rejectedLegIds={bookingRejectedLegIds}
+                partySize={bookingPartySize}
+                message={bookingMessage}
+                submitting={bookingSubmitting}
+                isSignedIn={Boolean(session?.user)}
+                lang={lang}
+                isMobile={isMobile}
+                mobileSidebarMode={mobileSidebarMode}
+                onMobileTouchStart={handleMobileSidebarTouchStart}
+                onMobileTouchMove={handleMobileSidebarTouchMove}
+                onMobileTouchEnd={handleMobileSidebarTouchEnd}
+                onClose={clearBookingSelection}
+                onToggleLeg={toggleBookingLeg}
+                onPartySizeChange={setBookingPartySize}
+                onMessageChange={setBookingMessage}
+                onSubmit={() => {
+                  if (!session?.user) {
+                    navigate("/login", { state: { from: `/${lang}/logbook` } });
+                    return;
+                  }
+                  if (selectedBookingLegIds.length === 0) {
+                    toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+                    return;
+                  }
+                  setBookingConfirmOpen(true);
+                }}
+              />
+            ) : (
+              <>
+                {/* Search inside sidebar */}
+                <div
+                  className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
+                >
+                  {isMobile && (
+                    <div className="mb-3 flex flex-col items-center gap-2">
+                      <div
+                        className="flex w-full flex-col items-center gap-2"
+                        style={{ touchAction: "none" }}
+                        onTouchStart={handleMobileSidebarTouchStart}
+                        onTouchMove={handleMobileSidebarTouchMove}
+                        onTouchEnd={handleMobileSidebarTouchEnd}
+                        onTouchCancel={handleMobileSidebarTouchEnd}
+                      >
+                        <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${mobileSidebarMode !== "expanded" ? "mobile-sheet-handle-hint" : ""}`} />
+                        <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                          {mobileSidebarMode === "expanded"
+                            ? (lang === "it" ? "Scorri verso il basso" : "Swipe down")
+                            : (lang === "it" ? "Scorri verso l'alto" : "Swipe up")}
+                        </p>
                       </div>
                     </div>
-                  ))}
+                  )}
+                  <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={lang === "it" ? "Cerca..." : "Search..."}
+                      className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
+                    />
+                  </div>
                 </div>
-              ) : filtered.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-xs">
-                  {lang === "it" ? "Nessun risultato." : "No entries found."}
+
+                {/* Article list */}
+                <div
+                  className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}
+                  style={isMobile ? { touchAction: "pan-y" } : undefined}
+                >
+                  {isArticlesLoading ? (
+                    <div className="p-3 space-y-3">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="animate-pulse flex gap-3">
+                          <div className="w-16 h-16 bg-muted shrink-0" />
+                          <div className="flex-1">
+                            <div className="h-3 bg-muted w-1/3 mb-2" />
+                            <div className="h-4 bg-muted w-3/4 mb-1" />
+                            <div className="h-3 bg-muted w-1/2" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground text-xs">
+                      {lang === "it" ? "Nessun risultato." : "No entries found."}
+                    </div>
+                  ) : (
+                    filtered.map((article) => (
+                      <ArticleListCard
+                        key={article.id}
+                        ref={(el) => { articleRefs.current[article.id] = el; }}
+                        article={article}
+                        waypointsMap={waypointsMap}
+                        lang={lang}
+                        isActive={selectedArticleId === article.id}
+                        isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
+                        isRead={isRead(article.id)}
+                        onMouseEnter={() => setHoveredArticleId(article.id)}
+                        onMouseLeave={() => setHoveredArticleId((current) => (current === article.id ? null : current))}
+                        onClick={() => handleListArticleClick(article)}
+                      />
+                    ))
+                  )}
                 </div>
-              ) : (
-                filtered.map((article) => (
-                  <ArticleListCard
-                    key={article.id}
-                    ref={(el) => { articleRefs.current[article.id] = el; }}
-                    article={article}
-                    waypointsMap={waypointsMap}
-                    lang={lang}
-                    isActive={selectedArticleId === article.id}
-                    isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
-                    isRead={isRead(article.id)}
-                    onMouseEnter={() => setHoveredArticleId(article.id)}
-                    onMouseLeave={() => setHoveredArticleId((current) => (current === article.id ? null : current))}
-                    onClick={() => handleListArticleClick(article)}
-                  />
-                ))
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       ) : (

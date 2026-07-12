@@ -12,10 +12,10 @@ const PrivacyPolicy = () => {
       title="Privacy Policy"
       intro={
         isIt
-          ? "Questa informativa descrive come BITE tratta i dati personali raccolti tramite biteproject.it, la community collegata al logbook e i relativi servizi email. Il testo è stato aggiornato per riflettere le funzionalità presenti sul sito alla data del 28 marzo 2026."
-          : "This notice explains how BITE processes personal data collected through biteproject.it, the logbook community area, and related email services. It has been updated to reflect the features currently present on the site as of March 28, 2026."
+          ? "Questa informativa descrive come BITE tratta i dati personali raccolti tramite biteproject.it, la community collegata al logbook, la partecipazione ai viaggi, i pagamenti di contributo spese e i relativi servizi email. Il testo è stato aggiornato per riflettere le funzionalità presenti sul sito alla data del 12 luglio 2026."
+          : "This notice explains how BITE processes personal data collected through biteproject.it, the logbook community area, voyage participation, shared-cost contribution payments, and related email services. It has been updated to reflect the features currently present on the site as of July 12, 2026."
       }
-      lastUpdated={isIt ? "Ultimo aggiornamento: 28 marzo 2026" : "Last updated: March 28, 2026"}
+      lastUpdated={isIt ? "Ultimo aggiornamento: 12 luglio 2026" : "Last updated: July 12, 2026"}
     >
       <LegalSection title={isIt ? "Titolare del trattamento" : "Data Controller"}>
         <p>
@@ -59,8 +59,23 @@ const PrivacyPolicy = () => {
           </li>
           <li>
             {isIt
-              ? "Dati che ci invii volontariamente scrivendoci via email."
-              : "Data you voluntarily send when you contact us by email."}
+              ? "Dati per la partecipazione ai viaggi: viaggio e tratte selezionate, dimensione del gruppo, messaggio o note inserite nella richiesta, stato della prenotazione, accettazioni o rifiuti, task pre-partenza completati, modifiche del piano di viaggio e dati degli altri partecipanti invitati, come nome, cognome, email, stato dell'invito e collegamento al profilo quando l'invitato accetta."
+              : "Voyage participation data: selected voyage and legs, party size, message or notes included in the request, booking status, acceptances or declines, completed pre-departure tasks, voyage plan changes, and data about invited participants, such as first name, last name, email, invite status, and profile link when the invitee accepts."}
+          </li>
+          <li>
+            {isIt
+              ? "Dati di pagamento del contributo spese: importo stimato, modalità di pagamento scelta, riferimento del pagamento, stato del deposito, scadenza, link o identificativo Bunq quando usi il pagamento online, e dettagli necessari al bonifico quando scegli questa modalità. BITE non memorizza credenziali bancarie o dati completi di carte di pagamento."
+              : "Shared-cost contribution payment data: estimated amount, chosen payment method, payment reference, deposit status, expiry, Bunq link or identifier when you use online payment, and the details needed for bank transfer when you choose that method. BITE does not store banking credentials or full payment card data."}
+          </li>
+          <li>
+            {isIt
+              ? "Dati notifiche push, se le attivi: endpoint del browser, chiavi tecniche della sottoscrizione, dispositivo/browser indicativo e stato della sottoscrizione, usati per notifiche community e amministrative."
+              : "Push notification data, if you enable them: browser endpoint, subscription technical keys, indicative device/browser information, and subscription status, used for community and administrative notifications."}
+          </li>
+          <li>
+            {isIt
+              ? "Dati che ci invii volontariamente tramite il form contatti o scrivendoci via email, inclusi nome, indirizzo email, messaggio e metadati tecnici minimi necessari alla consegna."
+              : "Data you voluntarily send through the contact form or by email, including name, email address, message, and minimal technical metadata needed for delivery."}
           </li>
         </ul>
       </LegalSection>
@@ -84,6 +99,21 @@ const PrivacyPolicy = () => {
           </li>
           <li>
             {isIt
+              ? "Gestione delle richieste di partecipazione ai viaggi, inviti agli altri partecipanti, task pre-partenza, modifiche della rotta e comunicazioni transazionali collegate: esecuzione di un servizio richiesto dall'utente e gestione della relazione tra partecipanti (art. 6, par. 1, lett. b GDPR)."
+              : "Handling voyage participation requests, invitations to other participants, pre-departure tasks, route changes, and related transactional communications: performance of a service requested by the user and management of the relationship between participants (Art. 6(1)(b) GDPR)."}
+          </li>
+          <li>
+            {isIt
+              ? "Calcolo, richiesta, verifica e riconciliazione del contributo alle spese vive tramite Bunq o bonifico: esecuzione del servizio richiesto, gestione contabile minima e legittimo interesse a verificare i pagamenti e prevenire abusi (art. 6, par. 1, lett. b, c e f GDPR)."
+              : "Calculating, requesting, verifying, and reconciling the shared-cost contribution through Bunq or bank transfer: performance of the requested service, minimal accounting handling, and legitimate interest in verifying payments and preventing abuse (Art. 6(1)(b), (c), and (f) GDPR)."}
+          </li>
+          <li>
+            {isIt
+              ? "Risposta alle richieste inviate tramite form contatti o email: esecuzione di misure richieste dall'interessato e legittimo interesse alla gestione delle comunicazioni (art. 6, par. 1, lett. b e f GDPR)."
+              : "Responding to requests sent through the contact form or email: taking steps requested by the data subject and legitimate interest in handling communications (Art. 6(1)(b) and (f) GDPR)."}
+          </li>
+          <li>
+            {isIt
               ? "Gestione disiscrizioni, soppressioni email, adempimenti normativi e difesa dei diritti del titolare: obbligo legale e legittimo interesse (art. 6, par. 1, lett. c e f GDPR)."
               : "Handling unsubscribes, email suppression, legal compliance, and protection of the controller's rights: legal obligation and legitimate interest (Art. 6(1)(c) and (f) GDPR)."}
           </li>
@@ -93,8 +123,8 @@ const PrivacyPolicy = () => {
       <LegalSection title={isIt ? "Natura del conferimento" : "Whether Data Provision Is Mandatory"}>
         <p>
           {isIt
-            ? "La navigazione ordinaria del sito richiede solo i dati tecnici minimi. La creazione di un account, la pubblicazione di commenti, l'iscrizione alla newsletter o a una storia, e l'uso del login Google richiedono invece il conferimento dei dati necessari a quella specifica funzione."
-            : "Ordinary browsing only requires minimal technical data. Creating an account, posting comments, subscribing to the newsletter or to a story, and using Google login instead require the data needed for that specific feature."}
+            ? "La navigazione ordinaria del sito richiede solo i dati tecnici minimi. La creazione di un account, la pubblicazione di commenti, l'iscrizione alla newsletter o a una storia, l'uso del login Google, la richiesta di partecipazione a un viaggio, l'invito di altri partecipanti e il pagamento del contributo spese richiedono invece il conferimento dei dati necessari a quella specifica funzione."
+            : "Ordinary browsing only requires minimal technical data. Creating an account, posting comments, subscribing to the newsletter or to a story, using Google login, requesting voyage participation, inviting other participants, and paying the shared-cost contribution instead require the data needed for that specific feature."}
         </p>
         <p>
           {isIt
@@ -108,6 +138,11 @@ const PrivacyPolicy = () => {
           {isIt
             ? "Nome profilo, avatar, commenti e altri contenuti che pubblichi nella community possono essere visibili pubblicamente ad altri utenti e visitatori. Ti chiediamo quindi di non inserire nei campi pubblici dati che non vuoi rendere conoscibili."
             : "Your profile name, avatar, comments, and other content you publish in the community may be visible to other users and visitors. For that reason, do not enter data in public fields that you do not want to disclose."}
+        </p>
+        <p>
+            {isIt
+            ? "I dettagli delle richieste di partecipazione ai viaggi, dei pagamenti e degli inviti non sono pubblici; possono però essere visibili agli amministratori del progetto e, per quanto necessario, al referente della richiesta e ai partecipanti coinvolti nello stesso viaggio."
+            : "Details of voyage participation requests, payments, and invitations are not public; however, they may be visible to project administrators and, where necessary, to the request lead and participants involved in the same voyage."}
         </p>
       </LegalSection>
 
@@ -132,6 +167,26 @@ const PrivacyPolicy = () => {
             {isIt
               ? "Newsletter: fino alla revoca del consenso o alla disiscrizione; i dati minimi di soppressione possono essere conservati per evitare invii indesiderati successivi."
               : "Newsletter: until consent is withdrawn or you unsubscribe; minimal suppression data may be retained to avoid future unwanted messages."}
+          </li>
+          <li>
+            {isIt
+              ? "Richieste di partecipazione, inviti, task e modifiche piano viaggio: per il tempo necessario a gestire il viaggio, eventuali variazioni, comunicazioni successive, controlli di sicurezza e tutela dei diritti del progetto o dei partecipanti."
+              : "Participation requests, invitations, tasks, and voyage plan changes: for the time needed to manage the voyage, any changes, follow-up communications, security checks, and protection of the rights of the project or participants."}
+          </li>
+          <li>
+            {isIt
+              ? "Dati di pagamento e riferimenti del contributo spese: per il tempo necessario alla riconciliazione, alla gestione di rimborsi o contestazioni e agli eventuali obblighi amministrativi o contabili applicabili."
+              : "Payment data and shared-cost contribution references: for the time needed for reconciliation, refunds or disputes, and any applicable administrative or accounting obligations."}
+          </li>
+          <li>
+            {isIt
+              ? "Messaggi inviati tramite form contatti o email: per il tempo necessario a rispondere e gestire la richiesta, salvo ulteriori esigenze di tutela."
+              : "Messages sent through the contact form or email: for the time needed to respond to and handle the request, unless further protection needs apply."}
+          </li>
+          <li>
+            {isIt
+              ? "Sottoscrizioni push: finché restano attive sul dispositivo o finché chiedi la rimozione."
+              : "Push subscriptions: while they remain active on the device or until you request removal."}
           </li>
           <li>
             {isIt
@@ -172,6 +227,16 @@ const PrivacyPolicy = () => {
             {isIt
               ? "fornitori email e infrastruttura di invio per messaggi transazionali e newsletter"
               : "email delivery and messaging infrastructure providers for transactional messages and newsletters"}
+          </li>
+          <li>
+            {isIt
+              ? "Bunq, quando viene creato o verificato un pagamento online del contributo spese"
+              : "Bunq, when an online shared-cost contribution payment is created or verified"}
+          </li>
+          <li>
+            {isIt
+              ? "fornitori di notifiche Web Push, quando abiliti le notifiche sul dispositivo"
+              : "Web Push notification providers, when you enable notifications on your device"}
           </li>
         </ul>
       </LegalSection>

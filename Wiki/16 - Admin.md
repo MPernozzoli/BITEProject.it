@@ -3,10 +3,10 @@ tags: [admin, cms, backoffice]
 ---
 # 16 - Admin
 
-⬅️ [[Home]] · sorgente: `src/pages/Admin*`, `src/components/admin/`
+⬅️ [[Home]] · sorgente: `apps/web/src/pages/Admin*`, `apps/web/src/components/admin/`
 
 ## Accesso
-- Servito sul **sottodominio** `admin.biteproject.it`; rilevamento host in `src/lib/admin-host.ts` (`isCurrentAdminHostname()`).
+- Servito sul **sottodominio** `admin.biteproject.it`; rilevamento host in `apps/web/src/lib/admin-host.ts` (`isCurrentAdminHostname()`).
 - Rotte protette da `AdminRoute.tsx` → [[03 - Routing e i18n]].
 - Login: `/admin/login` (`AdminLogin.tsx`).
 
@@ -21,19 +21,19 @@ tags: [admin, cms, backoffice]
 | `/admin/article/:id` | `ArticleEditor.tsx` | editor articolo (TipTap) |
 | `/profile` | `AdminProfile.tsx` | profilo |
 
-## Componenti admin (`src/components/admin/`)
-- **Editoriale:** `AdminEditorialPlan`, `AdminEditorialPlanSettingsDialog`, `AdminEditorialPlanSlotDialog` (piano editoriale) → `src/lib/editorial-plan.ts`
+## Componenti admin (`apps/web/src/components/admin/`)
+- **Editoriale:** `AdminEditorialPlan`, `AdminEditorialPlanSettingsDialog`, `AdminEditorialPlanSlotDialog` (piano editoriale) → `apps/web/src/lib/editorial-plan.ts`
 - **Viaggi/rotte:** `AdminVoyageManager`, `AdminRouteManager`, `ArticleMiniMapEditor`, `AdminMapPresenceManager`
 - **Newsletter:** `AdminNewsletterManager` → [[12 - Newsletter ed Email]]
 - **Mail:** `AdminMail.tsx` vive tra le pagine admin perché integra lista, dettaglio e compose su API Vercel.
 - **Altri:** `AdminBadgeManager`, `AdminCollapsibleListFilters`
-- Coda upload media: `src/lib/admin-media-upload-queue.ts`
+- Coda upload media: `apps/web/src/lib/admin-media-upload-queue.ts`
 
 ## Editor articoli
 - Basato su **TipTap 3** ([[02 - Stack Tecnologico]]): heading, image, link, youtube, text-align, color, underline, placeholder.
-- Sanitizzazione: `src/lib/sanitize-rich-html.ts` (dompurify).
-- Traduzione IT/EN: `translate-editor-content` ([[09 - Edge Functions]]) + `src/lib/translate-editor-content.ts`; gap traduzioni evidenziati da `article-translation-gaps.ts`.
-- Export Instagram story: `src/lib/article-instagram-story.ts`.
+- Sanitizzazione: `apps/web/src/lib/sanitize-rich-html.ts` (dompurify).
+- Traduzione IT/EN: `translate-editor-content` ([[09 - Edge Functions]]) + `apps/web/src/lib/translate-editor-content.ts`; gap traduzioni evidenziati da `article-translation-gaps.ts`.
+- Export Instagram story: `apps/web/src/lib/article-instagram-story.ts`.
 
 ## SEO
 Le rotte admin sono marcate `noindex, nofollow` in `vercel.json` → [[18 - Deploy e Configurazione]].

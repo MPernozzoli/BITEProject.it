@@ -52,8 +52,10 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 | **Build tool** | Vite 5 (+ SWC) |
 | **UI** | React 18, shadcn/ui, Radix, Tailwind, framer-motion |
 | **Backend** | Supabase (progetto `ekwloweuicrqjjgabfdp`) |
-| **Migrations** | 37+ file in `supabase/migrations/` |
-| **Edge Functions** | 28 in `supabase/functions/` |
+| **App principale** | `apps/web` (`@biteproject/web`) |
+| **Sub-app** | `apps/pack` su `/pack`, `apps/data` su `/Data` |
+| **Migrations** | 37+ file in `apps/web/supabase/migrations/` |
+| **Edge Functions** | 28 in `apps/web/supabase/functions/` |
 | **Pagamenti** | Bunq (request-inquiry) + bonifico bancario |
 | **Mappe** | MapLibre GL + supercluster |
 | **Origine** | progetto Lovable (`lovable-tagger`) |

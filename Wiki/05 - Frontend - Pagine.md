@@ -3,9 +3,9 @@ tags: [frontend, pagine, routing]
 ---
 # 05 - Frontend - Pagine
 
-⬅️ [[Home]] · sorgente: `src/pages/` · routing: [[03 - Routing e i18n]]
+⬅️ [[Home]] · sorgente: `apps/web/src/pages/` · routing: [[03 - Routing e i18n]]
 
-Tutte le pagine sono **lazy-loaded** in `src/App.tsx`.
+Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 
 ## Sito editoriale pubblico
 | Pagina | Rotta | Descrizione |
@@ -33,12 +33,12 @@ Tutte le pagine sono **lazy-loaded** in `src/App.tsx`.
 | `ManageBookingParticipants.tsx` | `/bookings/:id/participants` |
 
 ## Newsletter / legali → [[12 - Newsletter ed Email]]
-| Pagina | Rotta |
-|---|---|
-| `NewsletterConfirm.tsx` | `/newsletter/confirm` |
-| `Unsubscribe.tsx` | `/unsubscribe` |
-| `PrivacyPolicy.tsx` | `/privacy-policy` |
-| `CookiePolicy.tsx` | `/cookie-policy` |
+| Pagina | Rotta | Note |
+|---|---|---|
+| `NewsletterConfirm.tsx` | `/newsletter/confirm` | conferma iscrizione newsletter |
+| `Unsubscribe.tsx` | `/unsubscribe` | gestione disiscrizione/preferenze email |
+| `PrivacyPolicy.tsx` | `/privacy-policy` | informativa aggiornata per community, newsletter, contact form, partecipazione viaggi, inviti partecipanti, contributi spese, Bunq/bonifico e Web Push |
+| `CookiePolicy.tsx` | `/cookie-policy` | cookie/local storage tecnici per lingua, sessione, community, booking, pagamenti, UI e notifiche push |
 
 ## Admin → [[16 - Admin]]
 | Pagina | Rotta |

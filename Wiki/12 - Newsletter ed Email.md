@@ -3,7 +3,7 @@ tags: [newsletter, email, notifiche, funzionalita]
 ---
 # 12 - Newsletter ed Email
 
-⬅️ [[Home]] · sorgente: `supabase/functions/`, `src/lib/newsletter.ts`
+⬅️ [[Home]] · sorgente: `apps/web/supabase/functions/`, `apps/web/src/lib/newsletter.ts`
 
 Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge Functions]].
 
@@ -17,7 +17,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - Package installato: `@pynkstudio/mailapp` da `https://github.com/PynkStudio/pynkstudio-mailapp`; questa app Vite usa API Vercel dedicate invece dei server action Next del package.
 - Console admin: `/admin/mail` (`AdminMail.tsx`) con inbox, inviate, preferite, archivio, spam, compose e webhook Resend → [[10 - API Vercel]].
 - Inbound mail: il webhook risolve alias admin da `admin_email_aliases` (`massimo`, `massimo.pernozzoli`, `mpernozzoli`, ecc. generati da profilo/email admin). Se c'è un match unico assegna e invia push a quell'admin; se non determina l'assegnazione notifica tutti gli admin.
-- Implementazione assegnazione inbound: `src/server/mail-push.ts` carica prima `user_roles.user_id` e poi i profili admin con una query separata su `profiles`; non usare embed PostgREST `user_roles -> profiles` perché `user_roles` non dichiara una FK verso `profiles`.
+- Implementazione assegnazione inbound: `apps/web/src/server/mail-push.ts` carica prima `user_roles.user_id` e poi i profili admin con una query separata su `profiles`; non usare embed PostgREST `user_roles -> profiles` perché `user_roles` non dichiara una FK verso `profiles`.
 
 ## Iscrizione & gestione
 - `newsletter-subscribe` → invia email di conferma (double opt-in)
@@ -25,7 +25,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - `my-newsletter-subscription` → stato/preferenze utente
 - `handle-email-unsubscribe` → pagina `/unsubscribe`
 - `handle-email-suppression` → gestione bounce/soppressioni
-- Lib client: `src/lib/newsletter.ts`, `src/lib/email-notification-preferences.ts`
+- Lib client: `apps/web/src/lib/newsletter.ts`, `apps/web/src/lib/email-notification-preferences.ts`
 
 ## Invio & digest
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
@@ -49,7 +49,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 
 ## Auth email
 - `auth-email-hook` (no JWT) — intercetta email di autenticazione Supabase
-- Template React-email in `supabase/functions/_shared/email-templates/`: `signup`, `recovery`, `magic-link`, `invite`, `email-change`, `reauthentication`
+- Template React-email in `apps/web/supabase/functions/_shared/email-templates/`: `signup`, `recovery`, `magic-link`, `invite`, `email-change`, `reauthentication`
 
 ## Template & helper condivisi
 `_shared/`: `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `system-email-automation.ts`, `transactional-email-templates/`.

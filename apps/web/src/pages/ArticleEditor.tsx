@@ -39,6 +39,8 @@ type ArticleEditorDraft = {
   titleEn: string;
   titleIt: string;
   slug: string;
+  slugIt: string;
+  slugEn: string;
   excerptEn: string;
   excerptIt: string;
   contentEn: object;
@@ -120,6 +122,8 @@ const ArticleEditor = () => {
   const [titleEn, setTitleEn] = useState("");
   const [titleIt, setTitleIt] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugIt, setSlugIt] = useState("");
+  const [slugEn, setSlugEn] = useState("");
   const [excerptEn, setExcerptEn] = useState("");
   const [excerptIt, setExcerptIt] = useState("");
   const [contentEn, setContentEn] = useState<object>({});
@@ -207,6 +211,8 @@ const ArticleEditor = () => {
     setTitleEn(draft.titleEn || "");
     setTitleIt(draft.titleIt || "");
     setSlug(draft.slug || "");
+    setSlugIt(draft.slugIt || "");
+    setSlugEn(draft.slugEn || "");
     setExcerptEn(draft.excerptEn || "");
     setExcerptIt(draft.excerptIt || "");
     setContentEn(draft.contentEn || {});
@@ -327,6 +333,8 @@ const ArticleEditor = () => {
     setTitleEn(data.title_en || "");
     setTitleIt(data.title_it || "");
     setSlug(data.slug || "");
+    setSlugIt(((data as any).slug_it as string | null) || "");
+    setSlugEn(((data as any).slug_en as string | null) || "");
     setExcerptEn(data.excerpt_en || "");
     setExcerptIt(data.excerpt_it || "");
     setContentEn(data.content_en as object || {});
@@ -509,6 +517,8 @@ const ArticleEditor = () => {
       titleEn,
       titleIt,
       slug,
+      slugIt,
+      slugEn,
       excerptEn,
       excerptIt,
       contentEn: contentEn as object,
@@ -558,6 +568,8 @@ const ArticleEditor = () => {
     selectedTagIds,
     selectedVoyageId,
     slug,
+    slugIt,
+    slugEn,
     titleEn,
     titleIt,
     voyageSegEnd,
@@ -581,6 +593,7 @@ const ArticleEditor = () => {
   const handleTitleEnChange = (val: string) => {
     setTitleEn(val);
     if (isNew || !slug) setSlug(generateSlug(val));
+    if (isNew || !slugEn) setSlugEn(generateSlug(val));
   };
 
   const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
@@ -885,6 +898,8 @@ const ArticleEditor = () => {
       title_en: saveTitleEn,
       title_it: saveTitleIt,
       slug: trimmedSlug,
+      slug_it: (slugIt || "").trim() || null,
+      slug_en: (slugEn || "").trim() || null,
       excerpt_en: saveExcerptEn,
       excerpt_it: saveExcerptIt,
       content_en: saveContentEn as Json,
@@ -1042,6 +1057,8 @@ const ArticleEditor = () => {
     titleEn,
     titleIt,
     slug,
+    slugIt,
+    slugEn,
     excerptEn,
     excerptIt,
     contentEn,
@@ -2039,8 +2056,41 @@ const ArticleEditor = () => {
 
             {/* Slug */}
             <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug</label>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug (canonico / fallback)</label>
               <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL legacy / fallback. Resta usato come default se manca lo slug per la lingua.
+              </p>
+            </div>
+
+            {/* Slug EN */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug EN</label>
+              <input
+                type="text"
+                value={slugEn}
+                onChange={(e) => setSlugEn(e.target.value)}
+                placeholder="es. first-time-sailors"
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL pubblico in /en/logbook/. Lascia vuoto per usare lo slug canonico.
+              </p>
+            </div>
+
+            {/* Slug IT */}
+            <div>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug IT</label>
+              <input
+                type="text"
+                value={slugIt}
+                onChange={(e) => setSlugIt(e.target.value)}
+                placeholder="es. primi-velisti"
+                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                URL pubblico in /it/logbook/ — chiave SEO per il mercato italiano.
+              </p>
             </div>
 
             {/* Tags */}

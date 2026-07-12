@@ -14,6 +14,14 @@
       "destination": "/api/sitemap"
     },
     {
+      "source": "/pack/:path*",
+      "destination": "/pack/index.html"
+    },
+    {
+      "source": "/Data/:path*",
+      "destination": "/Data/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }

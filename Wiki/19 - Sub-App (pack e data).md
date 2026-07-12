@@ -5,25 +5,26 @@ tags: [monorepo, apps, sub-app]
 
 ⬅️ [[Home]] · sorgente: `apps/` · build: `scripts/copy-subapp-builds.mjs`
 
-Il repo è un **monorepo leggero**: la web app principale (`src/`) più sotto-app indipendenti in `apps/`, ognuna con il proprio Vite/Tailwind/tsconfig e pacchetto namespaced.
+Il repo è un **monorepo leggero**: tutte le app Vite vivono in `apps/`, ognuna con il proprio Vite/Tailwind/tsconfig e pacchetto namespaced. La root contiene solo orchestrazione, deploy, documentazione e symlink di compatibilità.
 
 | Cartella | Pacchetto | Build base path | Ruolo |
 |---|---|---|---|
-| `apps/web` | `@biteproject/web` | — | variante/mirror della web app |
-| `apps/pack` | `@biteproject/pack` | `/_pack/` | superficie applicativa "pack" |
-| `apps/data` | `@biteproject/data` | `/_data/` | superficie del [[15 - Semantic Layer (AI Agents)]] (dati/GeoJSON) |
+| `apps/web` | `@biteproject/web` | `/` | sito principale BITE |
+| `apps/pack` | `@biteproject/pack` | `/pack/` | sito dei cani / pack |
+| `apps/data` | `@biteproject/data` | `/Data/` | superficie del [[15 - Semantic Layer (AI Agents)]] (dati/GeoJSON) |
 
 ## Build integrata
 In `package.json` root:
 ```
-build:pack  = VITE_BASE_PATH=/_pack/ npm run build --prefix apps/pack
-build:data  = VITE_BASE_PATH=/_data/ npm run build --prefix apps/data
+build:web   = npm run build --workspace @biteproject/web
+build:pack  = VITE_BASE_PATH=/pack/ npm run build --workspace @biteproject/pack
+build:data  = VITE_BASE_PATH=/Data/ npm run build --workspace @biteproject/data
 ```
-Poi `scripts/copy-subapp-builds.mjs` copia i `dist/` delle sotto-app nella build principale, così vengono servite come sotto-percorsi dello stesso dominio (coerente con la strategia same-origin → [[15 - Semantic Layer (AI Agents)]]).
+Poi `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build, `apps/pack/dist` in `dist/pack` e `apps/data/dist` in `dist/Data`, così le app vengono servite come sotto-percorsi dello stesso dominio (coerente con la strategia same-origin → [[15 - Semantic Layer (AI Agents)]]).
 
 ## Note
-- Ogni sotto-app ha una propria cartella `supabase/` e config di test (Playwright/Vitest).
-- Esistono duplicati ` 2` (`apps/web 2`, `apps/pack 2`, `apps/data 2`): artefatti di copia, non attivi → vedi [[04 - Struttura Repository]].
+- `apps/web/supabase` è la sorgente Supabase attiva; `supabase` alla root è un symlink per CLI/workflow esistenti.
+- `api` alla root è un symlink verso `apps/web/api`, così Vercel continua a vedere `/api/*` senza mantenere una seconda copia.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[20 - Comandi e Workflow]] · [[15 - Semantic Layer (AI Agents)]]

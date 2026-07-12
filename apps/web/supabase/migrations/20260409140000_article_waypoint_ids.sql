@@ -2,12 +2,10 @@
 alter table public.logbook_articles
   add column if not exists voyage_waypoint_start_id uuid references public.voyage_waypoints (id) on delete set null,
   add column if not exists voyage_waypoint_end_id uuid references public.voyage_waypoints (id) on delete set null;
-
 comment on column public.logbook_articles.voyage_waypoint_start_id is
   'Waypoint di inizio segmento / punto; preferito rispetto a voyage_segment_* se risolvibile.';
 comment on column public.logbook_articles.voyage_waypoint_end_id is
   'Waypoint di fine segmento (uguale a start per punto); preferito rispetto a voyage_segment_* se risolvibile.';
-
 -- Backfill: allinea gli UUID agli indici 0-based nell’ordine sort_order corrente.
 -- Subquery scalari (non LATERAL in FROM): in UPDATE...FROM Postgres non consente a.voyage_id dentro LATERAL.
 update public.logbook_articles a

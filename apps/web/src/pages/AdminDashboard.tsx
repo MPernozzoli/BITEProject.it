@@ -17,11 +17,13 @@ import {
   Mail,
   ArrowUpRight,
   CalendarClock,
+  CalendarCheck,
   Award,
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
   MapPinned,
+  UploadCloud,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -454,13 +456,57 @@ const AdminDashboard = () => {
           <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
               <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
-              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
               <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
                 Gestisci articoli, stories, rotte e newsletter dentro un’unica interfaccia coerente con il nuovo linguaggio del progetto.
               </p>
             </div>
 
             <div className="flex items-center gap-3 self-start">
+              <Link
+                to="/admin/bookings"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/bookings");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Booking"
+              >
+                <CalendarCheck size={16} />
+                Booking
+              </Link>
+              <Link
+                to="/admin/media"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/media");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Media"
+              >
+                <UploadCloud size={16} />
+                Media
+              </Link>
+              <Link
+                to="/admin/mail"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/mail");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Mail"
+              >
+                <Mail size={16} />
+                Mail
+              </Link>
               <Link
                 to="/admin/trackers"
                 onClick={(event) => {

@@ -10,6 +10,7 @@ import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
+import { HERO_READY_EVENT } from "@/lib/hero-ready-event";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import StructuredData from "@/components/StructuredData";
 import { ORGANIZATION_ID, SITE_URL, WEBSITE_ID } from "@/lib/seo";
@@ -75,6 +76,7 @@ const HOMEPAGE_MEDIA_BUCKET = "homepage-media";
 const HOMEPAGE_HORIZONTAL_FOLDER = "hero-horizontal";
 const HOMEPAGE_VERTICAL_FOLDER = "hero-vertical";
 const SUPPORTED_HERO_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "m4v", "mov"]);
+const SUPPORTED_HERO_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "avif"]);
 const HERO_CROSSFADE_DURATION_MS = 2000;
 const HERO_MAX_VIDEO_SEGMENT_SECONDS = 10;
 const HERO_VIDEO_CACHE_NAME = "bite-hero-media-v1";
@@ -127,6 +129,18 @@ const getVideoMimeType = (filename: string) => {
   return "video/mp4";
 };
 
+const createStorageImageUrls = (folder: string, files: StorageListItem[]): string[] =>
+  files
+    .filter((file) => {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      return Boolean(extension && SUPPORTED_HERO_IMAGE_EXTENSIONS.has(extension));
+    })
+    .map((file) => {
+      const path = `${folder}/${file.name}`;
+      const { data } = supabase.storage.from(HOMEPAGE_MEDIA_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    });
+
 const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt: string): HeroMedia[] =>
   files
     .filter((file) => {
@@ -144,6 +158,7 @@ const createStorageVideoEntries = (folder: string, files: StorageListItem[], alt
         mimeType: getVideoMimeType(file.name),
       };
     });
+
 
 const getNextHeroTransition = (
   currentIndex: number,
@@ -258,25 +273,33 @@ const Index = () => {
   const currentHeroPool = useMemo(() => {
     return isMobile ? (heroVideoPool?.mobile ?? []) : (heroVideoPool?.desktop ?? []);
   }, [heroVideoPool, isMobile]);
+
+  const heroImagePool = publicContent?.heroImagePool ?? null;
+  const currentHeroImagePool = useMemo<string[]>(() => {
+    if (!heroImagePool) return [];
+    return isMobile ? (heroImagePool.mobile ?? []) : (heroImagePool.desktop ?? []);
+  }, [heroImagePool, isMobile]);
+  const heroBackgroundImage = useMemo<string | null>(() => {
+    if (!currentHeroImagePool.length) return null;
+    return currentHeroImagePool[heroPlaylistIndex % currentHeroImagePool.length] ?? null;
+  }, [currentHeroImagePool, heroPlaylistIndex]);
   const shouldAggressivelyWarmHeroCache = useMemo(
     () => shouldWarmHeroCacheAggressively(isMobile),
     [isMobile]
   );
 
   const heroMedia = heroPlaylist[heroPlaylistIndex] ?? currentHeroPool[0] ?? null;
-  const heroPosterUrl = heroMedia?.poster ?? null;
+  const shouldRenderHeroBackgroundImage = !heroMedia && Boolean(heroBackgroundImage);
+
+  // Nothing to paint (no video, no fallback image) once the hero data has actually
+  // settled — tell the boot splash to stop waiting instead of hanging until its safety timeout.
   useEffect(() => {
-    if (!heroPosterUrl) return;
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = heroPosterUrl;
-    link.setAttribute("fetchpriority", "high");
-    document.head.appendChild(link);
-    return () => {
-      document.head.removeChild(link);
-    };
-  }, [heroPosterUrl]);
+    if (heroMedia || heroBackgroundImage) return;
+    if (isPublicContentLoading) return;
+    if (!publicContent && liveHeroVideoPool === undefined) return;
+    window.dispatchEvent(new Event(HERO_READY_EVENT));
+  }, [heroMedia, heroBackgroundImage, isPublicContentLoading, publicContent, liveHeroVideoPool]);
+
   const heroPriorityMedia = useMemo(() => {
     const candidates = [
       heroMedia,
@@ -536,15 +559,12 @@ const Index = () => {
     video.pause();
   };
 
+  // First frame of the active hero video actually painted — safe to stop showing the boot splash.
+  const handleHeroVideoLoadedData = () => {
+    window.dispatchEvent(new Event(HERO_READY_EVENT));
+  };
+
   const renderHeroMedia = (media: HeroMedia, mode: "active" | "pending") => {
-    const playbackSrc = getHeroPlaybackSrc(media);
-    const shouldEagerPreload =
-      !isMobile
-      && (
-        mode === "pending"
-        || playbackSrc !== media.src
-        || media.src === heroMedia?.src
-      );
     const baseClassName = `img-cover hero-layer ${
       mode === "active"
         ? isHeroCrossfading
@@ -555,17 +575,26 @@ const Index = () => {
           : "hero-layer--incoming"
     }`;
 
+    const playbackSrc = getHeroPlaybackSrc(media);
+    const shouldEagerPreload =
+      !isMobile
+      && (
+        mode === "pending"
+        || playbackSrc !== media.src
+        || media.src === heroMedia?.src
+      );
+
     return (
       <video
         key={`${mode}:${media.src}`}
         ref={mode === "pending" ? pendingHeroVideoRef : undefined}
         className={baseClassName}
-        poster={media.poster}
         autoPlay={mode === "active"}
         muted
         playsInline
         preload={mode === "active" || shouldEagerPreload ? "auto" : isMobile && mode === "pending" ? "none" : "metadata"}
         onLoadedMetadata={mode === "active" ? handleHeroVideoMetadata : handlePendingHeroVideoMetadata}
+        onLoadedData={mode === "active" ? handleHeroVideoLoadedData : undefined}
         onEnded={mode === "active" ? queueHeroCrossfade : undefined}
       >
         <source src={playbackSrc} type={media.mimeType ?? "video/mp4"} />
@@ -745,8 +774,8 @@ const Index = () => {
     if (!newsletterConsent) {
       toast.error(
         lang === "it"
-          ? "Devi accettare l'iscrizione alla newsletter prima di continuare."
-          : "You need to accept the newsletter subscription before continuing."
+          ? "Devi accettare l'iscrizione agli Appunti dalla barca prima di continuare."
+          : "You need to accept the Notes from the boat subscription before continuing."
       );
       return;
     }
@@ -843,8 +872,8 @@ const Index = () => {
 
         toast.success(
           lang === "it"
-            ? "Preferenze newsletter aggiornate."
-            : "Newsletter preferences updated.",
+            ? "Preferenze Appunti dalla barca aggiornate."
+            : "Notes from the boat preferences updated.",
         );
         return;
       } else {
@@ -884,8 +913,8 @@ const Index = () => {
     toast.success(
       session?.user.email
         ? lang === "it"
-          ? "Preferenze newsletter aggiornate."
-          : "Newsletter preferences updated."
+          ? "Preferenze Appunti dalla barca aggiornate."
+          : "Notes from the boat preferences updated."
         : lang === "it"
           ? "Richiesta registrata."
           : "Subscription request received."
@@ -938,7 +967,20 @@ const Index = () => {
         ]}
       />
       <section className="relative min-h-[100dvh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-[#0b1a2c]">
+          {shouldRenderHeroBackgroundImage ? (
+            <img
+              key={heroBackgroundImage}
+              src={heroBackgroundImage}
+              alt=""
+              aria-hidden="true"
+              className="img-cover hero-layer hero-layer--active"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+              onLoad={() => window.dispatchEvent(new Event(HERO_READY_EVENT))}
+            />
+          ) : null}
           {heroMedia ? renderHeroMedia(heroMedia, "active") : null}
           {pendingHeroTransition ? renderHeroMedia(pendingHeroTransition.media, "pending") : null}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(7,15,27,0.26)_0%,rgba(9,18,31,0.22)_24%,rgba(10,20,34,0.36)_48%,rgba(8,17,30,0.6)_100%)]" />
@@ -1021,7 +1063,7 @@ const Index = () => {
                 key={i}
                 className={`glass-panel-soft rounded-[28px] p-6 md:p-8 transition-transform duration-reveal ease-out-expo md:hover:-translate-y-0.5 ${i >= 3 ? "md:mt-8" : ""}`}
               >
-                <h3 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h3>
+                <h2 className="editorial-heading text-2xl md:text-3xl mb-4">{t(`values.${i}.title`)}</h2>
                 <p className="editorial-body text-muted-foreground leading-relaxed">{t(`values.${i}.text`)}</p>
               </div>
             ))}
@@ -1305,8 +1347,8 @@ const Index = () => {
                 />
                 <span>
                   {lang === "it"
-                    ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
-                    : "I agree to receive the BITE newsletter and confirm that I have read the "}
+                    ? "Acconsento a ricevere gli Appunti dalla barca di BITE e confermo di aver letto la "
+                    : "I agree to receive BITE's Notes from the boat and confirm that I have read the "}
                   <Link to="/privacy-policy" className="underline decoration-slate-400 underline-offset-4 hover:text-slate-950">
                     {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
                   </Link>

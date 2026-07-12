@@ -9,50 +9,39 @@ tags: [struttura, filesystem, monorepo]
 
 ```
 iubgicrwfovrnvoqr/
-├── src/               # app web principale (React) → [[05..07]]
-│   ├── App.tsx        # routing radice → [[03 - Routing e i18n]]
-│   ├── main.tsx       # bootstrap (+ boot splash 3D, PWA)
-│   ├── pages/         # 28 pagine → [[05 - Frontend - Pagine]]
-│   ├── components/    # componenti → [[06 - Frontend - Componenti]]
-│   ├── lib/           # logica condivisa → [[07 - Frontend - Lib e Hooks]]
-│   ├── hooks/         # hook React → [[07 - Frontend - Lib e Hooks]]
-│   ├── integrations/  # client Supabase + Lovable
-│   ├── server/        # helper server-side Bunq → [[11 - Pagamenti Bunq]]
-│   ├── assets/        # immagini/asset importati
-│   └── test/          # unit test (Vitest)
-├── api/               # Vercel Functions → [[10 - API Vercel]]
-│   ├── payments/bunq/ # bank-transfer, request, status, webhook
-│   ├── bookings/      # invite
-│   ├── sitemap.ts
-│   └── prerender.ts
-├── apps/              # sotto-app → [[19 - Sub-App (pack e data)]]
-│   ├── web/           # @biteproject/web
-│   ├── pack/          # @biteproject/pack (build in /_pack/)
-│   └── data/          # @biteproject/data (build in /_data/)
-├── supabase/          # backend → [[08 - Supabase]]
-│   ├── config.toml    # progetto ekwloweuicrqjjgabfdp
-│   ├── functions/     # 28 Edge Functions → [[09 - Edge Functions]]
-│   └── migrations/    # 36 migrazioni SQL
+├── apps/              # applicazioni Vite → [[19 - Sub-App (pack e data)]]
+│   ├── web/           # @biteproject/web, sito principale
+│   │   ├── src/       # React app → [[05 - Frontend - Pagine]] / [[06 - Frontend - Componenti]]
+│   │   ├── api/       # Vercel Functions sorgente → [[10 - API Vercel]]
+│   │   ├── public/    # asset statici del sito principale
+│   │   ├── scripts/   # generate-sitemap
+│   │   └── supabase/  # backend Supabase sorgente → [[08 - Supabase]]
+│   ├── pack/          # @biteproject/pack, sito cani servito in /pack
+│   └── data/          # @biteproject/data, app dati servita in /Data
+├── api -> apps/web/api
+│                       # symlink per compatibilità Vercel root
+├── middleware.ts -> apps/web/middleware.ts
+│                       # symlink per compatibilità Vercel root
+├── supabase -> apps/web/supabase
+│                       # symlink per compatibilità Supabase CLI
 ├── docs/              # documentazione sorgente
 │   ├── bite-atlas-architecture.md  → [[15 - Semantic Layer (AI Agents)]]
 │   ├── payments-bunq.md            → [[11 - Pagamenti Bunq]]
-│   └── migration/SCHEMA.md
-├── scripts/           # generate-sitemap, copy-subapp-builds
-├── public/            # asset statici
-├── dist/              # output build (generato)
+│   └── migration/     # schema storico/consolidato
+├── scripts/           # copy-subapp-builds (composizione dist root)
+├── dist/              # output build root generato: web + /pack + /Data
 ├── middleware.ts      # edge middleware (prerender/routing)
 ├── vercel.json        # rewrite + header → [[18 - Deploy e Configurazione]]
-├── vite.config.ts / tailwind.config.ts / tsconfig*.json
-└── package.json       # script → [[20 - Comandi e Workflow]]
+└── package.json       # workspace + script root → [[20 - Comandi e Workflow]]
 ```
 
-> Nota: ci sono cartelle duplicate con suffisso ` 2` (es. `apps/web 2`, `supabase/migrations 2`, `a - migrazione biteproject su vercel/`): artefatti di copia/migrazione, **non** parte dell'app attiva.
+> Nota: la root non contiene più una copia applicativa `src/`, `public/` o `supabase/`. La sorgente attiva del sito principale vive in `apps/web`; `api`, `middleware.ts` e `supabase` alla root sono solo symlink di compatibilità.
 
 ## File di configurazione chiave
-- `components.json` — config shadcn/ui
-- `eslint.config.js` — lint flat config
-- `vitest.config.ts` / `playwright.config.ts` — test
-- `postcss.config.js` — PostCSS/Tailwind
+- `apps/web/components.json` — config shadcn/ui del sito principale
+- `apps/web/eslint.config.js` — lint flat config
+- `apps/web/vitest.config.ts` / `apps/web/playwright.config.ts` — test web
+- `apps/web/postcss.config.js` — PostCSS/Tailwind
 - `.env` — variabili Vite (vedi [[18 - Deploy e Configurazione]])
 
 ## Collegamenti

@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type SetStateAction } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DEFAULT_STOP_DEPARTURE_TIME,
+  STOP_DEPARTURE_PRESETS,
+  getEffectiveStopHoursDefault,
+  getWaypointStopUiMode,
+} from "@/lib/booking-utils";
 import { useI18n } from "@/lib/i18n";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -19,6 +25,10 @@ import {
   Loader2,
   Search,
   GripVertical,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
@@ -70,6 +80,10 @@ interface VoyageFormState {
   waterway_autoroute: boolean;
   status: "planned" | "active" | "completed";
   is_published: boolean;
+  booking_enabled: boolean;
+  booking_max_guests: string;
+  booking_planning_speed_kn: string;
+  booking_contribution_per_nm_eur: string;
   dates_tbd: boolean;
   start_date: string;
   start_time: string;
@@ -102,6 +116,10 @@ const emptyVoyageForm: VoyageFormState = {
   waterway_autoroute: false,
   status: "planned",
   is_published: true,
+  booking_enabled: false,
+  booking_max_guests: "2",
+  booking_planning_speed_kn: "5",
+  booking_contribution_per_nm_eur: "0.90",
   dates_tbd: true,
   start_date: "",
   start_time: "",
@@ -423,6 +441,11 @@ const WAYPOINT_PERSIST_PATCH_KEYS = [
   "event_time",
   "date_start",
   "date_end",
+  "planned_stop_duration_minutes",
+  "stop_mode",
+  "stop_hours",
+  "stop_nights",
+  "stop_departure_time",
   "waypoint_type",
   "visibility_mode",
   "sort_order",
@@ -468,7 +491,7 @@ const isMissingVoyageDateColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute"].some((column) => text.includes(column)) &&
+  return ["start_date", "start_time", "start_date_flex_days", "end_date", "end_time", "end_date_flex_days", "name_it", "name_en", "description_it", "description_en", "is_published", "waterway_autoroute", "booking_enabled", "booking_max_guests", "booking_planning_speed_kn", "booking_contribution_per_nm_eur"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -497,6 +520,12 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   event_date: (waypoint?.event_date ?? null) as string | null,
   event_time: (waypoint?.event_time ?? null) as string | null,
   media: normalizeWaypointMedia(waypoint?.media),
+  planned_stop_duration_minutes: Math.max(0, Number(waypoint?.planned_stop_duration_minutes ?? 0)),
+  stop_mode:
+    waypoint?.stop_mode === "hours" || waypoint?.stop_mode === "nights" ? waypoint.stop_mode : "legacy",
+  stop_hours: waypoint?.stop_hours == null ? null : Math.max(0, Number(waypoint.stop_hours)),
+  stop_nights: waypoint?.stop_nights == null ? null : Math.max(0, Number(waypoint.stop_nights)),
+  stop_departure_time: (waypoint?.stop_departure_time ?? null) as string | null,
   date_start: (waypoint?.date_start ?? null) as string | null,
   date_end: (waypoint?.date_end ?? null) as string | null,
 });
@@ -512,6 +541,12 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   cached_geometry: (voyage?.cached_geometry ?? null) as Voyage["cached_geometry"],
   waterway_autoroute: Boolean(voyage?.waterway_autoroute),
   is_published: (voyage?.is_published ?? true) as boolean,
+  booking_enabled: Boolean(voyage?.booking_enabled),
+  booking_max_guests: Math.max(1, Number(voyage?.booking_max_guests ?? 4)),
+  booking_planning_speed_kn: Math.max(0.1, Number(voyage?.booking_planning_speed_kn ?? 5)),
+  booking_contribution_per_nm_eur: Math.max(0, Number(voyage?.booking_contribution_per_nm_eur ?? 0.9)),
+  departure_window_start: (voyage?.departure_window_start ?? null) as string | null,
+  departure_window_end: (voyage?.departure_window_end ?? null) as string | null,
   start_date: (voyage?.start_date ?? null) as string | null,
   start_time: (voyage?.start_time ?? null) as string | null,
   start_date_flex_days: (voyage?.start_date_flex_days ?? 0) as number | null,
@@ -729,6 +764,7 @@ const AdminVoyageManager = ({
   const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapWorkspaceRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const markersByWaypointRef = useRef<Record<string, maplibregl.Marker>>({});
@@ -776,7 +812,50 @@ const AdminVoyageManager = ({
   /** Bumps when async route geometry (OSRM / BRouter) finishes so the map redraws even if waypoints state is unchanged. */
   const [routeGeometryTick, setRouteGeometryTick] = useState(0);
   const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
+  const [isMapWorkspaceFullscreen, setIsMapWorkspaceFullscreen] = useState(false);
+  const [isWaypointSidebarCollapsed, setIsWaypointSidebarCollapsed] = useState(false);
+  const [autoOpenWaypointPanel, setAutoOpenWaypointPanel] = useState(true);
   const waypointEditorPanelIdRef = useRef<string | null>(null);
+
+  const resizeMapAfterWorkspaceChange = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    window.requestAnimationFrame(() => {
+      map.resize();
+      window.setTimeout(() => map.resize(), 160);
+      window.setTimeout(() => map.resize(), 360);
+    });
+  }, []);
+
+  const toggleMapWorkspaceFullscreen = useCallback(async () => {
+    const workspace = mapWorkspaceRef.current;
+    const fullscreenElement = document.fullscreenElement;
+
+    if (fullscreenElement === workspace) {
+      try {
+        await document.exitFullscreen();
+      } catch (error) {
+        console.error("[AdminVoyageManager] exit fullscreen failed", error);
+        setIsMapWorkspaceFullscreen(false);
+        resizeMapAfterWorkspaceChange();
+      }
+      return;
+    }
+
+    if (workspace?.requestFullscreen) {
+      try {
+        await workspace.requestFullscreen();
+        return;
+      } catch (error) {
+        console.error("[AdminVoyageManager] request fullscreen failed", error);
+        toast.error("Fullscreen non disponibile in questo browser.");
+      }
+    }
+
+    setIsMapWorkspaceFullscreen((value) => !value);
+    resizeMapAfterWorkspaceChange();
+  }, [resizeMapAfterWorkspaceChange]);
 
   const setCurrentSelectedVoyageId = useCallback((nextVoyageId: string | null) => {
     setSelectedVoyageId(nextVoyageId);
@@ -1032,6 +1111,20 @@ const AdminVoyageManager = ({
     [commitVoyages, refreshVoyageGeometryPreview]
   );
 
+  const syncBookableLegs = useCallback(async (voyageId: string) => {
+    try {
+      const { error } = await supabase.rpc("sync_voyage_bookable_legs" as never, { _voyage_id: voyageId } as never);
+      if (error) {
+        console.warn("[AdminVoyageManager] sync_voyage_bookable_legs skipped", error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn("[AdminVoyageManager] sync_voyage_bookable_legs unavailable", error);
+      return false;
+    }
+  }, []);
+
   const uploadWaypointMediaAsset = useCallback(async (waypointId: string, file: File) => {
     const ext = file.name.split(".").pop() || "bin";
     const path = `voyage-waypoints/${waypointId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -1167,6 +1260,7 @@ const AdminVoyageManager = ({
       event_time: waypoint.event_time,
       date_start: waypoint.date_start,
       date_end: waypoint.date_end,
+      planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0)),
       media: waypoint.media as unknown as import("@/integrations/supabase/types").Json,
     };
     const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
@@ -1255,12 +1349,16 @@ const AdminVoyageManager = ({
       );
       primeGeometryOverrideAfterWaypointEdit(voyageId, committedWaypoints);
 
+      setIsWaypointSidebarCollapsed(false);
       setWaypointEditorPanelId(createdWaypoint.id);
       window.setTimeout(() => {
         void focusWaypointOnMapRef.current(createdWaypoint.id);
       }, 0);
 
-      const suggestedPlace = await reverseGeocodePlaceLocalized(lat, lng);
+      const selectedVoyageForNaming = voyagesRef.current.find((voyage) => voyage.id === voyageId);
+      const suggestedPlace = await reverseGeocodePlaceLocalized(lat, lng, {
+        maritime: selectedVoyageForNaming?.type === "water",
+      });
       if (!suggestedPlace.it && !suggestedPlace.en) return true;
 
       const currentWaypoint = (waypointsRef.current[voyageId] || []).find((item) => item.id === createdWaypoint.id);
@@ -1379,13 +1477,18 @@ const AdminVoyageManager = ({
     focusWaypointOnMapRef.current = focusWaypointOnMap;
   }, [focusWaypointOnMap]);
 
-  const openWaypointPopup = useCallback((waypointId: string) => {
+  const openWaypointPopup = useCallback((waypointId: string, options?: { automatic?: boolean }) => {
+    if (options?.automatic && !autoOpenWaypointPanel) {
+      queueMicrotask(() => void focusWaypointOnMap(waypointId));
+      return;
+    }
+    setIsWaypointSidebarCollapsed(false);
     setWaypointEditorPanelId((prev) => {
       if (prev === waypointId) return null;
       queueMicrotask(() => void focusWaypointOnMap(waypointId));
       return waypointId;
     });
-  }, [focusWaypointOnMap]);
+  }, [autoOpenWaypointPanel, focusWaypointOnMap]);
 
   const startWaypointRelocation = useCallback((voyageId: string, waypointId: string) => {
     waypointRelocationRef.current = { voyageId, waypointId };
@@ -1410,11 +1513,15 @@ const AdminVoyageManager = ({
 
   const submitWaypointNameEdit = useCallback(async (waypoint: VoyageWaypoint, index: number) => {
     const fallbackNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
+    const previousLocalizedName = getLocalizedWaypointName(waypoint, lang, index);
     const trimmedValue = editingWaypointNameValue.trim();
     const nextLocalizedName = trimmedValue || fallbackNames[lang];
     const nextNameIt = lang === "it" ? nextLocalizedName : (waypoint.name_it?.trim() || fallbackNames.it);
     const nextNameEn = lang === "en" ? nextLocalizedName : (waypoint.name_en?.trim() || fallbackNames.en);
     const legacyName = (lang === "it" ? nextNameIt : nextNameEn) || nextNameIt || nextNameEn || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
+    const shouldPromoteToNarrative =
+      nextLocalizedName !== previousLocalizedName &&
+      !(waypoint.visibility_mode === "manual" && waypoint.waypoint_type === "technical");
 
     setSavingWaypointNameId(waypoint.id);
     const success = await updateWaypoint(
@@ -1424,6 +1531,12 @@ const AdminVoyageManager = ({
         name: legacyName,
         name_it: nextNameIt,
         name_en: nextNameEn,
+        ...(shouldPromoteToNarrative
+          ? {
+              visibility_mode: "manual" as const,
+              waypoint_type: "narrative" as const,
+            }
+          : {}),
       }
     );
 
@@ -1482,6 +1595,12 @@ const AdminVoyageManager = ({
         dateSuggestions.departureTime,
         dateSuggestions.departureSource
       );
+      const initialStopUiMode = getWaypointStopUiMode(waypoint);
+      const initialStopHours = getEffectiveStopHoursDefault(waypoint);
+      const initialStopNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
+      const initialStopDeparture = (waypoint.stop_departure_time ?? DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
+      const popupChipStyle =
+        "padding:4px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:999px;";
       const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
       const statusLabel = waypoint.visibility_mode === "manual"
         ? effectiveType === "narrative" ? "Visible" : "Hidden"
@@ -1504,6 +1623,9 @@ const AdminVoyageManager = ({
 
       const heading = getWaypointSequenceHeading(index, total, lang);
       const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
+      const initialNameIt = waypoint.name_it || defaultNames.it;
+      const initialNameEn = waypoint.name_en || defaultNames.en;
+      const isWaterVoyage = selectedVoyage?.type === "water";
       const mediaMarkup = waypoint.media.length
         ? waypoint.media.map((mediaItem, mediaIndex) => {
             const safeUrl = escapeHtml(mediaItem.url);
@@ -1551,7 +1673,7 @@ const AdminVoyageManager = ({
               <input
                 name="name_it"
                 type="text"
-                value="${escapeHtml((waypoint.name_it || defaultNames.it))}"
+                value="${escapeHtml(initialNameIt)}"
                 style="${popupInputStyle}"
               />
             </div>
@@ -1570,7 +1692,7 @@ const AdminVoyageManager = ({
               <input
                 name="name_en"
                 type="text"
-                value="${escapeHtml((waypoint.name_en || defaultNames.en))}"
+                value="${escapeHtml(initialNameEn)}"
                 style="${popupInputStyle}"
               />
             </div>
@@ -1594,6 +1716,22 @@ const AdminVoyageManager = ({
               <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
             </select>
           </div>
+          ${isWaterVoyage ? `
+            <div style="display:grid;gap:8px;">
+              <label style="${popupLabelStyle}">Naming</label>
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
+                <select name="maritime_naming_mode" style="${popupInputStyle}">
+                  <option value="auto">Auto</option>
+                  <option value="city">Citta / porto</option>
+                  <option value="maritime">Baia, cala o toponimo</option>
+                </select>
+                <button type="button" data-action="apply-maritime-name" style="padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--muted));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+                  Applica
+                </button>
+              </div>
+              <p style="${popupHintStyle}margin:0;">Citta usa il centro costiero vicino; Baia/cala forza il toponimo marittimo piu vicino.</p>
+            </div>
+          ` : ""}
           ${selectedVoyageDatesTbd ? `
             <div style="display:grid;gap:8px;">
               <p style="${popupHintStyle}margin:0;">
@@ -1636,6 +1774,56 @@ const AdminVoyageManager = ({
               <p style="${popupHintStyle}">
                 ${escapeHtml(departureSuggestionNote || "Opzionale. Se valorizzata, verrà usata per stimare le tappe successive.")}
               </p>
+            </div>
+            <div>
+              <label style="${popupLabelStyle}">Sosta e ripartenza</label>
+              <select name="stop_mode_ui" style="${popupInputStyle}">
+                <option value="none"${initialStopUiMode === "none" ? " selected" : ""}>Nessuna sosta</option>
+                <option value="hours"${initialStopUiMode === "hours" ? " selected" : ""}>Sosta breve (ore)</option>
+                <option value="nights"${initialStopUiMode === "nights" ? " selected" : ""}>Giorni + orario di ripartenza</option>
+              </select>
+              <div data-stop-panel="hours" style="display:${initialStopUiMode === "hours" ? "grid" : "none"};gap:6px;margin-top:8px;">
+                <input
+                  name="stop_hours"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value="${escapeHtml(String(initialStopHours))}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-hours="8" style="${popupChipStyle}">8h</button>
+                  <button type="button" data-stop-hours="12" style="${popupChipStyle}">12h</button>
+                </div>
+              </div>
+              <div data-stop-panel="nights" style="display:${initialStopUiMode === "nights" ? "grid" : "none"};gap:6px;margin-top:8px;">
+                <label style="${popupLabelStyle}">Giorni di sosta</label>
+                <input
+                  name="stop_nights"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="${escapeHtml(String(initialStopNights))}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-nights="1" style="${popupChipStyle}">1</button>
+                  <button type="button" data-stop-nights="2" style="${popupChipStyle}">2</button>
+                  <button type="button" data-stop-nights="3" style="${popupChipStyle}">3</button>
+                </div>
+                <label style="${popupLabelStyle}">Orario di ripartenza</label>
+                <input
+                  name="stop_departure_time"
+                  type="time"
+                  value="${escapeHtml(initialStopDeparture)}"
+                  style="${popupInputStyle}"
+                />
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[0]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[0]}</button>
+                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[1]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[1]}</button>
+                </div>
+              </div>
+              <p style="${popupHintStyle}">Es.: arrivo il 10 alle 15 con 2 giorni e ripartenza 19:00 → si riparte il 12 alle 19:00.</p>
             </div>
           </div>
           <div data-details-kind="technical" style="display:${effectiveType === "technical" ? "grid" : "none"};gap:10px;">
@@ -1683,11 +1871,18 @@ const AdminVoyageManager = ({
       const departureDateInput = wrapper.querySelector('input[name="date_start"]') as HTMLInputElement | null;
       const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
       const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
+      const stopModeUiSelect = wrapper.querySelector('select[name="stop_mode_ui"]') as HTMLSelectElement | null;
+      const stopHoursInput = wrapper.querySelector('input[name="stop_hours"]') as HTMLInputElement | null;
+      const stopNightsInput = wrapper.querySelector('input[name="stop_nights"]') as HTMLInputElement | null;
+      const stopDepartureInput = wrapper.querySelector('input[name="stop_departure_time"]') as HTMLInputElement | null;
+      const stopPanels = wrapper.querySelectorAll<HTMLElement>("[data-stop-panel]");
       const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
+      const maritimeNamingModeSelect = wrapper.querySelector('select[name="maritime_naming_mode"]') as HTMLSelectElement | null;
       const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
       const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
       const relocateButton = wrapper.querySelector('[data-action="relocate"]') as HTMLButtonElement | null;
       const aiTranslateButton = wrapper.querySelector('[data-action="ai-translate"]') as HTMLButtonElement | null;
+      const applyMaritimeNameButton = wrapper.querySelector('[data-action="apply-maritime-name"]') as HTMLButtonElement | null;
       const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
       const langTabButtons = wrapper.querySelectorAll<HTMLButtonElement>("[data-popup-lang]");
       const langPanels = wrapper.querySelectorAll<HTMLElement>("[data-popup-panel]");
@@ -1718,6 +1913,31 @@ const AdminVoyageManager = ({
 
       visibilitySelect?.addEventListener("change", syncDetailsPanels);
       syncDetailsPanels();
+
+      const syncStopPanels = () => {
+        const mode = stopModeUiSelect?.value || "none";
+        stopPanels.forEach((panelElement) => {
+          panelElement.style.display = panelElement.getAttribute("data-stop-panel") === mode ? "grid" : "none";
+        });
+      };
+      stopModeUiSelect?.addEventListener("change", syncStopPanels);
+      syncStopPanels();
+
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-hours]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopHoursInput) stopHoursInput.value = chip.getAttribute("data-stop-hours") || "";
+        });
+      });
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-nights]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopNightsInput) stopNightsInput.value = chip.getAttribute("data-stop-nights") || "";
+        });
+      });
+      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-departure]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          if (stopDepartureInput) stopDepartureInput.value = chip.getAttribute("data-stop-departure") || "";
+        });
+      });
 
       aiTranslateButton?.addEventListener("click", () => {
         void (async () => {
@@ -1751,6 +1971,34 @@ const AdminVoyageManager = ({
         })();
       });
 
+      applyMaritimeNameButton?.addEventListener("click", () => {
+        void (async () => {
+          if (!applyMaritimeNameButton) return;
+          const mode =
+            maritimeNamingModeSelect?.value === "city" || maritimeNamingModeSelect?.value === "maritime"
+              ? maritimeNamingModeSelect.value
+              : "auto";
+          applyMaritimeNameButton.disabled = true;
+          applyMaritimeNameButton.textContent = "Cerco...";
+          try {
+            const suggestedPlace = await reverseGeocodePlaceLocalized(waypoint.lat, waypoint.lng, {
+              maritime: true,
+              maritimeLabelMode: mode,
+            });
+            if (!suggestedPlace.it && !suggestedPlace.en) {
+              toast.error("Nessun nome coerente trovato per questo punto.");
+              return;
+            }
+            if (nameItInput) nameItInput.value = suggestedPlace.it || suggestedPlace.en || nameItInput.value;
+            if (nameEnInput) nameEnInput.value = suggestedPlace.en || suggestedPlace.it || nameEnInput.value;
+            toast.success("Nome waypoint aggiornato nei campi (salva per confermare).");
+          } finally {
+            applyMaritimeNameButton.disabled = false;
+            applyMaritimeNameButton.textContent = "Applica";
+          }
+        })();
+      });
+
       const refreshPopup = () => {
         const nextWaypoint = (waypointsRef.current[waypoint.voyage_id] || []).find((item) => item.id === waypoint.id);
         if (!nextWaypoint) return;
@@ -1761,11 +2009,29 @@ const AdminVoyageManager = ({
         event.preventDefault();
         const name_it = nameItInput?.value.trim() || defaultNames.it;
         const name_en = nameEnInput?.value.trim() || defaultNames.en;
+        const hasCustomName = name_it !== initialNameIt || name_en !== initialNameEn;
         const visibilityValue = visibilitySelect?.value === "narrative" || visibilitySelect?.value === "technical"
           ? visibilitySelect.value
           : "auto";
-        const visibility_mode = visibilityValue === "auto" ? "auto" : "manual";
-        const waypoint_type = visibilityValue === "narrative" ? "narrative" : "technical";
+        const stopUiMode = stopModeUiSelect?.value === "hours" || stopModeUiSelect?.value === "nights"
+          ? stopModeUiSelect.value
+          : "none";
+        const stopHours = parseNonNegativeInteger(stopHoursInput?.value || "0");
+        const stopNights = Math.max(1, parseNonNegativeInteger(stopNightsInput?.value || "1"));
+        const hasPlannedStop =
+          stopUiMode === "hours"
+            ? stopHours > 0
+            : stopUiMode === "nights"
+              ? stopNights > 0
+              : false;
+        const shouldAutoPromoteToNarrative =
+          visibilityValue === "auto" &&
+          (hasCustomName || hasPlannedStop);
+        const visibility_mode = visibilityValue === "auto" && !shouldAutoPromoteToNarrative ? "auto" : "manual";
+        const waypoint_type =
+          visibilityValue === "narrative" || shouldAutoPromoteToNarrative
+            ? "narrative"
+            : "technical";
         const legacyName = (lang === "it" ? name_it : name_en) || name_it || name_en || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
         const nextChanges: Partial<VoyageWaypoint> = {
           name: legacyName,
@@ -1777,12 +2043,38 @@ const AdminVoyageManager = ({
           waypoint_type,
         };
 
+        const applyNoStop = () => {
+          nextChanges.stop_mode = "hours";
+          nextChanges.stop_hours = 0;
+          nextChanges.stop_nights = null;
+          nextChanges.stop_departure_time = null;
+          nextChanges.planned_stop_duration_minutes = 0;
+        };
+
         if (waypoint_type === "narrative") {
           nextChanges.date_end = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(arrivalDateInput?.value || null);
           nextChanges.date_start = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(departureDateInput?.value || null);
           nextChanges.event_date = null;
           nextChanges.event_time = null;
+
+          if (stopUiMode === "hours") {
+            nextChanges.stop_mode = "hours";
+            nextChanges.stop_hours = stopHours;
+            nextChanges.stop_nights = null;
+            nextChanges.stop_departure_time = null;
+            nextChanges.planned_stop_duration_minutes = stopHours * 60;
+          } else if (stopUiMode === "nights") {
+            const time = (stopDepartureInput?.value || DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
+            nextChanges.stop_mode = "nights";
+            nextChanges.stop_nights = stopNights;
+            nextChanges.stop_departure_time = time;
+            nextChanges.stop_hours = null;
+            nextChanges.planned_stop_duration_minutes = 0;
+          } else {
+            applyNoStop();
+          }
         } else {
+          applyNoStop();
           nextChanges.event_date = selectedVoyageDatesTbd ? null : eventDateInput?.value || null;
           nextChanges.event_time = selectedVoyageDatesTbd ? null : eventTimeInput?.value || null;
           nextChanges.date_start = null;
@@ -1856,6 +2148,7 @@ const AdminVoyageManager = ({
       lang,
       selectedWaypointDateSuggestions,
       selectedWaypointLegEstimates,
+      selectedVoyage?.type,
       selectedVoyageDatesTbd,
       startWaypointRelocation,
       updateWaypoint,
@@ -1866,6 +2159,16 @@ const AdminVoyageManager = ({
   useEffect(() => {
     setWaypointEditorPanelId(null);
   }, [selectedVoyageId]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsMapWorkspaceFullscreen(document.fullscreenElement === mapWorkspaceRef.current);
+      resizeMapAfterWorkspaceChange();
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [resizeMapAfterWorkspaceChange]);
 
   useEffect(() => {
     const mount = waypointPanelMountRef.current;
@@ -1897,11 +2200,26 @@ const AdminVoyageManager = ({
   }, [waypointEditorPanelId, selectedVoyageId, waypoints, createWaypointPopupContent]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const id = requestAnimationFrame(() => map.resize());
-    return () => cancelAnimationFrame(id);
-  }, [waypointEditorPanelId]);
+    if (!isMapWorkspaceFullscreen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !document.fullscreenElement) {
+        setIsMapWorkspaceFullscreen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMapWorkspaceFullscreen]);
+
+  useEffect(() => {
+    resizeMapAfterWorkspaceChange();
+  }, [isMapWorkspaceFullscreen, isWaypointSidebarCollapsed, waypointEditorPanelId, resizeMapAfterWorkspaceChange]);
 
   const createWaypointMarkerEl = useCallback((waypoint: VoyageWaypoint, index: number, total: number) => {
     const el = document.createElement("button");
@@ -2026,11 +2344,10 @@ const AdminVoyageManager = ({
       const markerEl = createWaypointMarkerEl(waypoint, index, selectedWaypoints.length);
       markerEl.addEventListener("click", (event) => {
         event.stopPropagation();
-        setWaypointEditorPanelIdRef.current((prev) => {
-          if (prev === waypoint.id) return null;
-          queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
-          return waypoint.id;
-        });
+        queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
+        if (!autoOpenWaypointPanel) return;
+        setIsWaypointSidebarCollapsed(false);
+        setWaypointEditorPanelIdRef.current((prev) => (prev === waypoint.id ? null : waypoint.id));
       });
 
       const marker = new maplibregl.Marker({ element: markerEl, draggable: true })
@@ -2050,7 +2367,7 @@ const AdminVoyageManager = ({
       markersRef.current.push(marker);
       markersByWaypointRef.current[waypoint.id] = marker;
     });
-  }, [createWaypointMarkerEl, ensureSegmentPreviewMarker, updateWaypoint]);
+  }, [autoOpenWaypointPanel, createWaypointMarkerEl, ensureSegmentPreviewMarker, updateWaypoint]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -2220,6 +2537,10 @@ const AdminVoyageManager = ({
         waterway_autoroute: voyage.type === "water" ? Boolean(voyage.waterway_autoroute) : false,
         status: voyage.status,
         is_published: voyage.is_published,
+        booking_enabled: Boolean(voyage.booking_enabled),
+        booking_max_guests: String(Math.max(1, Number(voyage.booking_max_guests ?? 4))),
+        booking_planning_speed_kn: String(Math.max(0.1, Number(voyage.booking_planning_speed_kn ?? 5))),
+        booking_contribution_per_nm_eur: String(Math.max(0, Number(voyage.booking_contribution_per_nm_eur ?? 0.9))),
         dates_tbd: hasVoyageDatesTbd(voyage),
         start_date: voyage.start_date || "",
         start_time: voyage.start_time ? voyage.start_time.slice(0, 5) : "",
@@ -2256,6 +2577,12 @@ const AdminVoyageManager = ({
     const datesTbd = voyageForm.status === "planned" && voyageForm.dates_tbd;
     const startFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.start_date_flex_days);
     const endFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
+    const bookingMaxGuests = Math.max(1, parseNonNegativeInteger(voyageForm.booking_max_guests) || 2);
+    const bookingPlanningSpeedKn = Math.max(0.1, Number.parseFloat(voyageForm.booking_planning_speed_kn) || 5);
+    const parsedContributionPerNm = Number.parseFloat(voyageForm.booking_contribution_per_nm_eur);
+    const bookingContributionPerNmEur = Number.isFinite(parsedContributionPerNm)
+      ? Math.max(0, parsedContributionPerNm)
+      : 0.9;
     const legacyName = nameEn || nameIt || "Untitled voyage";
     const legacyDescription = descriptionEn || descriptionIt || null;
     const data: TablesInsert<"voyages"> = {
@@ -2268,6 +2595,10 @@ const AdminVoyageManager = ({
       type: voyageForm.type,
       status: voyageForm.status,
       is_published: voyageForm.is_published,
+      booking_enabled: voyageForm.booking_enabled,
+      booking_max_guests: bookingMaxGuests,
+      booking_planning_speed_kn: bookingPlanningSpeedKn,
+      booking_contribution_per_nm_eur: bookingContributionPerNmEur,
       start_date: datesTbd ? null : voyageForm.start_date || null,
       start_time: datesTbd ? null : voyageForm.start_time || null,
       start_date_flex_days: datesTbd ? 0 : startFlexDays,
@@ -2312,6 +2643,9 @@ const AdminVoyageManager = ({
       if ((waypointsRef.current[editingVoyage.id] || []).length >= 2) {
         await syncVoyageGeometry(editingVoyage.id, waypointsRef.current[editingVoyage.id]);
       }
+      if (voyageForm.booking_enabled && (waypointsRef.current[editingVoyage.id] || []).length >= 2) {
+        await syncBookableLegs(editingVoyage.id);
+      }
       toast.success("Voyage updated");
     } else {
       let { data: newVoyage, error } = await supabase.from("voyages").insert(data).select().single();
@@ -2332,7 +2666,7 @@ const AdminVoyageManager = ({
     initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
     return true;
-  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncVoyageGeometry, voyageForm]);
+  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncBookableLegs, syncVoyageGeometry, voyageForm]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -2619,7 +2953,7 @@ const AdminVoyageManager = ({
         if (Object.keys(changes).length) mutationSteps += 1;
       }
 
-      const totalSteps = Math.max(1, toDelete.length + mutationSteps + 2);
+      const totalSteps = Math.max(1, toDelete.length + mutationSteps + 2 + (selectedVoyage.booking_enabled ? 1 : 0));
       let completed = 0;
 
       const reportProgress = async (label: string) => {
@@ -2736,6 +3070,10 @@ const AdminVoyageManager = ({
         "Calcolo e salvataggio geometria (può richiedere diversi secondi se il routing è attivo)…"
       );
       const geoOk = await syncVoyageGeometry(selectedVoyageId, waypointsRef.current[selectedVoyageId] || []);
+      if (selectedVoyage.booking_enabled) {
+        await reportProgress("Sincronizzazione tratte prenotabili...");
+        await syncBookableLegs(selectedVoyageId);
+      }
 
       setRouteSaveProgress({ label: "Completato", percent: 100, step: totalSteps, totalSteps });
       await yieldToUi();
@@ -2767,6 +3105,7 @@ const AdminVoyageManager = ({
     persistWaypointPatch,
     selectedVoyage,
     selectedVoyageId,
+    syncBookableLegs,
     syncVoyageGeometry,
     setWaypointEditorPanelId,
   ]);
@@ -3090,6 +3429,79 @@ const AdminVoyageManager = ({
                 </span>
               </span>
             </label>
+
+            <div className="rounded-[20px] border border-border px-4 py-3">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={voyageForm.booking_enabled}
+                  onChange={(event) =>
+                    setVoyageForm((form) => ({ ...form, booking_enabled: event.target.checked }))
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                    {voyageForm.booking_enabled ? "Booking aperto" : "Booking disattivato"}
+                  </span>
+                  <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
+                    Consente agli utenti registrati di richiedere imbarco sulle tratte pubbliche del viaggio.
+                  </span>
+                </span>
+              </label>
+              {voyageForm.booking_enabled && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      Persone max
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={voyageForm.booking_max_guests}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_max_guests: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      Velocità kn
+                    </label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={voyageForm.booking_planning_speed_kn}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_planning_speed_kn: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                      €/NM contributo
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={voyageForm.booking_contribution_per_nm_eur}
+                      onChange={(event) =>
+                        setVoyageForm((form) => ({ ...form, booking_contribution_per_nm_eur: event.target.value }))
+                      }
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
+                    />
+                    <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
+                      Default 0,90 euro per miglio nautico pianificato.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
@@ -3487,16 +3899,67 @@ const AdminVoyageManager = ({
         )}
       </div>
 
-      <div className="border border-border overflow-hidden">
-          <div className="flex flex-col lg:flex-row lg:items-stretch min-h-[min(420px,70vh)]">
-            <div className="relative flex-1 min-w-0 min-h-[280px] lg:min-h-[420px]" style={{ height: "420px" }}>
+      <div
+        ref={mapWorkspaceRef}
+        className={`border border-border overflow-hidden bg-background ${
+          isMapWorkspaceFullscreen
+            ? "fixed inset-0 z-50 flex flex-col border-0"
+            : ""
+        }`}
+      >
+          <div
+            className={`flex flex-col lg:flex-row lg:items-stretch ${
+              isMapWorkspaceFullscreen
+                ? "min-h-0 flex-1"
+                : "min-h-[min(420px,70vh)]"
+            }`}
+          >
+            <div
+              className={`relative flex-1 min-w-0 min-h-[280px] ${
+                isMapWorkspaceFullscreen ? "lg:min-h-0" : "lg:min-h-[420px]"
+              }`}
+              style={{ height: isMapWorkspaceFullscreen ? "auto" : "420px" }}
+            >
               <div ref={mapContainerRef} className="absolute inset-0 w-full h-full min-h-[240px]" />
+              <div className="absolute left-3 right-3 top-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+                <div className="pointer-events-auto inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/90 px-1.5 py-1 shadow-sm backdrop-blur-xl">
+                  <button
+                    type="button"
+                    onClick={() => void toggleMapWorkspaceFullscreen()}
+                    className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-sans text-foreground hover:bg-muted transition-colors"
+                    title={isMapWorkspaceFullscreen ? "Esci da mappa fullscreen" : "Apri mappa fullscreen"}
+                  >
+                    {isMapWorkspaceFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    <span>{isMapWorkspaceFullscreen ? "Esci" : "Fullscreen"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsWaypointSidebarCollapsed((value) => !value)}
+                    className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-sans text-foreground hover:bg-muted transition-colors"
+                    title={isWaypointSidebarCollapsed ? "Mostra sidebar waypoint" : "Collassa sidebar waypoint"}
+                  >
+                    {isWaypointSidebarCollapsed ? <PanelRightOpen size={14} /> : <PanelRightClose size={14} />}
+                    <span>{isWaypointSidebarCollapsed ? "Dettagli" : "Collassa"}</span>
+                  </button>
+                </div>
+                <label className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 text-xs font-sans text-foreground shadow-sm backdrop-blur-xl">
+                  <input
+                    type="checkbox"
+                    checked={autoOpenWaypointPanel}
+                    onChange={(event) => setAutoOpenWaypointPanel(event.target.checked)}
+                    className="h-3.5 w-3.5 accent-[hsl(var(--accent))]"
+                  />
+                  <span>Auto dettagli</span>
+                </label>
+              </div>
             </div>
             <aside
               data-waypoint-editor-panel
-              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[transform,opacity,width] duration-300 ease-out-expo overflow-hidden ${
-                waypointEditorPanelId
-                  ? "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
+              className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/86 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[max-height,width,opacity] duration-300 overflow-hidden ${
+                waypointEditorPanelId && !isWaypointSidebarCollapsed
+                  ? isMapWorkspaceFullscreen
+                    ? "max-h-[45vh] lg:max-h-none lg:w-[390px] xl:w-[430px] opacity-100"
+                    : "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
                   : "max-h-0 lg:max-h-none lg:w-0 lg:opacity-0 lg:pointer-events-none border-t-0 lg:border-l-0"
               }`}
             >
@@ -3504,26 +3967,36 @@ const AdminVoyageManager = ({
                 <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Waypoint
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setWaypointEditorPanelId(null)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                  aria-label="Chiudi pannello waypoint"
-                >
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsWaypointSidebarCollapsed(true)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    aria-label="Collassa pannello waypoint"
+                  >
+                    <PanelRightClose size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWaypointEditorPanelId(null)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                    aria-label="Chiudi pannello waypoint"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
               <div ref={waypointPanelMountRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2" />
             </aside>
           </div>
 
-          {!selectedVoyageId && (
+          {!isMapWorkspaceFullscreen && !selectedVoyageId && (
             <p className="px-4 py-3 text-xs text-muted-foreground border-t border-border">
               Seleziona un voyage dalla lista. Da quel momento, ogni click sulla mappa crea subito un waypoint: start e arrivo restano pubblici di default, gli intermedi diventano tecnici.
             </p>
           )}
 
-          {selectedVoyageId && (
+          {!isMapWorkspaceFullscreen && selectedVoyageId && (
             <div className="p-4 border-t border-border space-y-4">
               {selectedVoyage?.type === "land" && (
                 <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">

@@ -75,7 +75,7 @@ const renderCompactMedia = (item: ArticleVoyageMediaItem, lang: Language) => {
       <File className="h-8 w-8 text-accent" />
       <div className="space-y-2">
         <p className="text-sm font-medium text-foreground">
-          {item.media.name || (lang === "it" ? "Allegato del waypoint" : "Waypoint attachment")}
+          {item.media.name || (lang === "it" ? "Allegato della tappa" : "Stop attachment")}
         </p>
         <a
           href={item.media.url}
@@ -117,7 +117,7 @@ const renderExpandedMedia = (item: ArticleVoyageMediaItem, lang: Language) => {
     <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 px-6 text-center">
       <File className="h-10 w-10 text-accent" />
       <p className="text-base font-medium">
-        {item.media.name || (lang === "it" ? "Allegato del waypoint" : "Waypoint attachment")}
+        {item.media.name || (lang === "it" ? "Allegato della tappa" : "Stop attachment")}
       </p>
       <a
         href={item.media.url}
@@ -324,7 +324,7 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
                 {expandedItem.waypointName}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                {lang === "it" ? "Media del waypoint espanso" : "Expanded waypoint media"}
+                {lang === "it" ? "Media della tappa espansa" : "Expanded stop media"}
               </DialogDescription>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-sans uppercase tracking-[0.2em] text-white/70">
                 <span className="glass-chip px-3 py-1.5 text-white">{getMediaLabel(expandedItem.media.kind, lang)}</span>

@@ -3,13 +3,13 @@ tags: [backend, supabase, database, auth]
 ---
 # 08 - Supabase
 
-⬅️ [[Home]] · sorgente: `supabase/`, `src/integrations/supabase/`
+⬅️ [[Home]] · sorgente: `apps/web/supabase/`, `apps/web/src/integrations/supabase/`
 
 Supabase è il **backend unico** del progetto.
 
-- **Project ID:** `ekwloweuicrqjjgabfdp` (in `supabase/config.toml`)
-- **Client:** `src/integrations/supabase/client.ts` (URL/key da env — vedi [[18 - Deploy e Configurazione]])
-- **Tipi:** `src/integrations/supabase/types.ts` (generati dallo schema)
+- **Project ID:** `ekwloweuicrqjjgabfdp` (in `apps/web/supabase/config.toml`)
+- **Client:** `apps/web/src/integrations/supabase/client.ts` (URL/key da env — vedi [[18 - Deploy e Configurazione]])
+- **Tipi:** `apps/web/src/integrations/supabase/types.ts` (generati dallo schema)
 
 ## Componenti usati
 | Componente | Uso |
@@ -21,7 +21,7 @@ Supabase è il **backend unico** del progetto.
 | **RLS** | policy di sicurezza per riga (definite nelle migrazioni) |
 | **RPC** | funzioni SQL richiamate dal client (es. `request_voyage_booking`) |
 
-## Migrazioni (`supabase/migrations/`)
+## Migrazioni (`apps/web/supabase/migrations/`)
 **37+ file**, naming `AAAAMMGGhhmmss_descrizione.sql`. Le più recenti riguardano booking/pagamenti e la mail app admin:
 
 - `..._prevent_duplicate_leg_booking.sql`

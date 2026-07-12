@@ -3,22 +3,25 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const dist = resolve(root, "dist");
 
-const subapps = [
-  { name: "pack", source: "apps/pack/dist", destination: "dist/_pack" },
-  { name: "data", source: "apps/data/dist", destination: "dist/_data" },
+const builds = [
+  { name: "web", source: "apps/web/dist", destination: "dist" },
+  { name: "pack", source: "apps/pack/dist", destination: "dist/pack" },
+  { name: "data", source: "apps/data/dist", destination: "dist/Data" },
 ];
 
-for (const subapp of subapps) {
-  const source = resolve(root, subapp.source);
-  const destination = resolve(root, subapp.destination);
+rmSync(dist, { recursive: true, force: true });
+
+for (const build of builds) {
+  const source = resolve(root, build.source);
+  const destination = resolve(root, build.destination);
 
   if (!existsSync(source)) {
-    throw new Error(`${subapp.name} build output not found: ${source}`);
+    throw new Error(`${build.name} build output not found: ${source}`);
   }
 
-  rmSync(destination, { recursive: true, force: true });
   cpSync(source, destination, { recursive: true });
 
-  console.log(`[${subapp.name}] Copied ${source} -> ${destination}`);
+  console.log(`[${build.name}] Copied ${source} -> ${destination}`);
 }

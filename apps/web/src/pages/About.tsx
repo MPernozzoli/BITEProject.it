@@ -1,6 +1,5 @@
 import { useI18n } from "@/lib/i18n";
 import { Heart, Music } from "lucide-react";
-import dinghyCrew from "@/assets/dinghy-crew.webp";
 import boatSunset from "@/assets/boat-sunset.webp";
 import sailingCockpit from "@/assets/sailing-cockpit.webp";
 import boatHarbor from "@/assets/boat-harbor.webp";
@@ -33,15 +32,7 @@ const TheCrew = () => {
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <section className="relative min-h-[78vh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
-          <img
-            src={dinghyCrew}
-            alt="The crew arriving by dinghy beside the boat"
-            className="img-cover"
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.18)_0%,rgba(17,28,43,0.46)_42%,rgba(17,28,43,0.76)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.38)_0%,rgba(17,28,43,0.64)_42%,rgba(17,28,43,0.9)_100%)]" />
         </div>
         <div className="relative z-10 mx-auto flex min-h-[calc(78vh-7rem)] max-w-6xl items-end">
           <div className="max-w-4xl px-1 md:px-0">

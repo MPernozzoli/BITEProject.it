@@ -1,14 +1,20 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Google-Extended
 Allow: /
 
 User-agent: Bingbot
 Allow: /
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Applebot
 Allow: /
+Disallow: /_pack/
+Disallow: /_data/
 
 User-agent: Twitterbot
 Allow: /
@@ -36,5 +42,8 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /_pack/
+Disallow: /_data/
 
 Sitemap: https://biteproject.it/sitemap.xml
+Sitemap: https://biteproject.it/sitemap-live.xml

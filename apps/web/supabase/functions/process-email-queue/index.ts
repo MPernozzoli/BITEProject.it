@@ -151,6 +151,23 @@ Deno.serve(async (req) => {
 
   const supabase = createClient<any>(supabaseUrl, supabaseServiceKey)
 
+  try {
+    const bookingDispatchResponse = await fetch(`${supabaseUrl}/functions/v1/dispatch-voyage-booking-notifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({ limit: 100 }),
+    })
+
+    if (!bookingDispatchResponse.ok) {
+      console.error('dispatch-voyage-booking-notifications failed', await bookingDispatchResponse.text())
+    }
+  } catch (error) {
+    console.error('dispatch-voyage-booking-notifications error', error)
+  }
+
   // 1. Check rate-limit cooldown and read queue config
   const { data: state } = await supabase
     .from('email_send_state')

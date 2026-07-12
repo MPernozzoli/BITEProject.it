@@ -3,21 +3,21 @@ tags: [frontend, lib, hooks, logica]
 ---
 # 07 - Frontend - Lib e Hooks
 
-⬅️ [[Home]] · sorgente: `src/lib/`, `src/hooks/`, `src/integrations/`
+⬅️ [[Home]] · sorgente: `apps/web/src/lib/`, `apps/web/src/hooks/`, `apps/web/src/integrations/`
 
-## Hooks (`src/hooks/`)
+## Hooks (`apps/web/src/hooks/`)
 - `useAuth.tsx` — `AuthProvider` + accesso sessione Supabase → [[08 - Supabase]]
 - `useArticleReads.tsx` — conteggio letture articolo (live)
 - `usePublicContentSnapshot.ts` — snapshot contenuti pubblici in cache
 - `use-mobile.tsx` — breakpoint mobile
 - `use-toast.ts` — API toast (shadcn)
 
-## Integrazioni (`src/integrations/`)
-- `supabase/client.ts` — istanza client Supabase (URL/key da env)
-- `supabase/types.ts` — **tipi generati** dallo schema DB
+## Integrazioni (`apps/web/src/integrations/`)
+- `apps/web/supabase/client.ts` — istanza client Supabase (URL/key da env)
+- `apps/web/supabase/types.ts` — **tipi generati** dallo schema DB
 - `lovable/index.ts` — auth cloud Lovable
 
-## Lib per dominio (`src/lib/`)
+## Lib per dominio (`apps/web/src/lib/`)
 
 ### Auth & sessione
 - `supabase-auth.ts`, `supabase-auth-storage.ts`, `admin-host.ts`, `visitor-key.ts`
@@ -52,7 +52,7 @@ tags: [frontend, lib, hooks, logica]
 - `utils.ts`, `translate-editor-content.ts`
 - `admin-media-upload-queue.ts` — coda upload media admin
 
-## Server helper (`src/server/`)
+## Server helper (`apps/web/src/server/`)
 Usati dalle [[10 - API Vercel]]:
 - `http.ts` — util richieste
 - `bunq/` — `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `bank-details.ts`, `supabase.ts` → [[11 - Pagamenti Bunq]]

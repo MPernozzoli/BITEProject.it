@@ -1,6 +1,5 @@
 ALTER TABLE public.logbook_articles
   ADD COLUMN IF NOT EXISTS view_count bigint NOT NULL DEFAULT 0;
-
 CREATE OR REPLACE FUNCTION public.increment_article_view_count(_article_id uuid)
 RETURNS bigint
 LANGUAGE plpgsql
@@ -26,7 +25,6 @@ BEGIN
   RETURN COALESCE(v_count, 0);
 END;
 $$;
-
 REVOKE ALL ON FUNCTION public.increment_article_view_count(uuid) FROM public;
 GRANT EXECUTE ON FUNCTION public.increment_article_view_count(uuid) TO anon;
 GRANT EXECUTE ON FUNCTION public.increment_article_view_count(uuid) TO authenticated;

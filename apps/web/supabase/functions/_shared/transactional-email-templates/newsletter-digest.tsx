@@ -32,7 +32,7 @@ const COPY = {
     primaryCta: 'Apri il logbook',
     readLabel: 'Leggi articolo',
     empty: 'In questa finestra non ci sono nuovi articoli da inviare.',
-    footerReason: 'Ricevi questo digest perché sei iscritto alla newsletter di BITE.',
+    footerReason: 'Ricevi questo digest perché sei iscritto agli Appunti dalla barca di BITE.',
   },
   en: {
     eyebrow: 'Digest',
@@ -44,7 +44,7 @@ const COPY = {
     primaryCta: 'Open the logbook',
     readLabel: 'Read article',
     empty: 'There are no new articles in this window.',
-    footerReason: 'You are receiving this digest because you subscribed to the BITE newsletter.',
+    footerReason: "You are receiving this digest because you subscribed to BITE's Notes from the boat.",
   },
 } as const
 

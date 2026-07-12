@@ -50,8 +50,8 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
   "/voyages": {
     title: { en: "Voyages | BITE", it: "Rotte | BITE" },
     description: {
-      en: "Browse public routes with departures, arrivals, dates, and waypoints from aboard S/Y Spritz.",
-      it: "Naviga le rotte pubbliche con partenze, arrivi, date e waypoint da bordo di S/Y Spritz.",
+      en: "Browse public routes with departures, arrivals, dates, and stops from aboard S/Y Spritz.",
+      it: "Naviga le rotte pubbliche con partenze, arrivi, date e tappe da bordo di S/Y Spritz.",
     },
   },
   "/links": {
@@ -105,11 +105,27 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
     robots: "noindex, nofollow",
   },
+  "/bookings": {
+    title: { en: "My Voyages | BITE", it: "Le mie partecipazioni | BITE" },
+    description: {
+      en: "Manage the voyages you've joined on BITE.",
+      it: "Gestisci le tue partecipazioni ai viaggi BITE.",
+    },
+    robots: "noindex, nofollow",
+  },
   "/unsubscribe": {
     title: { en: "Unsubscribe | BITE", it: "Disiscriviti | BITE" },
     description: {
       en: "Manage your BITE email subscription preferences.",
       it: "Gestisci le tue preferenze di iscrizione email BITE.",
+    },
+    robots: "noindex, nofollow",
+  },
+  "/newsletter/confirm": {
+    title: { en: "Confirm subscription | BITE", it: "Conferma iscrizione | BITE" },
+    description: {
+      en: "Confirm your subscription to BITE's Notes from the boat.",
+      it: "Conferma la tua iscrizione agli Appunti dalla barca di BITE.",
     },
     robots: "noindex, nofollow",
   },
@@ -129,7 +145,9 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
     };
   }
 
-  if (pathname === "/profile" || pathname.startsWith("/profile/")) {
+  // Own profile area is private (noindex). Public profile pages /profile/:id
+  // ARE indexable — they are listed in the public sitemap.
+  if (pathname === "/profile") {
     return {
       title: { en: "Profile | BITE", it: "Profilo | BITE" },
       description: {
@@ -137,6 +155,16 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
         it: "Pagina profilo BITE.",
       },
       robots: "noindex, nofollow",
+    };
+  }
+
+  if (pathname.startsWith("/profile/")) {
+    return {
+      title: { en: "Profile | BITE", it: "Profilo | BITE" },
+      description: {
+        en: "Public BITE profile page.",
+        it: "Profilo pubblico BITE.",
+      },
     };
   }
 
@@ -164,17 +192,21 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
     return {
       title: { en: "Voyage Route | BITE", it: "Rotta del viaggio | BITE" },
       description: {
-        en: "Public route page with departure, arrival, waypoints, and voyage dates.",
-        it: "Pagina rotta pubblica con partenza, arrivo, waypoint e date del viaggio.",
+        en: "Public route page with departure, arrival, stops, and voyage dates.",
+        it: "Pagina rotta pubblica con partenza, arrivo, tappe e date del viaggio.",
       },
     };
   }
 
+  // Every legit public route is enumerated above (static map + dynamic
+  // prefixes). Anything else renders the NotFound page at an arbitrary URL:
+  // noindex it so soft-404s never get indexed. New public routes must be
+  // registered in STATIC_ROUTE_SEO (or a prefix branch) to be indexable.
   return (
     STATIC_ROUTE_SEO[pathname] ?? {
-      title: { en: "BITE", it: "BITE" },
+      title: { en: "Page not found | BITE", it: "Pagina non trovata | BITE" },
       description: { en: DEFAULT_DESCRIPTION, it: DEFAULT_DESCRIPTION_IT },
-      robots: pathname === "/404" ? "noindex, nofollow" : "index, follow",
+      robots: "noindex, nofollow",
     }
   );
 };

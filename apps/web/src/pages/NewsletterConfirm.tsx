@@ -84,15 +84,15 @@ const NewsletterConfirm = () => {
       <div className="mx-auto max-w-2xl">
         <div className="glass-panel rounded-[34px] border border-black/6 bg-white/80 p-6 md:p-10 shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
           <p className="mb-3 text-xs font-sans uppercase tracking-[0.28em] text-muted-foreground">
-            {lang === "it" ? "Conferma Newsletter" : "Newsletter Confirmation"}
+            {lang === "it" ? "Conferma iscrizione" : "Confirm subscription"}
           </p>
           <h1 className="editorial-heading text-3xl md:text-5xl leading-tight">
             {lang === "it" ? "Conferma che vuoi iscriverti." : "Confirm that you want to subscribe."}
           </h1>
           <p className="mt-4 text-sm md:text-base text-muted-foreground leading-relaxed">
             {lang === "it"
-              ? "Completa il double opt-in per attivare la newsletter. Dopo la conferma riceverai la mail di benvenuto e poi gli aggiornamenti editoriali."
-              : "Complete the double opt-in to activate the newsletter. After confirmation you will receive the welcome email and then the editorial updates."}
+              ? "Completa il double opt-in per attivare gli Appunti dalla barca. Dopo la conferma riceverai la mail di benvenuto e poi gli aggiornamenti editoriali."
+              : "Complete the double opt-in to activate Notes from the boat. After confirmation you will receive the welcome email and then the editorial updates."}
           </p>
 
           <div className="mt-10 space-y-6">
@@ -134,8 +134,8 @@ const NewsletterConfirm = () => {
               <div className="rounded-[24px] border border-accent/25 bg-accent/10 px-5 py-5">
                 <p className="text-sm text-foreground">
                   {lang === "it"
-                    ? "Iscrizione confermata. Da ora la newsletter è attiva e riceverai anche la mail di benvenuto."
-                    : "Subscription confirmed. Your newsletter is now active and the welcome email will follow."}
+                    ? "Iscrizione confermata. Da ora gli Appunti dalla barca sono attivi e riceverai anche la mail di benvenuto."
+                    : "Subscription confirmed. Notes from the boat is now active and the welcome email will follow."}
                 </p>
               </div>
             )}
