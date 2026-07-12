@@ -28,7 +28,8 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 
 ## 🔎 SEO / crawler
 - `sitemap.ts` — sitemap dinamica (esposta come `/sitemap-live.xml` via rewrite `vercel.json`)
-- `prerender.ts` — prerendering per bot/crawler, in coppia con `middleware.ts` a livello edge
+- `prerender.ts` — prerendering per bot/crawler, in coppia con `middleware.ts` a livello edge. Per `logbook` e `voyages` genera HTML server-side con liste `<a>` IT/EN verso tutti i contenuti pubblici; per articoli e rotte genera canonical/hreflang, OpenGraph/Twitter, JSON-LD (`BlogPosting`/`Trip`), testo ed internal linking.
+- `llms.ts` — proxy same-origin per `public-llms`, esposto come `/llms.txt` e `/llms-full.txt`, così gli agenti AI leggono il feed dal dominio canonico.
 
 ## Note
 - La logica Bunq server-side vive in `src/server/bunq/` (`client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `bank-details.ts`, `supabase.ts`).

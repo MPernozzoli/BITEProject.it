@@ -2,6 +2,14 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/llms.txt",
+      "destination": "/api/llms"
+    },
+    {
+      "source": "/llms-full.txt",
+      "destination": "/api/llms?full=1"
+    },
+    {
       "source": "/sitemap-live.xml",
       "destination": "/api/sitemap"
     },

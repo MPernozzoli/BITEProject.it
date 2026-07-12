@@ -46,9 +46,10 @@ tags: [frontend, lib, hooks, logica]
 
 ### SEO / i18n / infra
 - `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]
-- `pwa.ts` — service worker/PWA
-- `boot-splash-3d.ts` — splash 3D con three.js (untracked, nuovo)
-- `hero-ready-event.ts`, `utils.ts`, `translate-editor-content.ts`
+- `pwa.ts` — service worker/PWA; viene registrato dopo il mount React per non bloccare il primo render.
+- `boot-splash-3d.ts` — splash 3D con three.js mantenuta nel codice ma non più collegata al bootstrap/route iniziale.
+- `hero-ready-event.ts` — evento legacy per readiness hero, non più usato per trattenere il caricamento della home.
+- `utils.ts`, `translate-editor-content.ts`
 - `admin-media-upload-queue.ts` — coda upload media admin
 
 ## Server helper (`src/server/`)

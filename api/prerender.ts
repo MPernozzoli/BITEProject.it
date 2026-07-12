@@ -147,9 +147,28 @@ interface PageData {
   ogType: "website" | "article";
   jsonLd?: Record<string, unknown>;
   paragraphs?: string[];
+  sections?: HtmlSection[];
+  links?: HtmlLink[];
   status: number;
   robots: string;
 }
+
+interface HtmlLink {
+  href: string;
+  label: string;
+  description?: string | null;
+  date?: string | null;
+  rel?: string;
+}
+
+interface HtmlSection {
+  heading: string;
+  body?: string | null;
+  links?: HtmlLink[];
+}
+
+const absoluteUrl = (path: string) => `${SITE_URL}${path}`;
+const localizedUrl = (lang: Lang, path: string) => absoluteUrl(withLang(lang, path));
 
 const buildStaticPage = (lang: Lang, path: string): PageData | null => {
   const meta = STATIC_ROUTES[path];
@@ -183,6 +202,160 @@ const slugFor = (row: any, lang: Lang): string => {
   return localizedField(row, "slug", lang) || String(row?.slug ?? "");
 };
 
+const slugifyVoyageName = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "voyage";
+
+const voyageName = (row: any, lang: Lang): string =>
+  localizedField(row, "name", lang) || String(row?.name ?? "Voyage");
+
+const voyageDescription = (row: any, lang: Lang): string =>
+  localizedField(row, "description", lang) || "";
+
+const voyagePath = (row: any) =>
+  `/voyages/${row.id}--${slugifyVoyageName(String(row.name_en || row.name_it || row.name || "voyage"))}`;
+
+const articleTitle = (row: any, lang: Lang): string =>
+  localizedField(row, "title", lang) || String(row?.slug ?? "Logbook article");
+
+const articleDescription = (row: any, lang: Lang): string =>
+  localizedField(row, "excerpt", lang) || "";
+
+const articlePath = (row: any, lang: Lang) => `/logbook/${slugFor(row, lang)}`;
+
+const publishedAt = (row: any) =>
+  typeof row?.published_at === "string" && row.published_at ? row.published_at : null;
+
+const modifiedAt = (row: any) =>
+  (typeof row?.updated_at === "string" && row.updated_at) || publishedAt(row) || null;
+
+const fetchPublishedArticles = (select = "id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,cover_image,voyage_id,category") =>
+  supabaseFetch(
+    `logbook_articles?select=${encodeURIComponent(select)}&status=eq.published&order=published_at.desc.nullslast&order=created_at.desc`
+  );
+
+const fetchPublishedVoyages = (select = "id,name,name_en,name_it,description,description_en,description_it,start_date,end_date,updated_at,created_at,type,status") =>
+  supabaseFetch(`voyages?select=${encodeURIComponent(select)}&is_published=eq.true&order=sort_order.asc`);
+
+const fetchArticleAuthors = async (articleId: string): Promise<Array<{ id: string; name: string; avatar_url?: string | null }>> => {
+  const links = await supabaseFetch(`article_authors?select=profile_id&article_id=eq.${encodeURIComponent(articleId)}`);
+  const ids = (links ?? []).map((link) => link.profile_id).filter(Boolean);
+  if (!ids.length) return [];
+
+  const profiles = await supabaseFetch(
+    `public_profiles?select=id,name,avatar_url&id=in.(${ids.map((id) => `"${String(id).replaceAll('"', '\\"')}"`).join(",")})`
+  );
+  return (profiles ?? [])
+    .filter((profile) => typeof profile.name === "string" && profile.name.trim())
+    .map((profile) => ({ id: profile.id, name: profile.name, avatar_url: profile.avatar_url ?? null }));
+};
+
+const fetchArticleTags = async (articleId: string): Promise<string[]> => {
+  const rows = await supabaseFetch(
+    `article_tags?select=tags(name)&article_id=eq.${encodeURIComponent(articleId)}`
+  );
+  return (rows ?? [])
+    .map((row) => row.tags?.name)
+    .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
+};
+
+const buildLogbookIndex = async (lang: Lang): Promise<PageData> => {
+  const articles = (await fetchPublishedArticles()) ?? [];
+  const links: HtmlLink[] = articles.flatMap((article) =>
+    LANGS.map((itemLang) => ({
+      href: withLang(itemLang, articlePath(article, itemLang)),
+      label: `${articleTitle(article, itemLang)} (${itemLang})`,
+      description: articleDescription(article, itemLang),
+      date: publishedAt(article),
+      rel: itemLang === lang ? undefined : "alternate",
+    }))
+  );
+  const page = buildStaticPage(lang, "/logbook");
+  return {
+    ...(page ?? notFoundPage(lang)),
+    sections: [
+      {
+        heading: lang === "it" ? "Articoli pubblicati" : "Published articles",
+        body:
+          lang === "it"
+            ? "Archivio completo degli articoli pubblicati nel logbook."
+            : "Complete archive of published logbook articles.",
+        links,
+      },
+    ],
+    links,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: STATIC_ROUTES["/logbook"].title[lang],
+      description: STATIC_ROUTES["/logbook"].description[lang],
+      url: localizedUrl(lang, "/logbook"),
+      mainEntity: {
+        "@type": "ItemList",
+        itemListElement: links.map((link, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: absoluteUrl(link.href),
+          name: link.label,
+        })),
+      },
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      inLanguage: lang,
+    },
+  };
+};
+
+const buildVoyagesIndex = async (lang: Lang): Promise<PageData> => {
+  const voyages = (await fetchPublishedVoyages()) ?? [];
+  const links: HtmlLink[] = voyages.flatMap((voyage) =>
+    LANGS.map((itemLang) => ({
+      href: withLang(itemLang, voyagePath(voyage)),
+      label: `${voyageName(voyage, itemLang)} (${itemLang})`,
+      description: voyageDescription(voyage, itemLang),
+      date: modifiedAt(voyage),
+      rel: itemLang === lang ? undefined : "alternate",
+    }))
+  );
+  const page = buildStaticPage(lang, "/voyages");
+  return {
+    ...(page ?? notFoundPage(lang)),
+    sections: [
+      {
+        heading: lang === "it" ? "Rotte pubbliche" : "Public voyages",
+        body:
+          lang === "it"
+            ? "Tutti i viaggi pubblici con pagina dedicata, date e tappe."
+            : "All public voyages with dedicated route pages, dates, and stops.",
+        links,
+      },
+    ],
+    links,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: STATIC_ROUTES["/voyages"].title[lang],
+      description: STATIC_ROUTES["/voyages"].description[lang],
+      url: localizedUrl(lang, "/voyages"),
+      mainEntity: {
+        "@type": "ItemList",
+        itemListElement: links.map((link, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: absoluteUrl(link.href),
+          name: link.label,
+        })),
+      },
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      inLanguage: lang,
+    },
+  };
+};
+
 const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => {
   const rows = await supabaseFetch(
     `logbook_articles?select=*&status=eq.published&or=(slug.eq.${encodeURIComponent(slug)},slug_it.eq.${encodeURIComponent(slug)},slug_en.eq.${encodeURIComponent(slug)})&limit=1`
@@ -190,15 +363,49 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
   const article = rows?.[0];
   if (!article) return notFoundPage(lang);
 
-  const title = localizedField(article, "title", lang) || article.slug;
+  const title = articleTitle(article, lang);
   const paragraphs = extractParagraphs(lang === "it" ? article.content_it ?? article.content_en : article.content_en ?? article.content_it);
   const description =
-    localizedField(article, "excerpt", lang) || paragraphs.join(" ").slice(0, 160) || DEFAULT_DESCRIPTION[lang];
+    articleDescription(article, lang) || paragraphs.join(" ").slice(0, 160) || DEFAULT_DESCRIPTION[lang];
   const paths: Record<Lang, string> = {
-    it: `/logbook/${slugFor(article, "it")}`,
-    en: `/logbook/${slugFor(article, "en")}`,
+    it: articlePath(article, "it"),
+    en: articlePath(article, "en"),
   };
-  const canonicalUrl = `${SITE_URL}${withLang(lang, paths[lang])}`;
+  const canonicalUrl = localizedUrl(lang, paths[lang]);
+  const relatedQuery = article.voyage_id
+    ? `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,voyage_id&status=eq.published&voyage_id=eq.${encodeURIComponent(article.voyage_id)}&id=neq.${encodeURIComponent(article.id)}&order=published_at.desc.nullslast&limit=6`
+    : article.category
+      ? `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,voyage_id,category&status=eq.published&category=eq.${encodeURIComponent(article.category)}&id=neq.${encodeURIComponent(article.id)}&order=published_at.desc.nullslast&limit=6`
+      : `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,voyage_id&status=eq.published&id=neq.${encodeURIComponent(article.id)}&order=published_at.desc.nullslast&limit=6`;
+
+  const [authors, tags, linkedVoyageRows, relatedRows] = await Promise.all([
+    fetchArticleAuthors(article.id),
+    fetchArticleTags(article.id),
+    article.voyage_id
+      ? supabaseFetch(`voyages?select=id,name,name_en,name_it,description,description_en,description_it,updated_at,created_at,type,status&id=eq.${encodeURIComponent(article.voyage_id)}&is_published=eq.true&limit=1`)
+      : Promise.resolve(null),
+    supabaseFetch(relatedQuery),
+  ]);
+  const linkedVoyage = linkedVoyageRows?.[0] ?? null;
+  const internalLinks: HtmlLink[] = [
+    { href: withLang(lang, "/"), label: lang === "it" ? "Home" : "Home" },
+    { href: withLang(lang, "/logbook"), label: lang === "it" ? "Categoria: Logbook" : "Category: Logbook" },
+  ];
+  if (linkedVoyage) {
+    internalLinks.push({
+      href: withLang(lang, voyagePath(linkedVoyage)),
+      label: voyageName(linkedVoyage, lang),
+      description: lang === "it" ? "Viaggio collegato" : "Linked voyage",
+    });
+  }
+  for (const related of relatedRows ?? []) {
+    internalLinks.push({
+      href: withLang(lang, articlePath(related, lang)),
+      label: articleTitle(related, lang),
+      description: articleDescription(related, lang),
+      date: publishedAt(related),
+    });
+  }
 
   return {
     title: `${title} | BITE`,
@@ -209,9 +416,16 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
     paragraphs,
     status: 200,
     robots: "index, follow",
+    links: internalLinks,
+    sections: [
+      {
+        heading: lang === "it" ? "Collegamenti interni" : "Internal links",
+        links: internalLinks,
+      },
+    ],
     jsonLd: {
       "@context": "https://schema.org",
-      "@type": "Article",
+      "@type": "BlogPosting",
       headline: title,
       description,
       url: canonicalUrl,
@@ -220,6 +434,14 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
       datePublished: article.published_at || undefined,
       dateModified: article.updated_at || article.published_at || undefined,
       articleSection: article.category || "Logbook",
+      keywords: tags.length ? tags : undefined,
+      author: authors.length
+        ? authors.map((author) => ({
+            "@type": "Person",
+            name: author.name,
+            url: absoluteUrl(`/profile/${author.id}`),
+          }))
+        : { "@id": `${SITE_URL}/#organization` },
       inLanguage: lang,
       publisher: { "@id": `${SITE_URL}/#organization` },
       isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -269,24 +491,94 @@ const buildStoryPage = async (lang: Lang, slug: string): Promise<PageData> => {
 const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
   const id = ref.split("--")[0];
   if (!id) return notFoundPage(lang);
-  const rows = await supabaseFetch(`voyages?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
+  const rows = await supabaseFetch(`voyages?select=*&id=eq.${encodeURIComponent(id)}&is_published=eq.true&limit=1`);
   const voyage = rows?.[0];
   if (!voyage) return notFoundPage(lang);
 
-  const name = typeof voyage.name === "string" && voyage.name.trim() ? voyage.name.trim() : "Voyage";
+  const name = voyageName(voyage, lang);
   const description =
-    lang === "it"
+    voyageDescription(voyage, lang) ||
+    (lang === "it"
       ? `Rotta pubblica "${name}" con partenza, arrivo, waypoint e date del viaggio a bordo di S/Y Spritz.`
-      : `Public route "${name}" with departure, arrival, waypoints, and voyage dates aboard S/Y Spritz.`;
-  const path = `/voyages/${ref}`;
+      : `Public route "${name}" with departure, arrival, waypoints, and voyage dates aboard S/Y Spritz.`);
+  const path = voyagePath(voyage);
+  const [waypoints, articleRows, otherVoyages] = await Promise.all([
+    supabaseFetch(`voyage_waypoints?select=name,name_it,name_en,description,description_it,description_en,lat,lng,event_date,date_start,date_end,sort_order&voyage_id=eq.${encodeURIComponent(id)}&order=sort_order.asc`),
+    supabaseFetch(
+      `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,voyage_id&status=eq.published&voyage_id=eq.${encodeURIComponent(id)}&order=published_at.asc.nullslast`
+    ),
+    supabaseFetch(
+      `voyages?select=id,name,name_en,name_it,description,description_en,description_it,updated_at,created_at,type,status&is_published=eq.true&id=neq.${encodeURIComponent(id)}&order=sort_order.asc&limit=6`
+    ),
+  ]);
+  const articleLinks: HtmlLink[] = (articleRows ?? []).map((article) => ({
+    href: withLang(lang, articlePath(article, lang)),
+    label: articleTitle(article, lang),
+    description: articleDescription(article, lang),
+    date: publishedAt(article),
+  }));
+  const voyageLinks: HtmlLink[] = (otherVoyages ?? []).map((entry) => ({
+    href: withLang(lang, voyagePath(entry)),
+    label: voyageName(entry, lang),
+    description: voyageDescription(entry, lang),
+    date: modifiedAt(entry),
+  }));
+  const homeLinks: HtmlLink[] = [
+    { href: withLang(lang, "/"), label: "Home" },
+    { href: withLang(lang, "/voyages"), label: lang === "it" ? "Archivio rotte" : "Voyage archive" },
+  ];
+  const waypointParagraphs = (waypoints ?? []).slice(0, 24).map((waypoint, index) => {
+    const label = voyageName({ name: waypoint.name, name_it: waypoint.name_it, name_en: waypoint.name_en }, lang) || `Stop ${index + 1}`;
+    const body = localizedField(waypoint, "description", lang);
+    const date = waypoint.event_date || waypoint.date_start || waypoint.date_end;
+    return [label, date, body].filter(Boolean).join(" — ");
+  });
+  const canonicalUrl = localizedUrl(lang, path);
 
   return {
     title: `${name} | BITE`,
     description,
     paths: { it: path, en: path },
     ogType: "website",
+    paragraphs: waypointParagraphs,
+    sections: [
+      { heading: lang === "it" ? "Articoli collegati" : "Related articles", links: articleLinks },
+      { heading: lang === "it" ? "Altre rotte" : "Other voyages", links: voyageLinks },
+      { heading: lang === "it" ? "Navigazione" : "Navigation", links: homeLinks },
+    ],
+    links: [...articleLinks, ...voyageLinks, ...homeLinks],
     status: 200,
     robots: "index, follow",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Trip",
+      name,
+      description,
+      url: canonicalUrl,
+      mainEntityOfPage: canonicalUrl,
+      departureTime: voyage.start_date || undefined,
+      arrivalTime: voyage.end_date || undefined,
+      itinerary: (waypoints ?? []).map((waypoint, index) => ({
+        "@type": "Place",
+        name: voyageName({ name: waypoint.name, name_it: waypoint.name_it, name_en: waypoint.name_en }, lang) || `Stop ${index + 1}`,
+        geo:
+          typeof waypoint.lat === "number" && typeof waypoint.lng === "number"
+            ? {
+                "@type": "GeoCoordinates",
+                latitude: waypoint.lat,
+                longitude: waypoint.lng,
+              }
+            : undefined,
+      })),
+      subjectOf: articleLinks.map((link) => ({
+        "@type": "BlogPosting",
+        headline: link.label,
+        url: absoluteUrl(link.href),
+      })),
+      provider: { "@id": `${SITE_URL}/#organization` },
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      inLanguage: lang,
+    },
   };
 };
 
@@ -330,9 +622,20 @@ const renderHtml = (lang: Lang, page: PageData): string => {
   const bodyParagraphs = (page.paragraphs || [])
     .map((text) => `<p>${escapeHtml(text)}</p>`)
     .join("\n      ");
+  const renderLink = (link: HtmlLink) => {
+    const rel = link.rel ? ` rel="${escapeHtml(link.rel)}"` : "";
+    return `<li><a href="${escapeHtml(link.href)}"${rel}>${escapeHtml(link.label)}</a>${link.date ? ` <time datetime="${escapeHtml(link.date)}">${escapeHtml(link.date.slice(0, 10))}</time>` : ""}${link.description ? `<p>${escapeHtml(link.description)}</p>` : ""}</li>`;
+  };
+  const bodySections = (page.sections || [])
+    .map((section) => {
+      const body = section.body ? `<p>${escapeHtml(section.body)}</p>` : "";
+      const links = section.links?.length ? `<ul>\n        ${section.links.map(renderLink).join("\n        ")}\n      </ul>` : "";
+      return `<section>\n      <h2>${escapeHtml(section.heading)}</h2>\n      ${body}\n      ${links}\n    </section>`;
+    })
+    .join("\n    ");
 
   const navLinks = ["/logbook", "/voyages", "/crew", "/manifesto", "/collaborations", "/contact"]
-    .map((path) => `<a href="${SITE_URL}${withLang(lang, path)}">${escapeHtml(STATIC_ROUTES[path]?.title[lang] ?? path)}</a>`)
+    .map((path) => `<a href="${withLang(lang, path)}">${escapeHtml(STATIC_ROUTES[path]?.title[lang] ?? path)}</a>`)
     .join(" · ");
 
   return `<!doctype html>
@@ -363,9 +666,10 @@ const renderHtml = (lang: Lang, page: PageData): string => {
     <header><a href="${SITE_URL}${withLang(lang, "/")}">${SITE_NAME}</a></header>
     <main>
       <h1>${title}</h1>
-      ${page.image ? `<img src="${escapeHtml(page.image)}" alt="${title}" />` : ""}
+      ${page.image ? `<img src="${escapeHtml(page.image)}" alt="${title}" loading="eager" fetchpriority="high" />` : ""}
       <p>${description}</p>
       ${bodyParagraphs}
+      ${bodySections}
     </main>
     <footer><nav>${navLinks}</nav></footer>
   </body>
@@ -374,6 +678,9 @@ const renderHtml = (lang: Lang, page: PageData): string => {
 };
 
 const buildPage = async (lang: Lang, path: string): Promise<PageData> => {
+  if (path === "/logbook") return buildLogbookIndex(lang);
+  if (path === "/voyages") return buildVoyagesIndex(lang);
+
   const staticPage = buildStaticPage(lang, path);
   if (staticPage) return staticPage;
 

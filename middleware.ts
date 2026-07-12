@@ -17,6 +17,9 @@ const BOT_UA_RE =
 /** Paths that must never be prerendered (private/system areas). */
 const PRERENDER_EXCLUDE_RE =
   /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter)(\/|$)/i;
+const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;
+const LEGACY_PUBLIC_PATH_RE =
+  /^\/(crew|manifesto|logbook|voyages|links|linktree|route|collaborations|contact)(\/|$)/i;
 
 const getHostname = (request: Request) => {
   const forwardedHost = request.headers.get("x-forwarded-host");
@@ -61,6 +64,15 @@ export default function middleware(request: Request) {
     if (url.pathname === "/") {
       const target = new URL(url);
       target.pathname = `/${getPreferredLang(request)}`;
+      return Response.redirect(target, 302);
+    }
+
+    // Legacy unprefixed public URLs are redirects, not alternate crawlable
+    // documents. This avoids duplicate URL sets such as /manifesto and
+    // /en/manifesto while preserving old inbound links.
+    if (!LANG_PREFIX_RE.test(url.pathname) && LEGACY_PUBLIC_PATH_RE.test(url.pathname)) {
+      const target = new URL(url);
+      target.pathname = `/${getPreferredLang(request)}${url.pathname}`;
       return Response.redirect(target, 302);
     }
 

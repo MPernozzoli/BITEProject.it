@@ -12,6 +12,7 @@ Un **layer tecnico machine-readable** (JSON, GeoJSON, `llms.txt`) che espone la 
 
 ## Strategia dominio
 - **Nessun hostname separato.** Target pulito: `biteproject.it/llms.txt` + JSON/GeoJSON same-origin sotto `/data/`.
+- `/llms.txt` e `/llms-full.txt` sono serviti same-origin da Vercel (`api/llms.ts`) come proxy della function `public-llms`; `robots.txt` non li blocca.
 - Implementazione attuale (dettaglio tecnico) tramite Supabase functions → [[09 - Edge Functions]]:
   - `public-llms` → feed `llms.txt`
   - `public-semantic` → oggetti JSON
@@ -25,7 +26,7 @@ Un **layer tecnico machine-readable** (JSON, GeoJSON, `llms.txt`) che espone la 
 Articoli, Voyage, Waypoint, Observations, Crew/Vessel (`vessel:s-y-spritz` = S/Y Spritz), Media, Maps — ciascuno con ID semantico stabile, `machine_description`, `canonical_url`.
 
 ## Fasi (roadmap)
-1. **MVP** — indice discovery, GeoJSON rotte/waypoint, `llms.txt`, oggetti base. *(stato attuale)*
+1. **MVP** — indice discovery, GeoJSON rotte/waypoint, `llms.txt`, oggetti base, feed LLM same-origin con articoli e viaggi pubblici. *(stato attuale)*
 2. **Semantic migliorato** — routing same-origin `/data/*`, graph browsing, bilingue esplicito, export GPX, descrizioni media.
 3. **Agent-facing avanzato** — endpoint query con filtri documentati, entity search, schema versionato, snapshot firmati per ricerca.
 

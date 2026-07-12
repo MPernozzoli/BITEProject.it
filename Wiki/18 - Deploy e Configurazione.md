@@ -11,6 +11,8 @@ tags: [deploy, vercel, config, env]
 
 ## `vercel.json`
 **Rewrites:**
+- `/llms.txt` → `/api/llms`
+- `/llms-full.txt` → `/api/llms?full=1`
 - `/sitemap-live.xml` → `/api/sitemap`
 - `/(.*)` → `/` (SPA fallback, React Router lato client)
 
@@ -18,6 +20,7 @@ tags: [deploy, vercel, config, env]
 
 ## Edge middleware
 - `middleware.ts` — routing/prerender a livello edge, in coppia con `api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]].
+- Gli URL pubblici legacy senza prefisso lingua vengono reindirizzati a `/it/*` o `/en/*` prima del fallback SPA/prerender.
 
 ## Variabili d'ambiente (`.env`)
 Il progetto usa **un solo `.env` root** per lo sviluppo locale. Le sotto-app `apps/web`, `apps/pack` e `apps/data` leggono lo stesso file via `envDir` nei rispettivi `vite.config.ts`; non mantenere `.env` separati nelle sotto-cartelle.

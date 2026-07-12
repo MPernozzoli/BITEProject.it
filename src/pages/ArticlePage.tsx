@@ -485,7 +485,7 @@ const ArticlePage = () => {
       structuredData: [
         {
           "@context": "https://schema.org",
-          "@type": "Article",
+          "@type": "BlogPosting",
           headline: title,
           description: seoDescription,
           url: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,

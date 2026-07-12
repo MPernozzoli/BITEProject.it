@@ -195,7 +195,7 @@ const generateSitemap = async () => {
         "&status=eq.published&order=published_at.desc.nullslast"
       ),
       fetchSupabaseRows("stories", "slug,slug_it,slug_en,title_en,title_it,updated_at,cover_image", "&order=updated_at.desc.nullslast"),
-      fetchSupabaseRows("voyages", "id,name,updated_at", "&order=sort_order.asc"),
+      fetchSupabaseRows("voyages", "id,name,updated_at", "&is_published=eq.true&order=sort_order.asc"),
     ]);
 
     const slugFor = (row, l) => {
