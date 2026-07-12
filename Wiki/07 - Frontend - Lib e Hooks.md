@@ -8,6 +8,7 @@ tags: [frontend, lib, hooks, logica]
 ## Hooks (`apps/web/src/hooks/`)
 - `useAuth.tsx` — `AuthProvider` + accesso sessione Supabase → [[08 - Supabase]]
 - `useArticleReads.tsx` — conteggio letture articolo (live)
+- `useBeforeUnloadPrompt.ts` — prompt nativo per modifiche non salvate: attivo su desktop, disattivato su mobile/PWA per non interferire col ripristino pagina dopo background.
 - `usePublicContentSnapshot.ts` — snapshot contenuti pubblici in cache
 - `use-mobile.tsx` — breakpoint mobile
 - `use-toast.ts` — API toast (shadcn)
@@ -21,6 +22,7 @@ tags: [frontend, lib, hooks, logica]
 
 ### Auth & sessione
 - `supabase-auth.ts`, `supabase-auth-storage.ts`, `admin-host.ts`, `visitor-key.ts`
+- Le sessioni effimere continuano a essere pulite su chiusura/reload desktop; su mobile/PWA il cleanup non registra `beforeunload` per evitare ricariche o perdita di stato quando la pagina viene sospesa.
 
 ### Articoli / contenuto editoriale
 - `article-content.ts`, `article-cover.ts`, `article-media.tsx`, `article-slug.ts`
@@ -32,6 +34,7 @@ tags: [frontend, lib, hooks, logica]
 ### Booking & pagamenti → [[13 - Booking Voyage]] / [[11 - Pagamenti Bunq]]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
 - `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`)
+- `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
 - `danger-reasons.ts` — modificatori navigazione pericolosa
 - `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). L'admin può forzare il naming città o baia/cala dall'inspector WPT.
@@ -41,6 +44,7 @@ tags: [frontend, lib, hooks, logica]
 
 ### Newsletter / notifiche → [[12 - Newsletter ed Email]]
 - `newsletter.ts`, `email-notification-preferences.ts`
+- `mail-display.ts` — helper UI mail riusabili per nome mittente (`from_name` → firma → indirizzo), preview del solo testo nuovo e split delle citazioni; da sostituire con API `@pynkstudio/mailapp` quando il package le esporrà.
 
 ### Profilo
 - `profile-avatar.ts`, `profile-completeness.ts`

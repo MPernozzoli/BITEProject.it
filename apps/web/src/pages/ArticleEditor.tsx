@@ -29,6 +29,7 @@ import { normalizeArticleMapScenes } from "@/lib/article-map";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 import { getArticleTranslationGaps } from "@/lib/article-translation-gaps";
 import { EDITORIAL_TYPE_LABELS, type EditorialArticleType } from "@/lib/editorial-plan";
+import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 
 type ArticleLanguage = "en" | "it";
 
@@ -576,16 +577,7 @@ const ArticleEditor = () => {
     voyageSegStart,
   ]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!hasLocalChangesRef.current || saving || leaveBusy) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [leaveBusy, saving]);
+  useBeforeUnloadPrompt(hasLocalChangesRef.current && !saving && !leaveBusy);
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);

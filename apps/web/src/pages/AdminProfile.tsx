@@ -44,6 +44,7 @@ import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
+import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 import { ALL_LANGUAGES, SITE_LANGUAGES, useI18n, type ExtendedLanguage } from "@/lib/i18n";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import {
@@ -1260,16 +1261,7 @@ const AdminProfile = () => {
     };
   }, [loadPushState, shouldShowMobileAppCard]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty || saving || saveAndLeavePending) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty, saveAndLeavePending, saving]);
+  useBeforeUnloadPrompt(isDirty && !saving && !saveAndLeavePending);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {

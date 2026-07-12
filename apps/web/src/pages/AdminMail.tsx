@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Archive,
   ArrowLeft,
@@ -15,6 +15,14 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  isQuoteIntro,
+  mailDisplaySender,
+  mailPrimaryPreview,
+  quotedLineDepth,
+  splitQuotedMailText,
+  unquoteLine,
+} from "@/lib/mail-display";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 
 type MailView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";
@@ -82,17 +90,6 @@ const viewOptions: Array<{ id: MailView; label: string; icon: typeof Inbox }> = 
   { id: "spam", label: "Spam", icon: ShieldAlert },
 ];
 
-function senderName(message: MailMessage) {
-  return message.from_name?.trim() || message.from_address;
-}
-
-function cleanEmailPreview(message: MailMessage) {
-  return htmlToText(message.html_body, message.text_body)
-    .replace(/^\s*>+\s?/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("it-IT", {
     day: "2-digit",
@@ -100,75 +97,6 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function htmlToText(html: string | null, fallback: string | null) {
-  if (fallback?.trim()) return fallback;
-  if (!html) return "";
-  return html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function quotedLineDepth(line: string) {
-  const match = line.match(/^\s*((?:>\s*)+)/);
-  if (!match) return 0;
-  return (match[1].match(/>/g) ?? []).length;
-}
-
-function unquoteLine(line: string, depth: number) {
-  let next = line;
-  for (let index = 0; index < depth; index += 1) {
-    next = next.replace(/^\s*>\s?/, "");
-  }
-  return next;
-}
-
-function isQuoteIntro(line: string) {
-  const normalized = line.trim();
-  return /\bha scritto:\s*$/i.test(normalized) || /^on .+ wrote:\s*$/i.test(normalized);
-}
-
-function quoteSenderFromIntro(line: string) {
-  const withoutEmail = line.replace(/\s*<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-
-  const italianPrefix = withoutEmail.replace(/\s+ha scritto:\s*$/i, "");
-  if (italianPrefix !== withoutEmail) {
-    const timeMatch = italianPrefix.match(/\balle(?: ore)?\s+\d{1,2}[:.]\d{2}\s+(.+)$/i);
-    if (timeMatch?.[1]?.trim()) return timeMatch[1].trim();
-
-    const lastCommaSegment = italianPrefix.split(",").pop()?.trim();
-    if (lastCommaSegment) return lastCommaSegment;
-  }
-
-  const englishPrefix = withoutEmail.replace(/\s+wrote:\s*$/i, "");
-  if (englishPrefix !== withoutEmail) {
-    const lastCommaSegment = englishPrefix.split(",").pop()?.trim();
-    if (lastCommaSegment) return lastCommaSegment;
-  }
-
-  return null;
-}
-
-function splitQuotedText(text: string) {
-  const lines = text.split(/\r?\n/);
-  const quoteIntroIndex = lines.findIndex(isQuoteIntro);
-  if (quoteIntroIndex >= 0 && quoteIntroIndex < lines.length - 1) {
-    return {
-      visibleLines: lines.slice(0, quoteIntroIndex + 1),
-      quotedLines: lines.slice(quoteIntroIndex + 1),
-      quotedSender: quoteSenderFromIntro(lines[quoteIntroIndex]),
-    };
-  }
-
-  const firstQuotedLine = lines.findIndex((line) => quotedLineDepth(line) > 0);
-  if (firstQuotedLine >= 0) {
-    return {
-      visibleLines: lines.slice(0, firstQuotedLine),
-      quotedLines: lines.slice(firstQuotedLine),
-      quotedSender: null,
-    };
-  }
-
-  return { visibleLines: lines, quotedLines: [], quotedSender: null };
 }
 
 function MailTextLines({ lines, quoted = false }: { lines: string[]; quoted?: boolean }) {
@@ -198,7 +126,7 @@ function MailTextLines({ lines, quoted = false }: { lines: string[]; quoted?: bo
 function MailTextBody({ text }: { text: string }) {
   const quoteRegionId = useId();
   const [quotesExpanded, setQuotesExpanded] = useState(false);
-  const { visibleLines, quotedLines, quotedSender } = useMemo(() => splitQuotedText(text), [text]);
+  const { visibleLines, quoteIntroLine, quotedLines, quotedSender } = useMemo(() => splitQuotedMailText(text), [text]);
   const hasQuotedContent = quotedLines.some((line) => line.trim());
   const quoteSender = quotedSender || "mittente";
 
@@ -214,6 +142,7 @@ function MailTextBody({ text }: { text: string }) {
 
       {hasQuotedContent && (
         <div className="space-y-3">
+          {quoteIntroLine && <MailTextLines lines={[quoteIntroLine]} quoted />}
           <button
             type="button"
             aria-expanded={quotesExpanded}
@@ -241,6 +170,7 @@ function MailTextBody({ text }: { text: string }) {
 const AdminMail = () => {
   const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<MailView>("inbox");
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -258,6 +188,32 @@ const AdminMail = () => {
     body: "",
   });
   const [showCcBcc, setShowCcBcc] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("compose") !== "1") return;
+
+    const to = searchParams.get("to") ?? "";
+    const subject = searchParams.get("subject") ?? "";
+    setCompose((current) => ({
+      ...current,
+      fromOptionId:
+        fromOptions.find((option) => option.brand === "bite_ordinary")?.id ??
+        fromOptions[0]?.id ??
+        current.fromOptionId,
+      to,
+      cc: "",
+      bcc: "",
+      subject,
+      body: "",
+    }));
+    setShowCcBcc(false);
+    setComposeOpen(true);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("compose");
+    nextSearchParams.delete("to");
+    nextSearchParams.delete("subject");
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [fromOptions, searchParams, setSearchParams]);
 
   const selectedMessage = useMemo(
     () => messages.find((message) => message.id === selectedId) ?? messages[0] ?? null,
@@ -442,8 +398,8 @@ const AdminMail = () => {
                   <div className="max-h-[680px] overflow-y-auto">
                     {messages.map((message) => {
                       const selected = selectedMessage?.id === message.id;
-                      const sender = view === "sent" ? message.to_addresses.join(", ") : senderName(message);
-                      const preview = cleanEmailPreview(message);
+                      const sender = view === "sent" ? message.to_addresses.join(", ") : mailDisplaySender(message);
+                      const preview = mailPrimaryPreview(message);
                       return (
                         <button
                           key={message.id}
@@ -485,7 +441,7 @@ const AdminMail = () => {
                           <p className="grid gap-1 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
                             <span className="text-muted-foreground">{view === "sent" ? "A" : "Da"}</span>
                             <span className="min-w-0 break-words text-foreground">
-                              {view === "sent" ? selectedMessage.to_addresses.join(", ") : senderName(selectedMessage)}
+                              {view === "sent" ? selectedMessage.to_addresses.join(", ") : mailDisplaySender(selectedMessage)}
                             </span>
                           </p>
                           {view !== "sent" && selectedMessage.from_name?.trim() && selectedMessage.from_address !== selectedMessage.from_name && (

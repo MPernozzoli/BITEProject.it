@@ -7,6 +7,7 @@ import {
   validateSessionOrSignOut,
 } from "@/lib/supabase-auth";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
+import { isLikelyMobileDevice, isRunningAsInstalledApp } from "@/lib/pwa";
 
 const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 
@@ -82,6 +83,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [applySession]);
 
   useEffect(() => {
+    if (isLikelyMobileDevice() || isRunningAsInstalledApp()) return;
+
     const clearEphemeralSession = () => {
       if (!localStorage.getItem("bite_ephemeral_session")) return;
       removeSupabaseAuthStorage();

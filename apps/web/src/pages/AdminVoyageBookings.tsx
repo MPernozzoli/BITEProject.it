@@ -50,9 +50,11 @@ import {
   isLegComplexityAuto,
 } from "@/lib/booking-utils";
 import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
+import { DEFAULT_BOOKING_BRIEFINGS } from "@/lib/booking-briefings";
 import { sendBookingInvites } from "@/lib/booking-participants";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import { useI18n } from "@/lib/i18n";
+import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -82,6 +84,10 @@ const emptySettingsForm: BookingSettings = {
   predeparture_info_en: "",
   briefing_content_it: "",
   briefing_content_en: "",
+  first_briefing_content_it: DEFAULT_BOOKING_BRIEFINGS.first.it,
+  first_briefing_content_en: DEFAULT_BOOKING_BRIEFINGS.first.en,
+  second_briefing_content_it: DEFAULT_BOOKING_BRIEFINGS.second.it,
+  second_briefing_content_en: DEFAULT_BOOKING_BRIEFINGS.second.en,
   terms_content_it: "",
   terms_content_en: "",
 };
@@ -859,15 +865,7 @@ const AdminVoyageBookings = () => {
   // Unsaved-changes leave guard (same pattern as /profile): warns on tab close/reload,
   // in-app link clicks, and back/forward navigation while route planning or booking
   // settings edits haven't been persisted yet.
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty || saving || saveAndLeavePending) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty, saveAndLeavePending, saving]);
+  useBeforeUnloadPrompt(isDirty && !saving && !saveAndLeavePending);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
@@ -1621,7 +1619,7 @@ const AdminVoyageBookings = () => {
               <Settings size={17} className="text-accent" />
               <div>
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Admin / bookings / settings</p>
-                <h2 className="editorial-heading text-2xl">Prepartenza, briefing e checklist</h2>
+                <h2 className="editorial-heading text-2xl">Prepartenza, briefing email e checklist</h2>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1671,24 +1669,81 @@ const AdminVoyageBookings = () => {
                 className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
               />
             </label>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing IT</span>
-              <textarea
-                rows={4}
-                value={bookingSettings.briefing_content_it || ""}
-                onChange={(event) => updateSettingsField("briefing_content_it", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing EN</span>
-              <textarea
-                rows={4}
-                value={bookingSettings.briefing_content_en || ""}
-                onChange={(event) => updateSettingsField("briefing_content_en", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
+            <fieldset className="lg:col-span-3 rounded-[22px] border border-border/70 bg-background/35 p-4">
+              <legend className="px-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Mail briefing 1 · invio automatico alla conferma
+              </legend>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Riepilogo viaggio, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti gia disponibili a bordo.
+              </p>
+              <div className="grid gap-4">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 1 IT</span>
+                  <textarea
+                    rows={9}
+                    value={bookingSettings.first_briefing_content_it || ""}
+                    onChange={(event) => updateSettingsField("first_briefing_content_it", event.target.value)}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 1 EN</span>
+                  <textarea
+                    rows={9}
+                    value={bookingSettings.first_briefing_content_en || ""}
+                    onChange={(event) => updateSettingsField("first_briefing_content_en", event.target.value)}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+              </div>
+            </fieldset>
+            <fieldset className="lg:col-span-3 rounded-[22px] border border-border/70 bg-background/35 p-4">
+              <legend className="px-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Mail briefing 2 · operativo a ridosso della partenza
+              </legend>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F, USB-A/USB-C, frigo e suggerimenti per luoghi o esperienze.
+              </p>
+              <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo L</p>
+                  <div className="mt-3 flex h-16 items-center justify-center gap-3 rounded-xl border border-border/60 bg-background/80">
+                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
+                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
+                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
+                  </div>
+                </div>
+                <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo F</p>
+                  <div className="mt-3 flex h-16 items-center justify-center rounded-xl border border-border/60 bg-background/80">
+                    <div className="flex h-12 w-12 items-center justify-center gap-4 rounded-full border-2 border-foreground/70">
+                      <span className="h-3 w-3 rounded-full bg-foreground/70" />
+                      <span className="h-3 w-3 rounded-full bg-foreground/70" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 2 IT</span>
+                  <textarea
+                    rows={9}
+                    value={bookingSettings.second_briefing_content_it || ""}
+                    onChange={(event) => updateSettingsField("second_briefing_content_it", event.target.value)}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 2 EN</span>
+                  <textarea
+                    rows={9}
+                    value={bookingSettings.second_briefing_content_en || ""}
+                    onChange={(event) => updateSettingsField("second_briefing_content_en", event.target.value)}
+                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                </label>
+              </div>
+            </fieldset>
             <label className="block lg:col-span-3">
               <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Termini / note operative IT</span>
               <textarea

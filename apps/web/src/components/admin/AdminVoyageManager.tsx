@@ -69,6 +69,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 
 interface VoyageFormState {
   name_it: string;
@@ -3218,16 +3219,7 @@ const AdminVoyageManager = ({
     return () => onRegisterLeaveGuard?.(null);
   }, [handleSaveBeforeLeave, onRegisterLeaveGuard]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isRouteDraftDirty, isVoyageFormDirty]);
+  useBeforeUnloadPrompt(isVoyageFormDirty || isRouteDraftDirty);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {

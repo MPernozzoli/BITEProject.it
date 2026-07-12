@@ -32,6 +32,8 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `UserBookings.tsx` | `/bookings` |
 | `ManageBookingParticipants.tsx` | `/bookings/:id/participants` |
 
+`UserBookings.tsx` mostra, per booking confermati, la sezione **Mail briefing** divisa in primo briefing e secondo briefing operativo; la seconda scheda include anche la visualizzazione delle prese tipo L/F presenti a bordo.
+
 ## Newsletter / legali → [[12 - Newsletter ed Email]]
 | Pagina | Rotta | Note |
 |---|---|---|
@@ -53,7 +55,9 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |
 
-`AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, mostra mittente/destinatari con campi leggibili e collassa le citazioni nel corpo mail con azioni "Mostra di più da..." / "Nascondi".
+`AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, mostra il nome mittente quando disponibile o inferibile dalla firma e usa l'indirizzo solo come fallback. L'anteprima usa solo il testo nuovo prima del thread citato; nel corpo le citazioni restano collassabili con azioni "Mostra di più da..." / "Nascondi".
+
+`AdminVoyageBookings.tsx` nella sezione settings gestisce i contenuti bilingue delle due mail briefing viaggio (`first_briefing_content_*`, `second_briefing_content_*`) oltre a prepartenza, note operative e checklist.
 
 ## Collegamenti
 - Componenti usati: [[06 - Frontend - Componenti]]

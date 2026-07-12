@@ -135,6 +135,10 @@ export interface BookingSettings {
   predeparture_info_en: string | null;
   briefing_content_it: string | null;
   briefing_content_en: string | null;
+  first_briefing_content_it?: string | null;
+  first_briefing_content_en?: string | null;
+  second_briefing_content_it?: string | null;
+  second_briefing_content_en?: string | null;
   terms_content_it: string | null;
   terms_content_en: string | null;
 }

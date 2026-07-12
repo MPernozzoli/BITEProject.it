@@ -48,6 +48,7 @@ Supabase è il **backend unico** del progetto.
 - `..._admin_booking_email_invites.sql` — abilita gli inviti booking creati da admin verso email non ancora registrate e trasferisce la prenotazione al profilo reale quando l'invitato accetta.
 - `..._normalize_candidate_info_defaults.sql` — normalizza i valori nulli e rende `candidate_info` obbligatorio con default `{}` su richieste e partecipanti booking.
 - `..._bunq_booking_refunds.sql` — estende `voyage_booking_deposits` con alias pagatore e campi audit rimborso (`refund_amount_cents`, `refund_policy`, `refund_reference`, `refund_payment_id`) e aggiunge lo stato `partially_refunded`.
+- `..._voyage_booking_briefings.sql` — aggiunge i contenuti bilingue per prima/seconda mail briefing in `voyage_booking_settings`, estende `voyage_booking_notifications` con `first_briefing`/`second_briefing` e accoda automaticamente il primo briefing alla conferma booking o all'accettazione di un partecipante.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -59,7 +60,7 @@ Supabase è il **backend unico** del progetto.
 - `accept_booking_participation` (RPC) — collega l'invito all'utente autenticato, salva `candidate_info` e, per gli inviti admin one-person, trasferisce la richiesta dal profilo placeholder al profilo reale.
 - `sync_voyage_bookable_legs` (RPC admin) — ricalcola le tratte prenotabili e riconcilia le prenotazioni esistenti con il planning corrente
 - `voyage_booking_plan_changes` — audit/predisposizione approvazione utente per cambi planning booking → [[13 - Booking Voyage]]
-- `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti e modifiche planning; gli eventi utente e `admin_*` registrano anche `push_sent_at` per Web Push filtrate dalle preferenze → [[12 - Newsletter ed Email]]
+- `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti, modifiche planning e briefing viaggio; gli eventi utente e `admin_*` registrano anche `push_sent_at` per Web Push filtrate dalle preferenze → [[12 - Newsletter ed Email]]
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico → [[12 - Newsletter ed Email]]

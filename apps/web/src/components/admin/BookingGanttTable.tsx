@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Mail, Plus, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   type BookableLeg,
@@ -22,7 +31,6 @@ import {
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
-  getBookingStatusShortLabel,
   getLegLabel,
 } from "@/lib/booking-utils";
 
@@ -123,6 +131,7 @@ const BookingGanttTable = ({
   onResize,
   onAddPeople,
 }: BookingGanttTableProps) => {
+  const navigate = useNavigate();
   const legIndexById = useMemo(() => {
     const map = new Map<string, number>();
     legs.forEach((leg, index) => map.set(leg.id, index));
@@ -149,6 +158,7 @@ const BookingGanttTable = ({
   const [addPersonInviteEmail, setAddPersonInviteEmail] = useState("");
   const [addPersonBusy, setAddPersonBusy] = useState(false);
   const [addPersonPickerOpen, setAddPersonPickerOpen] = useState(false);
+  const [profileDialogRequestId, setProfileDialogRequestId] = useState<string | null>(null);
 
   const uniqueAvailableProfiles = useMemo(() => {
     const map = new Map<string, BookingProfile>();
@@ -248,12 +258,54 @@ const BookingGanttTable = ({
 
   const trackWidth = legs.length * COLUMN_WIDTH;
   const gridTemplateColumns = `${PERSON_COL_WIDTH}px repeat(${legs.length}, ${COLUMN_WIDTH}px) ${ACTIONS_COL_WIDTH}px`;
+  const activeAddLeg = addPersonLegId ? legs.find((leg) => leg.id === addPersonLegId) ?? null : null;
+  const activeAddOccupied = activeAddLeg ? legCapacity[activeAddLeg.id] || 0 : 0;
+  const activeAddRemainingSeats = activeAddLeg ? Math.max(0, maxGuests - activeAddOccupied) : 0;
+  const activeAddAlreadyOnLeg = activeAddLeg ? activeProfileIdsByLeg.get(activeAddLeg.id) || new Set<string>() : new Set<string>();
+  const activeAddSelectableProfiles = activeAddLeg
+    ? uniqueAvailableProfiles.filter((profile) => !activeAddAlreadyOnLeg.has(profile.id))
+    : [];
+  const activeAddSelectedProfiles = activeAddSelectableProfiles.filter((profile) =>
+    addPersonProfileIds.includes(profile.id)
+  );
+  const activeAddInviteEmail = addPersonInviteEmail.trim().toLowerCase();
+  const activeAddHasInviteEmail = activeAddInviteEmail.length > 0;
+  const activeAddInviteEmailReady = emailValid(activeAddInviteEmail);
+  const activeAddSelectedCount = addPersonProfileIds.length + (activeAddInviteEmailReady ? 1 : 0);
+  const selectedProfileRequest = profileDialogRequestId
+    ? requests.find((request) => request.id === profileDialogRequestId) ?? null
+    : null;
+  const selectedProfile = selectedProfileRequest ? profilesById[selectedProfileRequest.profile_id] : null;
 
   const openAddPerson = (legId: string) => {
     setAddPersonLegId(legId);
     setAddPersonProfileIds([]);
     setAddPersonInviteEmail("");
     setAddPersonPickerOpen(false);
+  };
+
+  const closeAddPerson = () => {
+    setAddPersonLegId(null);
+    setAddPersonInviteEmail("");
+    setAddPersonPickerOpen(false);
+  };
+
+  const toggleAddProfile = (profileId: string) => {
+    setAddPersonProfileIds((current) => {
+      if (current.includes(profileId)) return current.filter((id) => id !== profileId);
+      if (current.length + (activeAddInviteEmailReady ? 1 : 0) >= activeAddRemainingSeats) return current;
+      return [...current, profileId];
+    });
+  };
+
+  const openMailForProfile = () => {
+    if (!selectedProfile?.email) return;
+    const query = new URLSearchParams({
+      compose: "1",
+      to: selectedProfile.email,
+      subject: `Viaggio BITE - ${getProfileLabel(selectedProfile)}`,
+    });
+    navigate(`/admin/mail?${query.toString()}`);
   };
 
   const submitAddPerson = async () => {
@@ -269,6 +321,218 @@ const BookingGanttTable = ({
   };
 
   return (
+    <>
+    <Dialog
+      open={Boolean(addPersonLegId)}
+      onOpenChange={(open) => {
+        if (!open) closeAddPerson();
+      }}
+    >
+      <DialogContent className="max-w-md rounded-[24px] border-border bg-background p-5">
+        <DialogHeader>
+          <DialogTitle className="text-base">
+            {activeAddLeg ? `Aggiungi su ${getLegLabel(activeAddLeg, waypointsById, "it")}` : "Aggiungi persona"}
+          </DialogTitle>
+          <DialogDescription>
+            {activeAddLeg
+              ? activeAddRemainingSeats > 0
+                ? `${activeAddRemainingSeats} posti disponibili`
+                : "Tratta al completo"
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <Popover open={addPersonPickerOpen} onOpenChange={setAddPersonPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              role="combobox"
+              disabled={activeAddRemainingSeats === 0}
+              className="h-auto min-h-11 w-full justify-between gap-2 border-border bg-background/80 px-2 py-2 text-left text-xs font-normal hover:bg-background"
+            >
+              {activeAddSelectedProfiles.length > 0 ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex -space-x-2">
+                    {activeAddSelectedProfiles.slice(0, 3).map((profile) => (
+                      <span
+                        key={profile.id}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-background bg-accent/10 text-[10px] font-semibold text-accent"
+                      >
+                        <ProfileAvatar
+                          name={getProfileLabel(profile)}
+                          avatarUrl={profile.avatar_url}
+                          fallback={<span>{getProfileInitials(profile)}</span>}
+                        />
+                      </span>
+                    ))}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {activeAddSelectedProfiles.length === 1
+                        ? getProfileLabel(activeAddSelectedProfiles[0])
+                        : `${activeAddSelectedProfiles.length} persone selezionate`}
+                    </span>
+                  </span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Cerca persone...</span>
+              )}
+              <ChevronsUpDown size={14} className="shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 p-0">
+            <Command>
+              <CommandInput placeholder="Cerca per nome o email..." />
+              <CommandList>
+                <CommandEmpty>Nessuna persona trovata.</CommandEmpty>
+                <CommandGroup>
+                  {activeAddSelectableProfiles.map((profile) => (
+                    <CommandItem
+                      key={profile.id}
+                      value={`${getProfileLabel(profile)} ${profile.email || ""} ${profile.id}`}
+                      onSelect={() => toggleAddProfile(profile.id)}
+                      disabled={!addPersonProfileIds.includes(profile.id) && activeAddSelectedCount >= activeAddRemainingSeats}
+                      className="gap-2"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
+                        <ProfileAvatar
+                          name={getProfileLabel(profile)}
+                          avatarUrl={profile.avatar_url}
+                          fallback={<span>{getProfileInitials(profile)}</span>}
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{getProfileLabel(profile)}</span>
+                        {profile.email && (
+                          <span className="block truncate text-[11px] text-muted-foreground">{profile.email}</span>
+                        )}
+                      </span>
+                      <span
+                        className={`ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                          addPersonProfileIds.includes(profile.id)
+                            ? "border-accent bg-accent text-accent-foreground"
+                            : "border-border"
+                        }`}
+                      >
+                        {addPersonProfileIds.includes(profile.id) && <Check size={12} />}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+        <div className="rounded-xl border border-border/70 bg-background/70 p-2">
+          <label className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            Altri...
+          </label>
+          <input
+            type="email"
+            value={addPersonInviteEmail}
+            onChange={(event) => setAddPersonInviteEmail(event.target.value)}
+            disabled={activeAddRemainingSeats === 0 || addPersonProfileIds.length >= activeAddRemainingSeats}
+            placeholder="email@example.com"
+            className="w-full rounded-lg border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus:border-accent disabled:opacity-50"
+          />
+          {activeAddHasInviteEmail && !activeAddInviteEmailReady && (
+            <p className="mt-1 text-[10px] text-amber-700">Inserisci una email valida.</p>
+          )}
+        </div>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={closeAddPerson}
+            className="glass-chip inline-flex items-center justify-center px-3 py-2 text-xs text-muted-foreground"
+          >
+            Annulla
+          </button>
+          <button
+            type="button"
+            onClick={() => void submitAddPerson()}
+            disabled={addPersonBusy || activeAddSelectedCount === 0 || (activeAddHasInviteEmail && !activeAddInviteEmailReady)}
+            className="glass-chip inline-flex items-center justify-center gap-1 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+          >
+            <Check size={13} /> Aggiungi {activeAddSelectedCount || ""}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={Boolean(profileDialogRequestId)}
+      onOpenChange={(open) => {
+        if (!open) setProfileDialogRequestId(null);
+      }}
+    >
+      <DialogContent className="max-w-md rounded-[24px] border-border bg-background p-5">
+        <DialogHeader>
+          <DialogTitle>{selectedProfile ? getProfileLabel(selectedProfile) : "Profilo"}</DialogTitle>
+          <DialogDescription>Dettagli profilo e richiesta viaggio.</DialogDescription>
+        </DialogHeader>
+        {selectedProfileRequest && selectedProfile && (
+          <div className="space-y-4 text-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-xs font-semibold text-accent">
+                <ProfileAvatar
+                  name={getProfileLabel(selectedProfile)}
+                  avatarUrl={selectedProfile.avatar_url}
+                  fallback={<span>{getProfileInitials(selectedProfile)}</span>}
+                />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-medium">{getProfileLabel(selectedProfile)}</p>
+                <p className="truncate text-muted-foreground">{selectedProfile.email || "Email non disponibile"}</p>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 rounded-xl border border-border/70 bg-background/70 p-3">
+              <div>
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Stato</dt>
+                <dd className="mt-1">{getBookingStatusLabel(selectedProfileRequest.status, "it")}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Persone</dt>
+                <dd className="mt-1">{selectedProfileRequest.party_size}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Richiesta</dt>
+                <dd className="mt-1">{formatBookingDate(selectedProfileRequest.requested_at, "it-IT")}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Ruolo</dt>
+                <dd className="mt-1">{selectedProfileRequest.is_crew ? "Equipaggio" : "Ospite"}</dd>
+              </div>
+            </dl>
+            {selectedProfileRequest.message?.trim() && (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Messaggio</p>
+                <p className="mt-1 rounded-xl border border-border/70 bg-background/70 p-3 leading-relaxed">
+                  {selectedProfileRequest.message}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => setProfileDialogRequestId(null)}
+            className="glass-chip inline-flex items-center justify-center px-3 py-2 text-xs text-muted-foreground"
+          >
+            Chiudi
+          </button>
+          <button
+            type="button"
+            onClick={openMailForProfile}
+            disabled={!selectedProfile?.email}
+            className="glass-chip inline-flex items-center justify-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+          >
+            <Mail size={13} /> Scrivigli una mail
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <div className="overflow-x-auto">
       <div style={{ minWidth: PERSON_COL_WIDTH + trackWidth + ACTIONS_COL_WIDTH }}>
         {/* Header row */}
@@ -279,21 +543,6 @@ const BookingGanttTable = ({
           {legs.map((leg) => {
             const occupied = legCapacity[leg.id] || 0;
             const full = occupied >= maxGuests;
-            const remainingSeats = Math.max(0, maxGuests - occupied);
-            const alreadyOnLeg = activeProfileIdsByLeg.get(leg.id) || new Set<string>();
-            const selectableProfiles = uniqueAvailableProfiles.filter((profile) => !alreadyOnLeg.has(profile.id));
-            const selectedProfiles = selectableProfiles.filter((profile) => addPersonProfileIds.includes(profile.id));
-            const inviteEmail = addPersonInviteEmail.trim().toLowerCase();
-            const hasInviteEmail = inviteEmail.length > 0;
-            const inviteEmailReady = emailValid(inviteEmail);
-            const selectedCount = addPersonProfileIds.length + (inviteEmailReady ? 1 : 0);
-            const toggleSelectedProfile = (profileId: string) => {
-              setAddPersonProfileIds((current) => {
-                if (current.includes(profileId)) return current.filter((id) => id !== profileId);
-                if (current.length + (inviteEmailReady ? 1 : 0) >= remainingSeats) return current;
-                return [...current, profileId];
-              });
-            };
             return (
               <div key={leg.id} className="min-w-0 border-l border-border p-3 align-bottom">
                 <span className="block text-xs font-medium leading-snug">{getLegLabel(leg, waypointsById, "it")}</span>
@@ -310,139 +559,6 @@ const BookingGanttTable = ({
                     <Plus size={12} />
                   </button>
                 </div>
-                {addPersonLegId === leg.id && (
-                  <div className="absolute z-20 mt-2 w-80 rounded-[16px] border border-border bg-background p-3 shadow-xl">
-                    <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Aggiungi su {getLegLabel(leg, waypointsById, "it")}
-                    </p>
-                    <p className="mb-2 text-[11px] text-muted-foreground">
-                      {remainingSeats > 0 ? `${remainingSeats} posti disponibili` : "Tratta al completo"}
-                    </p>
-                    <Popover open={addPersonPickerOpen} onOpenChange={setAddPersonPickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          role="combobox"
-                          disabled={remainingSeats === 0}
-                          className="mb-2 h-auto min-h-11 w-full justify-between gap-2 border-border bg-background/80 px-2 py-2 text-left text-xs font-normal hover:bg-background"
-                        >
-                          {selectedProfiles.length > 0 ? (
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="flex -space-x-2">
-                                {selectedProfiles.slice(0, 3).map((profile) => (
-                                  <span
-                                    key={profile.id}
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-background bg-accent/10 text-[10px] font-semibold text-accent"
-                                  >
-                                    <ProfileAvatar
-                                      name={getProfileLabel(profile)}
-                                      avatarUrl={profile.avatar_url}
-                                      fallback={<span>{getProfileInitials(profile)}</span>}
-                                    />
-                                  </span>
-                                ))}
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium">
-                                  {selectedProfiles.length === 1
-                                    ? getProfileLabel(selectedProfiles[0])
-                                    : `${selectedProfiles.length} persone selezionate`}
-                                </span>
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">Cerca persone...</span>
-                          )}
-                          <ChevronsUpDown size={14} className="shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className="w-80 p-0">
-                        <Command>
-                          <CommandInput placeholder="Cerca per nome o email..." />
-                          <CommandList>
-                            <CommandEmpty>Nessuna persona trovata.</CommandEmpty>
-                            <CommandGroup>
-                              {selectableProfiles.map((profile) => (
-                                <CommandItem
-                                  key={profile.id}
-                                  value={`${getProfileLabel(profile)} ${profile.email || ""} ${profile.id}`}
-                                  onSelect={() => {
-                                    toggleSelectedProfile(profile.id);
-                                  }}
-                                  disabled={!addPersonProfileIds.includes(profile.id) && selectedCount >= remainingSeats}
-                                  className="gap-2"
-                                >
-                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
-                                    <ProfileAvatar
-                                      name={getProfileLabel(profile)}
-                                      avatarUrl={profile.avatar_url}
-                                      fallback={<span>{getProfileInitials(profile)}</span>}
-                                    />
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-medium">{getProfileLabel(profile)}</span>
-                                    {profile.email && (
-                                      <span className="block truncate text-[11px] text-muted-foreground">
-                                        {profile.email}
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span
-                                    className={`ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                                      addPersonProfileIds.includes(profile.id)
-                                        ? "border-accent bg-accent text-accent-foreground"
-                                        : "border-border"
-                                    }`}
-                                  >
-                                    {addPersonProfileIds.includes(profile.id) && <Check size={12} />}
-                                  </span>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    <div className="mb-2 rounded-xl border border-border/70 bg-background/70 p-2">
-                      <label className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Altri...
-                      </label>
-                      <input
-                        type="email"
-                        value={addPersonInviteEmail}
-                        onChange={(event) => setAddPersonInviteEmail(event.target.value)}
-                        disabled={remainingSeats === 0 || addPersonProfileIds.length >= remainingSeats}
-                        placeholder="email@example.com"
-                        className="w-full rounded-lg border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus:border-accent disabled:opacity-50"
-                      />
-                      {hasInviteEmail && !inviteEmailReady && (
-                        <p className="mt-1 text-[10px] text-amber-700">Inserisci una email valida.</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void submitAddPerson()}
-                        disabled={addPersonBusy || selectedCount === 0 || (hasInviteEmail && !inviteEmailReady)}
-                        className="glass-chip inline-flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-foreground hover:text-accent disabled:opacity-50"
-                      >
-                        <Check size={12} /> Aggiungi {selectedCount || ""}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAddPersonLegId(null);
-                          setAddPersonInviteEmail("");
-                          setAddPersonPickerOpen(false);
-                        }}
-                        className="glass-chip inline-flex items-center justify-center px-2 py-1.5 text-[11px] text-muted-foreground"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -461,19 +577,19 @@ const BookingGanttTable = ({
             <div key={request.id} className="grid border-b border-border/60" style={{ gridTemplateColumns }}>
               <div className="sticky left-0 z-10 min-w-0 bg-background/95 p-3 align-top">
                 <div className="flex items-center gap-1.5 font-medium">
-                  {profile?.name || profile?.email || request.profile_id}
+                  <button
+                    type="button"
+                    onClick={() => setProfileDialogRequestId(request.id)}
+                    className="min-w-0 text-left underline-offset-4 hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+                  >
+                    <span className="block truncate">{profile?.name || profile?.email || request.profile_id}</span>
+                  </button>
                   {request.is_crew && (
                     <span className="rounded-full border border-indigo-300/70 bg-indigo-100/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-800">
                       Equipaggio
                     </span>
                   )}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {profile?.email || "No email"} · {request.party_size} pax
-                </div>
-                <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] ${statusClass}`}>
-                  {getBookingStatusLabel(request.status, "it")}
-                </span>
               </div>
 
               <div
@@ -502,7 +618,7 @@ const BookingGanttTable = ({
                         className="absolute left-0 top-0 h-full w-3 cursor-ew-resize"
                         title="Trascina per estendere/ridurre"
                       />
-                      <span className="truncate">{getBookingStatusShortLabel(request.status)}</span>
+                      <span className="truncate">{getBookingStatusLabel(request.status, "it")}</span>
                       <span
                         onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
                         className="absolute right-0 top-0 h-full w-3 cursor-ew-resize"
@@ -560,6 +676,7 @@ const BookingGanttTable = ({
         )}
       </div>
     </div>
+    </>
   );
 };
 

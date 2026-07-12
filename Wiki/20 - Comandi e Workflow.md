@@ -37,6 +37,11 @@ tags: [comandi, workflow, script, dx]
 - **Modifica schema:** nuova migrazione SQL + rigenera `apps/web/src/integrations/supabase/types.ts`.
 - **Deploy:** push su `main` → Vercel build (`npm run build`) → [[18 - Deploy e Configurazione]].
 
+## Workflow agenti AI
+- Gli agenti devono indicare esplicitamente ogni passaggio che richiede un'azione umana, distinguendolo dalle attività completate in autonomia.
+- Prima di chiedere interventi manuali, gli agenti devono predisporre quanto più possibile: generare valori configurabili localmente quando opportuno, preparare file/comandi e indicare con precisione dove inserire chiavi, token o segreti.
+- Quando un'implementazione introduce o modifica migrazioni Supabase, gli agenti devono applicarle autonomamente al termine del lavoro e verificarne l'esito. Se credenziali o accessi mancanti lo impediscono, devono lasciare istruzioni operative complete e segnalare il blocco come azione richiesta all'umano.
+
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
 Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`; l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18.

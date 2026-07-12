@@ -11,6 +11,7 @@ import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } fro
 import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
+import { getBookingBriefingContent } from "@/lib/booking-briefings";
 import {
   listMyParticipations,
   acceptParticipation,
@@ -855,9 +856,9 @@ const UserBookings = () => {
                     const predepartureInfo = lang === "it"
                       ? settings?.predeparture_info_it || settings?.predeparture_info_en
                       : settings?.predeparture_info_en || settings?.predeparture_info_it;
-                    const briefingContent = lang === "it"
-                      ? settings?.briefing_content_it || settings?.briefing_content_en
-                      : settings?.briefing_content_en || settings?.briefing_content_it;
+                    const firstBriefingContent = getBookingBriefingContent(settings, "first", lang);
+                    const secondBriefingContent = getBookingBriefingContent(settings, "second", lang);
+                    const showBriefings = request.status === "user_confirmed";
                     const termsContent = lang === "it"
                       ? settings?.terms_content_it || settings?.terms_content_en
                       : settings?.terms_content_en || settings?.terms_content_it;
@@ -980,7 +981,7 @@ const UserBookings = () => {
                               : "Counterproposal sent: the team is reviewing it."}
                           </div>
                         )}
-                        {(predepartureInfo || briefingContent || termsContent || voyageTasks.length > 0) && (
+                        {(predepartureInfo || showBriefings || termsContent || voyageTasks.length > 0) && (
                           <div className="mt-4 space-y-3 rounded-[18px] border border-border/70 bg-background/45 p-3">
                             {predepartureInfo && (
                               <div>
@@ -990,12 +991,42 @@ const UserBookings = () => {
                                 <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{predepartureInfo}</p>
                               </div>
                             )}
-                            {briefingContent && (
-                              <div>
+                            {showBriefings && (
+                              <div className="space-y-3">
                                 <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                                  {lang === "it" ? "Briefing" : "Briefing"}
+                                  {lang === "it" ? "Mail briefing" : "Briefing emails"}
                                 </p>
-                                <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{briefingContent}</p>
+                                <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
+                                    {lang === "it" ? "1. Prima mail di briefing" : "1. First briefing email"}
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{firstBriefingContent}</p>
+                                </div>
+                                <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
+                                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
+                                    {lang === "it" ? "2. Seconda mail operativa" : "2. Second operational email"}
+                                  </p>
+                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type L</p>
+                                      <div className="mt-2 flex h-12 items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/80">
+                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                      </div>
+                                    </div>
+                                    <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type F</p>
+                                      <div className="mt-2 flex h-12 items-center justify-center rounded-xl border border-border/60 bg-background/80">
+                                        <div className="flex h-9 w-9 items-center justify-center gap-3 rounded-full border-2 border-foreground/70">
+                                          <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
+                                          <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">{secondBriefingContent}</p>
+                                </div>
                               </div>
                             )}
                             {termsContent && (

@@ -39,6 +39,16 @@ type VoyageRow = {
   name_en: string | null
 }
 
+type BookingSettingsRow = {
+  voyage_id: string
+  briefing_content_it: string | null
+  briefing_content_en: string | null
+  first_briefing_content_it?: string | null
+  first_briefing_content_en?: string | null
+  second_briefing_content_it?: string | null
+  second_briefing_content_en?: string | null
+}
+
 type LegRow = {
   booking_request_id: string
   bookable_leg_id: string
@@ -119,6 +129,18 @@ function localizedName(
   return language === 'en'
     ? value.name_en || value.name_it || value.name || ''
     : value.name_it || value.name_en || value.name || ''
+}
+
+function localizedBriefingContent(settings: BookingSettingsRow | undefined, language: string, kind: 'first' | 'second') {
+  if (!settings) return null
+  if (kind === 'first') {
+    return language === 'en'
+      ? settings.first_briefing_content_en || settings.briefing_content_en || settings.first_briefing_content_it || settings.briefing_content_it
+      : settings.first_briefing_content_it || settings.briefing_content_it || settings.first_briefing_content_en || settings.briefing_content_en
+  }
+  return language === 'en'
+    ? settings.second_briefing_content_en || settings.second_briefing_content_it
+    : settings.second_briefing_content_it || settings.second_briefing_content_en
 }
 
 async function queueEmail(params: {
@@ -276,6 +298,12 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'plan_change_pending') {
       return { title: 'Voyage plan changed', body: `A change for ${voyageName}${legs} needs your response.` }
     }
+    if (params.eventType === 'first_briefing') {
+      return { title: 'Voyage briefing', body: `First practical briefing for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'second_briefing') {
+      return { title: 'Voyage briefing', body: `Operational briefing for ${voyageName}${legs}.` }
+    }
     return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
   }
 
@@ -308,6 +336,12 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'plan_change_pending') {
     return { title: 'Planning viaggio cambiato', body: `Una variazione per ${voyageName}${legs} richiede una tua risposta.` }
+  }
+  if (params.eventType === 'first_briefing') {
+    return { title: 'Briefing viaggio', body: `Primo briefing pratico per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'second_briefing') {
+    return { title: 'Briefing viaggio', body: `Briefing operativo per ${voyageName}${legs}.` }
   }
   return { title: 'Aggiornamento booking viaggio', body: `C'e un aggiornamento per ${voyageName}${legs}.` }
 }
@@ -414,9 +448,15 @@ Deno.serve(async (req) => {
     new Set(profileRows.map((row) => row.email?.trim().toLowerCase()).filter((value): value is string => Boolean(value)))
   )
 
-  const [{ data: voyages }, { data: requestLegs }, { data: pushSubscriptionRows }, { data: preferenceRows }] = await Promise.all([
+  const [{ data: voyages }, { data: bookingSettings }, { data: requestLegs }, { data: pushSubscriptionRows }, { data: preferenceRows }] = await Promise.all([
     voyageIds.length
       ? supabase.from('voyages').select('id, name, name_it, name_en').in('id', voyageIds)
+      : Promise.resolve({ data: [] }),
+    voyageIds.length
+      ? supabase
+          .from('voyage_booking_settings')
+          .select('voyage_id, briefing_content_it, briefing_content_en, first_briefing_content_it, first_briefing_content_en, second_briefing_content_it, second_briefing_content_en')
+          .in('voyage_id', voyageIds)
       : Promise.resolve({ data: [] }),
     requestIds.length
       ? supabase.from('voyage_booking_request_legs').select('booking_request_id, bookable_leg_id').in('booking_request_id', requestIds)
@@ -437,6 +477,7 @@ Deno.serve(async (req) => {
   ])
 
   const voyageById = new Map(((voyages ?? []) as VoyageRow[]).map((row) => [row.id, row]))
+  const bookingSettingsByVoyageId = new Map(((bookingSettings ?? []) as BookingSettingsRow[]).map((row) => [row.voyage_id, row]))
   const requestLegRows = (requestLegs ?? []) as LegRow[]
   const legIds = [...new Set(requestLegRows.map((row) => row.bookable_leg_id))]
 
@@ -499,6 +540,7 @@ Deno.serve(async (req) => {
 
     const language = profile.preferred_language === 'en' ? 'en' : 'it'
     const voyage = voyageById.get(booking.voyage_id)
+    const settings = bookingSettingsByVoyageId.get(booking.voyage_id)
     const legLabels = (legsByRequestId.get(booking.id) ?? [])
       .map((link) => legById.get(link.bookable_leg_id))
       .filter((leg): leg is BookableLegRow => Boolean(leg))
@@ -526,13 +568,30 @@ Deno.serve(async (req) => {
 
     try {
       if (!emailedAt && profile.email) {
+        const isBriefing = notification.event_type === 'first_briefing' || notification.event_type === 'second_briefing'
+        const briefingKind = notification.event_type === 'second_briefing' ? 'second' : 'first'
         await queueEmail({
           supabaseUrl,
           serviceRoleKey,
           recipientEmail: profile.email,
-          templateName: isAdminEvent ? 'voyage-booking-admin-notification' : 'voyage-booking-notification',
+          templateName: isBriefing
+            ? 'voyage-briefing'
+            : isAdminEvent
+              ? 'voyage-booking-admin-notification'
+              : 'voyage-booking-notification',
           idempotencyKey: `voyage-booking:${notification.id}`,
-          templateData: isAdminEvent
+          templateData: isBriefing
+            ? {
+                language,
+                recipientName: profile.name,
+                briefingKind,
+                voyageName: localizedName(voyage, language),
+                legs: legLabels,
+                partySize: booking.party_size,
+                bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
+                briefingContent: localizedBriefingContent(settings, language, briefingKind),
+              }
+            : isAdminEvent
             ? {
                 language,
                 recipientName: profile.name,

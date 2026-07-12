@@ -13,7 +13,7 @@ tags: [backend, edge-functions, serverless, supabase]
 - `process-email-queue` — worker coda email
 - `auth-email-hook` (no jwt) — hook email di autenticazione (signup, recovery, magic-link…)
 - `handle-email-suppression`, `handle-email-unsubscribe` — bounce/unsubscribe
-- Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`; i transazionali condividono `theme.tsx` per shell editoriale, card, pill, detail row, route box, callout e highlight importi.
+- Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`; i transazionali condividono `theme.tsx` per shell editoriale, card, pill, detail row, route box, callout e highlight importi. `voyage-briefing` gestisce le due mail briefing viaggio, incluso il visual delle prese tipo L/F nel secondo briefing.
 
 ## 📰 Newsletter → [[12 - Newsletter ed Email]]
 - `newsletter-subscribe`, `confirm-newsletter-subscription`, `my-newsletter-subscription`
@@ -24,7 +24,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## 🔔 Notifiche & engagement
 - `dispatch-engagement-notifications` — like/commenti/letture
-- `dispatch-voyage-booking-notifications` — notifiche prenotazioni, pagamenti e cambi planning; per gli eventi admin invia anche Web Push agli admin iscritti → [[13 - Booking Voyage]]
+- `dispatch-voyage-booking-notifications` — notifiche prenotazioni, pagamenti, cambi planning e briefing viaggio; per gli eventi admin invia anche Web Push agli admin iscritti → [[13 - Booking Voyage]]
 - `vapid-public-key` — chiave push Web Push
 
 ## 🌐 Layer semantico pubblico → [[15 - Semantic Layer (AI Agents)]]

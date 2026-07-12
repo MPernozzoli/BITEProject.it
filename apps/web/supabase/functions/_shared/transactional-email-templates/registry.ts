@@ -17,6 +17,7 @@ import { template as engagementNotification } from './engagement-notification.ts
 import { template as voyageBookingNotification } from './voyage-booking-notification.tsx'
 import { template as voyageBookingAdminNotification } from './voyage-booking-admin-notification.tsx'
 import { template as voyageParticipantInvite } from './voyage-participant-invite.tsx'
+import { template as voyageBriefing } from './voyage-briefing.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'newsletter-subscription-confirmation': newsletterSubscriptionConfirmation,
@@ -27,4 +28,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'voyage-booking-notification': voyageBookingNotification,
   'voyage-booking-admin-notification': voyageBookingAdminNotification,
   'voyage-participant-invite': voyageParticipantInvite,
+  'voyage-briefing': voyageBriefing,
 }
