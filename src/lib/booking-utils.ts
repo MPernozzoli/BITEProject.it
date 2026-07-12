@@ -349,12 +349,12 @@ export function buildLegCapacityMap(requests: BookingRequest[], requestLegs: Boo
   return map;
 }
 
-export function getLegRangeBetweenWaypoints(
+export function getLegRangeBetweenWaypoints<T extends Pick<BookableLeg, "from_waypoint_id" | "to_waypoint_id">>(
   waypointIds: string[],
-  legs: BookableLeg[],
+  legs: T[],
   fromWaypointId: string,
   toWaypointId: string
-) {
+): T[] {
   const fromIndex = waypointIds.indexOf(fromWaypointId);
   const toIndex = waypointIds.indexOf(toWaypointId);
   if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return [];
@@ -362,7 +362,7 @@ export function getLegRangeBetweenWaypoints(
   const startIndex = Math.min(fromIndex, toIndex);
   const endIndex = Math.max(fromIndex, toIndex);
   const legsByPair = new Map(legs.map((leg) => [`${leg.from_waypoint_id}:${leg.to_waypoint_id}`, leg]));
-  const selected: BookableLeg[] = [];
+  const selected: T[] = [];
 
   for (let index = startIndex; index < endIndex; index += 1) {
     const from = waypointIds[index];
@@ -602,7 +602,13 @@ export function legHasNightNavigation(
  * Auto complexity (1–5) from duration, night navigation, offshore navigation and danger. Danger at or
  * above {@link DANGER_COMPLEXITY_THRESHOLD} pins the leg to the maximum.
  */
-export function computeAutoLegComplexity(leg: BookableLeg): number {
+/** Leg fields consulted when deriving complexity, danger and duration. */
+type ComplexityLeg = Pick<
+  BookableLeg,
+  "complexity_override" | "danger_level" | "open_sea" | "starts_at_window_start" | "ends_at_window_start"
+>;
+
+export function computeAutoLegComplexity(leg: ComplexityLeg): number {
   let level = 1;
   const duration = getLegDurationHours(leg);
   if (legHasNightNavigation(leg)) level = Math.max(level, 2);
@@ -614,14 +620,14 @@ export function computeAutoLegComplexity(leg: BookableLeg): number {
 }
 
 /** Effective complexity: the manual override when set, otherwise the auto value. */
-export function getLegComplexity(leg: BookableLeg): number {
+export function getLegComplexity(leg: ComplexityLeg): number {
   const override = leg.complexity_override;
   if (override != null && override >= 1 && override <= 5) return clampLevel(Number(override), 1, 5);
   return computeAutoLegComplexity(leg);
 }
 
 /** Is the leg currently showing an auto (non-overridden) complexity? */
-export function isLegComplexityAuto(leg: BookableLeg): boolean {
+export function isLegComplexityAuto(leg: Pick<BookableLeg, "complexity_override">): boolean {
   const override = leg.complexity_override;
   return !(override != null && override >= 1 && override <= 5);
 }

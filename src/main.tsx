@@ -20,6 +20,14 @@ function isHomeRoute(pathname: string): boolean {
 }
 
 async function bootstrap() {
+  // Progressive enhancement: upgrade the static boot splash to a 3D scene once the
+  // three.js chunk arrives. Fire-and-forget so it never delays the app import below.
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    void import("./lib/boot-splash-3d")
+      .then((mod) => mod.mountBootSplash3D())
+      .catch(() => {});
+  }
+
   const onHomeRoute = isHomeRoute(window.location.pathname);
   let dismissed = false;
   const dismiss = () => {

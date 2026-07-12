@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => ({
           if (id.includes("@tanstack")) return "query";
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("maplibre-gl")) return "maps";
+          if (id.includes("node_modules/three")) return "three";
           if (id.includes("@tiptap")) return "tiptap";
           if (id.includes("@radix-ui")) return "radix";
           if (id.includes("lucide-react")) return "icons";

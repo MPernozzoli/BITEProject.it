@@ -441,7 +441,10 @@ export const normalizeWaypointMedia = (value: unknown): VoyageWaypointMediaItem[
 };
 
 export function getWaypointEffectiveType(
-  waypoint: Pick<VoyageWaypoint, "visibility_mode" | "waypoint_type">,
+  waypoint: {
+    visibility_mode?: VoyageWaypoint["visibility_mode"];
+    waypoint_type?: VoyageWaypoint["waypoint_type"];
+  },
   index: number,
   total: number
 ): "technical" | "narrative" {

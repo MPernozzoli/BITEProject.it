@@ -1,0 +1,215 @@
+{
+  "main": {
+    "id": "d70d2255acf075c8",
+    "type": "split",
+    "children": [
+      {
+        "id": "a6e1b768d5eb2037",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "62e870696e5b08ca",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Vista grafo"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9c4435d85de222c9",
+    "type": "split",
+    "children": [
+      {
+        "id": "c8d98744c8926585",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0c75c95aa5caca8f",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Esplora risorse"
+            }
+          },
+          {
+            "id": "55d9644d782087e5",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Ricerca"
+            }
+          },
+          {
+            "id": "21b03177823be0d0",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Segnalibri"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "35b03f294173f6fe",
+    "type": "split",
+    "children": [
+      {
+        "id": "1fbb8274cc60f12c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7e735824f84e03a6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Riferimenti"
+            }
+          },
+          {
+            "id": "86ece510344e6ba1",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Collegamenti in uscita"
+            }
+          },
+          {
+            "id": "6a3ca1354b4a8f05",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etichette"
+            }
+          },
+          {
+            "id": "7c085293c8f39853",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Tutte le proprietà"
+            }
+          },
+          {
+            "id": "8500ffae5073b1cb",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Struttura"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Apri selezione rapida": false,
+      "graph:Apri vista grafo": false,
+      "canvas:Crea nuova lavagna": false,
+      "daily-notes:Apri nota del giorno": false,
+      "templates:Inserisci modello": false,
+      "command-palette:Apri riquadro comandi": false,
+      "bases:Crea nuova Base": false
+    }
+  },
+  "active": "62e870696e5b08ca",
+  "lastOpenFiles": [
+    "node_modules/linkifyjs/README.md",
+    "AGENTS.md",
+    "Wiki/20 - Comandi e Workflow.md",
+    "Wiki/19 - Sub-App (pack e data).md",
+    "Wiki/18 - Deploy e Configurazione.md",
+    "Wiki/17 - Content Model.md",
+    "Wiki/16 - Admin.md",
+    "Wiki/15 - Semantic Layer (AI Agents).md",
+    "Wiki/14 - Mappe e Layer Geospaziale.md",
+    "Wiki/13 - Booking Voyage.md",
+    "Wiki/12 - Newsletter ed Email.md",
+    "Wiki/11 - Pagamenti Bunq.md",
+    "Wiki/10 - API Vercel.md",
+    "Wiki/09 - Edge Functions.md",
+    "Wiki/08 - Supabase.md",
+    "Wiki/07 - Frontend - Lib e Hooks.md",
+    "Wiki/06 - Frontend - Componenti.md",
+    "Wiki/05 - Frontend - Pagine.md",
+    "Wiki/04 - Struttura Repository.md",
+    "Wiki/03 - Routing e i18n.md",
+    "dist/assets/AdminEditorialPlan-D_qfJ7Yb.js",
+    "dist/assets/AdminBadgeManager-9rQfVwuM.js",
+    "dist/assets/AdminNewsletterManager-BkJIh2Kl.js",
+    "dist/assets/AdminVoyageManager-B4XOb8SR.js",
+    "dist/assets/ArticleMapAside-DUtjPvKQ.js",
+    "dist/assets/translate-editor-content-BfEwnb_Y.js",
+    "dist/assets/RichTextEditor-Cfas6v8g.js",
+    "dist/assets/select-DLe7bzHl.js",
+    "dist/assets/alert-dialog-CrkgzqrQ.js",
+    "dist/assets/button-CpVplOg9.js",
+    "Wiki/02 - Stack Tecnologico.md",
+    "Wiki/01 - Architettura.md",
+    "Home.md"
+  ]
+}

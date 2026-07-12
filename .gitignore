@@ -48,3 +48,4 @@ supabase/.branches/
 
 .env
 .vercel
+AGENTS.md
