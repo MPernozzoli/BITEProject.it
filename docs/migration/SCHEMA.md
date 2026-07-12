@@ -66,7 +66,7 @@ Inventario consolidato dei tre progetti Supabase, da unificare nel nuovo progett
 ### Edge Functions (30)
 auth-email-hook, confirm-newsletter-subscription, contact-form-submit, dispatch-engagement-notifications, handle-email-suppression, handle-email-unsubscribe, my-newsletter-subscription, newsletter-dispatch, newsletter-subscribe, newsletter-track-click, newsletter-track-open, notify-article-publication, notify-story-subscribers, preview-transactional-email, process-email-queue, public-geo, public-llms, public-semantic, public-sitemap, publish-scheduled-articles, publish-social-queue, send-newsletter-digest, send-transactional-email, social-oauth-callback, social-oauth-start, translate-editor-content, update-my-profile, vapid-public-key
 
-### Tabelle prive di migration locale (definite solo via Lovable UI)
+### Tabelle legacy prive di migration locale iniziale
 article_authors, article_comments, article_likes, article_read_events, article_reads, article_tags, comment_likes, comment_mentions, engagement_notifications, newsletter_confirmation_tokens, newsletter_unsubscribe_feedback, profile_badges, push_subscriptions, story_subscriptions, suppressed_emails
 
 → schema canonico = `src/integrations/supabase/types.ts` + CSV header
@@ -157,4 +157,4 @@ Solo `web` ha FK interne. `pack` e `data` sono indipendenti — niente FK verso 
 - Durante import: `ALTER TABLE ... DISABLE TRIGGER ALL`, poi riabilita
 - RLS: applicare policy DOPO l'import, non prima
 - Sequenze: tutti i PK sono UUID — no problemi di sequence reset
-- Lovable Cloud auth → Supabase Auth standard (auth.users referenced by profiles.id)
+- Migrazione storica: auth Lovable Cloud → Supabase Auth standard (auth.users referenced by profiles.id)

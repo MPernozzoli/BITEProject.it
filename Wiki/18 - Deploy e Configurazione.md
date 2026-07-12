@@ -39,6 +39,10 @@ Prefisso Vite `VITE_` (esposte al client):
 Mail admin e invio Resend:
 - `RESEND_API_KEY` in Vercel per `/api/email/send` e webhook enrichment.
 - `RESEND_WEBHOOK_SECRET` in Vercel per verificare `apps/web/api/webhooks/email/inbound`.
+- `RESEND_API_KEY` anche tra i secret Supabase Functions: `process-email-queue` lo usa per spedire auth email, newsletter e transazionali.
+- `AUTH_EMAIL_HOOK_SECRET` tra i secret Supabase Functions se `auth-email-hook` viene chiamata come hook HTTP con bearer condiviso.
+- `EMAIL_SUPPRESSION_WEBHOOK_SECRET` tra i secret Supabase Functions solo se `handle-email-suppression` viene esposto a un caller interno non service-role.
+- `TRANSLATION_AI_GATEWAY_URL`, `TRANSLATION_AI_API_KEY`, `TRANSLATION_AI_MODEL` tra i secret Supabase Functions solo se si abilita la traduzione editoriale automatica.
 - `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY`/`VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel per autenticare admin e scrivere lo storico mail.
 - `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` in Vercel per notificare gli admin quando arrivano nuove mail.
 - Le Supabase Edge Functions automatiche usano `mail.biteproject.it` come sender domain.
@@ -49,11 +53,13 @@ Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ
 - `npm run build` orchestra: `build:web` (sitemap + Vite build in `apps/web`) → `build:pack` (`/pack/`) → `build:data` (`/Data/`) → `copy-subapp-builds.mjs`.
 - Base path sotto-app via `VITE_BASE_PATH`. Vedi [[19 - Sub-App (pack e data)]] e [[20 - Comandi e Workflow]].
 - `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build e copia `apps/pack/dist` in `dist/pack`, `apps/data/dist` in `dist/Data`.
+- `apps/web/scripts/generate-sitemap.mjs` legge sia `apps/web/.env` sia `.env` root, così la build monorepo locale genera anche URL dinamici di articoli/viaggi e non solo le rotte statiche.
 - Chunking Vite: app principale e sub-app separano vendor pesanti (`router`, `query`, `radix`, `icons`, `maps`, `three`/`tiptap` dove presenti). `apps/pack` carica la pagina principale in lazy route; `apps/data` isola MapLibre nel chunk `maps`, così la route `/map` resta leggera e il vendor viene scaricato/cacheato separatamente.
 
 ## Note ambiente
 - Repo git: `github.com/MPernozzoli/BITEProject.it` (branch `main`).
 - Package manager: usare npm come fonte di lock principale (`package-lock.json`).
+- I vecchi lock Bun sono stati rimossi: erano residui del setup iniziale e non devono essere rigenerati.
 - `.obsidian/` **non** è in `.gitignore`: valuta se ignorare il vault o versionarlo.
 - Supabase Cron è usato per manutenzioni DB (`deactivate-past-voyage-bookable-legs`, `expire-pending-voyage-booking-payments`) → [[08 - Supabase]].
 - Hardening residuo da dashboard: abilitare **leaked password protection** in Supabase Auth. `homepage-media` è listabile pubblicamente solo sui prefissi hero usati dalla home.

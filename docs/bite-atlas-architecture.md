@@ -414,7 +414,7 @@ Recommended stable vanity paths later:
 
 Lean, realistic stack:
 
-- Lovable or custom React frontend for the editorial site
+- Vite/React frontend for the editorial site, deployed on Vercel
 - Supabase Postgres as the primary content and route store
 - Supabase Edge Functions for public machine-readable endpoints
 - MapLibre for rendered route maps

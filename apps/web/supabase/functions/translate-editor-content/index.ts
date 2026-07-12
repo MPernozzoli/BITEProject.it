@@ -7,8 +7,7 @@ const corsHeaders = {
 }
 
 const MAX_INPUT_CHARS = 100_000
-const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions'
-const AI_MODEL = 'google/gemini-2.5-flash'
+const DEFAULT_AI_MODEL = 'gpt-4o-mini'
 
 type Claims = Record<string, unknown> | null
 
@@ -77,14 +76,21 @@ function readString(value: unknown, max: number): string {
 }
 
 async function callAiJson(prompt: string, apiKey: string): Promise<Record<string, unknown>> {
-  const res = await fetch(AI_GATEWAY_URL, {
+  const aiGatewayUrl = Deno.env.get('TRANSLATION_AI_GATEWAY_URL')?.trim()
+  const aiModel = Deno.env.get('TRANSLATION_AI_MODEL')?.trim() || DEFAULT_AI_MODEL
+
+  if (!aiGatewayUrl) {
+    throw new Error('Translation AI gateway not configured')
+  }
+
+  const res = await fetch(aiGatewayUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: AI_MODEL,
+      model: aiModel,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
     }),
@@ -365,14 +371,14 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')?.trim()
+  const apiKey = Deno.env.get('TRANSLATION_AI_API_KEY')?.trim()
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
   if (!apiKey) {
-    return jsonResponse({ error: 'LOVABLE_API_KEY non configurata.' }, 503)
+    return jsonResponse({ error: 'TRANSLATION_AI_API_KEY non configurata.' }, 503)
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)

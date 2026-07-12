@@ -58,7 +58,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 | **Edge Functions** | 28 in `apps/web/supabase/functions/` |
 | **Pagamenti** | Bunq (request-inquiry) + bonifico bancario |
 | **Mappe** | MapLibre GL + supercluster |
-| **Origine** | progetto Lovable (`lovable-tagger`) |
+| **Origine** | nato su Lovable Cloud, poi migrato fuori da Lovable |
 | **Deploy** | Vercel (SPA rewrite + edge middleware) |
 
 ---

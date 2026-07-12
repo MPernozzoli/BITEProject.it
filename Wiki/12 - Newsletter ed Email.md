@@ -6,6 +6,7 @@ tags: [newsletter, email, notifiche, funzionalita]
 ⬅️ [[Home]] · sorgente: `apps/web/supabase/functions/`, `apps/web/src/lib/newsletter.ts`
 
 Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge Functions]].
+Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come origine storica del progetto e non è più un provider email/auth.
 
 ## Naming pubblico
 - A livello commerciale/utente il servizio **non si chiama "newsletter"**: si chiama **"Appunti dalla barca"** (IT) / **"Notes from the boat"** (EN). Vale per copy home, consenso, toast, pagine `/newsletter/confirm` e `/unsubscribe`, SEO e le email utente (conferma iscrizione, benvenuto, digest).
@@ -14,6 +15,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 ## Domini e mail app
 - Mail automatiche/transazionali/newsletter: `@mail.biteproject.it` (`SENDER_DOMAIN=mail.biteproject.it`).
 - Mail ordinarie/casella admin: `@biteproject.it`.
+- Provider invio/ricezione: **Resend**. Le code e i log vivono in Supabase (`email_send_log`, `email_send_state`, PGMQ); il worker `process-email-queue` invia con `RESEND_API_KEY`.
 - Package installato: `@pynkstudio/mailapp` da `https://github.com/PynkStudio/pynkstudio-mailapp`; questa app Vite usa API Vercel dedicate invece dei server action Next del package.
 - Console admin: `/admin/mail` (`AdminMail.tsx`) con inbox, inviate, preferite, archivio, spam, compose e webhook Resend; il compose può aprirsi già precompilato via query `compose=1&to=...&subject=...`, usata anche dalla matrice booking admin → [[10 - API Vercel]].
 - UX console mail: lista e dettaglio non mostrano più badge dominio/routing come elementi primari; mittente/destinatari e anteprima corpo hanno priorità visiva. Il mittente usa `from_name`, poi un nome inferito dalla firma del testo nuovo, e solo infine l'indirizzo email. L'anteprima non include la citazione dei messaggi precedenti; le citazioni testuali nel corpo vengono collassate in stile Apple Mail con "Mostra di più da..." e "Nascondi".
@@ -26,14 +28,14 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - `confirm-newsletter-subscription` → attiva iscrizione (pagina `/newsletter/confirm` → [[05 - Frontend - Pagine\|NewsletterConfirm]])
 - `my-newsletter-subscription` → stato/preferenze utente
 - `handle-email-unsubscribe` → pagina `/unsubscribe`
-- `handle-email-suppression` → gestione bounce/soppressioni
+- `handle-email-suppression` → gestione interna bounce/soppressioni; i webhook pubblici Resend della mail app passano da Vercel (`/api/webhooks/email/inbound`)
 - Lib client: `apps/web/src/lib/newsletter.ts`, `apps/web/src/lib/email-notification-preferences.ts`
 
 ## Invio & digest
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
 - `send-newsletter-digest` — digest periodico
-- `process-email-queue` — worker della coda email (verify_jwt). Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) ed eventuale cron `pg_cron` lato dashboard Supabase (non versionato).
-- `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
+- `process-email-queue` — worker della coda email (verify_jwt) con invio Resend, retry/backoff e DLQ. Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) ed eventuale cron `pg_cron` lato dashboard Supabase (non versionato).
+- `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima service-role; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
 
 ## Tracking
 - `newsletter-track-open` — pixel apertura
@@ -46,12 +48,12 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - `dispatch-engagement-notifications` — like/commenti/letture
 - `dispatch-voyage-booking-notifications` — eventi booking, email e push admin → [[13 - Booking Voyage]]
 - Booking voyage: la coda `voyage_booking_notifications` copre conferma richiesta, waitlist, approvazione admin, conferma utente, cancellazione, rifiuto, promozione dalla waitlist, aggiunta manuale, pagamento in sospeso/ricevuto/scaduto, cambio planning, briefing viaggio e notifiche admin correlate. Le mail utente e admin usano la stessa struttura visuale: pill di stato, riepilogo operativo, box tratte, importi evidenziati e callout messaggi. Gli eventi admin (`admin_*`) inviano anche Web Push agli admin con device registrato; `push_sent_at` evita invii duplicati.
-- Briefing viaggio: il template React Email `voyage-briefing` gestisce `first_briefing` e `second_briefing`. Il primo briefing viene accodato automaticamente quando un booking passa a `user_confirmed` o quando un partecipante invitato accetta; include riepilogo viaggio/tratte, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti gia a bordo. Il secondo briefing e predisposto per invio operativo successivo e copre vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F con visual, USB-A/USB-C, frigo e suggerimenti esperienze.
+- Briefing viaggio: il template React Email `voyage-briefing` gestisce `first_briefing` e `second_briefing`. Il primo briefing viene accodato automaticamente quando un booking passa a `user_confirmed` o quando un partecipante invitato accetta; include riepilogo viaggio/tratte, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti già a bordo. Il secondo briefing è predisposto per invio operativo successivo e copre vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F con visual, USB-A/USB-C, frigo e suggerimenti esperienze.
 - Cambi planning booking: `voyage_booking_plan_changes` accoda `plan_change_pending` quando serve approvazione utente. La mail mostra tratte prima/proposta e rimanda al booking per accettare, annullare con rimborso completo o chiedere una variazione; i cambi auto-accettati per equipaggio non richiedono approvazione manuale.
 - Inviti partecipanti: `/api/bookings/invite` invia il template React Email `voyage-participant-invite` agli ospiti ancora pending e marca `invite_sent_at`; può essere chiamato dal lead oppure dall'admin quando l'invito nasce da `/admin/bookings` con email esterna. La lingua dell'invito segue la lingua del sito al momento dell'invio (`/it` → italiano, `/en` → inglese) e il link punta alla sezione booking nella stessa lingua.
 
 ## Auth email
-- `auth-email-hook` (no JWT) — intercetta email di autenticazione Supabase
+- `auth-email-hook` (no JWT, bearer `AUTH_EMAIL_HOOK_SECRET`) — intercetta email di autenticazione Supabase e accoda i template su `auth_emails`
 - Template React-email in `apps/web/supabase/functions/_shared/email-templates/`: `signup`, `recovery`, `magic-link`, `invite`, `email-change`, `reauthentication`
 
 ## Template & helper condivisi

@@ -9,10 +9,10 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## 📧 Email transazionale & sistema → [[12 - Newsletter ed Email]]
 - `send-transactional-email` (verify_jwt) — invio email transazionali
-- `preview-transactional-email` — anteprima template
-- `process-email-queue` — worker coda email
-- `auth-email-hook` (no jwt) — hook email di autenticazione (signup, recovery, magic-link…)
-- `handle-email-suppression`, `handle-email-unsubscribe` — bounce/unsubscribe
+- `preview-transactional-email` (verify_jwt) — anteprima template
+- `process-email-queue` (verify_jwt) — worker coda email con invio Resend
+- `auth-email-hook` (no jwt, bearer `AUTH_EMAIL_HOOK_SECRET`) — hook email di autenticazione Supabase (signup, recovery, magic-link…)
+- `handle-email-suppression` (no jwt, bearer interno o service-role), `handle-email-unsubscribe` — bounce/unsubscribe
 - Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`; i transazionali condividono `theme.tsx` per shell editoriale, card, pill, detail row, route box, callout e highlight importi. `voyage-briefing` gestisce le due mail briefing viaggio, incluso il visual delle prese tipo L/F nel secondo briefing.
 
 ## 📰 Newsletter → [[12 - Newsletter ed Email]]
@@ -48,7 +48,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## Codice condiviso (`_shared/`)
 `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `public-semantic.ts`, `social-oauth-auth.ts`, `system-email-automation.ts`.
-`email-config.ts`, `auth-email-hook` e `send-transactional-email` usano `mail.biteproject.it` come sender domain per le email automatiche; la casella ordinaria admin vive invece su `/api/email/*` in [[10 - API Vercel]].
+`email-config.ts`, `auth-email-hook` e `send-transactional-email` usano `mail.biteproject.it` come sender domain per le email automatiche. L'invio effettivo passa da Resend in `process-email-queue`; la casella ordinaria admin vive invece su `/api/email/*` in [[10 - API Vercel]].
 
 ## Collegamenti
 - [[08 - Supabase]] · [[10 - API Vercel]] · [[12 - Newsletter ed Email]]

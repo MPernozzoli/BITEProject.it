@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
@@ -484,8 +483,11 @@ const UserLogin = () => {
     }
 
     const oauthReturnPath = `/login?redirect=${encodeURIComponent(redirectTo)}`;
-    const { error: oauthError } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: new URL(oauthReturnPath, window.location.origin).toString(),
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: new URL(oauthReturnPath, window.location.origin).toString(),
+      },
     });
 
     if (oauthError) {

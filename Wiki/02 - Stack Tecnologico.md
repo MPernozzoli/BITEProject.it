@@ -45,14 +45,12 @@ Vedi [[14 - Mappe e Layer Geospaziale]].
 - **Vitest 3** + `@testing-library/react` + `jsdom` — unit/component test (`apps/web/src/test/`)
 - **Playwright** — E2E (config `playwright.config.ts`)
 
-## Auth extra
-- **@lovable.dev/cloud-auth-js** — integrazione auth Lovable (`apps/web/src/integrations/lovable/`)
-
 ## Mail
+- **Resend** — invio/ricezione email automatiche e mail admin; webhook su Vercel e coda invio su Supabase Edge Functions → [[12 - Newsletter ed Email]].
 - **@pynkstudio/mailapp** — package condiviso PynkStudio per struttura e utility mail; in questa repo è installato da tarball GitHub e usato lato server per normalizzazione indirizzi nel modulo admin mail → [[12 - Newsletter ed Email]].
 
 ## Origine
-Progetto generato/gestito con **Lovable** (`lovable-tagger` in dev, cartelle `.lovable/`, `apps/web/src/integrations/lovable/`).
+Il progetto nasce storicamente su **Lovable Cloud**, ma lo stack operativo è stato migrato fuori da Lovable. Oggi usa Supabase, Vercel e Resend; non restano dipendenze runtime Lovable.
 
 ## Collegamenti
 - Script e comandi: [[20 - Comandi e Workflow]]

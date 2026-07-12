@@ -14,9 +14,8 @@ tags: [frontend, lib, hooks, logica]
 - `use-toast.ts` — API toast (shadcn)
 
 ## Integrazioni (`apps/web/src/integrations/`)
-- `apps/web/supabase/client.ts` — istanza client Supabase (URL/key da env)
-- `apps/web/supabase/types.ts` — **tipi generati** dallo schema DB
-- `lovable/index.ts` — auth cloud Lovable
+- `supabase/client.ts` — istanza client Supabase (URL/key da env)
+- `supabase/types.ts` — **tipi generati** dallo schema DB
 
 ## Lib per dominio (`apps/web/src/lib/`)
 

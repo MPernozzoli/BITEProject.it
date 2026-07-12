@@ -184,9 +184,8 @@ export function useSyncArticleViewCount(articleId?: string | null, articleSlug?:
   useEffect(() => {
     if (!articleId) return;
 
-    // Polling lazy on visibility change (sostituisce il canale realtime persistente
-    // per ridurre i consumi di Lovable Cloud). Il view count si aggiorna quando
-    // l'utente torna alla tab.
+    // Polling lazy on visibility change: il view count si aggiorna quando
+    // l'utente torna alla tab senza mantenere un canale realtime persistente.
     const refreshViewCount = async () => {
       const { data, error } = await supabase
         .from("logbook_articles")

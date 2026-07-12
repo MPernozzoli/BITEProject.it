@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
+const monorepoRoot = path.resolve(projectRoot, "../..");
 const publicDir = path.join(projectRoot, "public");
 const outputPath = path.join(publicDir, "sitemap.xml");
 
@@ -82,12 +83,15 @@ const extractImagesFromRichContent = (content) => {
 };
 
 const loadEnvFile = async () => {
-  const envPath = path.join(projectRoot, ".env");
+  const envPaths = [path.join(projectRoot, ".env"), path.join(monorepoRoot, ".env")];
   let envContents = "";
-  try {
-    envContents = await readFile(envPath, "utf8");
-  } catch {
-    // No .env file (e.g. Vercel CI) — fall back to process env below.
+  for (const envPath of envPaths) {
+    try {
+      envContents = await readFile(envPath, "utf8");
+      break;
+    } catch {
+      // Try the next conventional monorepo/root env path, then fall back to process env below.
+    }
   }
   const env = {
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL,
