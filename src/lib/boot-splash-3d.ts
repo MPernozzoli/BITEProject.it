@@ -222,6 +222,59 @@ function makeWoodTexture(base: string, seam: string, plankHeight: number): THREE
   return texture;
 }
 
+function makeHullTexture(): THREE.CanvasTexture {
+  // Spritz's paint scheme mapped around the hull section (v: rail -> keel -> rail):
+  // white topsides band with a gold cove stripe, navy blue below the sheer.
+  const w = 256;
+  const h = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#232f4b";
+  ctx.fillRect(0, 0, w, h);
+  // Slightly darker antifouling around the keel.
+  ctx.fillStyle = "#1b2540";
+  ctx.fillRect(0, Math.round(h * 0.3), w, Math.round(h * 0.4));
+  // White band + gold cove stripe at both rails.
+  ctx.fillStyle = "#edeee9";
+  ctx.fillRect(0, 0, w, Math.round(h * 0.085));
+  ctx.fillRect(0, h - Math.round(h * 0.085), w, Math.round(h * 0.085));
+  ctx.fillStyle = "#c9a35e";
+  ctx.fillRect(0, Math.round(h * 0.085), w, 4);
+  ctx.fillRect(0, h - Math.round(h * 0.085) - 4, w, 4);
+  // Faint hull sheen noise.
+  ctx.globalAlpha = 0.05;
+  for (let i = 0; i < 220; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? "#0c1322" : "#4a5a80";
+    ctx.fillRect(Math.random() * w, Math.round(h * 0.12) + Math.random() * h * 0.74, 20 + Math.random() * 70, 1.5);
+  }
+  ctx.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function makeFlagTexture(): THREE.CanvasTexture {
+  // German ensign, slightly muted for the night palette.
+  const w = 60;
+  const h = 42;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#26262b";
+  ctx.fillRect(0, 0, w, h / 3);
+  ctx.fillStyle = "#a83a30";
+  ctx.fillRect(0, h / 3, w, h / 3);
+  ctx.fillStyle = "#d9a13b";
+  ctx.fillRect(0, (2 * h) / 3, w, h / 3);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function makeSailTexture(): THREE.CanvasTexture {
   // Woven canvas with faint horizontal panel seams.
   const w = 256;
@@ -247,13 +300,15 @@ function makeSailTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// Lofted hull: smooth stations from a raked transom to a fine, upswept bow.
+// Lofted hull modelled on S/Y Spritz: a double-ender — the stern tapers to a
+// canoe point that mirrors the fine, upswept bow.
 const HULL_STATIONS = [
-  { x: -1.05, w: 0.24, d: 0.2, s: 0.07 },
-  { x: -0.85, w: 0.295, d: 0.27, s: 0.038 },
-  { x: -0.65, w: 0.325, d: 0.31, s: 0.02 },
-  { x: -0.45, w: 0.342, d: 0.335, s: 0.008 },
-  { x: -0.25, w: 0.35, d: 0.35, s: 0.002 },
+  { x: -1.18, w: 0.02, d: 0.06, s: 0.105 },
+  { x: -1.06, w: 0.105, d: 0.15, s: 0.06 },
+  { x: -0.9, w: 0.195, d: 0.235, s: 0.032 },
+  { x: -0.7, w: 0.27, d: 0.295, s: 0.015 },
+  { x: -0.48, w: 0.322, d: 0.33, s: 0.006 },
+  { x: -0.25, w: 0.348, d: 0.35, s: 0.002 },
   { x: -0.05, w: 0.35, d: 0.35, s: 0.0 },
   { x: 0.15, w: 0.344, d: 0.345, s: 0.002 },
   { x: 0.35, w: 0.33, d: 0.33, s: 0.01 },
@@ -428,13 +483,16 @@ export function mountBootSplash3D(): void {
 
   // ---------------------------------------------------------------- Boat
   const boat = new THREE.Group();
-  const hullTexture = makeWoodTexture("#c77e46", "rgba(90,48,20,0.5)", 30);
+  const hullTexture = makeHullTexture();
   const deckTexture = makeWoodTexture("#e2c49a", "rgba(140,100,60,0.45)", 22);
   const sailTexture = makeSailTexture();
+  const flagTexture = makeFlagTexture();
 
-  const hullMat = new THREE.MeshStandardMaterial({ map: hullTexture, roughness: 0.5, metalness: 0.05 });
+  const hullMat = new THREE.MeshStandardMaterial({ map: hullTexture, roughness: 0.45, metalness: 0.05 });
   const darkWoodMat = new THREE.MeshStandardMaterial({ color: "#6e3d1e", roughness: 0.55 });
-  const sparMat = new THREE.MeshStandardMaterial({ color: "#e8dfcc", roughness: 0.7 });
+  // Spritz's mast and boom are painted blue.
+  const sparMat = new THREE.MeshStandardMaterial({ color: "#41598a", roughness: 0.55 });
+  const steelMat = new THREE.MeshStandardMaterial({ color: "#9aa4ad", roughness: 0.35, metalness: 0.7 });
 
   const hull = new THREE.Mesh(buildHullGeometry(), hullMat);
   const deck = new THREE.Mesh(
@@ -471,13 +529,13 @@ export function mountBootSplash3D(): void {
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 2.3, 12), sparMat);
   mast.position.set(0.1, 1.15, 0);
   boat.add(mast);
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.1, 10), sparMat);
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.02, 10), sparMat);
   boom.rotation.z = Math.PI / 2;
-  boom.position.set(-0.44, 0.3, 0);
+  boom.position.set(-0.4, 0.3, 0);
   boat.add(boom);
 
   const mainSail = new THREE.Mesh(
-    buildSailGeometry(1.95, 1.05, 0.17),
+    buildSailGeometry(1.95, 0.98, 0.17),
     new THREE.MeshStandardMaterial({ map: sailTexture, roughness: 0.85, side: THREE.DoubleSide })
   );
   mainSail.position.set(0.13, 0.33, 0);
@@ -486,16 +544,37 @@ export function mountBootSplash3D(): void {
 
   const jib = new THREE.Mesh(
     buildSailGeometry(1.6, 0.85, 0.13),
-    new THREE.MeshStandardMaterial({ map: sailTexture, color: "#a9c6cd", roughness: 0.85, side: THREE.DoubleSide })
+    new THREE.MeshStandardMaterial({ map: sailTexture, roughness: 0.85, side: THREE.DoubleSide })
   );
   jib.position.set(0.16, 0.3, 0);
   boat.add(jib);
+
+  // Stern arch carrying the solar panel, and the cream sprayhood over the companionway.
+  const archPanel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.34, 0.018, 0.46),
+    new THREE.MeshStandardMaterial({ color: "#141a28", roughness: 0.35, metalness: 0.5 })
+  );
+  archPanel.position.set(-0.92, 0.56, 0);
+  boat.add(archPanel);
+  const postGeometry = new THREE.CylinderGeometry(0.011, 0.011, 0.52, 6);
+  for (const [px, pz] of [[-0.79, 0.15], [-0.79, -0.15], [-1.04, 0.12], [-1.04, -0.12]] as const) {
+    const post = new THREE.Mesh(postGeometry, steelMat);
+    post.position.set(px, 0.3, pz);
+    boat.add(post);
+  }
+  const sprayhood = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.17, 0.17, 0.34, 14, 1, true, Math.PI / 2, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: "#e6d9bc", roughness: 0.9, side: THREE.DoubleSide })
+  );
+  sprayhood.rotation.x = Math.PI / 2;
+  sprayhood.position.set(-0.76, 0.13, 0);
+  boat.add(sprayhood);
 
   // Rigging: forestay, backstay and two shrouds as thin lines.
   const mastTop = new THREE.Vector3(0.1, 2.28, 0);
   const riggingGeometry = new THREE.BufferGeometry().setFromPoints([
     mastTop, new THREE.Vector3(1.2, 0.15, 0),     // forestay -> bow tip
-    mastTop, new THREE.Vector3(-1.02, 0.09, 0),   // backstay -> transom
+    mastTop, new THREE.Vector3(-1.16, 0.12, 0),   // backstay -> stern point
     mastTop, new THREE.Vector3(0.05, 0.02, 0.33), // shroud starboard
     mastTop, new THREE.Vector3(0.05, 0.02, -0.33) // shroud port
   ]);
@@ -514,9 +593,15 @@ export function mountBootSplash3D(): void {
   }
   flagGeometry.setIndex(flagIndices);
   flagGeometry.setAttribute("position", new THREE.BufferAttribute(flagPositions, 3));
+  const flagUvs = new Float32Array((flagSegments + 1) * 2 * 2);
+  for (let i = 0; i <= flagSegments; i++) {
+    const u = i / flagSegments;
+    flagUvs.set([u, 1, u, 0], i * 4);
+  }
+  flagGeometry.setAttribute("uv", new THREE.BufferAttribute(flagUvs, 2));
   const flag = new THREE.Mesh(
     flagGeometry,
-    new THREE.MeshBasicMaterial({ color: "#d68a52", side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ map: flagTexture, side: THREE.DoubleSide })
   );
   flag.position.copy(mastTop);
   boat.add(flag);
@@ -637,6 +722,7 @@ export function mountBootSplash3D(): void {
     hullTexture.dispose();
     deckTexture.dispose();
     sailTexture.dispose();
+    flagTexture.dispose();
     renderer.dispose();
   };
 
