@@ -21,7 +21,7 @@ tags: [deploy, vercel, config, env]
 **Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`.
 
 ## Edge middleware
-- `apps/web/middleware.ts` — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. `middleware.ts` alla root è un symlink per Vercel.
+- `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. Mantiene lo stesso contenuto operativo di `apps/web/middleware.ts`, ma resta un file reale per evitare problemi di packaging Edge su Vercel.
 - Il middleware Edge non importa helper da `@vercel/functions`: usa direttamente gli header `x-middleware-next` e `x-middleware-rewrite`, così Vercel non include moduli Node non supportati nell'Edge runtime.
 - Gli URL pubblici legacy senza prefisso lingua vengono reindirizzati a `/it/*` o `/en/*` prima del fallback SPA/prerender.
 - I sottodomini `pack.biteproject.it` e `data.biteproject.it` vengono riscritti rispettivamente sui prefissi `/pack` e `/Data`.
