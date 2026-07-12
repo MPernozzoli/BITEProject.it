@@ -124,8 +124,8 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
   "/newsletter/confirm": {
     title: { en: "Confirm subscription | BITE", it: "Conferma iscrizione | BITE" },
     description: {
-      en: "Confirm your BITE newsletter subscription.",
-      it: "Conferma la tua iscrizione alla newsletter BITE.",
+      en: "Confirm your subscription to BITE's Notes from the boat.",
+      it: "Conferma la tua iscrizione agli Appunti dalla barca di BITE.",
     },
     robots: "noindex, nofollow",
   },

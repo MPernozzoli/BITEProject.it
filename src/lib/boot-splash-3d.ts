@@ -225,29 +225,31 @@ function makeWoodTexture(base: string, seam: string, plankHeight: number): THREE
 function makeHullTexture(): THREE.CanvasTexture {
   // Spritz's paint scheme mapped around the hull section (v: rail -> keel -> rail):
   // white topsides band with a gold cove stripe, navy blue below the sheer.
+  // The waterline sits at only ~8% of the rail-to-keel arc, so the paint bands
+  // must be much thinner than they look on the real hull photos.
   const w = 256;
-  const h = 256;
+  const h = 512;
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#232f4b";
+  ctx.fillStyle = "#3a4d7a";
   ctx.fillRect(0, 0, w, h);
   // Slightly darker antifouling around the keel.
-  ctx.fillStyle = "#1b2540";
+  ctx.fillStyle = "#2a3757";
   ctx.fillRect(0, Math.round(h * 0.3), w, Math.round(h * 0.4));
-  // White band + gold cove stripe at both rails.
+  // Hairline white sheer band + gold cove stripe at both rails; navy owns the freeboard.
   ctx.fillStyle = "#edeee9";
-  ctx.fillRect(0, 0, w, Math.round(h * 0.085));
-  ctx.fillRect(0, h - Math.round(h * 0.085), w, Math.round(h * 0.085));
+  ctx.fillRect(0, 0, w, 5);
+  ctx.fillRect(0, h - 5, w, 5);
   ctx.fillStyle = "#c9a35e";
-  ctx.fillRect(0, Math.round(h * 0.085), w, 4);
-  ctx.fillRect(0, h - Math.round(h * 0.085) - 4, w, 4);
+  ctx.fillRect(0, 5, w, 3);
+  ctx.fillRect(0, h - 8, w, 3);
   // Faint hull sheen noise.
   ctx.globalAlpha = 0.05;
   for (let i = 0; i < 220; i++) {
-    ctx.fillStyle = Math.random() > 0.5 ? "#0c1322" : "#4a5a80";
-    ctx.fillRect(Math.random() * w, Math.round(h * 0.12) + Math.random() * h * 0.74, 20 + Math.random() * 70, 1.5);
+    ctx.fillStyle = Math.random() > 0.5 ? "#141d33" : "#5a6c96";
+    ctx.fillRect(Math.random() * w, Math.round(h * 0.06) + Math.random() * h * 0.86, 20 + Math.random() * 70, 1.5);
   }
   ctx.globalAlpha = 1;
   const texture = new THREE.CanvasTexture(canvas);
@@ -448,7 +450,7 @@ export function mountBootSplash3D(): void {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(48, splash.clientWidth / splash.clientHeight, 0.1, 100);
-  camera.position.set(0, 2.1, 10.8);
+  camera.position.set(0, 1.35, 10.8);
 
   scene.add(new THREE.HemisphereLight(0x9fcfd6, 0x1a2c40, 1.2));
   const moonDir = new THREE.Vector3(-0.35, 0.55, -0.75).normalize();
@@ -484,7 +486,7 @@ export function mountBootSplash3D(): void {
   // ---------------------------------------------------------------- Boat
   const boat = new THREE.Group();
   const hullTexture = makeHullTexture();
-  const deckTexture = makeWoodTexture("#e2c49a", "rgba(140,100,60,0.45)", 22);
+  const deckTexture = makeWoodTexture("#8f6f4c", "rgba(58,38,22,0.5)", 22);
   const sailTexture = makeSailTexture();
   const flagTexture = makeFlagTexture();
 
@@ -603,7 +605,8 @@ export function mountBootSplash3D(): void {
     flagGeometry,
     new THREE.MeshBasicMaterial({ map: flagTexture, side: THREE.DoubleSide })
   );
-  flag.position.copy(mastTop);
+  // Fly the ensign below the masthead light so its glow doesn't wash out the black stripe.
+  flag.position.set(mastTop.x, mastTop.y - 0.18, mastTop.z);
   boat.add(flag);
 
   // Warm masthead lantern: flickering glow sprite + a real point light.
@@ -745,10 +748,10 @@ export function mountBootSplash3D(): void {
     const hBow = waveHeight(0.85 + scroll, 0, t);
     const hMid = waveHeight(scroll, 0, t);
     const hStern = waveHeight(-0.85 + scroll, 0, t);
-    boat.position.y = (hBow + hMid + hStern) / 3 + 0.05;
+    boat.position.y = (hBow + hMid + hStern) / 3 + 0.075;
     const dz = (waveHeight(scroll, 0.6, t) - waveHeight(scroll, -0.6, t)) / 1.2;
     boat.rotation.z = Math.atan2(hBow - hStern, 1.7) * 0.7 + 0.02; // pitch with the swell, slight bow-up trim
-    boat.rotation.x = -dz * 0.45 - 0.055; // wave roll plus a steady sailing heel
+    boat.rotation.x = -dz * 0.45 - 0.03; // wave roll plus a slight heel, near freeboard lifted into view
     boat.rotation.y = Math.sin(t * 0.22) * 0.06;
 
     // Sails breathe as if catching gusts.
@@ -774,7 +777,7 @@ export function mountBootSplash3D(): void {
     // Lantern flicker.
     const flicker = 0.75 + 0.18 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
     lanternLight.intensity = flicker;
-    lantern.scale.setScalar(0.42 + flicker * 0.12);
+    lantern.scale.setScalar(0.34 + flicker * 0.1);
 
     // Clouds drift and wrap.
     for (const cloud of clouds) {
@@ -809,8 +812,8 @@ export function mountBootSplash3D(): void {
     const ease = 1 - Math.pow(1 - intro, 3);
     camera.position.z = 10.8 - 3.2 * ease;
     camera.position.x = Math.sin(t * 0.12) * 0.45;
-    camera.position.y = 2.1 + Math.sin(t * 0.3) * 0.06;
-    camera.lookAt(0, 0.55, 0);
+    camera.position.y = 1.35 + Math.sin(t * 0.3) * 0.06;
+    camera.lookAt(0, 0.5, 0);
 
     renderer.render(scene, camera);
 
@@ -819,14 +822,17 @@ export function mountBootSplash3D(): void {
       revealTime = t;
       requestAnimationFrame(() => {
         canvas.style.opacity = "1";
-        const fade = "opacity 600ms ease-out";
-        if (stage) {
-          stage.style.transition = fade;
-          stage.style.opacity = "0";
-        }
-        if (waves) {
-          waves.style.transition = fade;
-          waves.style.opacity = "0";
+        // The 2D fallback fades in via a delayed CSS animation (see index.html).
+        // Freeze it at its current opacity, then fade to zero — if it never
+        // appeared it stays hidden; if it was mid-fade it dissolves smoothly.
+        for (const el of [stage, waves]) {
+          if (!el) continue;
+          el.style.opacity = getComputedStyle(el).opacity;
+          el.style.animation = "none";
+          requestAnimationFrame(() => {
+            el.style.transition = "opacity 600ms ease-out";
+            el.style.opacity = "0";
+          });
         }
       });
     }

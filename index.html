@@ -94,6 +94,16 @@
         transition: opacity 520ms ease-out;
       }
       #bite-boot-splash.is-hiding { opacity: 0; pointer-events: none; }
+      /* The 2D boat/waves are only a fallback: they stay hidden and fade in after a
+         delay, so when the 3D scene loads quickly they never flash on screen. */
+      #bite-boot-splash .bite-boot-stage,
+      #bite-boot-splash .bite-boot-waves {
+        opacity: 0;
+        animation: bite-boot-fallback-in 600ms ease-out 1.5s forwards;
+      }
+      @keyframes bite-boot-fallback-in {
+        to { opacity: 1; }
+      }
       #bite-boot-splash .bite-boot-stage {
         position: relative;
         width: min(200px, 50vw);
@@ -160,6 +170,9 @@
       }
       @media (prefers-reduced-motion: reduce) {
         .bite-boot-boat, .bite-boot-wave, .bite-boot-label::after { animation: none; }
+        /* No 3D scene with reduced motion — show the static 2D boat right away. */
+        #bite-boot-splash .bite-boot-stage,
+        #bite-boot-splash .bite-boot-waves { animation: none; opacity: 1; }
       }
     </style>
 </head>

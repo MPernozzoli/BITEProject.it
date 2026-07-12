@@ -774,8 +774,8 @@ const Index = () => {
     if (!newsletterConsent) {
       toast.error(
         lang === "it"
-          ? "Devi accettare l'iscrizione alla newsletter prima di continuare."
-          : "You need to accept the newsletter subscription before continuing."
+          ? "Devi accettare l'iscrizione agli Appunti dalla barca prima di continuare."
+          : "You need to accept the Notes from the boat subscription before continuing."
       );
       return;
     }
@@ -872,8 +872,8 @@ const Index = () => {
 
         toast.success(
           lang === "it"
-            ? "Preferenze newsletter aggiornate."
-            : "Newsletter preferences updated.",
+            ? "Preferenze Appunti dalla barca aggiornate."
+            : "Notes from the boat preferences updated.",
         );
         return;
       } else {
@@ -913,8 +913,8 @@ const Index = () => {
     toast.success(
       session?.user.email
         ? lang === "it"
-          ? "Preferenze newsletter aggiornate."
-          : "Newsletter preferences updated."
+          ? "Preferenze Appunti dalla barca aggiornate."
+          : "Notes from the boat preferences updated."
         : lang === "it"
           ? "Richiesta registrata."
           : "Subscription request received."
@@ -1347,8 +1347,8 @@ const Index = () => {
                 />
                 <span>
                   {lang === "it"
-                    ? "Acconsento a ricevere la newsletter di BITE e confermo di aver letto la "
-                    : "I agree to receive the BITE newsletter and confirm that I have read the "}
+                    ? "Acconsento a ricevere gli Appunti dalla barca di BITE e confermo di aver letto la "
+                    : "I agree to receive BITE's Notes from the boat and confirm that I have read the "}
                   <Link to="/privacy-policy" className="underline decoration-slate-400 underline-offset-4 hover:text-slate-950">
                     {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
                   </Link>

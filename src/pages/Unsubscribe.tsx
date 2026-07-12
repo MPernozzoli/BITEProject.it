@@ -181,7 +181,7 @@ const Unsubscribe = () => {
   const toggleCards = [
     {
       key: "newsletter_enabled" as const,
-      title: lang === "it" ? "Newsletter editoriali" : "Editorial newsletters",
+      title: lang === "it" ? "Appunti dalla barca" : "Notes from the boat",
       description:
         lang === "it"
           ? "Mail singole, annunci e campagne curate da BITE."

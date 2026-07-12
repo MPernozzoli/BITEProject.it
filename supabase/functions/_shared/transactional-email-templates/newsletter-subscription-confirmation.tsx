@@ -19,33 +19,33 @@ type NewsletterSubscriptionConfirmationProps = {
 
 const COPY = {
   it: {
-    preview: 'Conferma che vuoi ricevere la newsletter di BITE',
-    eyebrow: 'Newsletter',
+    preview: 'Conferma che vuoi ricevere gli Appunti dalla barca di BITE',
+    eyebrow: 'Appunti dalla barca',
     title: 'Conferma la tua iscrizione.',
     primaryCta: 'Conferma iscrizione',
     secondaryCta: 'Scopri il logbook',
     intro: (name: string) =>
-      `${name ? `${name}, ` : ''}abbiamo ricevuto la tua richiesta di iscrizione alla newsletter di BITE. Per attivarla davvero, conferma dal pulsante qui sotto.`,
+      `${name ? `${name}, ` : ''}abbiamo ricevuto la tua richiesta di iscrizione agli Appunti dalla barca di BITE. Per attivarla davvero, conferma dal pulsante qui sotto.`,
     cardTitle:
       'Ti manderemo solo contenuti editoriali, recap e aggiornamenti rilevanti. Nessuna iscrizione diventa attiva finché non confermi il tuo interesse.',
     footerReason:
-      'Ricevi questa email perché qualcuno ha richiesto l’iscrizione alla newsletter di BITE con questo indirizzo.',
+      'Ricevi questa email perché qualcuno ha richiesto l’iscrizione agli Appunti dalla barca di BITE con questo indirizzo.',
     linkLabel: 'logbook di BITE',
     linkBody:
       'è il punto di partenza migliore per orientarti tra i contenuti già pubblicati.',
   },
   en: {
-    preview: 'Confirm that you want to receive the BITE newsletter',
-    eyebrow: 'Newsletter',
+    preview: "Confirm that you want to receive BITE's Notes from the boat",
+    eyebrow: 'Notes from the boat',
     title: 'Confirm your subscription.',
     primaryCta: 'Confirm subscription',
     secondaryCta: 'Explore the logbook',
     intro: (name: string) =>
-      `${name ? `${name}, ` : ''}we received a request to subscribe this address to the BITE newsletter. To activate it for real, confirm from the button below.`,
+      `${name ? `${name}, ` : ''}we received a request to subscribe this address to BITE's Notes from the boat. To activate it for real, confirm from the button below.`,
     cardTitle:
       'We only send editorial content, roundups, and relevant updates. No subscription becomes active until you confirm your interest.',
     footerReason:
-      'You are receiving this email because someone requested a BITE newsletter subscription with this address.',
+      "You are receiving this email because someone requested a subscription to BITE's Notes from the boat with this address.",
     linkLabel: 'BITE logbook',
     linkBody: 'is the best place to start exploring what has already been published.',
   },
@@ -95,8 +95,8 @@ export const template = {
     resolveEmailLanguage(
       typeof data.language === 'string' ? data.language : null
     ) === 'en'
-      ? 'Confirm your BITE newsletter subscription'
-      : 'Conferma la tua iscrizione alla newsletter di BITE',
+      ? "Confirm your subscription to BITE's Notes from the boat"
+      : 'Conferma la tua iscrizione agli Appunti dalla barca di BITE',
   displayName: 'Newsletter subscription confirmation',
   previewData: {
     language: 'it',

@@ -7,6 +7,10 @@ tags: [newsletter, email, notifiche, funzionalita]
 
 Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge Functions]].
 
+## Naming pubblico
+- A livello commerciale/utente il servizio **non si chiama "newsletter"**: si chiama **"Appunti dalla barca"** (IT) / **"Notes from the boat"** (EN). Vale per copy home, consenso, toast, pagine `/newsletter/confirm` e `/unsubscribe`, SEO e le email utente (conferma iscrizione, benvenuto, digest).
+- "newsletter" resta solo come termine tecnico/interno: nomi di tabelle (`newsletter_*`), edge functions (`newsletter-dispatch`, ecc.), pannello `AdminNewsletterManager` e categoria generica nella privacy policy.
+
 ## Domini e mail app
 - Mail automatiche/transazionali/newsletter: `@mail.biteproject.it` (`SENDER_DOMAIN=mail.biteproject.it`).
 - Mail ordinarie/casella admin: `@biteproject.it`.
@@ -23,9 +27,9 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - Lib client: `src/lib/newsletter.ts`, `src/lib/email-notification-preferences.ts`
 
 ## Invio & digest
-- `newsletter-dispatch` — dispatch campagne
+- `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
 - `send-newsletter-digest` — digest periodico
-- `process-email-queue` — worker della coda email (verify_jwt)
+- `process-email-queue` — worker della coda email (verify_jwt). Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) ed eventuale cron `pg_cron` lato dashboard Supabase (non versionato).
 - `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima
 
 ## Tracking

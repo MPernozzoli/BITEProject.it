@@ -8,32 +8,44 @@ export const AUTOMATIC_MAIL_DOMAIN = "mail.biteproject.it";
 
 export const MAIL_FROM_OPTIONS = [
   {
-    id: "ordinary-hello",
-    label: "BITE ordinaria",
+    id: "hello",
+    label: "Hello",
     from: `BITE <hello@${ORDINARY_MAIL_DOMAIN}>`,
     brand: "bite_ordinary",
   },
   {
-    id: "ordinary-crew",
-    label: "Crew",
-    from: `BITE Crew <crew@${ORDINARY_MAIL_DOMAIN}>`,
+    id: "massimo",
+    label: "Massimo",
+    from: `Massimo <massimo@${ORDINARY_MAIL_DOMAIN}>`,
     brand: "bite_ordinary",
   },
   {
-    id: "automatic-admin",
-    label: "Automatiche",
-    from: `BITE <noreply@${AUTOMATIC_MAIL_DOMAIN}>`,
-    brand: "bite_automatic",
+    id: "sami",
+    label: "Sami",
+    from: `Sami <sami@${ORDINARY_MAIL_DOMAIN}>`,
+    brand: "bite_ordinary",
   },
   {
-    id: "newsletter",
-    label: "Newsletter",
-    from: `BITE Newsletter <newsletter@${AUTOMATIC_MAIL_DOMAIN}>`,
-    brand: "newsletter",
+    id: "pack",
+    label: "Pack",
+    from: `Pack <pack@${ORDINARY_MAIL_DOMAIN}>`,
+    brand: "bite_ordinary",
+  },
+  {
+    id: "viaggi",
+    label: "Viaggi",
+    from: `Viaggi <viaggi@${ORDINARY_MAIL_DOMAIN}>`,
+    brand: "bite_ordinary",
+  },
+  {
+    id: "support",
+    label: "Support",
+    from: `Support <support@${ORDINARY_MAIL_DOMAIN}>`,
+    brand: "bite_ordinary",
   },
 ] as const;
 
-export type MailBrand = (typeof MAIL_FROM_OPTIONS)[number]["brand"];
+export type MailBrand = "bite_ordinary" | "bite_automatic" | "newsletter" | "transactional";
 
 export type AuthenticatedAdmin = {
   db: SupabaseClient;

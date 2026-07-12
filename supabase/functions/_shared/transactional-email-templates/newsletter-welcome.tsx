@@ -17,9 +17,9 @@ type NewsletterWelcomeProps = {
 
 const COPY = {
   it: {
-    preview: 'Benvenuto a bordo della newsletter di BITE',
+    preview: 'Benvenuto a bordo degli Appunti dalla barca di BITE',
     eyebrow: 'Benvenuto A Bordo',
-    title: 'La newsletter di BITE parte da qui.',
+    title: 'Gli Appunti dalla barca di BITE partono da qui.',
     intro: (name: string) =>
       `${name ? `${name}, ` : ''}benvenuto a bordo. Useremo questa casella per mandarti nuove storie, aggiornamenti da Spritz e raccolte periodiche dei pezzi più importanti.`,
     primaryCta: 'Leggi il diario',
@@ -30,12 +30,12 @@ const COPY = {
       'Un tono visivo coerente con il sito: niente template anonimi, solo BITE.',
     ],
     footerReason:
-      'Hai ricevuto questa email perché la tua iscrizione alla newsletter è attiva.',
+      'Hai ricevuto questa email perché la tua iscrizione agli Appunti dalla barca è attiva.',
   },
   en: {
-    preview: 'Welcome aboard the BITE newsletter',
+    preview: "Welcome aboard BITE's Notes from the boat",
     eyebrow: 'Welcome Aboard',
-    title: 'The BITE newsletter starts here.',
+    title: "BITE's Notes from the boat starts here.",
     intro: (name: string) =>
       `${name ? `${name}, ` : ''}welcome aboard. We will use this inbox to send new stories, updates from Spritz, and periodic roundups of the most relevant pieces we publish.`,
     primaryCta: 'Read the journal',
@@ -46,7 +46,7 @@ const COPY = {
       'A visual language that matches the site instead of a generic email template.',
     ],
     footerReason:
-      'You are receiving this because your newsletter subscription is active.',
+      'You are receiving this because your Notes from the boat subscription is active.',
   },
 } as const
 
@@ -86,8 +86,8 @@ export const template = {
     resolveEmailLanguage(
       typeof data.language === 'string' ? data.language : null
     ) === 'en'
-      ? 'Welcome to the BITE newsletter'
-      : 'Benvenuto nella newsletter di BITE',
+      ? "Welcome to BITE's Notes from the boat"
+      : 'Benvenuto negli Appunti dalla barca di BITE',
   displayName: 'Newsletter welcome',
   previewData: {
     language: 'it',

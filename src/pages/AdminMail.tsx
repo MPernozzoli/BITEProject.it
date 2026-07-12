@@ -24,6 +24,8 @@ type MailMessage = {
   from_address: string;
   from_name: string | null;
   to_addresses: string[];
+  cc_addresses?: string[];
+  bcc_addresses?: string[];
   subject: string;
   text_body: string | null;
   html_body: string | null;
@@ -62,8 +64,12 @@ type MailboxResponse = {
 };
 
 const fallbackFromOptions: FromOption[] = [
-  { id: "ordinary-hello", label: "BITE ordinaria", from: "BITE <hello@biteproject.it>", brand: "bite_ordinary" },
-  { id: "automatic-admin", label: "Automatiche", from: "BITE <noreply@mail.biteproject.it>", brand: "bite_automatic" },
+  { id: "hello", label: "Hello", from: "BITE <hello@biteproject.it>", brand: "bite_ordinary" },
+  { id: "massimo", label: "Massimo", from: "Massimo <massimo@biteproject.it>", brand: "bite_ordinary" },
+  { id: "sami", label: "Sami", from: "Sami <sami@biteproject.it>", brand: "bite_ordinary" },
+  { id: "pack", label: "Pack", from: "Pack <pack@biteproject.it>", brand: "bite_ordinary" },
+  { id: "viaggi", label: "Viaggi", from: "Viaggi <viaggi@biteproject.it>", brand: "bite_ordinary" },
+  { id: "support", label: "Support", from: "Support <support@biteproject.it>", brand: "bite_ordinary" },
 ];
 
 const viewOptions: Array<{ id: MailView; label: string; icon: typeof Inbox }> = [
@@ -118,9 +124,12 @@ const AdminMail = () => {
   const [compose, setCompose] = useState({
     fromOptionId: fallbackFromOptions[0].id,
     to: "",
+    cc: "",
+    bcc: "",
     subject: "",
     body: "",
   });
+  const [showCcBcc, setShowCcBcc] = useState(false);
 
   const selectedMessage = useMemo(
     () => messages.find((message) => message.id === selectedId) ?? messages[0] ?? null,
@@ -179,11 +188,14 @@ const AdminMail = () => {
 
   const openReply = (message: MailMessage) => {
     setCompose({
-      fromOptionId: fromOptions.find((option) => option.brand === "bite_ordinary")?.id ?? fromOptions[0]?.id ?? "ordinary-hello",
+      fromOptionId: fromOptions.find((option) => option.brand === "bite_ordinary")?.id ?? fromOptions[0]?.id ?? "hello",
       to: message.from_address,
+      cc: "",
+      bcc: "",
       subject: message.subject.toLowerCase().startsWith("re:") ? message.subject : `Re: ${message.subject}`,
       body: "",
     });
+    setShowCcBcc(false);
     setComposeOpen(true);
   };
 
@@ -197,13 +209,16 @@ const AdminMail = () => {
         body: JSON.stringify({
           fromOptionId: compose.fromOptionId,
           to: compose.to,
+          cc: compose.cc,
+          bcc: compose.bcc,
           subject: compose.subject,
           text: compose.body,
         }),
       });
       if (!response.ok) throw new Error(await response.text());
       toast.success("Email inviata.");
-      setCompose({ fromOptionId: compose.fromOptionId, to: "", subject: "", body: "" });
+      setCompose({ fromOptionId: compose.fromOptionId, to: "", cc: "", bcc: "", subject: "", body: "" });
+      setShowCcBcc(false);
       setComposeOpen(false);
       if (view === "sent") await loadMailbox();
     } catch (error) {
@@ -352,6 +367,16 @@ const AdminMail = () => {
                             {view === "sent" ? selectedMessage.to_addresses.join(", ") : selectedMessage.from_name || selectedMessage.from_address}
                           </span>
                         </p>
+                        {view === "sent" && selectedMessage.cc_addresses && selectedMessage.cc_addresses.length > 0 && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Cc <span className="text-foreground">{selectedMessage.cc_addresses.join(", ")}</span>
+                          </p>
+                        )}
+                        {view === "sent" && selectedMessage.bcc_addresses && selectedMessage.bcc_addresses.length > 0 && (
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Ccn <span className="text-foreground">{selectedMessage.bcc_addresses.join(", ")}</span>
+                          </p>
+                        )}
                         {assignmentLabel(selectedMessage) && (
                           <p className="mt-2 text-sm text-muted-foreground">
                             Routing <span className="text-foreground">{assignmentLabel(selectedMessage)}</span>
@@ -418,12 +443,41 @@ const AdminMail = () => {
                   </option>
                 ))}
               </select>
-              <input
-                value={compose.to}
-                onChange={(event) => setCompose((current) => ({ ...current, to: event.target.value }))}
-                placeholder="destinatario@email.it"
-                className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
-              />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={compose.to}
+                    onChange={(event) => setCompose((current) => ({ ...current, to: event.target.value }))}
+                    placeholder="destinatario@email.it"
+                    className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                  />
+                  {!showCcBcc && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCcBcc(true)}
+                      className="shrink-0 whitespace-nowrap text-xs font-sans text-muted-foreground hover:text-accent"
+                    >
+                      Cc/Ccn
+                    </button>
+                  )}
+                </div>
+                {showCcBcc && (
+                  <>
+                    <input
+                      value={compose.cc}
+                      onChange={(event) => setCompose((current) => ({ ...current, cc: event.target.value }))}
+                      placeholder="Cc: destinatario@email.it"
+                      className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                    />
+                    <input
+                      value={compose.bcc}
+                      onChange={(event) => setCompose((current) => ({ ...current, bcc: event.target.value }))}
+                      placeholder="Ccn: destinatario@email.it"
+                      className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                    />
+                  </>
+                )}
+              </div>
               <input
                 value={compose.subject}
                 onChange={(event) => setCompose((current) => ({ ...current, subject: event.target.value }))}

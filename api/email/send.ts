@@ -11,6 +11,8 @@ import {
 type SendBody = {
   fromOptionId?: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   subject?: string;
   html?: string;
   text?: string;
@@ -36,6 +38,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   if (!body) return;
 
   const to = splitRecipients(body.to ?? "");
+  const cc = splitRecipients(body.cc ?? "");
+  const bcc = splitRecipients(body.bcc ?? "");
   const subject = (body.subject ?? "").trim();
   const html = (body.html ?? "").trim();
   const text = (body.text ?? "").trim();
@@ -64,6 +68,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       body: JSON.stringify({
         from: fromOption.from,
         to,
+        ...(cc.length > 0 ? { cc } : {}),
+        ...(bcc.length > 0 ? { bcc } : {}),
         subject,
         html: emailHtml,
       }),
@@ -83,6 +89,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       from_address: parsedFrom.address,
       from_name: parsedFrom.name,
       to_addresses: to,
+      cc_addresses: cc,
+      bcc_addresses: bcc,
       subject,
       html_body: emailHtml,
       text_body: text || null,
