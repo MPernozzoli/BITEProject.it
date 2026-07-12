@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, AlertTriangle, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Loader2, X, TicketCheck } from "lucide-react";
+import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,6 +12,7 @@ import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import LazyVoyageMap from "@/components/LazyVoyageMap";
 import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
+import BookingSidebarPanel from "@/components/voyage/BookingSidebarPanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
@@ -36,15 +37,10 @@ import {
   type BookableLegAvailability,
   type BookingRequest,
   type BookingWaypoint,
-  getComplexityLabel,
-  getLegComplexity,
-  getLegDangerLevel,
   getLegLabel,
   getLegRangeBetweenWaypoints,
   isVoyageBookableNow,
 } from "@/lib/booking-utils";
-import { getDangerReasonDef, getDangerReasonLabels } from "@/lib/danger-reasons";
-import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 
 type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
 type SupabaseRpcClient = {
@@ -456,8 +452,15 @@ const Journal = () => {
     if (waypointIds.length < 2) return;
 
     setFocusedVoyageId(voyageId);
-    // Il pannello di adesione prende il posto della legenda, che qui sotto si chiude.
-    setSelectedRouteVoyageId(null);
+    setSelectedRouteVoyageId(voyageId);
+    setPanelArticle(null);
+    setPanelProfileId(null);
+    setHideMapChromeOnScroll(false);
+    if (isMobile) {
+      setMobileSidebarMode("expanded");
+    } else {
+      setSidebarOpen(true);
+    }
 
     const fromWaypointId = waypointIds[0];
     const toWaypointId = waypointIds[waypointIds.length - 1];
@@ -487,7 +490,7 @@ const Journal = () => {
           : "Some legs have no availability: you can remove them from the selection."
       );
     }
-  }, [bookingLegsByVoyage, bookingPartySize, lang, waypointsMap]);
+  }, [bookingLegsByVoyage, bookingPartySize, isMobile, lang, waypointsMap]);
 
   const toggleBookingLeg = useCallback((legId: string) => {
     const leg = bookingLegsById[legId];
@@ -832,26 +835,6 @@ const Journal = () => {
     () => selectedBookingLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
     [bookingLegsById, selectedBookingLegIds]
   );
-  const rejectedBookingLegs = useMemo(
-    () => bookingRejectedLegIds.map((id) => bookingLegsById[id]).filter(Boolean),
-    [bookingLegsById, bookingRejectedLegIds]
-  );
-  // Surfaced whenever a selected leg is genuinely demanding — "Impegnativa"/"Molto difficile"
-  // complexity or a flagged danger — right where the user is building the selection, not
-  // just buried in the final confirm dialog.
-  const bookingHazardSummary = useMemo(() => {
-    if (selectedBookingLegs.length === 0) return null;
-    let maxComplexity = 0;
-    let maxDanger = 0;
-    const reasonKeys = new Set<string>();
-    for (const leg of selectedBookingLegs) {
-      maxComplexity = Math.max(maxComplexity, getLegComplexity(leg));
-      maxDanger = Math.max(maxDanger, getLegDangerLevel(leg));
-      (leg.danger_reasons ?? []).forEach((key) => reasonKeys.add(key));
-    }
-    if (maxComplexity < 4 && maxDanger === 0) return null;
-    return { maxComplexity, maxDanger, reasonKeys: Array.from(reasonKeys) };
-  }, [selectedBookingLegs]);
   const selectedBookingWaypointsById = useMemo<Record<string, BookingWaypoint>>(
     () => Object.fromEntries((bookingAnchor ? waypointsMap[bookingAnchor.voyageId] || [] : []).map((waypoint) => [
       waypoint.id,
@@ -874,6 +857,7 @@ const Journal = () => {
     [bookingAnchor, waypointsMap]
   );
   const bookingVoyageLegs = bookingAnchor ? bookingLegsByVoyage[bookingAnchor.voyageId] || [] : [];
+  const bookingSidebarActive = Boolean(bookingAnchor);
 
   const filteredVoyages = useMemo(() => {
     const list =
@@ -993,185 +977,6 @@ const Journal = () => {
               </div>
             );
           })()}
-
-          {(bookingAnchor || selectedBookingLegs.length > 0 || rejectedBookingLegs.length > 0) && (
-            <div
-              className={`fixed z-30 min-w-0 transition-[left,right,bottom,max-width] duration-300 ease-out-expo ${
-                isMobile
-                  ? "left-3 right-3 bottom-[calc(0.75rem+72px)]"
-                  : sidebarOpen && !isSidebarAutoHidden
-                    ? "left-[calc(340px+2rem)] xl:left-[calc(390px+2rem)] right-4 bottom-6 max-w-[720px]"
-                    : "left-4 right-4 bottom-6 max-w-[720px]"
-              }`}
-            >
-              <div className="rounded-[28px] border border-white/60 bg-background/86 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.2)] backdrop-blur-2xl">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {lang === "it" ? "Partecipa al viaggio" : "Join the voyage"}
-                    </p>
-                    <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
-                      {bookingSummaryVoyage ? getLocalizedVoyageName(bookingSummaryVoyage, lang) : (lang === "it" ? "Selezione" : "Selection")}
-                    </h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearBookingSelection}
-                    className="rounded-full border border-white/60 bg-white/60 p-2 text-muted-foreground transition-colors hover:text-foreground"
-                    title={lang === "it" ? "Chiudi riepilogo" : "Close summary"}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-
-                {bookingAnchor && selectedBookingLegs.length === 0 ? (
-                  <div className="rounded-[18px] border border-dashed border-emerald-300/70 bg-emerald-50/75 px-3 py-2 text-xs text-emerald-800">
-                    {lang === "it"
-                      ? "Al momento non ci sono tratte disponibili su questo viaggio."
-                      : "There are currently no open legs on this voyage."}
-                  </div>
-                ) : null}
-
-                {bookingVoyageLegs.length > 0 ? (
-                  <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
-                    {bookingVoyageLegs.map((leg) => {
-                      const selected = selectedBookingLegIds.includes(leg.id);
-                      const rejected = bookingRejectedLegIds.includes(leg.id);
-                      return (
-                        <button
-                          key={leg.id}
-                          type="button"
-                          onClick={() => toggleBookingLeg(leg.id)}
-                          className={`h-2 min-w-10 flex-1 rounded-full transition-colors ${
-                            selected
-                              ? "bg-emerald-600"
-                              : rejected
-                                ? "bg-red-500"
-                                : leg.available
-                                  ? "bg-emerald-200 hover:bg-emerald-300"
-                                  : "bg-slate-300"
-                          }`}
-                          title={`${getLegLabel(leg, selectedBookingWaypointsById, lang)} · ${leg.occupied}/${leg.capacity}`}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {selectedBookingLegs.length > 0 ? (
-                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                    {selectedBookingLegs.map((leg) => (
-                      <div key={leg.id} className="flex items-center gap-3 rounded-[18px] border border-emerald-200/70 bg-emerald-50/75 px-3 py-2 text-xs">
-                        <span className="min-w-0 flex-1 truncate text-foreground">{getLegLabel(leg, selectedBookingWaypointsById, lang)}</span>
-                        <ComplexityIndicator
-                          variant="dot"
-                          compact
-                          level={getLegComplexity(leg)}
-                          dangerLevel={getLegDangerLevel(leg)}
-                          leg={leg}
-                          lang={lang}
-                        />
-                        <span className="shrink-0 text-emerald-800">{leg.remaining}/{leg.capacity}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleBookingLeg(leg.id)}
-                          className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground"
-                          title={lang === "it" ? "Rimuovi tratta" : "Remove leg"}
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {bookingHazardSummary && (
-                  <div className="mt-3 rounded-[18px] border border-orange-200/75 bg-orange-50/80 px-3 py-2 text-xs text-orange-900">
-                    <p className="flex items-center gap-1.5 font-medium text-orange-800">
-                      <AlertTriangle size={13} className="shrink-0" />
-                      {lang === "it"
-                        ? `Tratta ${getComplexityLabel(bookingHazardSummary.maxComplexity, lang).toLowerCase()}`
-                        : `${getComplexityLabel(bookingHazardSummary.maxComplexity, lang)} leg`}
-                    </p>
-                    {bookingHazardSummary.reasonKeys.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {bookingHazardSummary.reasonKeys.map((key) => {
-                          const reason = getDangerReasonDef(key);
-                          if (!reason) return null;
-                          const Icon = reason.icon;
-                          return (
-                            <span
-                              key={key}
-                              className="inline-flex items-center gap-1 rounded-full border border-orange-300/70 bg-white/70 px-1.5 py-0.5 text-[10.5px] font-medium text-orange-800"
-                            >
-                              <Icon size={11} strokeWidth={2.4} aria-hidden />
-                              {lang === "it" ? reason.label_it : reason.label_en}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {rejectedBookingLegs.length > 0 ? (
-                  <div className="mt-3 rounded-[18px] border border-red-200/75 bg-red-50/80 px-3 py-2 text-xs text-red-800">
-                    <p className="font-medium">
-                      {lang === "it" ? "Tratte escluse perché non disponibili" : "Legs excluded because unavailable"}
-                    </p>
-                    <p className="mt-1 line-clamp-2">
-                      {rejectedBookingLegs.map((leg) => getLegLabel(leg, selectedBookingWaypointsById, lang)).join(" · ")}
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-[120px_1fr_auto] sm:items-end">
-                  <label className="block">
-                    <span className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Pax</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={bookingPartySize}
-                      onChange={(event) => setBookingPartySize(Math.max(1, Number(event.target.value) || 1))}
-                      className="w-full rounded-full border border-white/70 bg-white/65 px-3 py-2 text-xs focus:outline-none"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                      {lang === "it" ? "Messaggio" : "Message"}
-                    </span>
-                    <input
-                      value={bookingMessage}
-                      onChange={(event) => setBookingMessage(event.target.value)}
-                      placeholder={lang === "it" ? "Note opzionali" : "Optional notes"}
-                      className="w-full rounded-full border border-white/70 bg-white/65 px-3 py-2 text-xs focus:outline-none"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!session?.user) {
-                        navigate("/login", { state: { from: `/${lang}/logbook` } });
-                        return;
-                      }
-                      if (selectedBookingLegIds.length === 0) {
-                        toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
-                        return;
-                      }
-                      setBookingConfirmOpen(true);
-                    }}
-                    disabled={bookingSubmitting || selectedBookingLegIds.length === 0}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {bookingSubmitting ? <Loader2 size={14} className="animate-spin" /> : <TicketCheck size={14} />}
-                    {session?.user
-                      ? (lang === "it" ? "Partecipa" : "Join")
-                      : (lang === "it" ? "Accedi" : "Sign in")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           <BookingConfirmDialog
             open={bookingConfirmOpen}
@@ -1401,81 +1206,118 @@ const Journal = () => {
             }`}
             style={isMobile ? { height: `${mobileSidebarHeight}px`, transform: `translateY(${mobileSidebarTranslateY}px)` } : undefined}
           >
-            {/* Search inside sidebar */}
-            <div
-              className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
-            >
-              {isMobile && (
-                <div className="mb-3 flex flex-col items-center gap-2">
-                  <div
-                    className="flex w-full flex-col items-center gap-2"
-                    style={{ touchAction: "none" }}
-                    onTouchStart={handleMobileSidebarTouchStart}
-                    onTouchMove={handleMobileSidebarTouchMove}
-                    onTouchEnd={handleMobileSidebarTouchEnd}
-                    onTouchCancel={handleMobileSidebarTouchEnd}
-                  >
-                    <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${mobileSidebarMode !== "expanded" ? "mobile-sheet-handle-hint" : ""}`} />
-                    <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {mobileSidebarMode === "expanded"
-                        ? (lang === "it" ? "Scorri verso il basso" : "Swipe down")
-                        : (lang === "it" ? "Scorri verso l'alto" : "Swipe up")}
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={lang === "it" ? "Cerca..." : "Search..."}
-                  className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Article list */}
-            <div
-              className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}
-              style={isMobile ? { touchAction: "pan-y" } : undefined}
-            >
-              {isArticlesLoading ? (
-                <div className="p-3 space-y-3">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="animate-pulse flex gap-3">
-                      <div className="w-16 h-16 bg-muted shrink-0" />
-                      <div className="flex-1">
-                        <div className="h-3 bg-muted w-1/3 mb-2" />
-                        <div className="h-4 bg-muted w-3/4 mb-1" />
-                        <div className="h-3 bg-muted w-1/2" />
+            {bookingSidebarActive ? (
+              <BookingSidebarPanel
+                voyage={bookingSummaryVoyage}
+                legs={bookingVoyageLegs}
+                waypointsById={selectedBookingWaypointsById}
+                selectedLegIds={selectedBookingLegIds}
+                rejectedLegIds={bookingRejectedLegIds}
+                partySize={bookingPartySize}
+                message={bookingMessage}
+                submitting={bookingSubmitting}
+                isSignedIn={Boolean(session?.user)}
+                lang={lang}
+                isMobile={isMobile}
+                mobileSidebarMode={mobileSidebarMode}
+                onMobileTouchStart={handleMobileSidebarTouchStart}
+                onMobileTouchMove={handleMobileSidebarTouchMove}
+                onMobileTouchEnd={handleMobileSidebarTouchEnd}
+                onClose={clearBookingSelection}
+                onToggleLeg={toggleBookingLeg}
+                onPartySizeChange={setBookingPartySize}
+                onMessageChange={setBookingMessage}
+                onSubmit={() => {
+                  if (!session?.user) {
+                    navigate("/login", { state: { from: `/${lang}/logbook` } });
+                    return;
+                  }
+                  if (selectedBookingLegIds.length === 0) {
+                    toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+                    return;
+                  }
+                  setBookingConfirmOpen(true);
+                }}
+              />
+            ) : (
+              <>
+                {/* Search inside sidebar */}
+                <div
+                  className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
+                >
+                  {isMobile && (
+                    <div className="mb-3 flex flex-col items-center gap-2">
+                      <div
+                        className="flex w-full flex-col items-center gap-2"
+                        style={{ touchAction: "none" }}
+                        onTouchStart={handleMobileSidebarTouchStart}
+                        onTouchMove={handleMobileSidebarTouchMove}
+                        onTouchEnd={handleMobileSidebarTouchEnd}
+                        onTouchCancel={handleMobileSidebarTouchEnd}
+                      >
+                        <div className={`h-1.5 w-14 rounded-full bg-foreground/20 ${mobileSidebarMode !== "expanded" ? "mobile-sheet-handle-hint" : ""}`} />
+                        <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                          {mobileSidebarMode === "expanded"
+                            ? (lang === "it" ? "Scorri verso il basso" : "Swipe down")
+                            : (lang === "it" ? "Scorri verso l'alto" : "Swipe up")}
+                        </p>
                       </div>
                     </div>
-                  ))}
+                  )}
+                  <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={lang === "it" ? "Cerca..." : "Search..."}
+                      className="w-full bg-transparent pl-8 pr-3 py-2 text-xs font-sans focus:outline-none"
+                    />
+                  </div>
                 </div>
-              ) : filtered.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-xs">
-                  {lang === "it" ? "Nessun risultato." : "No entries found."}
+
+                {/* Article list */}
+                <div
+                  className={`flex-1 overflow-y-auto pb-3 ${isMobile ? "overscroll-contain" : ""}`}
+                  style={isMobile ? { touchAction: "pan-y" } : undefined}
+                >
+                  {isArticlesLoading ? (
+                    <div className="p-3 space-y-3">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="animate-pulse flex gap-3">
+                          <div className="w-16 h-16 bg-muted shrink-0" />
+                          <div className="flex-1">
+                            <div className="h-3 bg-muted w-1/3 mb-2" />
+                            <div className="h-4 bg-muted w-3/4 mb-1" />
+                            <div className="h-3 bg-muted w-1/2" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground text-xs">
+                      {lang === "it" ? "Nessun risultato." : "No entries found."}
+                    </div>
+                  ) : (
+                    filtered.map((article) => (
+                      <ArticleListCard
+                        key={article.id}
+                        ref={(el) => { articleRefs.current[article.id] = el; }}
+                        article={article}
+                        waypointsMap={waypointsMap}
+                        lang={lang}
+                        isActive={selectedArticleId === article.id}
+                        isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
+                        isRead={isRead(article.id)}
+                        onMouseEnter={() => setHoveredArticleId(article.id)}
+                        onMouseLeave={() => setHoveredArticleId((current) => (current === article.id ? null : current))}
+                        onClick={() => handleListArticleClick(article)}
+                      />
+                    ))
+                  )}
                 </div>
-              ) : (
-                filtered.map((article) => (
-                  <ArticleListCard
-                    key={article.id}
-                    ref={(el) => { articleRefs.current[article.id] = el; }}
-                    article={article}
-                    waypointsMap={waypointsMap}
-                    lang={lang}
-                    isActive={selectedArticleId === article.id}
-                    isDimmed={Boolean(focusedVoyageId && article.voyage_id !== focusedVoyageId && selectedArticleId !== article.id)}
-                    isRead={isRead(article.id)}
-                    onMouseEnter={() => setHoveredArticleId(article.id)}
-                    onMouseLeave={() => setHoveredArticleId((current) => (current === article.id ? null : current))}
-                    onClick={() => handleListArticleClick(article)}
-                  />
-                ))
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       ) : (

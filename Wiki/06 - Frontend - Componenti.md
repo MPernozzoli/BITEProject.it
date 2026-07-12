@@ -29,6 +29,7 @@ tags: [frontend, componenti, ui]
 
 ## Mappe
 - `LazyVoyageMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
+- `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, pax, note e CTA, riusando la shell della sidebar articoli → [[13 - Booking Voyage]]
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
