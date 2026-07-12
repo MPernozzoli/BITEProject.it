@@ -45,7 +45,7 @@ const getPreferredLang = (request: Request): "it" | "en" => {
     if (code === "it") return "it";
     if (code === "en") return "en";
   }
-  return "en";
+  return "it";
 };
 
 export default function middleware(request: Request) {

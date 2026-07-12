@@ -15,7 +15,7 @@ const SITE_URL = "https://biteproject.it";
 const SITE_NAME = "BITE";
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 const LANGS = ["it", "en"] as const;
-const DEFAULT_LANG = "en";
+const DEFAULT_LANG = "it";
 
 type Lang = (typeof LANGS)[number];
 
@@ -610,7 +610,7 @@ const renderHtml = (lang: Lang, page: PageData): string => {
           "@id": `${SITE_URL}/#website`,
           url: `${SITE_URL}/`,
           name: "BITE Project",
-          description: DEFAULT_DESCRIPTION.en,
+          description: DEFAULT_DESCRIPTION.it,
           publisher: { "@id": `${SITE_URL}/#organization` },
           inLanguage: ["en", "it"],
         },

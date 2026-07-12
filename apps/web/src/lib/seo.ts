@@ -2,7 +2,7 @@ import type { Language } from "@/lib/i18n";
 
 export const SITE_URL = "https://biteproject.it";
 export const SUPPORTED_LANGS: Language[] = ["it", "en"];
-export const DEFAULT_LANG: Language = "en";
+export const DEFAULT_LANG: Language = "it";
 
 // ---------------------------------------------------------------------------
 // Legacy constants (used across pages and SeoManager)
@@ -114,7 +114,7 @@ export const OG_LOCALE: Record<Language, string> = {
   en: "en_US",
 };
 
-export const HREFLANG_DEFAULT: Language = "en";
+export const HREFLANG_DEFAULT: Language = "it";
 
 /**
  * Build the canonical URL and full hreflang alternates for a localized path.

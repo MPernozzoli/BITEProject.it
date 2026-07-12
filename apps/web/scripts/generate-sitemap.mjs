@@ -26,7 +26,7 @@ const LOCALIZED_ROUTES = [
 const SINGLE_ROUTES = ["/privacy-policy", "/cookie-policy"];
 
 const LANGS = ["it", "en"];
-const DEFAULT_LANG = "en";
+const DEFAULT_LANG = "it";
 const withLang = (lang, path) => (path === "/" ? `/${lang}` : `/${lang}${path}`);
 
 const xmlEscape = (value) =>

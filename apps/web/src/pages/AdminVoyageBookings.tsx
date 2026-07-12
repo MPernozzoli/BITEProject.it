@@ -1674,7 +1674,7 @@ const AdminVoyageBookings = () => {
                 Mail briefing 1 · invio automatico alla conferma
               </legend>
               <p className="mb-4 text-sm text-muted-foreground">
-                Riepilogo viaggio, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti gia disponibili a bordo.
+                Riepilogo viaggio, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti già disponibili a bordo.
               </p>
               <div className="grid gap-4">
                 <label className="block">

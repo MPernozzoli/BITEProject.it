@@ -21,7 +21,7 @@ const SINGLE_ROUTES = [
 ]
 
 const LANGS = ['it', 'en'] as const
-const DEFAULT_LANG = 'en'
+const DEFAULT_LANG = 'it'
 type Lang = typeof LANGS[number]
 
 const withLang = (lang: Lang, path: string) =>

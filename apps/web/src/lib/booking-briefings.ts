@@ -3,15 +3,15 @@ import type { BookingSettings } from "./booking-utils.js";
 
 export type BookingBriefingKey = "first" | "second";
 
-const FIRST_BRIEFING_IT = `Benvenuto a bordo. Questo primo briefing arriva appena la tua partecipazione e confermata: contiene le informazioni pratiche da considerare prima di organizzare gli spostamenti e preparare il bagaglio.
+const FIRST_BRIEFING_IT = `Benvenuto a bordo. Questo primo briefing arriva appena la tua partecipazione è confermata: contiene le informazioni pratiche da considerare prima di organizzare gli spostamenti e preparare il bagaglio.
 
-Spostamenti da/per l'imbarco: pianifica con mezzi modificabili quando possibile. Se acquisti biglietti non flessibili, valuta una assicurazione viaggio che consenta rimborso o cambio data in caso di variazioni operative.
+Spostamenti da/per l'imbarco: pianifica con mezzi modificabili quando possibile. Se acquisti biglietti non flessibili, valuta un'assicurazione viaggio che consenta rimborso o cambio data in caso di variazioni operative.
 
 Bagaglio: in barca non si portano valigie rigide, trolley o simili. Scegli una sacca morbida o uno zaino di medie dimensioni: si stiva meglio e in cabina occupa meno spazio.
 
-Cosa portare: anche se si va per mare, alcune navigazioni sono notturne o al largo e puo fare fresco. Porta almeno una camicia pesante, un pile o una giacca antivento. A bordo non si usano scarpe con suola scura: consigliamo scarpe adatte all'acqua e dedicate solo alla barca.
+Cosa portare: anche se si va per mare, alcune navigazioni sono notturne o al largo e può fare fresco. Porta almeno una camicia pesante, un pile o una giacca antivento. A bordo non si usano scarpe con suola scura: consigliamo scarpe adatte all'acqua e dedicate solo alla barca.
 
-Saponi, detersivi e crema solare: non serve portare saponi o detersivi da casa, che comunque non si possono usare a bordo per ragioni ambientali. La crema solare e gia in barca.`;
+Saponi, detersivi e crema solare: non serve portare saponi o detersivi da casa, che comunque non si possono usare a bordo per ragioni ambientali. La crema solare è già in barca.`;
 
 const FIRST_BRIEFING_EN = `Welcome aboard. This first briefing is sent as soon as your participation is confirmed: it covers the practical information to consider before booking transfers and packing.
 
@@ -25,13 +25,13 @@ Soap, detergents and sunscreen: there is no need to bring household soap or dete
 
 const SECOND_BRIEFING_IT = `Secondo briefing operativo: qui raccogliamo le informazioni utili per vivere bene la barca durante il viaggio.
 
-Lavaggio e abbigliamento: a bordo non c'e una lavatrice. I vestiti si lavano a mano in un secchio, quindi porta capi semplici da lavare e asciugare. Le cose in barca si consumano facilmente e non sono previste sfilate: la maglietta della salute batte il vestito di marca.
+Lavaggio e abbigliamento: a bordo non c'è una lavatrice. I vestiti si lavano a mano in un secchio, quindi porta capi semplici da lavare e asciugare. Le cose in barca si consumano facilmente e non sono previste sfilate: la maglietta della salute batte il vestito di marca.
 
 Intrattenimento: la barca ha Starlink per una connessione veloce e illimitata, radio con casse interne ed esterne e un proiettore per i film serali. Non serve portare casse Bluetooth o altra attrezzatura.
 
-Tecnologia: a bordo trovi prese elettriche tipo L e tipo F, piu prese USB-A e USB-C per ricaricare i dispositivi.
+Tecnologia: a bordo trovi prese elettriche tipo L e tipo F, più prese USB-A e USB-C per ricaricare i dispositivi.
 
-Cibo e frigo: ci sono due frigoriferi con un piccolo congelatore, quindi niente ghiaccio in quantita. Puoi portare pietanze che vorresti mangiare o condividere, ma considera spazio, tempi e conservazione.
+Cibo e frigo: ci sono due frigoriferi con un piccolo congelatore, quindi niente ghiaccio in quantità. Puoi portare pietanze che vorresti mangiare o condividere, ma considera spazio, tempi e conservazione.
 
 Posti ed esperienze: sentiti libero di proporre luoghi da vedere, soste o esperienze lungo la rotta. Le migliori idee entrano nel piano quando meteo, tempi e sicurezza lo permettono.`;
 
