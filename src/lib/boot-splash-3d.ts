@@ -165,59 +165,176 @@ function makeStreakTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-function buildHullGeometry(): THREE.BufferGeometry {
-  // Tapered trapezoid prism echoing the SVG hull silhouette.
-  const halfLen = 1.15;
-  const halfTop = 0.34;
-  const halfBottom = 0.2;
-  const depth = 0.42;
-  const bowTaper = 0.55;
-  const topY = 0;
-  const bottomY = -depth;
+function makeWoodTexture(base: string, seam: string, plankHeight: number): THREE.CanvasTexture {
+  // Horizontal strakes with subtle grain streaks; u runs along the hull length.
+  const w = 256;
+  const h = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += plankHeight) {
+    ctx.fillStyle = seam;
+    ctx.fillRect(0, y, w, 2);
+    // Slight per-plank tonal shift so strakes read individually.
+    ctx.fillStyle = `rgba(${Math.random() > 0.5 ? "255,235,210" : "60,30,10"},${0.03 + Math.random() * 0.05})`;
+    ctx.fillRect(0, y + 2, w, plankHeight - 2);
+  }
+  ctx.globalAlpha = 0.08;
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? "#3c1f0a" : "#ffe9cf";
+    const y = Math.random() * h;
+    ctx.fillRect(Math.random() * w, y, 14 + Math.random() * 60, 1);
+  }
+  ctx.globalAlpha = 1;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
-  const vertices = new Float32Array([
-    -halfLen, topY, -halfTop,
-    halfLen, topY, -halfTop * bowTaper,
-    halfLen, topY, halfTop * bowTaper,
-    -halfLen, topY, halfTop,
-    -halfLen * 0.72, bottomY, -halfBottom,
-    halfLen * 0.82, bottomY, -halfBottom * bowTaper,
-    halfLen * 0.82, bottomY, halfBottom * bowTaper,
-    -halfLen * 0.72, bottomY, halfBottom,
-  ]);
-  const indices = [
-    0, 2, 1, 0, 3, 2, // deck
-    4, 5, 6, 4, 6, 7, // keel
-    0, 1, 5, 0, 5, 4, // port side
-    3, 7, 6, 3, 6, 2, // starboard side
-    1, 2, 6, 1, 6, 5, // bow
-    0, 4, 7, 0, 7, 3, // stern
-  ];
+function makeSailTexture(): THREE.CanvasTexture {
+  // Woven canvas with faint horizontal panel seams.
+  const w = 256;
+  const h = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#f8f2e4";
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = 0.05;
+  for (let i = 0; i < 500; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? "#b8ac90" : "#ffffff";
+    ctx.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 8, 1.5);
+  }
+  ctx.globalAlpha = 1;
+  for (let y = 64; y < h; y += 64) {
+    ctx.fillStyle = "rgba(150,138,112,0.28)";
+    ctx.fillRect(0, y, w, 1.5);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// Lofted hull: smooth stations from a raked transom to a fine, upswept bow.
+const HULL_STATIONS = [
+  { x: -1.05, w: 0.24, d: 0.2, s: 0.07 },
+  { x: -0.85, w: 0.295, d: 0.27, s: 0.038 },
+  { x: -0.65, w: 0.325, d: 0.31, s: 0.02 },
+  { x: -0.45, w: 0.342, d: 0.335, s: 0.008 },
+  { x: -0.25, w: 0.35, d: 0.35, s: 0.002 },
+  { x: -0.05, w: 0.35, d: 0.35, s: 0.0 },
+  { x: 0.15, w: 0.344, d: 0.345, s: 0.002 },
+  { x: 0.35, w: 0.33, d: 0.33, s: 0.01 },
+  { x: 0.55, w: 0.305, d: 0.305, s: 0.024 },
+  { x: 0.75, w: 0.265, d: 0.27, s: 0.045 },
+  { x: 0.95, w: 0.205, d: 0.22, s: 0.072 },
+  { x: 1.1, w: 0.125, d: 0.16, s: 0.1 },
+  { x: 1.22, w: 0.018, d: 0.07, s: 0.132 },
+];
+const HULL_RING = 9;
+
+function buildHullGeometry(): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const S = HULL_STATIONS.length;
+
+  for (let i = 0; i < S; i++) {
+    const st = HULL_STATIONS[i];
+    for (let k = 0; k < HULL_RING; k++) {
+      const t = k / (HULL_RING - 1);
+      // Half-round section: port rail -> keel -> starboard rail.
+      positions.push(st.x, st.s - Math.sin(t * Math.PI) * st.d, Math.cos(t * Math.PI) * st.w);
+      uvs.push((i / (S - 1)) * 3, t);
+    }
+  }
+  for (let i = 0; i < S - 1; i++) {
+    for (let k = 0; k < HULL_RING - 1; k++) {
+      const a = i * HULL_RING + k;
+      const b = (i + 1) * HULL_RING + k;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  // Transom: fan closing the stern.
+  const sternCenter = positions.length / 3;
+  const st0 = HULL_STATIONS[0];
+  positions.push(st0.x, st0.s - st0.d * 0.45, 0);
+  uvs.push(0, 0.5);
+  for (let k = 0; k < HULL_RING - 1; k++) {
+    indices.push(sternCenter, k, k + 1);
+  }
+
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }
 
-function buildSailGeometry(luffHeight: number, footLength: number, belly: number): THREE.BufferGeometry {
-  // Triangular sail with a slight horizontal belly so it catches the light.
-  const segments = 6;
+function buildDeckGeometry(): THREE.BufferGeometry {
   const positions: number[] = [];
+  const uvs: number[] = [];
   const indices: number[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const v = i / segments;
-    const y = v * luffHeight;
-    const foot = footLength * (1 - v);
-    positions.push(0, y, 0);
-    positions.push(foot, y, Math.sin(v * Math.PI) * belly);
+  const S = HULL_STATIONS.length;
+  for (let i = 0; i < S; i++) {
+    const st = HULL_STATIONS[i];
+    positions.push(st.x, st.s + 0.004, st.w * 0.97); // port edge
+    positions.push(st.x, st.s + 0.004, -st.w * 0.97); // starboard edge
+    uvs.push((i / (S - 1)) * 3, 0, (i / (S - 1)) * 3, 1);
   }
-  for (let i = 0; i < segments; i++) {
-    const a = i * 2;
-    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  for (let i = 0; i < S - 1; i++) {
+    const p = i * 2;
+    indices.push(p, p + 3, p + 1, p, p + 2, p + 3);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function buildRailCurve(side: 1 | -1): THREE.CatmullRomCurve3 {
+  return new THREE.CatmullRomCurve3(
+    HULL_STATIONS.map((st) => new THREE.Vector3(st.x, st.s + 0.016, side * st.w * 0.99))
+  );
+}
+
+function buildSailGeometry(luffHeight: number, footLength: number, belly: number): THREE.BufferGeometry {
+  // Full cloth grid: belly curves both across the chord and up the luff,
+  // with a gentle roach (outward curve) on the leech.
+  const rows = 12;
+  const cols = 7;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let r = 0; r <= rows; r++) {
+    const v = r / rows;
+    const foot = footLength * (1 - v) * (1 + 0.07 * Math.sin(v * Math.PI));
+    for (let c = 0; c <= cols; c++) {
+      const f = c / cols;
+      const draft = Math.sin(Math.PI * Math.pow(f, 0.85)) * Math.sin(Math.PI * Math.min(1, v * 1.06 + 0.02));
+      positions.push(f * foot, v * luffHeight, draft * belly);
+      uvs.push(f, v);
+    }
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const a = r * (cols + 1) + c;
+      const b = (r + 1) * (cols + 1) + c;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
@@ -271,7 +388,7 @@ export function mountBootSplash3D(): void {
     uCameraPos: { value: camera.position },
   };
   const ocean = new THREE.Mesh(
-    new THREE.PlaneGeometry(80, 44, 160, 90),
+    new THREE.PlaneGeometry(80, 44, 220, 120),
     new THREE.ShaderMaterial({
       vertexShader: OCEAN_VERTEX,
       fragmentShader: OCEAN_FRAGMENT,
@@ -284,42 +401,65 @@ export function mountBootSplash3D(): void {
 
   // ---------------------------------------------------------------- Boat
   const boat = new THREE.Group();
-  const hullMat = new THREE.MeshLambertMaterial({ color: "#d68a52" });
-  const trimMat = new THREE.MeshLambertMaterial({ color: "#7a4220" });
-  const creamMat = new THREE.MeshLambertMaterial({ color: "#f6efe2" });
+  const hullTexture = makeWoodTexture("#c77e46", "rgba(90,48,20,0.5)", 30);
+  const deckTexture = makeWoodTexture("#e2c49a", "rgba(140,100,60,0.45)", 22);
+  const sailTexture = makeSailTexture();
+
+  const hullMat = new THREE.MeshStandardMaterial({ map: hullTexture, roughness: 0.5, metalness: 0.05 });
+  const darkWoodMat = new THREE.MeshStandardMaterial({ color: "#6e3d1e", roughness: 0.55 });
+  const sparMat = new THREE.MeshStandardMaterial({ color: "#e8dfcc", roughness: 0.7 });
+
   const hull = new THREE.Mesh(buildHullGeometry(), hullMat);
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.07, 0.66), trimMat);
-  trim.position.y = 0.035;
-  boat.add(hull, trim);
+  const deck = new THREE.Mesh(
+    buildDeckGeometry(),
+    new THREE.MeshStandardMaterial({ map: deckTexture, roughness: 0.75 })
+  );
+  boat.add(hull, deck);
 
-  // Cabin with a warm lit porthole facing the camera.
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.4), new THREE.MeshLambertMaterial({ color: "#b06a38" }));
-  cabin.position.set(-0.42, 0.17, 0);
+  // Rounded rub rail along the sheer line, closing at the bow.
+  const railGeometryPort = new THREE.TubeGeometry(buildRailCurve(1), 32, 0.02, 6);
+  const railGeometryStar = new THREE.TubeGeometry(buildRailCurve(-1), 32, 0.02, 6);
+  boat.add(new THREE.Mesh(railGeometryPort, darkWoodMat), new THREE.Mesh(railGeometryStar, darkWoodMat));
+
+  // Cabin: cream sides, wood roof, brass-ringed porthole glowing warm.
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(0.58, 0.2, 0.38),
+    new THREE.MeshStandardMaterial({ color: "#efe5d0", roughness: 0.8 })
+  );
+  cabin.position.set(-0.42, 0.11, 0);
   boat.add(cabin);
-  const windowMat = new THREE.MeshBasicMaterial({ color: "#ffd9a0" });
-  const cabinWindow = new THREE.Mesh(new THREE.CircleGeometry(0.045, 12), windowMat);
-  cabinWindow.position.set(-0.42, 0.18, 0.201);
+  const cabinRoof = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.035, 0.44), darkWoodMat);
+  cabinRoof.position.set(-0.42, 0.225, 0);
+  boat.add(cabinRoof);
+  const cabinWindow = new THREE.Mesh(new THREE.CircleGeometry(0.038, 20), new THREE.MeshBasicMaterial({ color: "#ffd9a0" }));
+  cabinWindow.position.set(-0.42, 0.12, 0.191);
   boat.add(cabinWindow);
+  const portholeRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.042, 0.007, 8, 24),
+    new THREE.MeshStandardMaterial({ color: "#c9a35e", roughness: 0.35, metalness: 0.7 })
+  );
+  portholeRing.position.set(-0.42, 0.12, 0.192);
+  boat.add(portholeRing);
 
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.032, 2.3, 8), creamMat);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 2.3, 12), sparMat);
   mast.position.set(0.1, 1.15, 0);
   boat.add(mast);
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.1, 8), creamMat);
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.1, 10), sparMat);
   boom.rotation.z = Math.PI / 2;
   boom.position.set(-0.44, 0.3, 0);
   boat.add(boom);
 
   const mainSail = new THREE.Mesh(
-    buildSailGeometry(1.95, 1.05, 0.16),
-    new THREE.MeshLambertMaterial({ color: "#f6efe2", side: THREE.DoubleSide })
+    buildSailGeometry(1.95, 1.05, 0.17),
+    new THREE.MeshStandardMaterial({ map: sailTexture, roughness: 0.85, side: THREE.DoubleSide })
   );
   mainSail.position.set(0.13, 0.33, 0);
   mainSail.rotation.y = Math.PI; // boom toward the stern
   boat.add(mainSail);
 
   const jib = new THREE.Mesh(
-    buildSailGeometry(1.6, 0.85, 0.12),
-    new THREE.MeshLambertMaterial({ color: "#8db6c0", side: THREE.DoubleSide })
+    buildSailGeometry(1.6, 0.85, 0.13),
+    new THREE.MeshStandardMaterial({ map: sailTexture, color: "#a9c6cd", roughness: 0.85, side: THREE.DoubleSide })
   );
   jib.position.set(0.16, 0.3, 0);
   boat.add(jib);
@@ -327,10 +467,10 @@ export function mountBootSplash3D(): void {
   // Rigging: forestay, backstay and two shrouds as thin lines.
   const mastTop = new THREE.Vector3(0.1, 2.28, 0);
   const riggingGeometry = new THREE.BufferGeometry().setFromPoints([
-    mastTop, new THREE.Vector3(1.12, 0.05, 0),   // forestay -> bow
-    mastTop, new THREE.Vector3(-1.12, 0.05, 0),  // backstay -> stern
-    mastTop, new THREE.Vector3(0.05, 0.05, 0.3), // shroud starboard
-    mastTop, new THREE.Vector3(0.05, 0.05, -0.3) // shroud port
+    mastTop, new THREE.Vector3(1.2, 0.15, 0),     // forestay -> bow tip
+    mastTop, new THREE.Vector3(-1.02, 0.09, 0),   // backstay -> transom
+    mastTop, new THREE.Vector3(0.05, 0.02, 0.33), // shroud starboard
+    mastTop, new THREE.Vector3(0.05, 0.02, -0.33) // shroud port
   ]);
   const riggingMat = new THREE.LineBasicMaterial({ color: 0xd8d2c4, transparent: true, opacity: 0.5 });
   boat.add(new THREE.LineSegments(riggingGeometry, riggingMat));
@@ -465,6 +605,9 @@ export function mountBootSplash3D(): void {
     lanternTexture.dispose();
     cloudTexture.dispose();
     streakTexture.dispose();
+    hullTexture.dispose();
+    deckTexture.dispose();
+    sailTexture.dispose();
     renderer.dispose();
   };
 
@@ -481,7 +624,7 @@ export function mountBootSplash3D(): void {
     // Ride the same wave field as the shader.
     const bx = boat.position.x;
     const bz = boat.position.z;
-    boat.position.y = waveHeight(bx, bz, t) + 0.16;
+    boat.position.y = waveHeight(bx, bz, t) + 0.09;
     const dx = (waveHeight(bx + 0.6, bz, t) - waveHeight(bx - 0.6, bz, t)) / 1.2;
     const dz = (waveHeight(bx, bz + 0.6, t) - waveHeight(bx, bz - 0.6, t)) / 1.2;
     boat.rotation.z = dx * 0.55;

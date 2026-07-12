@@ -6,7 +6,7 @@ import { ArrowRight, CalendarCheck, LogIn, LogOut, Menu, Shield, User, X } from 
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import ProfileNotificationsMenu from "@/components/ProfileNotificationsMenu";
-import { getAdminUrl } from "@/lib/admin-host";
+import { getAdminUrl, getMainSiteUrl, isCurrentAdminHostname } from "@/lib/admin-host";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -119,6 +119,8 @@ const Navbar = () => {
     setProfile(null);
     navigate("/");
   };
+
+  const onAdminHost = isCurrentAdminHostname();
 
   const isLinkActive = (to: string) =>
     location.pathname === to || location.pathname.startsWith(`${to}/`);
@@ -249,21 +251,25 @@ const Navbar = () => {
 
         {/* Desktop Nav */}
         <div className="hidden lg:flex items-center gap-7">
-          {links.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={cn(
-                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
-                navTextClass,
-                isLinkActive(link.to)
-                  ? "nav-chip-light font-medium"
-                  : "text-slate-700/80 hover:text-slate-900",
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const className = cn(
+              "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
+              navTextClass,
+              isLinkActive(link.to)
+                ? "nav-chip-light font-medium"
+                : "text-slate-700/80 hover:text-slate-900",
+            );
+
+            return onAdminHost ? (
+              <a key={link.to} href={getMainSiteUrl(link.to)} className={className}>
+                {link.label}
+              </a>
+            ) : (
+              <Link key={link.to} to={link.to} className={className}>
+                {link.label}
+              </Link>
+            );
+          })}
 
           <div className="mx-1 h-5 w-px bg-slate-300/80" />
 
@@ -501,18 +507,14 @@ const Navbar = () => {
               <div className="flex flex-col gap-3">
                 {links.map((link) => {
                   const active = isLinkActive(link.to);
-
-                  return (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      className={cn(
-                        "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
-                        active
-                          ? "nav-chip-light border-white/80 text-slate-950 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.34)]"
-                          : "border-white/70 bg-white/48 text-slate-800 hover:border-white hover:bg-white/70",
-                      )}
-                    >
+                  const className = cn(
+                    "group flex items-center justify-between gap-4 rounded-[1.75rem] border px-4 py-4 transition-[border-color,background-color,transform,box-shadow] duration-300 ease-out-expo active:scale-[0.99]",
+                    active
+                      ? "nav-chip-light border-white/80 text-slate-950 shadow-[0_18px_44px_-32px_rgba(15,23,42,0.34)]"
+                      : "border-white/70 bg-white/48 text-slate-800 hover:border-white hover:bg-white/70",
+                  );
+                  const content = (
+                    <>
                       <div className="min-w-0">
                         <p
                           className={cn(
@@ -542,6 +544,16 @@ const Navbar = () => {
                       >
                         <ArrowRight size={18} />
                       </span>
+                    </>
+                  );
+
+                  return onAdminHost ? (
+                    <a key={link.to} href={getMainSiteUrl(link.to)} className={className}>
+                      {content}
+                    </a>
+                  ) : (
+                    <Link key={link.to} to={link.to} className={className}>
+                      {content}
                     </Link>
                   );
                 })}
