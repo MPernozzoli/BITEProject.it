@@ -197,17 +197,30 @@ const COPY = {
         "Ricevi notifiche nel sito e push quando una storia che segui pubblica un nuovo capitolo.",
       pushTitle: "Notifiche push",
       pushHint:
-        "Quando usi BITE come web app sulla home del telefono puoi ricevere notifiche push in tempo reale per like e commenti.",
+        "Quando usi BITE come web app sulla home del telefono puoi scegliere quali notifiche ricevere in tempo reale.",
+      pushEngagementTitle: "Community",
+      pushEngagementHint: "Like, commenti e risposte legate ai tuoi contenuti.",
+      pushPublicationTitle: "Nuove pubblicazioni",
+      pushPublicationHint: "Articoli standalone e nuovi capitoli nelle storie seguite.",
+      pushMailTitle: "Nuove mail",
+      pushMailHint: "Messaggi ricevuti nella casella admin e assegnazioni inbound.",
+      pushVoyageAdminTitle: "Viaggi da gestire",
+      pushVoyageAdminHint: "Richieste, modifiche, cancellazioni e pagamenti dei partecipanti.",
+      pushVoyageUserTitle: "I miei viaggi",
+      pushVoyageUserHint: "Approvazioni, conferme, pagamenti e cambi planning delle tue prenotazioni.",
       pushNotInstalled:
         "Per attivare le push devi prima salvare BITE sulla schermata Home del telefono.",
       pushUnsupported:
         "Questo dispositivo o browser non supporta ancora le notifiche push web in questo contesto.",
       pushDenied:
         "Le notifiche push sono bloccate. Riattivale dalle impostazioni del browser o dell'app installata.",
+      pushRegistrationError:
+        "Permesso notifiche attivo, ma non riesco a registrare questo dispositivo. Riprova dopo aver chiuso e riaperto l'app.",
       pushEnable: "Attiva notifiche push",
       pushReconnect: "Ricollega notifiche push",
       pushEnabled: "Push attive",
       pushDisabled: "Push disattivate",
+      pushDisable: "Disattiva push",
       pushSaving: "Aggiornamento...",
       pushInstructionLabel: "Come installare l'app",
       pushConfiguredLabel: "Gestione push app",
@@ -337,17 +350,30 @@ const COPY = {
         "Receive in-app notifications and push alerts when a story you follow publishes a new chapter.",
       pushTitle: "Push notifications",
       pushHint:
-        "When you use BITE as a web app from your phone home screen, you can receive real-time push notifications for likes and comments.",
+        "When you use BITE as a web app from your phone home screen, you can choose which real-time push notifications you receive.",
+      pushEngagementTitle: "Community",
+      pushEngagementHint: "Likes, comments, and replies tied to your content.",
+      pushPublicationTitle: "New publications",
+      pushPublicationHint: "Standalone articles and new chapters in followed stories.",
+      pushMailTitle: "New mail",
+      pushMailHint: "Messages received in the admin mailbox and inbound assignments.",
+      pushVoyageAdminTitle: "Voyages to manage",
+      pushVoyageAdminHint: "Requests, changes, cancellations, and participant payments.",
+      pushVoyageUserTitle: "My voyages",
+      pushVoyageUserHint: "Approvals, confirmations, payments, and plan changes for your bookings.",
       pushNotInstalled:
         "To enable push notifications you first need to save BITE to your phone home screen.",
       pushUnsupported:
         "This device or browser does not currently support web push in this context.",
       pushDenied:
         "Push notifications are blocked. Re-enable them from your browser or installed app settings.",
+      pushRegistrationError:
+        "Notifications are allowed, but this device could not be registered. Close and reopen the app, then try again.",
       pushEnable: "Enable push notifications",
       pushReconnect: "Reconnect push notifications",
       pushEnabled: "Push enabled",
       pushDisabled: "Push disabled",
+      pushDisable: "Disable push",
       pushSaving: "Updating...",
       pushInstructionLabel: "How to install the app",
       pushConfiguredLabel: "App push controls",
@@ -419,7 +445,7 @@ const COPY = {
 } as const;
 
 const AdminProfile = () => {
-  const { session, loading: authLoading } = useAuth();
+  const { session, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -444,6 +470,10 @@ const AdminProfile = () => {
   );
   const [pushEngagementEnabled, setPushEngagementEnabled] = useState(true);
   const [pushPublicationEnabled, setPushPublicationEnabled] = useState(true);
+  const [pushMailEnabled, setPushMailEnabled] = useState(true);
+  const [pushVoyageAdminEnabled, setPushVoyageAdminEnabled] = useState(true);
+  const [pushVoyageUserEnabled, setPushVoyageUserEnabled] = useState(true);
+  const [hasVoyageNotificationScope, setHasVoyageNotificationScope] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const [hasPushSubscription, setHasPushSubscription] = useState(false);
   const [pushStateLoading, setPushStateLoading] = useState(false);
@@ -758,6 +788,9 @@ const AdminProfile = () => {
     async (updates: {
       pushEngagementEnabled?: boolean;
       pushPublicationEnabled?: boolean;
+      pushMailEnabled?: boolean;
+      pushVoyageAdminEnabled?: boolean;
+      pushVoyageUserEnabled?: boolean;
       articleNotificationsEnabled?: boolean;
       storyNotificationsEnabled?: boolean;
     }) => {
@@ -767,7 +800,7 @@ const AdminProfile = () => {
       const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
         .from("email_notification_preferences")
         .select(
-          "newsletter_enabled, digest_enabled, article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled",
+          "newsletter_enabled, digest_enabled, article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled",
         )
         .eq("email", normalizedEmail)
         .maybeSingle();
@@ -802,6 +835,18 @@ const AdminProfile = () => {
           updates.pushPublicationEnabled
           ?? currentPreferenceRow?.push_publication_enabled
           ?? pushPublicationEnabled,
+        push_mail_enabled:
+          updates.pushMailEnabled
+          ?? currentPreferenceRow?.push_mail_enabled
+          ?? pushMailEnabled,
+        push_voyage_admin_enabled:
+          updates.pushVoyageAdminEnabled
+          ?? currentPreferenceRow?.push_voyage_admin_enabled
+          ?? pushVoyageAdminEnabled,
+        push_voyage_user_enabled:
+          updates.pushVoyageUserEnabled
+          ?? currentPreferenceRow?.push_voyage_user_enabled
+          ?? pushVoyageUserEnabled,
         updated_at: new Date().toISOString(),
       });
 
@@ -815,7 +860,10 @@ const AdminProfile = () => {
       notificationPreferences.comment_notifications_frequency,
       notificationPreferences.like_notifications_frequency,
       pushEngagementEnabled,
+      pushMailEnabled,
       pushPublicationEnabled,
+      pushVoyageAdminEnabled,
+      pushVoyageUserEnabled,
       session?.user?.email,
       storyNotificationsEnabled,
     ],
@@ -848,20 +896,29 @@ const AdminProfile = () => {
       await persistNotificationSettings({
         pushEngagementEnabled: true,
         pushPublicationEnabled: true,
+        pushMailEnabled: isAdmin ? true : undefined,
+        pushVoyageAdminEnabled: isAdmin ? true : undefined,
+        pushVoyageUserEnabled: hasVoyageNotificationScope ? true : undefined,
       });
       setPushPermission(getPushPermission());
       setHasPushSubscription(true);
       setPushEngagementEnabled(true);
       setPushPublicationEnabled(true);
+      if (isAdmin) {
+        setPushMailEnabled(true);
+        setPushVoyageAdminEnabled(true);
+      }
+      if (hasVoyageNotificationScope) setPushVoyageUserEnabled(true);
       toast.success(copy.fields.pushEnabled);
     } catch (error) {
       console.error("Push enable error:", error);
-      setPushPermission(getPushPermission());
-      toast.error(copy.fields.pushDenied);
+      const nextPermission = getPushPermission();
+      setPushPermission(nextPermission);
+      toast.error(nextPermission === "denied" ? copy.fields.pushDenied : copy.fields.pushRegistrationError);
     } finally {
       setPushStateLoading(false);
     }
-  }, [copy.fields.pushDenied, copy.fields.pushEnabled, copy.fields.pushMissingKey, persistNotificationSettings, pushPublicKey, savePushSubscription]);
+  }, [copy.fields.pushDenied, copy.fields.pushEnabled, copy.fields.pushMissingKey, copy.fields.pushRegistrationError, hasVoyageNotificationScope, isAdmin, persistNotificationSettings, pushPublicKey, savePushSubscription]);
 
   const handleDisablePushNotifications = useCallback(async () => {
     setPushStateLoading(true);
@@ -871,11 +928,17 @@ const AdminProfile = () => {
       await persistNotificationSettings({
         pushEngagementEnabled: false,
         pushPublicationEnabled: false,
+        pushMailEnabled: false,
+        pushVoyageAdminEnabled: false,
+        pushVoyageUserEnabled: false,
       });
       setHasPushSubscription(false);
       setPushPermission(getPushPermission());
       setPushEngagementEnabled(false);
       setPushPublicationEnabled(false);
+      setPushMailEnabled(false);
+      setPushVoyageAdminEnabled(false);
+      setPushVoyageUserEnabled(false);
       toast.success(copy.fields.pushDisabled);
     } catch (error) {
       console.error("Push disable error:", error);
@@ -884,6 +947,35 @@ const AdminProfile = () => {
       setPushStateLoading(false);
     }
   }, [copy.actions.saveError, copy.fields.pushDisabled, persistNotificationSettings, removePushSubscriptionRecord]);
+
+  const pushReady = hasPushSubscription && pushPermission === "granted";
+  const handlePushPreferenceChange = useCallback(
+    async (
+      key:
+        | "pushEngagementEnabled"
+        | "pushPublicationEnabled"
+        | "pushMailEnabled"
+        | "pushVoyageAdminEnabled"
+        | "pushVoyageUserEnabled",
+      checked: boolean,
+    ) => {
+      setPushStateLoading(true);
+      try {
+        await persistNotificationSettings({ [key]: checked });
+        if (key === "pushEngagementEnabled") setPushEngagementEnabled(checked);
+        if (key === "pushPublicationEnabled") setPushPublicationEnabled(checked);
+        if (key === "pushMailEnabled") setPushMailEnabled(checked);
+        if (key === "pushVoyageAdminEnabled") setPushVoyageAdminEnabled(checked);
+        if (key === "pushVoyageUserEnabled") setPushVoyageUserEnabled(checked);
+      } catch (error) {
+        console.error("Push preference save error:", error);
+        toast.error(copy.actions.saveError);
+      } finally {
+        setPushStateLoading(false);
+      }
+    },
+    [copy.actions.saveError, persistNotificationSettings],
+  );
 
   const loadPasskeys = useCallback(async () => {
     if (!session?.user) return;
@@ -1031,10 +1123,23 @@ const AdminProfile = () => {
       };
 
       const loadedNewsletterSubscribed = await loadNewsletterState(userId, currentEmail);
+      const [{ count: ownedVoyageBookingCount }, { count: participantVoyageBookingCount }] = await Promise.all([
+        supabase
+          .from("voyage_booking_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("profile_id", userId),
+        supabase
+          .from("voyage_booking_participants")
+          .select("id", { count: "exact", head: true })
+          .eq("profile_id", userId),
+      ]);
+      const loadedHasVoyageNotificationScope =
+        Boolean((ownedVoyageBookingCount ?? 0) > 0 || (participantVoyageBookingCount ?? 0) > 0);
+      setHasVoyageNotificationScope(loadedHasVoyageNotificationScope);
 
       const { data: preferenceRow, error: preferenceError } = await supabase
         .from("email_notification_preferences")
-        .select("article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled")
+        .select("article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled")
         .eq("email", currentEmail.trim().toLowerCase())
         .maybeSingle();
 
@@ -1059,6 +1164,9 @@ const AdminProfile = () => {
         setNotificationPreferences(loadedNotificationPreferences);
         setPushEngagementEnabled(preferenceRow.push_engagement_enabled ?? true);
         setPushPublicationEnabled(preferenceRow.push_publication_enabled ?? true);
+        setPushMailEnabled(preferenceRow.push_mail_enabled ?? true);
+        setPushVoyageAdminEnabled(preferenceRow.push_voyage_admin_enabled ?? true);
+        setPushVoyageUserEnabled(preferenceRow.push_voyage_user_enabled ?? true);
       }
 
       await loadPushState();
@@ -1137,14 +1245,19 @@ const AdminProfile = () => {
   useEffect(() => {
     if (!shouldShowMobileAppCard) return;
 
+    const refreshPushState = () => void loadPushState();
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void loadPushState();
-      }
+      if (document.visibilityState === "visible") refreshPushState();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", refreshPushState);
+    window.addEventListener("pageshow", refreshPushState);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", refreshPushState);
+      window.removeEventListener("pageshow", refreshPushState);
+    };
   }, [loadPushState, shouldShowMobileAppCard]);
 
   useEffect(() => {
@@ -1334,7 +1447,7 @@ const AdminProfile = () => {
       if (!notificationPreferencesSaved) {
         const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
           .from("email_notification_preferences")
-          .select("newsletter_enabled, digest_enabled, story_notifications_enabled, push_engagement_enabled, push_publication_enabled")
+          .select("newsletter_enabled, digest_enabled, story_notifications_enabled, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled")
           .eq("email", currentEmail)
           .maybeSingle();
 
@@ -1354,6 +1467,9 @@ const AdminProfile = () => {
             comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
             push_engagement_enabled: currentPreferenceRow?.push_engagement_enabled ?? pushEngagementEnabled,
             push_publication_enabled: currentPreferenceRow?.push_publication_enabled ?? pushPublicationEnabled,
+            push_mail_enabled: currentPreferenceRow?.push_mail_enabled ?? pushMailEnabled,
+            push_voyage_admin_enabled: currentPreferenceRow?.push_voyage_admin_enabled ?? pushVoyageAdminEnabled,
+            push_voyage_user_enabled: currentPreferenceRow?.push_voyage_user_enabled ?? pushVoyageUserEnabled,
             updated_at: new Date().toISOString(),
           });
 
@@ -1480,6 +1596,44 @@ const AdminProfile = () => {
 
     setSaveAndLeavePending(false);
   };
+
+  const pushPreferenceRows = [
+    {
+      key: "pushPublicationEnabled" as const,
+      title: copy.fields.pushPublicationTitle,
+      hint: copy.fields.pushPublicationHint,
+      checked: pushPublicationEnabled,
+      visible: true,
+    },
+    {
+      key: "pushEngagementEnabled" as const,
+      title: copy.fields.pushEngagementTitle,
+      hint: copy.fields.pushEngagementHint,
+      checked: pushEngagementEnabled,
+      visible: true,
+    },
+    {
+      key: "pushMailEnabled" as const,
+      title: copy.fields.pushMailTitle,
+      hint: copy.fields.pushMailHint,
+      checked: pushMailEnabled,
+      visible: isAdmin,
+    },
+    {
+      key: "pushVoyageAdminEnabled" as const,
+      title: copy.fields.pushVoyageAdminTitle,
+      hint: copy.fields.pushVoyageAdminHint,
+      checked: pushVoyageAdminEnabled,
+      visible: isAdmin,
+    },
+    {
+      key: "pushVoyageUserEnabled" as const,
+      title: copy.fields.pushVoyageUserTitle,
+      hint: copy.fields.pushVoyageUserHint,
+      checked: pushVoyageUserEnabled,
+      visible: hasVoyageNotificationScope,
+    },
+  ].filter((row) => row.visible);
 
   if (authLoading || (!profileLoaded && session)) {
     return (
@@ -2000,54 +2154,23 @@ const AdminProfile = () => {
                           <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
                               <p className="text-sm font-sans font-medium text-foreground">
-                                {pushEngagementEnabled && hasPushSubscription && pushPermission === "granted"
-                                  ? copy.fields.pushEnabled
-                                  : copy.fields.pushDisabled}
+                                {pushReady ? copy.fields.pushEnabled : copy.fields.pushDisabled}
                               </p>
                               <p className="text-xs font-sans text-muted-foreground">
                                 Permission: {pushPermission}
                               </p>
                             </div>
-                            <Switch
-                              checked={pushEngagementEnabled && hasPushSubscription && pushPermission === "granted"}
-                              disabled={pushStateLoading || pushPermission !== "granted" || !hasPushSubscription}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  void handleEnablePushNotifications();
-                                } else {
-                                  void handleDisablePushNotifications();
-                                }
-                              }}
-                            />
-                          </div>
-
-                          <div className="flex items-start justify-between gap-4 border-t border-black/6 pt-4">
-                            <div className="space-y-1">
-                              <p className="text-sm font-sans font-medium text-foreground">
-                                {lang === "en" ? "Push for publications" : "Push per nuove pubblicazioni"}
-                              </p>
-                              <p className="text-xs font-sans text-muted-foreground">
-                                {lang === "en"
-                                  ? "Standalone articles and new chapters in followed stories."
-                                  : "Articoli standalone e nuovi capitoli nelle storie seguite."}
-                              </p>
-                            </div>
-                            <Switch
-                              checked={pushPublicationEnabled && hasPushSubscription && pushPermission === "granted"}
-                              disabled={pushStateLoading || pushPermission !== "granted" || !hasPushSubscription}
-                              onCheckedChange={async (checked) => {
-                                setPushStateLoading(true);
-                                try {
-                                  await persistNotificationSettings({ pushPublicationEnabled: checked });
-                                  setPushPublicationEnabled(checked);
-                                } catch (error) {
-                                  console.error("Push publication preference save error:", error);
-                                  toast.error(copy.actions.saveError);
-                                } finally {
-                                  setPushStateLoading(false);
-                                }
-                              }}
-                            />
+                            {pushReady ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                                disabled={pushStateLoading}
+                                onClick={() => void handleDisablePushNotifications()}
+                              >
+                                {copy.fields.pushDisable}
+                              </Button>
+                            ) : null}
                           </div>
 
                           {pushPermission === "default" || !hasPushSubscription ? (
@@ -2064,6 +2187,30 @@ const AdminProfile = () => {
                                   ? copy.fields.pushReconnect
                                   : copy.fields.pushEnable}
                             </Button>
+                          ) : null}
+
+                          {pushReady ? (
+                            <div className="space-y-0 border-t border-black/6 pt-2">
+                              {pushPreferenceRows.map((row, index) => (
+                                <div
+                                  key={row.key}
+                                  className={cn(
+                                    "flex items-start justify-between gap-4 py-4",
+                                    index > 0 && "border-t border-black/6",
+                                  )}
+                                >
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-sans font-medium text-foreground">{row.title}</p>
+                                    <p className="text-xs font-sans text-muted-foreground leading-relaxed">{row.hint}</p>
+                                  </div>
+                                  <Switch
+                                    checked={row.checked}
+                                    disabled={pushStateLoading}
+                                    onCheckedChange={(checked) => void handlePushPreferenceChange(row.key, checked)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
                           ) : null}
 
                           {pushPermission === "denied" ? (

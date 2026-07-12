@@ -113,6 +113,7 @@ export function EditorialEmailShell({
           <Section style={frame}>
             {/* Brand mark */}
             <Text style={brand}>{SITE_NAME}</Text>
+            <Section style={brandRule} />
 
             {/* Hero image */}
             <Section style={heroFrame}>
@@ -196,6 +197,83 @@ export function EmailBodyText({
   muted?: boolean
 }) {
   return <Text style={muted ? bodyMutedText : bodyText}>{children}</Text>
+}
+
+export function EmailSectionLabel({ children }: { children: React.ReactNode }) {
+  return <Text style={sectionLabel}>{children}</Text>
+}
+
+export function EmailSignalPills({ items }: { items: React.ReactNode[] }) {
+  const safeItems = items.filter(Boolean)
+  if (!safeItems.length) return null
+
+  return (
+    <Section style={signalRow}>
+      {safeItems.map((item, index) => (
+        <Text key={index} style={signalPill}>
+          {item}
+        </Text>
+      ))}
+    </Section>
+  )
+}
+
+export function EmailDetailRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: React.ReactNode
+  value: React.ReactNode
+  strong?: boolean
+}) {
+  if (!value) return null
+
+  return (
+    <Section style={detailRow}>
+      <Text style={detailLabel}>{label}</Text>
+      <Text style={strong ? detailValueStrong : detailValue}>{value}</Text>
+    </Section>
+  )
+}
+
+export function EmailHighlightBox({
+  label,
+  value,
+}: {
+  label: React.ReactNode
+  value: React.ReactNode
+}) {
+  if (!value) return null
+
+  return (
+    <Section style={highlightBox}>
+      <Text style={highlightLabel}>{label}</Text>
+      <Text style={highlightValue}>{value}</Text>
+    </Section>
+  )
+}
+
+export function EmailRouteBox({
+  label,
+  routes,
+}: {
+  label: React.ReactNode
+  routes: string[]
+}) {
+  const safeRoutes = routes.filter((route) => route?.trim())
+  if (!safeRoutes.length) return null
+
+  return (
+    <Section style={routeBox}>
+      <Text style={routeLabel}>{label}</Text>
+      <Text style={routeText}>{safeRoutes.join(' · ')}</Text>
+    </Section>
+  )
+}
+
+export function EmailCallout({ children }: { children: React.ReactNode }) {
+  return <Text style={callout}>{children}</Text>
 }
 
 export function EmailArticleCard({
@@ -298,8 +376,16 @@ const brand = {
   fontSize: '16px',
   fontWeight: '700' as const,
   letterSpacing: '0.32em',
-  margin: '0 0 22px',
+  margin: '0 0 12px',
   textTransform: 'uppercase' as const,
+}
+
+const brandRule = {
+  backgroundColor: COLOR_TEAL,
+  borderRadius: '999px',
+  height: '3px',
+  margin: '0 0 22px',
+  maxWidth: '72px',
 }
 
 const heroFrame = {
@@ -358,6 +444,140 @@ const bodyText = {
 const bodyMutedText = {
   ...bodyText,
   color: COLOR_MUTED,
+}
+
+const sectionLabel = {
+  color: COLOR_TEAL,
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  letterSpacing: '0.18em',
+  margin: '0 0 10px',
+  textTransform: 'uppercase' as const,
+}
+
+const signalRow = {
+  margin: '0 0 18px',
+}
+
+const signalPill = {
+  backgroundColor: COLOR_SECONDARY_BG,
+  border: `1px solid ${COLOR_SECONDARY_BORDER}`,
+  borderRadius: '999px',
+  color: COLOR_TEAL_DARK,
+  display: 'inline-block',
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  letterSpacing: '0.08em',
+  lineHeight: '1',
+  margin: '0 8px 8px 0',
+  padding: '9px 12px',
+  textTransform: 'uppercase' as const,
+}
+
+const detailRow = {
+  borderTop: `1px solid ${COLOR_BORDER}`,
+  margin: '0',
+  padding: '13px 0 0',
+}
+
+const detailLabel = {
+  color: COLOR_MUTED,
+  display: 'inline-block',
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  letterSpacing: '0.12em',
+  lineHeight: '1.5',
+  margin: '0 16px 12px 0',
+  textTransform: 'uppercase' as const,
+  verticalAlign: 'top',
+  width: '128px',
+}
+
+const detailValue = {
+  color: COLOR_BODY,
+  display: 'inline-block',
+  fontFamily: FONT_SANS,
+  fontSize: '14px',
+  lineHeight: '1.6',
+  margin: '0 0 12px',
+  verticalAlign: 'top',
+  width: 'calc(100% - 154px)',
+}
+
+const detailValueStrong = {
+  ...detailValue,
+  color: COLOR_NAVY,
+  fontFamily: FONT_SERIF,
+  fontSize: '22px',
+  fontWeight: '600' as const,
+  lineHeight: '1.25',
+}
+
+const highlightBox = {
+  backgroundColor: COLOR_NAVY,
+  borderRadius: '16px',
+  margin: '0 0 14px',
+  padding: '16px',
+}
+
+const highlightLabel = {
+  color: '#d7e5e3',
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  letterSpacing: '0.14em',
+  margin: '0 0 4px',
+  textTransform: 'uppercase' as const,
+}
+
+const highlightValue = {
+  color: '#fffaf3',
+  fontFamily: FONT_SERIF,
+  fontSize: '30px',
+  fontWeight: '600' as const,
+  lineHeight: '1.1',
+  margin: '0',
+}
+
+const routeBox = {
+  backgroundColor: COLOR_FOOTER_BG,
+  border: `1px solid ${COLOR_FOOTER_BORDER}`,
+  borderRadius: '16px',
+  margin: '0 0 14px',
+  padding: '14px 16px',
+}
+
+const routeLabel = {
+  color: COLOR_MUTED,
+  fontFamily: FONT_SANS,
+  fontSize: '11px',
+  fontWeight: '700' as const,
+  letterSpacing: '0.14em',
+  margin: '0 0 4px',
+  textTransform: 'uppercase' as const,
+}
+
+const routeText = {
+  color: COLOR_BODY,
+  fontFamily: FONT_SANS,
+  fontSize: '14px',
+  lineHeight: '1.6',
+  margin: '0',
+}
+
+const callout = {
+  backgroundColor: COLOR_SECONDARY_BG,
+  border: `1px solid ${COLOR_SECONDARY_BORDER}`,
+  borderRadius: '16px',
+  color: COLOR_TEAL_DARK,
+  fontFamily: FONT_SANS,
+  fontSize: '14px',
+  lineHeight: '1.6',
+  margin: '4px 0 16px',
+  padding: '14px 16px',
 }
 
 const ctaRow = {

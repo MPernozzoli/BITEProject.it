@@ -1,11 +1,17 @@
 import * as React from 'npm:react@18.3.1'
+import { Section, Text } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
 import { PUBLIC_SITE_URL } from '../email-config.ts'
 import {
   buildGreetingName,
   EditorialEmailShell,
   EmailBodyText,
+  EmailCallout,
   EmailCard,
+  EmailHighlightBox,
+  EmailRouteBox,
+  EmailSectionLabel,
+  EmailSignalPills,
   resolveEmailLanguage,
 } from './theme.tsx'
 
@@ -35,10 +41,16 @@ const COPY = {
     stepAccept: 'Apri le tue prenotazioni, accetta l\'invito e le condizioni di partecipazione.',
     stepPay: 'Versa la tua quota equa di contributo alle spese vive del viaggio per confermare la partecipazione.',
     noPay: 'Per questo viaggio il contributo è già coperto da chi ti ha invitato: dovrai solo accettare le condizioni.',
+    accountNote: 'Usa la stessa email su cui hai ricevuto questo invito: così il portale riconosce automaticamente la tua partecipazione.',
+    privateVoyage: 'Viaggio privato',
+    sharedCosts: 'Spese condivise',
+    portalAccount: 'Account personale',
     deposit: 'Quota contributo viaggio',
     cta: 'Vai alle prenotazioni',
     voyageFallback: 'un viaggio',
     legsTitle: 'Tratte',
+    summaryTitle: 'Dettagli invito',
+    nextTitle: 'Prossimi passi',
     footerReason: 'Ricevi questa email perché sei stato invitato a un viaggio su BITE.',
   },
   en: {
@@ -55,13 +67,26 @@ const COPY = {
     stepAccept: 'Open your bookings, accept the invitation and the participation terms.',
     stepPay: 'Pay your fair-share contribution to the voyage out-of-pocket costs to confirm participation.',
     noPay: 'For this voyage your contribution is already covered by whoever invited you: you only need to accept the terms.',
+    accountNote: 'Use the same email address that received this invite: the portal will then recognise your participation automatically.',
+    privateVoyage: 'Private voyage',
+    sharedCosts: 'Shared costs',
+    portalAccount: 'Personal account',
     deposit: 'Voyage contribution share',
     cta: 'Go to bookings',
     voyageFallback: 'a voyage',
     legsTitle: 'Legs',
+    summaryTitle: 'Invite details',
+    nextTitle: 'Next steps',
     footerReason: 'You are receiving this email because you were invited to a voyage on BITE.',
   },
 } as const
+
+const Step = ({ number, children }: { number: string; children: React.ReactNode }) => (
+  <Section style={stepRow}>
+    <Text style={stepNumber}>{number}</Text>
+    <Text style={stepText}>{children}</Text>
+  </Section>
+)
 
 const VoyageParticipantInviteEmail = ({
   language,
@@ -100,36 +125,57 @@ const VoyageParticipantInviteEmail = ({
       primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
       footerReason={copy.footerReason}
     >
+      <EmailSignalPills items={[copy.privateVoyage, copy.sharedCosts, copy.portalAccount]} />
+
       <EmailCard>
+        <EmailSectionLabel>{copy.summaryTitle}</EmailSectionLabel>
         <EmailBodyText>
           <strong>{resolvedVoyageName}</strong>
         </EmailBodyText>
-        {safeLegs.length ? (
-          <EmailBodyText muted>
-            {copy.legsTitle}: {safeLegs.join(' · ')}
-          </EmailBodyText>
-        ) : null}
+        <EmailRouteBox label={copy.legsTitle} routes={safeLegs} />
         {requiresPayment && depositLabel ? (
-          <EmailBodyText muted>
-            {copy.deposit}: {depositLabel}
-          </EmailBodyText>
+          <EmailHighlightBox label={copy.deposit} value={depositLabel} />
         ) : null}
       </EmailCard>
 
       <EmailCard>
-        <EmailBodyText>
-          <strong>{copy.steps}</strong>
-        </EmailBodyText>
-        <EmailBodyText muted>1. {copy.stepRegister}</EmailBodyText>
-        <EmailBodyText muted>2. {copy.stepAccept}</EmailBodyText>
-        {requiresPayment ? (
-          <EmailBodyText muted>3. {copy.stepPay}</EmailBodyText>
-        ) : (
-          <EmailBodyText muted>{copy.noPay}</EmailBodyText>
-        )}
+        <EmailSectionLabel>{copy.nextTitle}</EmailSectionLabel>
+        <Step number="01">{copy.stepRegister}</Step>
+        <Step number="02">{copy.stepAccept}</Step>
+        {requiresPayment ? <Step number="03">{copy.stepPay}</Step> : <EmailCallout>{copy.noPay}</EmailCallout>}
+        <EmailBodyText muted>{copy.accountNote}</EmailBodyText>
       </EmailCard>
     </EditorialEmailShell>
   )
+}
+
+const stepRow = {
+  borderTop: '1px solid #e6ddd1',
+  margin: '0',
+  padding: '14px 0 0',
+}
+
+const stepNumber = {
+  color: '#3f7c7a',
+  display: 'inline-block',
+  fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif",
+  fontSize: '11px',
+  fontWeight: '800' as const,
+  letterSpacing: '0.14em',
+  margin: '0 10px 0 0',
+  verticalAlign: 'top',
+  width: '34px',
+}
+
+const stepText = {
+  color: '#3d4654',
+  display: 'inline-block',
+  fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif",
+  fontSize: '14px',
+  lineHeight: '1.65',
+  margin: '0 0 14px',
+  verticalAlign: 'top',
+  width: 'calc(100% - 52px)',
 }
 
 export const template = {

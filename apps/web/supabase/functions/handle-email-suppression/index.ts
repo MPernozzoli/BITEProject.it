@@ -1,8 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { WebhookError, verifyWebhookRequest } from 'npm:@lovable.dev/webhooks-js'
-import {
-  normalizeEmailNotificationPreferences,
-} from '../_shared/email-preferences.ts'
 
 // Suppression event payload sent by the Go API when Mailgun reports
 // a bounce, complaint, or unsubscribe.
@@ -105,17 +102,19 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Failed to write suppression' }, 500)
   }
 
-  const disabledPreferences = normalizeEmailNotificationPreferences({
+  const disabledEmailPreferences = {
     newsletter_enabled: false,
     digest_enabled: false,
     story_notifications_enabled: false,
-  })
+    like_notifications_frequency: 'none',
+    comment_notifications_frequency: 'none',
+  }
 
   const { error: preferenceError } = await supabase
     .from('email_notification_preferences')
     .upsert({
       email: normalizedEmail,
-      ...disabledPreferences,
+      ...disabledEmailPreferences,
       updated_at: new Date().toISOString(),
     })
 
@@ -170,7 +169,7 @@ Deno.serve(async (req) => {
         source: 'suppression_webhook',
         reason_code: 'mailbox_provider_unsubscribe',
         reason_text: null,
-        unsubscribe_scope: disabledPreferences,
+        unsubscribe_scope: disabledEmailPreferences,
         message_context: payload.metadata ?? null,
       })
 

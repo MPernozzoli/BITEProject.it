@@ -16,7 +16,9 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - Mail ordinarie/casella admin: `@biteproject.it`.
 - Package installato: `@pynkstudio/mailapp` da `https://github.com/PynkStudio/pynkstudio-mailapp`; questa app Vite usa API Vercel dedicate invece dei server action Next del package.
 - Console admin: `/admin/mail` (`AdminMail.tsx`) con inbox, inviate, preferite, archivio, spam, compose e webhook Resend → [[10 - API Vercel]].
-- Inbound mail: il webhook risolve alias admin da `admin_email_aliases` (`massimo`, `massimo.pernozzoli`, `mpernozzoli`, ecc. generati da profilo/email admin). Se c'è un match unico assegna e invia push a quell'admin; se non determina l'assegnazione notifica tutti gli admin.
+- UX console mail: lista e dettaglio non mostrano più badge dominio/routing come elementi primari; mittente/destinatari e anteprima corpo hanno priorità visiva. Le citazioni testuali vengono collassate in stile Apple Mail con "Mostra di più da..." e "Nascondi".
+- Inbound mail: il webhook `webhooks/email/inbound.ts` riceve `email.received`, usa l'ID Resend per chiamare `GET /emails/receiving/:id` e salva corpo plain/html, header e attachment metadata in `inbound_emails`. `email/inbox.ts` idrata anche i record legacy senza corpo quando hanno `resend_email_id`. La UI `/admin/mail` preferisce `text_body` quando presente, così preserva e visualizza i livelli di citazione (`>`, `>>`, ecc.); l'HTML è fallback sanificato.
+- Routing inbound: il webhook risolve alias admin da `admin_email_aliases` (`massimo`, `massimo.pernozzoli`, `mpernozzoli`, ecc. generati da profilo/email admin). Se c'è un match unico assegna e invia push a quell'admin; se non determina l'assegnazione notifica tutti gli admin.
 - Implementazione assegnazione inbound: `apps/web/src/server/mail-push.ts` carica prima `user_roles.user_id` e poi i profili admin con una query separata su `profiles`; non usare embed PostgREST `user_roles -> profiles` perché `user_roles` non dichiara una FK verso `profiles`.
 
 ## Iscrizione & gestione
@@ -31,7 +33,7 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
 - `send-newsletter-digest` — digest periodico
 - `process-email-queue` — worker della coda email (verify_jwt). Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) ed eventuale cron `pg_cron` lato dashboard Supabase (non versionato).
-- `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima
+- `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
 
 ## Tracking
 - `newsletter-track-open` — pixel apertura
@@ -43,20 +45,24 @@ Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge
 - `publish-scheduled-articles` — pubblicazione programmata
 - `dispatch-engagement-notifications` — like/commenti/letture
 - `dispatch-voyage-booking-notifications` — eventi booking, email e push admin → [[13 - Booking Voyage]]
-- Booking voyage: la coda `voyage_booking_notifications` copre conferma richiesta, waitlist, approvazione admin, conferma utente, cancellazione, rifiuto, promozione dalla waitlist, aggiunta manuale, pagamento in sospeso/ricevuto/scaduto, cambio planning e notifiche admin correlate. Gli eventi admin (`admin_*`) inviano anche Web Push agli admin con device registrato; `push_sent_at` evita invii duplicati.
+- Booking voyage: la coda `voyage_booking_notifications` copre conferma richiesta, waitlist, approvazione admin, conferma utente, cancellazione, rifiuto, promozione dalla waitlist, aggiunta manuale, pagamento in sospeso/ricevuto/scaduto, cambio planning e notifiche admin correlate. Le mail utente e admin usano la stessa struttura visuale: pill di stato, riepilogo operativo, box tratte, importi evidenziati e callout messaggi. Gli eventi admin (`admin_*`) inviano anche Web Push agli admin con device registrato; `push_sent_at` evita invii duplicati.
 - Cambi planning booking: `voyage_booking_plan_changes` accoda `plan_change_pending` quando serve approvazione utente. La mail mostra tratte prima/proposta e rimanda al booking per accettare, annullare con rimborso completo o chiedere una variazione; i cambi auto-accettati per equipaggio non richiedono approvazione manuale.
-- Inviti partecipanti: `/api/bookings/invite` invia `voyage-participant-invite` agli ospiti ancora pending e marca `invite_sent_at`.
+- Inviti partecipanti: `/api/bookings/invite` invia il template React Email `voyage-participant-invite` agli ospiti ancora pending e marca `invite_sent_at`; può essere chiamato dal lead oppure dall'admin quando l'invito nasce da `/admin/bookings` con email esterna. La lingua dell'invito segue la lingua del sito al momento dell'invio (`/it` → italiano, `/en` → inglese) e il link punta alla sezione booking nella stessa lingua.
 
 ## Auth email
 - `auth-email-hook` (no JWT) — intercetta email di autenticazione Supabase
 - Template React-email in `apps/web/supabase/functions/_shared/email-templates/`: `signup`, `recovery`, `magic-link`, `invite`, `email-change`, `reauthentication`
 
 ## Template & helper condivisi
-`_shared/`: `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `system-email-automation.ts`, `transactional-email-templates/`.
+`_shared/`: `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `system-email-automation.ts`, `transactional-email-templates/`. In `transactional-email-templates/theme.tsx` vivono i componenti condivisi di brand; `voyage-participant-invite` usa layout card, riepilogo tratta/contributo e step numerati per guidare signup/login, compilazione dati candidato e conferma.
 
 ## Push (Web Push)
-- `vapid-public-key` — espone la chiave pubblica VAPID; gestione preferenze notifiche in `ProfileNotificationsMenu.tsx`.
-- Le push admin booking e mail usano `push_subscriptions` e le variabili `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`.
+- `vapid-public-key` — espone la chiave pubblica VAPID; gestione preferenze notifiche in `ProfileNotificationsMenu.tsx` / `AdminProfile.tsx`.
+- Le push usano `push_subscriptions` e le variabili `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`.
+- Su iOS/iPadOS la richiesta permesso funziona solo dalla web app installata in Home e dopo tap utente. `AdminProfile.tsx` rilegge lo stato al ritorno da Impostazioni/focus e distingue permesso negato da errori di registrazione device.
+- Preferenze granulari in `email_notification_preferences`: `push_publication_enabled` (articoli/storie), `push_engagement_enabled` (like/commenti), `push_mail_enabled` (mail admin), `push_voyage_admin_enabled` (booking da gestire), `push_voyage_user_enabled` (booking/viaggi dell'utente).
+- `AdminProfile.tsx` mostra solo i controlli applicabili: mail e viaggi admin solo agli admin; viaggi utente solo a chi ha almeno una richiesta/partecipazione booking.
+- Regola per nuovi sistemi push: ogni nuovo dominio che invia Web Push deve dichiarare una colonna/preferenza dedicata o riusare esplicitamente una categoria esistente, filtrare l'invio lato server prima di leggere/spedire le subscription e documentare il controllo in questa sezione.
 
 ## Collegamenti
 - [[09 - Edge Functions]] · [[16 - Admin]] (AdminNewsletterManager)

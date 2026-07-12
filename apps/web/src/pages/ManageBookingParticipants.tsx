@@ -7,10 +7,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import { getLocalizedBookingVoyageName, type BookingVoyage } from "@/lib/booking-utils";
 import {
+  CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
   depositForPayerEur,
   formatDepositEur,
   perPersonDepositEur,
+  shouldApplyContributionFixedMinimum,
   type DepositLeg,
+  type PriorVoyageContributionBooking,
 } from "@/lib/booking-deposit";
 import {
   saveBookingParticipants,
@@ -25,6 +28,7 @@ type QueryResult<T> = Promise<{ data: T | null; error: { message?: string } | nu
 type QueryBuilder<T> = QueryResult<T> & {
   select: (columns?: string) => QueryBuilder<T>;
   eq: (column: string, value: unknown) => QueryBuilder<T>;
+  neq: (column: string, value: unknown) => QueryBuilder<T>;
   in: (column: string, values: unknown[]) => QueryBuilder<T>;
   order: (column: string, options?: { ascending?: boolean }) => QueryBuilder<T>;
   maybeSingle: () => QueryResult<T>;
@@ -42,6 +46,7 @@ const ManageBookingParticipants = () => {
 
   const [loading, setLoading] = useState(true);
   const [voyage, setVoyage] = useState<BookingVoyage | null>(null);
+  const [priorVoyageContributionBookings, setPriorVoyageContributionBookings] = useState<PriorVoyageContributionBooking[]>([]);
   const [partySize, setPartySize] = useState(1);
   const [legs, setLegs] = useState<DepositLeg[]>([]);
   const [guests, setGuests] = useState<ParticipantInput[]>([]);
@@ -76,6 +81,14 @@ const ManageBookingParticipants = () => {
     setPartySize(size);
     setGuests(Array.from({ length: size - 1 }, () => ({ first_name: "", last_name: "", email: "" })));
 
+    const { data: priorBookings } = await q<PriorVoyageContributionBooking[]>("voyage_booking_requests")
+      .select("id, voyage_id, status")
+      .eq("profile_id", session.user.id)
+      .eq("voyage_id", request.voyage_id)
+      .neq("id", id)
+      .in("status", [...CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES]);
+    setPriorVoyageContributionBookings(priorBookings ?? []);
+
     const { data: voyageRow } = await q<BookingVoyage>("voyages")
       .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
       .eq("id", request.voyage_id)
@@ -105,14 +118,23 @@ const ManageBookingParticipants = () => {
   }, [load]);
 
   const contributionPerNmEur = voyage?.booking_contribution_per_nm_eur;
-  const perPerson = useMemo(() => perPersonDepositEur(legs, { contributionPerNmEur }), [contributionPerNmEur, legs]);
+  const contributionOptions = useMemo(
+    () => ({
+      contributionPerNmEur,
+      fixedMinimumEur: shouldApplyContributionFixedMinimum(priorVoyageContributionBookings, voyage?.id, id)
+        ? undefined
+        : 0,
+    }),
+    [contributionPerNmEur, id, priorVoyageContributionBookings, voyage?.id],
+  );
+  const perPerson = useMemo(() => perPersonDepositEur(legs, contributionOptions), [contributionOptions, legs]);
   const leadPaysAllTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }, { contributionPerNmEur }),
-    [contributionPerNmEur, legs, partySize]
+    () => depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }, contributionOptions),
+    [contributionOptions, legs, partySize]
   );
   const leadPaysMeTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, { contributionPerNmEur }),
-    [contributionPerNmEur, legs, partySize]
+    () => depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, contributionOptions),
+    [contributionOptions, legs, partySize]
   );
 
   const updateGuest = (index: number, field: keyof ParticipantInput, value: string) => {
@@ -155,7 +177,7 @@ const ManageBookingParticipants = () => {
         }))
       );
 
-      const invite = await sendBookingInvites(id);
+      const invite = await sendBookingInvites(id, lang === "en" ? "en" : "it");
       if ("notConfigured" in invite) {
         toast.info(
           lang === "it"

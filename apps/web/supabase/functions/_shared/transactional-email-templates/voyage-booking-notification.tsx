@@ -5,7 +5,13 @@ import {
   buildGreetingName,
   EditorialEmailShell,
   EmailBodyText,
+  EmailCallout,
   EmailCard,
+  EmailDetailRow,
+  EmailHighlightBox,
+  EmailRouteBox,
+  EmailSectionLabel,
+  EmailSignalPills,
   resolveEmailLanguage,
 } from './theme.tsx'
 
@@ -83,6 +89,10 @@ const COPY = {
     },
     cta: 'Apri booking',
     voyageFallback: 'questo viaggio',
+    summaryTitle: 'Dettagli booking',
+    paymentTitle: 'Pagamento',
+    planTitle: 'Cambio planning',
+    messageTitle: 'Messaggio',
     legsTitle: 'Tratte',
     oldLegsTitle: 'Prima',
     proposedLegsTitle: 'Proposta',
@@ -91,6 +101,22 @@ const COPY = {
     paymentMethod: 'Metodo',
     paymentReference: 'Riferimento',
     paymentExpiresAt: 'Scadenza',
+    status: {
+      requested: 'Richiesta ricevuta',
+      waitlisted: 'Waiting list',
+      admin_approved: 'Da confermare',
+      user_confirmed: 'Confermato',
+      cancelled: 'Annullato',
+      rejected: 'Non confermato',
+      promoted_from_waitlist: 'Posto disponibile',
+      manual_added: 'Aggiunto da admin',
+      payment_pending: 'Pagamento in sospeso',
+      payment_received: 'Pagamento ricevuto',
+      payment_failed: 'Pagamento non riuscito',
+      payment_expired: 'Pagamento scaduto',
+      plan_change_pending: 'Richiede risposta',
+      plan_change_auto_accepted: 'Aggiornato',
+    },
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
   en: {
@@ -131,6 +157,10 @@ const COPY = {
     },
     cta: 'Open bookings',
     voyageFallback: 'this voyage',
+    summaryTitle: 'Booking details',
+    paymentTitle: 'Payment',
+    planTitle: 'Plan change',
+    messageTitle: 'Message',
     legsTitle: 'Legs',
     oldLegsTitle: 'Before',
     proposedLegsTitle: 'Proposed',
@@ -139,6 +169,22 @@ const COPY = {
     paymentMethod: 'Method',
     paymentReference: 'Reference',
     paymentExpiresAt: 'Deadline',
+    status: {
+      requested: 'Request received',
+      waitlisted: 'Waiting list',
+      admin_approved: 'Ready to confirm',
+      user_confirmed: 'Confirmed',
+      cancelled: 'Cancelled',
+      rejected: 'Not confirmed',
+      promoted_from_waitlist: 'Berth available',
+      manual_added: 'Added by admin',
+      payment_pending: 'Payment pending',
+      payment_received: 'Payment received',
+      payment_failed: 'Payment failed',
+      payment_expired: 'Payment expired',
+      plan_change_pending: 'Needs reply',
+      plan_change_auto_accepted: 'Updated',
+    },
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
 } as const
@@ -222,42 +268,37 @@ const VoyageBookingNotificationEmail = ({
       footerReason={copy.footerReason}
       unsubscribeUrl={unsubscribeUrl}
     >
+      <EmailSignalPills
+        items={[
+          copy.status[normalizedEventType],
+          partySize ? `${copy.partySize}: ${partySize}` : null,
+          safeLegs.length ? `${safeLegs.length} ${copy.legsTitle.toLowerCase()}` : null,
+        ]}
+      />
+
       <EmailCard>
+        <EmailSectionLabel>{copy.summaryTitle}</EmailSectionLabel>
         <EmailBodyText>
           <strong>{resolvedVoyageName}</strong>
         </EmailBodyText>
-        {partySize ? (
-          <EmailBodyText muted>
-            {copy.partySize}: {partySize}
-          </EmailBodyText>
-        ) : null}
-        {safeLegs.length ? (
-          <EmailBodyText muted>
-            {copy.legsTitle}: {safeLegs.join(' · ')}
-          </EmailBodyText>
-        ) : null}
-        {message?.trim() ? <EmailBodyText muted>{message.trim()}</EmailBodyText> : null}
+        <EmailDetailRow label={copy.partySize} value={partySize ? String(partySize) : null} />
+        <EmailRouteBox label={copy.legsTitle} routes={safeLegs} />
+        {message?.trim() ? <EmailCallout>{message.trim()}</EmailCallout> : null}
       </EmailCard>
       {amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
         <EmailCard>
-          {amountLabel ? <EmailBodyText muted>{copy.amount}: {amountLabel}</EmailBodyText> : null}
-          {paymentMethod ? <EmailBodyText muted>{copy.paymentMethod}: {paymentMethod}</EmailBodyText> : null}
-          {paymentReference ? <EmailBodyText muted>{copy.paymentReference}: {paymentReference}</EmailBodyText> : null}
-          {paymentExpiresAtLabel ? <EmailBodyText muted>{copy.paymentExpiresAt}: {paymentExpiresAtLabel}</EmailBodyText> : null}
+          <EmailSectionLabel>{copy.paymentTitle}</EmailSectionLabel>
+          {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
+          <EmailDetailRow label={copy.paymentMethod} value={paymentMethod} />
+          <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
+          <EmailDetailRow label={copy.paymentExpiresAt} value={paymentExpiresAtLabel} />
         </EmailCard>
       ) : null}
       {safeOldLegs.length || safeProposedLegs.length ? (
         <EmailCard>
-          {safeOldLegs.length ? (
-            <EmailBodyText muted>
-              {copy.oldLegsTitle}: {safeOldLegs.join(' · ')}
-            </EmailBodyText>
-          ) : null}
-          {safeProposedLegs.length ? (
-            <EmailBodyText muted>
-              {copy.proposedLegsTitle}: {safeProposedLegs.join(' · ')}
-            </EmailBodyText>
-          ) : null}
+          <EmailSectionLabel>{copy.planTitle}</EmailSectionLabel>
+          <EmailRouteBox label={copy.oldLegsTitle} routes={safeOldLegs} />
+          <EmailRouteBox label={copy.proposedLegsTitle} routes={safeProposedLegs} />
         </EmailCard>
       ) : null}
     </EditorialEmailShell>

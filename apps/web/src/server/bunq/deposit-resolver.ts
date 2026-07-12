@@ -63,6 +63,46 @@ function paymentDeadlineIso(base = new Date()): string {
   return new Date(base.getTime() + PAYMENT_PENDING_DEADLINE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
+async function hasPriorActiveVoyageBookingForPayer(
+  db: SupabaseClient,
+  params: {
+    voyageId: string;
+    currentBookingRequestId: string;
+    profileId: string | null;
+    email: string;
+  },
+): Promise<boolean> {
+  const { data: priorRequests, error: requestError } = await db
+    .from("voyage_booking_requests")
+    .select("id, profile_id")
+    .eq("voyage_id", params.voyageId)
+    .neq("id", params.currentBookingRequestId)
+    .in("status", [...ACTIVE_STATUSES]);
+  if (requestError) throw new Error(requestError.message);
+
+  const requestRows = (priorRequests ?? []) as Array<{ id: string; profile_id: string | null }>;
+  if (params.profileId && requestRows.some((request) => request.profile_id === params.profileId)) {
+    return true;
+  }
+
+  const priorRequestIds = requestRows.map((request) => request.id);
+  if (priorRequestIds.length === 0) return false;
+
+  const participantFilters = [`email.eq.${params.email.toLowerCase()}`];
+  if (params.profileId) participantFilters.push(`profile_id.eq.${params.profileId}`);
+
+  const { data: participant, error: participantError } = await db
+    .from("voyage_booking_participants")
+    .select("id")
+    .in("booking_request_id", priorRequestIds)
+    .in("status", ["pending", "accepted"])
+    .or(participantFilters.join(","))
+    .limit(1)
+    .maybeSingle();
+  if (participantError) throw new Error(participantError.message);
+  return Boolean(participant);
+}
+
 /** Verifies the bearer token and returns the caller + a service-role db client. */
 export async function resolveCaller(token: string): Promise<{ db: SupabaseClient; user: User }> {
   const auth = createAuthClient();
@@ -85,6 +125,8 @@ export async function resolveDepositPayer(
   participantId: string | null,
 ): Promise<ResolvedDeposit> {
   const userEmail = (user.email ?? "").toLowerCase();
+  const counterpartyEmail = user.email;
+  if (!counterpartyEmail) throw new DepositHttpError(409, { error: "missing_user_email" });
 
   const { data: request, error: requestError } = await db
     .from("voyage_booking_requests")
@@ -136,6 +178,7 @@ export async function resolveDepositPayer(
 
   const isLead = payer?.is_lead ?? true;
   const payerParticipantId = payer?.id ?? null;
+  const payerProfileId = isLead ? bookingOwnerId : payer?.profile_id ?? null;
 
   const { data: legLinks, error: legLinkError } = await db
     .from("voyage_booking_request_legs")
@@ -164,8 +207,18 @@ export async function resolveDepositPayer(
     (voyageRow as { booking_contribution_per_nm_eur?: number } | null)?.booking_contribution_per_nm_eur ?? 0.9,
   );
 
-  const perPersonEur = perPersonDepositEur(legs, { contributionPerNmEur });
-  const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, { contributionPerNmEur });
+  const payerAlreadyHasVoyageBooking = await hasPriorActiveVoyageBookingForPayer(db, {
+    voyageId,
+    currentBookingRequestId: bookingRequestId,
+    profileId: payerProfileId,
+    email: userEmail,
+  });
+  const contributionOpts = {
+    contributionPerNmEur,
+    fixedMinimumEur: payerAlreadyHasVoyageBooking ? 0 : undefined,
+  };
+  const perPersonEur = perPersonDepositEur(legs, contributionOpts);
+  const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
   if (amountEur <= 0) throw new DepositHttpError(409, { error: "zero_deposit" });
   if (amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR) {
     throw new DepositHttpError(409, {
@@ -176,9 +229,6 @@ export async function resolveDepositPayer(
   }
 
   const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
-  const counterpartyEmail = user.email;
-  if (!counterpartyEmail) throw new DepositHttpError(409, { error: "missing_user_email" });
-
   return {
     db,
     user,

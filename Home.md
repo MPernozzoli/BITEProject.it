@@ -19,7 +19,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[03 - Routing e i18n]] — rotte, lingue, sottodominio admin
 
 ### Frontend
-- [[05 - Frontend - Pagine]] — le 28 pagine dell'app
+- [[05 - Frontend - Pagine]] — le 29 pagine dell'app
 - [[06 - Frontend - Componenti]] — libreria componenti (UI, admin, booking, voyage)
 - [[07 - Frontend - Lib e Hooks]] — logica condivisa lato client
 

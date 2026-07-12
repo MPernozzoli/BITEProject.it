@@ -62,10 +62,12 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
   let bookingRequestId: string;
   let resend = false;
+  let requestedLanguage: "it" | "en" = "it";
   try {
-    const body = await readJsonBody<{ bookingRequestId?: string; resend?: boolean }>(req);
+    const body = await readJsonBody<{ bookingRequestId?: string; resend?: boolean; language?: string }>(req);
     bookingRequestId = String(body.bookingRequestId ?? "").trim();
     resend = body.resend === true;
+    requestedLanguage = body.language === "en" ? "en" : "it";
     if (!bookingRequestId) {
       sendJson(res, 400, { error: "missing_booking_request_id" });
       return;
@@ -83,7 +85,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   }
 
   try {
-    // 1. Resolve the caller and verify booking ownership.
+    // 1. Resolve the caller and verify booking ownership/admin permission.
     const auth = createAuthClient();
     const { data: userData, error: userError } = await auth.auth.getUser(token);
     if (userError || !userData?.user) {
@@ -98,7 +100,14 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       .select("id, profile_id, voyage_id, payment_mode")
       .eq("id", bookingRequestId)
       .maybeSingle();
-    if (!request || (request as { profile_id: string }).profile_id !== user.id) {
+    const { data: roleRows } = await db
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .limit(1);
+    const isAdmin = (roleRows ?? []).length > 0;
+    if (!request || ((request as { profile_id: string }).profile_id !== user.id && !isAdmin)) {
       sendJson(res, 404, { error: "booking_not_found" });
       return;
     }
@@ -109,14 +118,14 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     // 2. Gather email context: voyage name, inviter name, per-person contribution.
     const [{ data: voyage }, { data: inviter }] = await Promise.all([
       db.from("voyages").select("name, name_it, name_en, booking_contribution_per_nm_eur").eq("id", voyageId).maybeSingle(),
-      db.from("profiles").select("name, preferred_language").eq("id", user.id).maybeSingle(),
+      db.from("profiles").select("name").eq("id", user.id).maybeSingle(),
     ]);
     const voyageName =
       (voyage as { name_it?: string; name_en?: string; name?: string } | null)?.name_it ||
       (voyage as { name?: string } | null)?.name ||
       "";
     const inviterName = (inviter as { name?: string } | null)?.name || "";
-    const language = (inviter as { preferred_language?: string } | null)?.preferred_language === "en" ? "en" : "it";
+    const language = requestedLanguage;
     const contributionPerNmEur = Number(
       (voyage as { booking_contribution_per_nm_eur?: number } | null)?.booking_contribution_per_nm_eur ?? 0.9,
     );
@@ -163,7 +172,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           voyageName,
           requiresPayment,
           depositEur: requiresPayment ? depositEur : 0,
-          bookingUrl: `${siteUrl()}/bookings`,
+          bookingUrl: `${siteUrl()}/${language}/bookings`,
         },
       });
       if (ok) {

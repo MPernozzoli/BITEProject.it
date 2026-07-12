@@ -48,7 +48,7 @@ interface BookingGanttTableProps {
   /** Persist a request's leg range after a drag-resize; nextLegIds is the full new set. */
   onResize: (requestId: string, nextLegIds: string[]) => Promise<void>;
   /** Create brand-new single-leg bookings from a column's "+" pill. */
-  onAddPeople: (legId: string, profileIds: string[]) => Promise<void>;
+  onAddPeople: (legId: string, profileIds: string[], inviteEmails: string[]) => Promise<void>;
 }
 
 /** A contiguous run of leg-column indices a booking occupies. */
@@ -97,6 +97,7 @@ const duplicateBlockingStatuses = new Set<VoyageBookingStatus>([
 ]);
 
 const getProfileLabel = (profile: BookingProfile) => profile.name || profile.email || "Profilo senza nome";
+const emailValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 const getProfileInitials = (profile: BookingProfile) => {
   const source = getProfileLabel(profile).trim();
@@ -145,6 +146,7 @@ const BookingGanttTable = ({
   dragRef.current = drag;
   const [addPersonLegId, setAddPersonLegId] = useState<string | null>(null);
   const [addPersonProfileIds, setAddPersonProfileIds] = useState<string[]>([]);
+  const [addPersonInviteEmail, setAddPersonInviteEmail] = useState("");
   const [addPersonBusy, setAddPersonBusy] = useState(false);
   const [addPersonPickerOpen, setAddPersonPickerOpen] = useState(false);
 
@@ -250,15 +252,19 @@ const BookingGanttTable = ({
   const openAddPerson = (legId: string) => {
     setAddPersonLegId(legId);
     setAddPersonProfileIds([]);
+    setAddPersonInviteEmail("");
     setAddPersonPickerOpen(false);
   };
 
   const submitAddPerson = async () => {
-    if (!addPersonLegId || addPersonProfileIds.length === 0) return;
+    const inviteEmail = addPersonInviteEmail.trim().toLowerCase();
+    const inviteEmails = emailValid(inviteEmail) ? [inviteEmail] : [];
+    if (!addPersonLegId || (addPersonProfileIds.length === 0 && inviteEmails.length === 0)) return;
     setAddPersonBusy(true);
-    await onAddPeople(addPersonLegId, addPersonProfileIds);
+    await onAddPeople(addPersonLegId, addPersonProfileIds, inviteEmails);
     setAddPersonBusy(false);
     setAddPersonLegId(null);
+    setAddPersonInviteEmail("");
     setAddPersonPickerOpen(false);
   };
 
@@ -277,10 +283,14 @@ const BookingGanttTable = ({
             const alreadyOnLeg = activeProfileIdsByLeg.get(leg.id) || new Set<string>();
             const selectableProfiles = uniqueAvailableProfiles.filter((profile) => !alreadyOnLeg.has(profile.id));
             const selectedProfiles = selectableProfiles.filter((profile) => addPersonProfileIds.includes(profile.id));
+            const inviteEmail = addPersonInviteEmail.trim().toLowerCase();
+            const hasInviteEmail = inviteEmail.length > 0;
+            const inviteEmailReady = emailValid(inviteEmail);
+            const selectedCount = addPersonProfileIds.length + (inviteEmailReady ? 1 : 0);
             const toggleSelectedProfile = (profileId: string) => {
               setAddPersonProfileIds((current) => {
                 if (current.includes(profileId)) return current.filter((id) => id !== profileId);
-                if (current.length >= remainingSeats) return current;
+                if (current.length + (inviteEmailReady ? 1 : 0) >= remainingSeats) return current;
                 return [...current, profileId];
               });
             };
@@ -360,7 +370,7 @@ const BookingGanttTable = ({
                                   onSelect={() => {
                                     toggleSelectedProfile(profile.id);
                                   }}
-                                  disabled={!addPersonProfileIds.includes(profile.id) && addPersonProfileIds.length >= remainingSeats}
+                                  disabled={!addPersonProfileIds.includes(profile.id) && selectedCount >= remainingSeats}
                                   className="gap-2"
                                 >
                                   <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent/10 text-[10px] font-semibold text-accent">
@@ -394,19 +404,36 @@ const BookingGanttTable = ({
                         </Command>
                       </PopoverContent>
                     </Popover>
+                    <div className="mb-2 rounded-xl border border-border/70 bg-background/70 p-2">
+                      <label className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        Altri...
+                      </label>
+                      <input
+                        type="email"
+                        value={addPersonInviteEmail}
+                        onChange={(event) => setAddPersonInviteEmail(event.target.value)}
+                        disabled={remainingSeats === 0 || addPersonProfileIds.length >= remainingSeats}
+                        placeholder="email@example.com"
+                        className="w-full rounded-lg border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus:border-accent disabled:opacity-50"
+                      />
+                      {hasInviteEmail && !inviteEmailReady && (
+                        <p className="mt-1 text-[10px] text-amber-700">Inserisci una email valida.</p>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => void submitAddPerson()}
-                        disabled={addPersonBusy || addPersonProfileIds.length === 0}
+                        disabled={addPersonBusy || selectedCount === 0 || (hasInviteEmail && !inviteEmailReady)}
                         className="glass-chip inline-flex flex-1 items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-foreground hover:text-accent disabled:opacity-50"
                       >
-                        <Check size={12} /> Aggiungi {addPersonProfileIds.length || ""}
+                        <Check size={12} /> Aggiungi {selectedCount || ""}
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setAddPersonLegId(null);
+                          setAddPersonInviteEmail("");
                           setAddPersonPickerOpen(false);
                         }}
                         className="glass-chip inline-flex items-center justify-center px-2 py-1.5 text-[11px] text-muted-foreground"

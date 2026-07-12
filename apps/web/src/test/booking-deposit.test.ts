@@ -66,6 +66,11 @@ describe("booking deposit", () => {
     expect(perPersonDepositEur(legs)).toBe(CONTRIBUTION_FIXED_MINIMUM_EUR + (30 * DEFAULT_CONTRIBUTION_PER_NM_EUR));
   });
 
+  it("can skip the fixed minimum when already applied on the voyage", () => {
+    const legs = [makeLeg({ planned_nautical_miles: 10 }), makeLeg({ planned_nautical_miles: 20 })];
+    expect(perPersonDepositEur(legs, { fixedMinimumEur: 0 })).toBe(30 * DEFAULT_CONTRIBUTION_PER_NM_EUR);
+  });
+
   it("multiplies the per-person amount by the party size", () => {
     const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €20 + €9 = €29 per person
     expect(totalDepositEur(legs, 3)).toBe(87);
@@ -78,6 +83,17 @@ describe("booking deposit", () => {
   it("charges the lead the whole party in lead_pays_all", () => {
     const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €29 per person
     expect(depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize: 3 })).toBe(87);
+  });
+
+  it("does not multiply a skipped voyage fixed minimum in lead_pays_all", () => {
+    const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €9 per person without the fixed minimum
+    expect(
+      depositForPayerEur(
+        legs,
+        { isLead: true, paymentMode: "lead_pays_all", partySize: 3 },
+        { fixedMinimumEur: 0 },
+      ),
+    ).toBe(27);
   });
 
   it("charges the lead only their share in each_pays_own", () => {

@@ -67,6 +67,12 @@ type PushSubscriptionRow = {
   enabled: boolean
 }
 
+type PushPreferenceRow = {
+  email: string
+  push_voyage_admin_enabled: boolean | null
+  push_voyage_user_enabled: boolean | null
+}
+
 function metadataString(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -230,6 +236,82 @@ function buildAdminPushMessage(params: {
   }
 }
 
+function buildUserPushMessage(params: {
+  eventType: string
+  language: string
+  voyageName: string
+  legLabels: string[]
+}) {
+  const voyageName = params.voyageName || (params.language === 'en' ? 'your voyage' : 'il tuo viaggio')
+  const legs = params.legLabels.length ? ` (${params.legLabels.join(', ')})` : ''
+
+  if (params.language === 'en') {
+    if (params.eventType === 'approved') {
+      return { title: 'Booking approved', body: `Your booking for ${voyageName}${legs} was approved.` }
+    }
+    if (params.eventType === 'confirmed' || params.eventType === 'user_confirmed') {
+      return { title: 'Booking confirmed', body: `Your place on ${voyageName}${legs} is confirmed.` }
+    }
+    if (params.eventType === 'cancelled') {
+      return { title: 'Booking cancelled', body: `Your booking for ${voyageName}${legs} was cancelled.` }
+    }
+    if (params.eventType === 'rejected') {
+      return { title: 'Booking update', body: `Your request for ${voyageName}${legs} was declined.` }
+    }
+    if (params.eventType === 'waitlisted') {
+      return { title: 'Waitlist update', body: `You are on the waitlist for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'promoted') {
+      return { title: 'Waitlist promoted', body: `A place opened up for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'payment_pending') {
+      return { title: 'Payment pending', body: `Payment is pending for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'payment_received') {
+      return { title: 'Payment received', body: `Payment was received for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'payment_expired') {
+      return { title: 'Payment expired', body: `The payment window expired for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'plan_change_pending') {
+      return { title: 'Voyage plan changed', body: `A change for ${voyageName}${legs} needs your response.` }
+    }
+    return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
+  }
+
+  if (params.eventType === 'approved') {
+    return { title: 'Booking approvato', body: `La tua prenotazione per ${voyageName}${legs} e stata approvata.` }
+  }
+  if (params.eventType === 'confirmed' || params.eventType === 'user_confirmed') {
+    return { title: 'Booking confermato', body: `Il tuo posto su ${voyageName}${legs} e confermato.` }
+  }
+  if (params.eventType === 'cancelled') {
+    return { title: 'Booking annullato', body: `La tua prenotazione per ${voyageName}${legs} e stata annullata.` }
+  }
+  if (params.eventType === 'rejected') {
+    return { title: 'Aggiornamento booking', body: `La tua richiesta per ${voyageName}${legs} e stata rifiutata.` }
+  }
+  if (params.eventType === 'waitlisted') {
+    return { title: 'Aggiornamento waitlist', body: `Sei in lista d'attesa per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'promoted') {
+    return { title: 'Promozione waitlist', body: `Si e liberato un posto per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'payment_pending') {
+    return { title: 'Pagamento in attesa', body: `Pagamento in attesa per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'payment_received') {
+    return { title: 'Pagamento ricevuto', body: `Pagamento ricevuto per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'payment_expired') {
+    return { title: 'Pagamento scaduto', body: `La finestra di pagamento per ${voyageName}${legs} e scaduta.` }
+  }
+  if (params.eventType === 'plan_change_pending') {
+    return { title: 'Planning viaggio cambiato', body: `Una variazione per ${voyageName}${legs} richiede una tua risposta.` }
+  }
+  return { title: 'Aggiornamento booking viaggio', body: `C'e un aggiornamento per ${voyageName}${legs}.` }
+}
+
 async function sendPushNotification(params: {
   subscription: PushSubscriptionRow
   vapidSubject: string
@@ -327,23 +409,30 @@ Deno.serve(async (req) => {
   const profileRows = (profiles ?? []) as ProfileRow[]
   const voyageIds = [...new Set(bookingRows.map((row) => row.voyage_id))]
   const profileById = new Map(profileRows.map((row) => [row.id, row]))
-  const adminRecipientIds = [
-    ...new Set(pending.filter((row) => row.event_type.startsWith('admin_')).map((row) => row.recipient_profile_id)),
-  ]
+  const pushRecipientIds = [...new Set(pending.map((row) => row.recipient_profile_id))]
+  const recipientEmails = Array.from(
+    new Set(profileRows.map((row) => row.email?.trim().toLowerCase()).filter((value): value is string => Boolean(value)))
+  )
 
-  const [{ data: voyages }, { data: requestLegs }, { data: pushSubscriptionRows }] = await Promise.all([
+  const [{ data: voyages }, { data: requestLegs }, { data: pushSubscriptionRows }, { data: preferenceRows }] = await Promise.all([
     voyageIds.length
       ? supabase.from('voyages').select('id, name, name_it, name_en').in('id', voyageIds)
       : Promise.resolve({ data: [] }),
     requestIds.length
       ? supabase.from('voyage_booking_request_legs').select('booking_request_id, bookable_leg_id').in('booking_request_id', requestIds)
       : Promise.resolve({ data: [] }),
-    adminRecipientIds.length
+    pushRecipientIds.length
       ? supabase
           .from('push_subscriptions')
           .select('id, profile_id, endpoint, p256dh, auth, enabled')
-          .in('profile_id', adminRecipientIds)
+          .in('profile_id', pushRecipientIds)
           .eq('enabled', true)
+      : Promise.resolve({ data: [] }),
+    recipientEmails.length
+      ? supabase
+          .from('email_notification_preferences')
+          .select('email, push_voyage_admin_enabled, push_voyage_user_enabled')
+          .in('email', recipientEmails)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -379,6 +468,9 @@ Deno.serve(async (req) => {
     list.push(row)
     pushSubscriptionsByProfileId.set(row.profile_id, list)
   }
+  const pushPreferencesByEmail = new Map(
+    ((preferenceRows ?? []) as PushPreferenceRow[]).map((row) => [row.email.trim().toLowerCase(), row])
+  )
   const legsByRequestId = new Map<string, LegRow[]>()
   for (const link of requestLegRows) {
     const list = legsByRequestId.get(link.booking_request_id) ?? []
@@ -425,6 +517,7 @@ Deno.serve(async (req) => {
     const proposedTo = localizedName(waypointById.get(metadataString(metadata, 'proposed_to_waypoint_id') ?? ''), language)
     const oldLegs = oldFrom && oldTo ? [`${oldFrom} -> ${oldTo}`] : null
     const proposedLegs = proposedFrom && proposedTo ? [`${proposedFrom} -> ${proposedTo}`] : null
+    const adminMessage = metadataString(metadata, 'admin_message') ?? metadataString(metadata, 'admin_note')
     const amountEur = metadataNumber(metadata, 'amount_eur') ?? metadataNumber(metadata, 'amountEur')
     const paymentReference = metadataString(metadata, 'payment_reference') ?? metadataString(metadata, 'reference')
 
@@ -464,7 +557,7 @@ Deno.serve(async (req) => {
                 legs: legLabels,
                 partySize: booking.party_size,
                 bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
-                message: booking.message,
+                message: adminMessage ?? booking.message,
                 amountEur,
                 paymentMethod: metadataString(metadata, 'payment_method'),
                 paymentReference,
@@ -507,21 +600,37 @@ Deno.serve(async (req) => {
       continue
     }
 
-    const subscriptions = isAdminEvent
+    const recipientEmail = profile.email?.trim().toLowerCase() ?? ''
+    const pushPreferences = recipientEmail ? pushPreferencesByEmail.get(recipientEmail) : null
+    const pushEnabled = isAdminEvent
+      ? pushPreferences?.push_voyage_admin_enabled ?? true
+      : pushPreferences?.push_voyage_user_enabled ?? true
+    const subscriptions = pushEnabled
       ? pushSubscriptionsByProfileId.get(notification.recipient_profile_id) ?? []
       : []
 
-    if (isAdminEvent && !pushSentAt && vapidPublicKey && vapidPrivateKey) {
+    if (!pushSentAt && vapidPublicKey && vapidPrivateKey) {
       if (subscriptions.length > 0) {
         try {
-          const pushMessage = buildAdminPushMessage({
-            eventType: notification.event_type,
-            language,
-            voyageName: localizedName(voyage, language),
-            travelerName: traveler?.name ?? null,
-            travelerEmail: traveler?.email ?? null,
-            legLabels,
-          })
+          const voyageName = localizedName(voyage, language)
+          const pushMessage = isAdminEvent
+            ? buildAdminPushMessage({
+                eventType: notification.event_type,
+                language,
+                voyageName,
+                travelerName: traveler?.name ?? null,
+                travelerEmail: traveler?.email ?? null,
+                legLabels,
+              })
+            : buildUserPushMessage({
+                eventType: notification.event_type,
+                language,
+                voyageName,
+                legLabels,
+              })
+          const pushUrl = isAdminEvent
+            ? `${PUBLIC_SITE_URL}/admin/bookings?voyage=${booking.voyage_id}`
+            : `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`
           const results = await Promise.allSettled(
             subscriptions.map((subscription) =>
               sendPushNotification({
@@ -532,7 +641,7 @@ Deno.serve(async (req) => {
                 notification: {
                   title: pushMessage.title,
                   body: pushMessage.body,
-                  url: `${PUBLIC_SITE_URL}/admin/bookings?voyage=${booking.voyage_id}`,
+                  url: pushUrl,
                 },
               })
             )
@@ -566,7 +675,7 @@ Deno.serve(async (req) => {
             pushSentAt = notification.push_sent_at ?? new Date().toISOString()
           }
         } catch (error) {
-          console.error('Failed to send admin booking push notification', {
+          console.error('Failed to send booking push notification', {
             notificationId: notification.id,
             recipientProfileId: notification.recipient_profile_id,
             error,
@@ -576,7 +685,7 @@ Deno.serve(async (req) => {
     }
 
     const pushComplete =
-      !isAdminEvent || Boolean(pushSentAt) || !vapidPublicKey || !vapidPrivateKey || subscriptions.length === 0
+      Boolean(pushSentAt) || !vapidPublicKey || !vapidPrivateKey || !pushEnabled || subscriptions.length === 0
     const emailComplete = Boolean(emailedAt) || (isAdminEvent && !profile.email)
     if (emailComplete && pushComplete) {
       queued += 1

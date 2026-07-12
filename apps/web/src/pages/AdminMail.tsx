@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Archive,
@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 
 type MailView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";
 
@@ -81,18 +82,15 @@ const viewOptions: Array<{ id: MailView; label: string; icon: typeof Inbox }> = 
   { id: "spam", label: "Spam", icon: ShieldAlert },
 ];
 
-function brandLabel(brand: MailMessage["brand"]) {
-  if (brand === "bite_automatic") return "@mail.biteproject.it";
-  if (brand === "newsletter") return "Newsletter";
-  if (brand === "transactional") return "Transazionale";
-  return "@biteproject.it";
+function senderName(message: MailMessage) {
+  return message.from_name?.trim() || message.from_address;
 }
 
-function assignmentLabel(message: MailMessage) {
-  if (message.assigned_profile) return `Assegnata a ${message.assigned_profile.name || message.assigned_profile.email}`;
-  if (message.assignment_reason === "fallback_all_admins") return "Notificata a tutti gli admin";
-  if (message.assignment_reason === "ambiguous_alias") return "Alias ambiguo: notificata a tutti";
-  return null;
+function cleanEmailPreview(message: MailMessage) {
+  return htmlToText(message.html_body, message.text_body)
+    .replace(/^\s*>+\s?/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function formatDate(value: string) {
@@ -108,6 +106,136 @@ function htmlToText(html: string | null, fallback: string | null) {
   if (fallback?.trim()) return fallback;
   if (!html) return "";
   return html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function quotedLineDepth(line: string) {
+  const match = line.match(/^\s*((?:>\s*)+)/);
+  if (!match) return 0;
+  return (match[1].match(/>/g) ?? []).length;
+}
+
+function unquoteLine(line: string, depth: number) {
+  let next = line;
+  for (let index = 0; index < depth; index += 1) {
+    next = next.replace(/^\s*>\s?/, "");
+  }
+  return next;
+}
+
+function isQuoteIntro(line: string) {
+  const normalized = line.trim();
+  return /\bha scritto:\s*$/i.test(normalized) || /^on .+ wrote:\s*$/i.test(normalized);
+}
+
+function quoteSenderFromIntro(line: string) {
+  const withoutEmail = line.replace(/\s*<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+
+  const italianPrefix = withoutEmail.replace(/\s+ha scritto:\s*$/i, "");
+  if (italianPrefix !== withoutEmail) {
+    const timeMatch = italianPrefix.match(/\balle(?: ore)?\s+\d{1,2}[:.]\d{2}\s+(.+)$/i);
+    if (timeMatch?.[1]?.trim()) return timeMatch[1].trim();
+
+    const lastCommaSegment = italianPrefix.split(",").pop()?.trim();
+    if (lastCommaSegment) return lastCommaSegment;
+  }
+
+  const englishPrefix = withoutEmail.replace(/\s+wrote:\s*$/i, "");
+  if (englishPrefix !== withoutEmail) {
+    const lastCommaSegment = englishPrefix.split(",").pop()?.trim();
+    if (lastCommaSegment) return lastCommaSegment;
+  }
+
+  return null;
+}
+
+function splitQuotedText(text: string) {
+  const lines = text.split(/\r?\n/);
+  const quoteIntroIndex = lines.findIndex(isQuoteIntro);
+  if (quoteIntroIndex >= 0 && quoteIntroIndex < lines.length - 1) {
+    return {
+      visibleLines: lines.slice(0, quoteIntroIndex + 1),
+      quotedLines: lines.slice(quoteIntroIndex + 1),
+      quotedSender: quoteSenderFromIntro(lines[quoteIntroIndex]),
+    };
+  }
+
+  const firstQuotedLine = lines.findIndex((line) => quotedLineDepth(line) > 0);
+  if (firstQuotedLine >= 0) {
+    return {
+      visibleLines: lines.slice(0, firstQuotedLine),
+      quotedLines: lines.slice(firstQuotedLine),
+      quotedSender: null,
+    };
+  }
+
+  return { visibleLines: lines, quotedLines: [], quotedSender: null };
+}
+
+function MailTextLines({ lines, quoted = false }: { lines: string[]; quoted?: boolean }) {
+  return (
+    <>
+      {lines.map((line, index) => {
+        const depth = quotedLineDepth(line);
+        const content = depth > 0 ? unquoteLine(line, depth) : line;
+        if (!content.trim()) return <div key={index} className="h-3" />;
+
+        return (
+          <p
+            key={index}
+            className={`my-0 whitespace-pre-wrap break-words py-0.5 ${
+              quoted || depth > 0 || isQuoteIntro(line) ? "text-foreground/62" : "text-foreground"
+            }`}
+            style={depth > 1 ? { marginLeft: `${Math.min(depth - 1, 5) * 14}px` } : undefined}
+          >
+            {content}
+          </p>
+        );
+      })}
+    </>
+  );
+}
+
+function MailTextBody({ text }: { text: string }) {
+  const quoteRegionId = useId();
+  const [quotesExpanded, setQuotesExpanded] = useState(false);
+  const { visibleLines, quotedLines, quotedSender } = useMemo(() => splitQuotedText(text), [text]);
+  const hasQuotedContent = quotedLines.some((line) => line.trim());
+  const quoteSender = quotedSender || "mittente";
+
+  useEffect(() => {
+    setQuotesExpanded(false);
+  }, [text]);
+
+  return (
+    <div className="space-y-3 font-sans text-[15px] leading-7">
+      <div className="space-y-1">
+        <MailTextLines lines={visibleLines} />
+      </div>
+
+      {hasQuotedContent && (
+        <div className="space-y-3">
+          <button
+            type="button"
+            aria-expanded={quotesExpanded}
+            aria-controls={quoteRegionId}
+            onClick={() => setQuotesExpanded((current) => !current)}
+            className="inline-flex min-h-8 items-center rounded-full px-0 text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          >
+            {quotesExpanded ? "Nascondi" : `Mostra di più da ${quoteSender}`}
+          </button>
+
+          {quotesExpanded && (
+            <blockquote
+              id={quoteRegionId}
+              className="m-0 space-y-1 border-l-2 border-stone-300/80 pl-4 text-foreground/62"
+            >
+              <MailTextLines lines={quotedLines} quoted />
+            </blockquote>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const AdminMail = () => {
@@ -314,7 +442,8 @@ const AdminMail = () => {
                   <div className="max-h-[680px] overflow-y-auto">
                     {messages.map((message) => {
                       const selected = selectedMessage?.id === message.id;
-                      const sender = view === "sent" ? message.to_addresses.join(", ") : message.from_name || message.from_address;
+                      const sender = view === "sent" ? message.to_addresses.join(", ") : senderName(message);
+                      const preview = cleanEmailPreview(message);
                       return (
                         <button
                           key={message.id}
@@ -327,24 +456,16 @@ const AdminMail = () => {
                             selected ? "bg-white/80" : "bg-white/25 hover:bg-white/55"
                           }`}
                         >
-                          <span className="mb-2 flex items-start justify-between gap-3">
-                            <span className={`truncate text-sm font-sans ${message.read || view === "sent" ? "text-foreground/78" : "font-semibold text-foreground"}`}>
+                          <span className="mb-1.5 flex items-start justify-between gap-3">
+                            <span className={`min-w-0 flex-1 truncate text-[15px] font-sans leading-snug ${message.read || view === "sent" ? "text-foreground/82" : "font-semibold text-foreground"}`}>
                               {sender}
                             </span>
                             <span className="shrink-0 text-[11px] text-muted-foreground">{formatDate(message.created_at)}</span>
                           </span>
-                          <span className="block truncate text-sm font-sans text-foreground">{message.subject || "(nessun oggetto)"}</span>
-                          <span className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                            {htmlToText(message.html_body, message.text_body)}
+                          <span className="block truncate text-sm font-sans font-medium text-foreground">{message.subject || "(nessun oggetto)"}</span>
+                          <span className="mt-2 block line-clamp-2 text-[13px] leading-5 text-muted-foreground">
+                            {preview || "Messaggio senza anteprima."}
                           </span>
-                          <span className="mt-3 inline-flex rounded-full border border-stone-200/80 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                            {brandLabel(message.brand)}
-                          </span>
-                          {assignmentLabel(message) && (
-                            <span className="ml-2 mt-3 inline-flex rounded-full border border-accent/25 bg-accent/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-accent">
-                              {assignmentLabel(message)}
-                            </span>
-                          )}
                         </button>
                       );
                     })}
@@ -359,27 +480,31 @@ const AdminMail = () => {
                   <div className="space-y-6">
                     <div className="flex flex-col gap-4 border-b border-stone-200/70 pb-5 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
-                        <p className="mb-2 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{brandLabel(selectedMessage.brand)}</p>
                         <h2 className="editorial-heading text-3xl leading-tight">{selectedMessage.subject || "(nessun oggetto)"}</h2>
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          {view === "sent" ? "A" : "Da"}{" "}
-                          <span className="text-foreground">
-                            {view === "sent" ? selectedMessage.to_addresses.join(", ") : selectedMessage.from_name || selectedMessage.from_address}
-                          </span>
-                        </p>
+                        <div className="mt-4 space-y-1.5 font-sans text-sm leading-relaxed">
+                          <p className="grid gap-1 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+                            <span className="text-muted-foreground">{view === "sent" ? "A" : "Da"}</span>
+                            <span className="min-w-0 break-words text-foreground">
+                              {view === "sent" ? selectedMessage.to_addresses.join(", ") : senderName(selectedMessage)}
+                            </span>
+                          </p>
+                          {view !== "sent" && selectedMessage.from_name?.trim() && selectedMessage.from_address !== selectedMessage.from_name && (
+                            <p className="grid gap-1 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+                              <span className="text-muted-foreground">Mail</span>
+                              <span className="min-w-0 break-words text-foreground/78">{selectedMessage.from_address}</span>
+                            </p>
+                          )}
+                        </div>
                         {view === "sent" && selectedMessage.cc_addresses && selectedMessage.cc_addresses.length > 0 && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Cc <span className="text-foreground">{selectedMessage.cc_addresses.join(", ")}</span>
+                          <p className="mt-1 grid gap-1 font-sans text-sm leading-relaxed sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+                            <span className="text-muted-foreground">Cc</span>
+                            <span className="min-w-0 break-words text-foreground">{selectedMessage.cc_addresses.join(", ")}</span>
                           </p>
                         )}
                         {view === "sent" && selectedMessage.bcc_addresses && selectedMessage.bcc_addresses.length > 0 && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Ccn <span className="text-foreground">{selectedMessage.bcc_addresses.join(", ")}</span>
-                          </p>
-                        )}
-                        {assignmentLabel(selectedMessage) && (
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Routing <span className="text-foreground">{assignmentLabel(selectedMessage)}</span>
+                          <p className="mt-1 grid gap-1 font-sans text-sm leading-relaxed sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+                            <span className="text-muted-foreground">Ccn</span>
+                            <span className="min-w-0 break-words text-foreground">{selectedMessage.bcc_addresses.join(", ")}</span>
                           </p>
                         )}
                       </div>
@@ -405,10 +530,12 @@ const AdminMail = () => {
                     </div>
 
                     <div className="prose prose-stone max-w-none text-sm leading-relaxed">
-                      {selectedMessage.html_body ? (
-                        <div dangerouslySetInnerHTML={{ __html: selectedMessage.html_body }} />
+                      {selectedMessage.text_body?.trim() ? (
+                        <MailTextBody text={selectedMessage.text_body} />
+                      ) : selectedMessage.html_body ? (
+                        <div dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(selectedMessage.html_body) }} />
                       ) : (
-                        <p className="whitespace-pre-wrap">{selectedMessage.text_body || "Messaggio senza corpo."}</p>
+                        <p>Messaggio senza corpo.</p>
                       )}
                     </div>
                   </div>

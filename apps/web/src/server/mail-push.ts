@@ -26,6 +26,11 @@ type UserRoleRow = {
   user_id: string;
 };
 
+type PushPreferenceRow = {
+  email: string;
+  push_mail_enabled: boolean | null;
+};
+
 export type MailAssignment = {
   assignedProfileId: string | null;
   notifyProfileIds: string[];
@@ -112,13 +117,33 @@ export async function sendMailPushNotification(
 
   const { data, error } = await db
     .from("push_subscriptions")
-    .select("id, profile_id, endpoint, p256dh, auth, enabled")
+    .select("id, profile_id, endpoint, p256dh, auth, enabled, profiles!inner(email)")
     .in("profile_id", uniqueProfileIds)
     .eq("enabled", true);
 
   if (error) throw error;
 
-  const subscriptions = (data ?? []) as PushSubscriptionRow[];
+  const rows = (data ?? []) as Array<PushSubscriptionRow & { profiles?: { email?: string | null } | null }>;
+  const recipientEmails = Array.from(
+    new Set(rows.map((row) => row.profiles?.email?.trim().toLowerCase()).filter((value): value is string => Boolean(value))),
+  );
+  const { data: preferenceRows, error: preferenceError } = recipientEmails.length
+    ? await db
+        .from("email_notification_preferences")
+        .select("email, push_mail_enabled")
+        .in("email", recipientEmails)
+    : { data: [], error: null };
+
+  if (preferenceError) throw preferenceError;
+
+  const preferencesByEmail = new Map(
+    ((preferenceRows ?? []) as PushPreferenceRow[]).map((row) => [row.email.trim().toLowerCase(), row]),
+  );
+  const subscriptions = rows.filter((row) => {
+    const email = row.profiles?.email?.trim().toLowerCase();
+    if (!email) return false;
+    return preferencesByEmail.get(email)?.push_mail_enabled ?? true;
+  });
   if (subscriptions.length === 0) return false;
 
   const results = await Promise.allSettled(

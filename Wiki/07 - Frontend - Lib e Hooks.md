@@ -31,6 +31,7 @@ tags: [frontend, lib, hooks, logica]
 
 ### Booking & pagamenti → [[13 - Booking Voyage]] / [[11 - Pagamenti Bunq]]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
+- `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`)
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
 - `danger-reasons.ts` — modificatori navigazione pericolosa
 - `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). L'admin può forzare il naming città o baia/cala dall'inspector WPT.

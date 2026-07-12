@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { CandidateInfo } from "@/lib/booking-candidate-info";
 
 export type PaymentMode = "lead_pays_all" | "each_pays_own";
 
@@ -85,9 +86,10 @@ export async function listMyParticipations(): Promise<MyParticipation[]> {
   return (data ?? []) as MyParticipation[];
 }
 
-export async function acceptParticipation(participantId: string): Promise<BookingParticipant> {
+export async function acceptParticipation(participantId: string, candidateInfo?: CandidateInfo): Promise<BookingParticipant> {
   const { data, error } = await client.rpc<BookingParticipant>("accept_booking_participation", {
     _participant_id: participantId,
+    _candidate_info: candidateInfo ?? null,
   });
   if (error) throw new Error(error.message ?? "accept_failed");
   return data as BookingParticipant;
@@ -99,7 +101,10 @@ export async function declineParticipation(participantId: string): Promise<void>
 }
 
 /** Trigger invite emails for a booking's pending guests. */
-export async function sendBookingInvites(bookingRequestId: string): Promise<{ sent: number; total: number } | { notConfigured: true }> {
+export async function sendBookingInvites(
+  bookingRequestId: string,
+  language: "it" | "en" = "it",
+): Promise<{ sent: number; total: number } | { notConfigured: true }> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) throw new Error("unauthenticated");
@@ -107,7 +112,7 @@ export async function sendBookingInvites(bookingRequestId: string): Promise<{ se
   const response = await fetch("/api/bookings/invite", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ bookingRequestId }),
+    body: JSON.stringify({ bookingRequestId, language }),
   });
   if (response.status === 503) return { notConfigured: true };
   const payload = (await response.json().catch(() => ({}))) as { sent?: number; total?: number };

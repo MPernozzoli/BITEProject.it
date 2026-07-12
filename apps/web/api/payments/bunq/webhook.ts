@@ -15,6 +15,7 @@ import {
   clearBookingPaymentDeadlineIfSettled,
   enqueuePaymentReceivedNotifications,
 } from "../../../src/server/bunq/deposit-resolver.js";
+import { getBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import { firstQueryParam, readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 import { timingSafeEqual } from "node:crypto";
 
@@ -74,9 +75,15 @@ async function markPaidByBunqRequestId(requestId: number): Promise<boolean> {
     payment_method: string | null;
     reference: string | null;
   };
+  let payerAlias: Record<string, unknown> | null = null;
+  try {
+    payerAlias = (await getBunqPaymentRequest(requestId)).counterpartyAlias;
+  } catch (error) {
+    console.error("[bunq/webhook] request-inquiry fetch failed", error);
+  }
   await db
     .from("voyage_booking_deposits")
-    .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ status: "paid", paid_at: new Date().toISOString(), payer_alias: payerAlias, updated_at: new Date().toISOString() })
     .eq("id", row.id)
     .eq("status", "pending");
   try {

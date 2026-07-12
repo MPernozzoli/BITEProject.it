@@ -13,7 +13,7 @@ tags: [backend, edge-functions, serverless, supabase]
 - `process-email-queue` — worker coda email
 - `auth-email-hook` (no jwt) — hook email di autenticazione (signup, recovery, magic-link…)
 - `handle-email-suppression`, `handle-email-unsubscribe` — bounce/unsubscribe
-- Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`
+- Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`; i transazionali condividono `theme.tsx` per shell editoriale, card, pill, detail row, route box, callout e highlight importi.
 
 ## 📰 Newsletter → [[12 - Newsletter ed Email]]
 - `newsletter-subscribe`, `confirm-newsletter-subscription`, `my-newsletter-subscription`

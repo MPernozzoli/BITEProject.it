@@ -20,6 +20,12 @@ export const NIGHT_NAVIGATION_MODIFIER = 0.1;
 export const OFFSHORE_NAVIGATION_MODIFIER = 0.2;
 export const DANGEROUS_NAVIGATION_MODIFIER = 0.2;
 export const BUNQ_SINGLE_TRANSACTION_LIMIT_EUR = 500;
+export const CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES = [
+  "requested",
+  "waitlisted",
+  "admin_approved",
+  "user_confirmed",
+] as const;
 
 /** Legs only need the fields that feed contribution calculation. */
 export type DepositLeg = Pick<
@@ -33,6 +39,13 @@ export type DepositLeg = Pick<
 
 export type ContributionOptions = {
   contributionPerNmEur?: number | null;
+  fixedMinimumEur?: number | null;
+};
+
+export type PriorVoyageContributionBooking = {
+  id?: string | null;
+  voyage_id: string;
+  status: string;
 };
 
 function roundCurrency(amount: number): number {
@@ -44,9 +57,30 @@ export function contributionPerNmEur(value?: number | null): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_CONTRIBUTION_PER_NM_EUR;
 }
 
+export function contributionFixedMinimumEur(value?: number | null): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : CONTRIBUTION_FIXED_MINIMUM_EUR;
+}
+
 export function plannedNauticalMiles(leg: Pick<BookableLeg, "planned_nautical_miles">): number {
   const nm = Number(leg.planned_nautical_miles ?? 0);
   return Number.isFinite(nm) && nm > 0 ? nm : 0;
+}
+
+export function shouldApplyContributionFixedMinimum(
+  bookings: PriorVoyageContributionBooking[],
+  voyageId: string | null | undefined,
+  currentBookingRequestId?: string | null,
+): boolean {
+  if (!voyageId) return true;
+  return !bookings.some(
+    (booking) =>
+      booking.voyage_id === voyageId &&
+      booking.id !== currentBookingRequestId &&
+      CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES.includes(
+        booking.status as (typeof CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES)[number],
+      ),
+  );
 }
 
 export function legContributionModifier(leg: DepositLeg): number {
@@ -67,7 +101,7 @@ export function legDepositEur(leg: DepositLeg, opts: ContributionOptions = {}): 
 export function perPersonDepositEur(legs: DepositLeg[], opts: ContributionOptions = {}): number {
   if (legs.length === 0) return 0;
   const variable = legs.reduce((acc, leg) => acc + legDepositEur(leg, opts), 0);
-  return roundCurrency(CONTRIBUTION_FIXED_MINIMUM_EUR + variable);
+  return roundCurrency(contributionFixedMinimumEur(opts.fixedMinimumEur) + variable);
 }
 
 /** Total contribution charged to the booker: per-person amount × party size. */

@@ -46,11 +46,14 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `AdminLogin.tsx` | `/admin/login` |
 | `AdminDashboard.tsx` | `/admin` |
 | `AdminVoyageBookings.tsx` | `/admin/bookings` |
+| `AdminVoyageCandidates.tsx` | `/admin/candidates` |
 | `AdminMedia.tsx` | `/admin/media` |
 | `AdminMail.tsx` | `/admin/mail` |
 | `AdminMapPresence.tsx` | `/admin/trackers` |
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |
+
+`AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, mostra mittente/destinatari con campi leggibili e collassa le citazioni nel corpo mail con azioni "Mostra di più da..." / "Nascondi".
 
 ## Collegamenti
 - Componenti usati: [[06 - Frontend - Componenti]]

@@ -11,7 +11,7 @@ Il flusso di [[13 - Booking Voyage]] richiede un **contributo equo alle spese vi
 ## Calcolo importo (server-authoritative)
 Ricalcolato in `apps/web/src/lib/booking-deposit.ts`, **mai** fidato dal client:
 
-- **Minimo fisso:** €20 a persona, applicato una sola volta (indipendente dal numero di tratte).
+- **Minimo fisso:** €20 a persona per viaggio, applicato solo alla prima prenotazione attiva dell'utente su quel voyage. Se lo stesso utente crea una seconda prenotazione per altre tratte dello stesso viaggio, il fisso viene saltato e si addebita solo la parte variabile delle nuove tratte.
 - **Parte variabile:** miglia nautiche pianificate per tratta × coefficiente `booking_contribution_per_nm_eur` del viaggio (default **€0,90/NM**).
 - **Modificatori di tratta** (additivi, solo sulla parte variabile):
   - navigazione notturna: **+10%**
@@ -34,6 +34,15 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 6. Redirect a Bunq per il pagamento.
 7. Liquidazione rilevata dal **webhook** (`POST /api/payments/bunq/webhook`) o, in fallback, da `GET /api/payments/bunq/status?bookingRequestId=...`; quando non restano depositi pendenti, la deadline viene azzerata.
 
+## Rimborsi automatici
+`apps/web/api/bookings/status.ts` applica la policy di rimborso prima di rendere terminale una prenotazione:
+
+- cancellazione o rifiuto da admin: **100%** dei depositi pagati;
+- cancellazione utente: **100%** se mancano più di 30 giorni alla partenza, **50%** tra 30 e 15 giorni, **0%** sotto i 15 giorni;
+- proposta di modifica admin rifiutata dall'utente con annullamento viaggio: **100%** a prescindere dalle date.
+
+La API Bunq non espone un refund dedicato per `request-inquiry`: il rimborso viene eseguito creando un `Payment` in uscita verso il `counterparty_alias` del pagamento ricevuto. `voyage_booking_deposits` conserva `payer_alias`, `refund_amount_cents`, `refund_policy`, `refund_reference` e `refund_payment_id`; lo stato può diventare `partially_refunded` per i rimborsi al 50% o `refunded` per quelli completi. Se Bunq non è configurato o manca l'alias pagatore, la prenotazione non viene annullata/rifiutata: l'operazione fallisce prima del cambio stato.
+
 ## Scadenza pending pagamento
 `expire_pending_voyage_booking_payments()` è una RPC `service_role` schedulata ogni ora con `pg_cron`: cancella le prenotazioni attive con depositi `pending` più vecchi di 48 ore, marca quei depositi come `cancelled`, invia le notifiche e libera/promuove eventuali posti in waitlist. Non interviene sulle richieste che aspettano solo una decisione admin.
 
@@ -41,10 +50,10 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 `apps/web/api/payments/bunq/webhook.ts` richiede `BUNQ_WEBHOOK_SECRET`: la callback Bunq deve includerlo nella URL (`?secret=...`) oppure in header `x-bite-bunq-webhook-secret` se passa da un proxy. Senza secret valido l'endpoint risponde `401` e non tenta alcuna riconciliazione. Il polling `/status` resta il controllo live autorevole verso Bunq.
 
 ## Endpoint → [[10 - API Vercel]]
-`request` · `status` · `webhook` · `bank-transfer`
+`request` · `status` · `webhook` · `bank-transfer` · `bookings/status` per transizioni terminali con rimborso
 
 ## Codice server → [[07 - Frontend - Lib e Hooks]]
-`apps/web/src/server/bunq/`: `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `bank-details.ts`, `supabase.ts`
+`apps/web/src/server/bunq/`: `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`
 
 ## Collegamenti
 - [[13 - Booking Voyage]] · [[10 - API Vercel]] · [[08 - Supabase]]

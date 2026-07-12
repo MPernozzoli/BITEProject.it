@@ -18,8 +18,15 @@ import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/v
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
-import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
+import {
+  CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
+  perPersonDepositEur,
+  shouldApplyContributionFixedMinimum,
+  totalDepositEur,
+  type PriorVoyageContributionBooking,
+} from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
+import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
@@ -101,6 +108,8 @@ const Journal = () => {
   const [bookingRejectedLegIds, setBookingRejectedLegIds] = useState<string[]>([]);
   const [bookingPartySize, setBookingPartySize] = useState(1);
   const [bookingMessage, setBookingMessage] = useState("");
+  const [bookingCandidateInfo, setBookingCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
+  const [bookingCandidateInfoTouched, setBookingCandidateInfoTouched] = useState(false);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
@@ -134,6 +143,42 @@ const Journal = () => {
     staleTime: 1000 * 60,
     retry: 1,
   });
+
+  const { data: bookingCandidateInfoPrefill = emptyCandidateInfo } = useQuery({
+    queryKey: ["booking-candidate-info-prefill", session?.user.id],
+    enabled: Boolean(session?.user.id),
+    queryFn: async () => {
+      const [profileRes, latestRequestRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("preferred_language,secondary_language")
+          .eq("id", session!.user.id)
+          .maybeSingle(),
+        supabase
+          .from("voyage_booking_requests")
+          .select("candidate_info")
+          .eq("profile_id", session!.user.id)
+          .order("requested_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (profileRes.error || latestRequestRes.error) {
+        return emptyCandidateInfo;
+      }
+
+      return buildCandidateInfoPrefill({
+        latestCandidateInfo: latestRequestRes.data?.candidate_info as Partial<CandidateInfo> | null | undefined,
+        preferredLanguage: profileRes.data?.preferred_language,
+        secondaryLanguage: profileRes.data?.secondary_language,
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!session?.user.id || bookingCandidateInfoTouched) return;
+    setBookingCandidateInfo(bookingCandidateInfoPrefill);
+  }, [bookingCandidateInfoPrefill, bookingCandidateInfoTouched, session?.user.id]);
 
   const mapPresenceMarkers = useMemo(
     () => buildMapPresenceMarkers(mapPresenceRows, lang),
@@ -321,6 +366,25 @@ const Journal = () => {
     [bookingLegs]
   );
 
+  const { data: myActiveVoyageContributionBookings = [] } = useQuery({
+    queryKey: ["my-active-voyage-contribution-bookings", session?.user.id, bookableVoyageIdsKey],
+    enabled: Boolean(session?.user.id && bookableVoyageIds.length > 0),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_booking_requests")
+        .select("id, voyage_id, status")
+        .eq("profile_id", session!.user.id)
+        .in("voyage_id", bookableVoyageIds)
+        .in("status", [...CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES]);
+      if (error) {
+        console.warn("[Journal] my active voyage contribution bookings unavailable", error);
+        return [] as PriorVoyageContributionBooking[];
+      }
+      return (data || []) as PriorVoyageContributionBooking[];
+    },
+    staleTime: 1000 * 30,
+  });
+
   // Filter articles
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return articles;
@@ -442,8 +506,10 @@ const Journal = () => {
     setSelectedBookingLegIds([]);
     setBookingRejectedLegIds([]);
     setBookingMessage("");
+    setBookingCandidateInfoTouched(false);
+    setBookingCandidateInfo(bookingCandidateInfoPrefill);
     setBookingPartySize(1);
-  }, []);
+  }, [bookingCandidateInfoPrefill]);
 
   const handleParticipate = useCallback((voyageId: string) => {
     const voyageLegs = bookingLegsByVoyage[voyageId] || [];
@@ -518,6 +584,14 @@ const Journal = () => {
       toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
       return;
     }
+    if (bookingCandidateInfo.motivation.trim().length < 20) {
+      toast.error(
+        lang === "it"
+          ? "Scrivi qualche riga sul perche vorresti partecipare."
+          : "Write a few lines about why you would like to join."
+      );
+      return;
+    }
 
     const selectedBookingVoyage = voyages.find((voyage) => voyage.id === bookingAnchor.voyageId);
     if (!isVoyageBookableNow(selectedBookingVoyage)) {
@@ -547,6 +621,7 @@ const Journal = () => {
         _leg_ids: selectedBookingLegIds,
         _party_size: Math.max(1, bookingPartySize),
         _message: bookingMessage.trim() || null,
+        _candidate_info: bookingCandidateInfo,
       });
 
       if (error) {
@@ -617,6 +692,7 @@ const Journal = () => {
   }, [
     bookingAnchor,
     bookingLegsById,
+    bookingCandidateInfo,
     bookingMessage,
     bookingPartySize,
     clearBookingSelection,
@@ -859,6 +935,18 @@ const Journal = () => {
   );
   const bookingVoyageLegs = bookingAnchor ? bookingLegsByVoyage[bookingAnchor.voyageId] || [] : [];
   const bookingSidebarActive = Boolean(bookingAnchor);
+  const bookingContributionOptions = useMemo(
+    () => ({
+      contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
+      fixedMinimumEur: shouldApplyContributionFixedMinimum(
+        myActiveVoyageContributionBookings,
+        bookingSummaryVoyage?.id,
+      )
+        ? undefined
+        : 0,
+    }),
+    [bookingSummaryVoyage?.booking_contribution_per_nm_eur, bookingSummaryVoyage?.id, myActiveVoyageContributionBookings],
+  );
 
   const filteredVoyages = useMemo(() => {
     const list =
@@ -991,12 +1079,8 @@ const Journal = () => {
             partySize={bookingPartySize}
             message={bookingMessage}
             requiresPayment
-            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, {
-              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
-            })}
-            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, {
-              contributionPerNmEur: bookingSummaryVoyage?.booking_contribution_per_nm_eur,
-            })}
+            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
+            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             submitting={bookingSubmitting}
             onConfirm={() => void submitBookingFromLogbook()}
@@ -1218,6 +1302,9 @@ const Journal = () => {
                 rejectedLegIds={bookingRejectedLegIds}
                 partySize={bookingPartySize}
                 message={bookingMessage}
+                candidateInfo={bookingCandidateInfo}
+                depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
+                depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
                 submitting={bookingSubmitting}
                 isSignedIn={Boolean(session?.user)}
                 lang={lang}
@@ -1230,6 +1317,10 @@ const Journal = () => {
                 onToggleLeg={toggleBookingLeg}
                 onPartySizeChange={setBookingPartySize}
                 onMessageChange={setBookingMessage}
+                onCandidateInfoChange={(nextInfo) => {
+                  setBookingCandidateInfoTouched(true);
+                  setBookingCandidateInfo(nextInfo);
+                }}
                 onSubmit={() => {
                   if (!session?.user) {
                     navigate("/login", { state: { from: `/${lang}/logbook` } });

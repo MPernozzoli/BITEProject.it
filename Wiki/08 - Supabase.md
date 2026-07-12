@@ -43,16 +43,25 @@ Supabase è il **backend unico** del progetto.
 - `..._voyage_booking_email_flows.sql` — estende gli eventi `voyage_booking_notifications` per pagamenti e cambio planning, attiva trigger email su `voyage_booking_plan_changes` e backfill delle notifiche pending.
 - `..._bite_mailapp.sql` — tabelle `inbound_emails`, `sent_emails`, `email_tracking_events`, `email_spam_senders`, `admin_email_aliases` per `/admin/mail`, con RLS admin e inserimenti server-side via [[10 - API Vercel]].
 - `..._booking_admin_push_notifications.sql` — aggiunge `push_sent_at` a `voyage_booking_notifications` e indicizza gli eventi admin pending per le push.
+- `..._granular_push_notification_preferences.sql` — aggiunge i toggle granulari `push_mail_enabled`, `push_voyage_admin_enabled`, `push_voyage_user_enabled` su `email_notification_preferences`.
+- `..._voyage_candidate_info.sql` — aggiunge `candidate_info` JSONB a `voyage_booking_requests` e `voyage_booking_participants`, estende `request_voyage_booking`/`accept_booking_participation`, introduce `admin_propose_voyage_booking_legs` per proporre tratte alternative dalla revisione candidati o dal Gantt booking, aggiunge `respond_voyage_booking_plan_change` per accettazione/controproposta/rifiuto/annullamento utente e porta i messaggi admin nelle notifiche utente di proposta/approvazione/rifiuto.
+- `..._admin_booking_email_invites.sql` — abilita gli inviti booking creati da admin verso email non ancora registrate e trasferisce la prenotazione al profilo reale quando l'invitato accetta.
+- `..._normalize_candidate_info_defaults.sql` — normalizza i valori nulli e rende `candidate_info` obbligatorio con default `{}` su richieste e partecipanti booking.
+- `..._bunq_booking_refunds.sql` — estende `voyage_booking_deposits` con alias pagatore e campi audit rimborso (`refund_amount_cents`, `refund_policy`, `refund_reference`, `refund_payment_id`) e aggiunge lo stato `partially_refunded`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)
 - `request_voyage_booking` (RPC) — crea richiesta di prenotazione → [[13 - Booking Voyage]]
+- `admin_propose_voyage_booking_legs` (RPC admin) — registra una proposta di tratte alternative in `voyage_booking_plan_changes`, con messaggio admin opzionale in metadata, senza modificare direttamente la matrice Gantt → [[13 - Booking Voyage]]
+- `respond_voyage_booking_plan_change` (RPC utente) — risponde a una proposta pending: accetta e applica le tratte proposte, contropropone con messaggio, rifiuta o annulla la richiesta con notifica admin.
+- `admin_create_voyage_booking_invite_by_email` (RPC admin) — crea una prenotazione da email esterna e una partecipazione pending invitabile via mail → [[13 - Booking Voyage]]
+- `accept_booking_participation` (RPC) — collega l'invito all'utente autenticato, salva `candidate_info` e, per gli inviti admin one-person, trasferisce la richiesta dal profilo placeholder al profilo reale.
 - `sync_voyage_bookable_legs` (RPC admin) — ricalcola le tratte prenotabili e riconcilia le prenotazioni esistenti con il planning corrente
 - `voyage_booking_plan_changes` — audit/predisposizione approvazione utente per cambi planning booking → [[13 - Booking Voyage]]
-- `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti e modifiche planning; gli eventi `admin_*` registrano anche `push_sent_at` per Web Push admin → [[12 - Newsletter ed Email]]
+- `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti e modifiche planning; gli eventi utente e `admin_*` registrano anche `push_sent_at` per Web Push filtrate dalle preferenze → [[12 - Newsletter ed Email]]
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
-- `voyage_booking_deposits` — depositi/contributi → [[11 - Pagamenti Bunq]]
+- `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico → [[12 - Newsletter ed Email]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 

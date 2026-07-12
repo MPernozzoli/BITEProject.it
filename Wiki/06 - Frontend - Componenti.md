@@ -30,14 +30,14 @@ tags: [frontend, componenti, ui]
 ## Mappe
 - `LazyVoyageMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
 - `admin/AdminVoyageManager.tsx` — editor rotte admin con workspace mappa MapLibre; il comando `Fullscreen` usa la Fullscreen API del browser e mantiene un fallback layout `fixed` se l'API non è disponibile.
-- `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, pax, note e CTA, riusando la shell della sidebar articoli; la selezione illumina la tratta su `VoyageMap` e `VoyageLegend` → [[13 - Booking Voyage]]
+- `voyage/BookingSidebarPanel.tsx` — modalità booking dentro la sidebar della mappa: lista tutte le tratte prenotabili/non disponibili, riepilogo tratte/contributo spese vive, passaggio "Dicci di te" e CTA, riusando la shell della sidebar articoli; la selezione illumina la tratta su `VoyageMap` e `VoyageLegend` → [[13 - Booking Voyage]]
 - `voyage/VoyageLegend.tsx` — legenda rotta del logbook; mostra distanze, tappe e articoli collegati, ma non i badge di complessità delle tratte prenotabili.
 - `voyage/ArticleListCard.tsx` — card articolo della sidebar `/logbook`, con thumbnail, metadati, autori, contatori e icona occhiali senza box per gli articoli già letti.
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
 - `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminNewsletterManager`, `AdminRouteManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… → [[16 - Admin]]
-- `booking/` — flusso prenotazione e pagamento → [[13 - Booking Voyage]]
+- `booking/` — flusso candidatura, condizioni, prenotazione e pagamento; include `CandidateInfoForm.tsx` per raccogliere esperienza nautica, lingue, lavoro remoto, regimi alimentari, motivazione e note → [[13 - Booking Voyage]]
 - `voyage/` — componenti dettaglio viaggio
 - `home/` — sezioni della homepage
 - `legal/` — blocchi pagine legali

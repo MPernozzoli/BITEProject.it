@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarCheck, Check, Clock3, Loader2, Ship, X } from "lucide-react";
+import { CalendarCheck, Check, Clock3, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
-import { perPersonDepositEur, totalDepositEur } from "@/lib/booking-deposit";
+import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
+import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
+import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import {
   listMyParticipations,
   acceptParticipation,
@@ -38,6 +41,11 @@ import {
 } from "@/lib/booking-utils";
 
 type RequestBookingResult = { booking_request_id: string; booking_status: BookingRequest["status"] };
+type PlanChangeAction =
+  | "accept_proposed_change"
+  | "request_different_route"
+  | "reject_proposed_change"
+  | "cancel_with_full_refund";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -55,6 +63,16 @@ type UntypedSupabase = {
 };
 
 const typedSupabase = supabase as unknown as UntypedSupabase;
+
+const stringArrayFromMetadata = (metadata: Record<string, unknown> | null | undefined, key: string) => {
+  const value = metadata?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+};
+
+const stringFromMetadata = (metadata: Record<string, unknown> | null | undefined, key: string) => {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+};
 
 const UserBookings = () => {
   const { session, loading } = useAuth();
@@ -76,13 +94,18 @@ const UserBookings = () => {
   const [selectedLegIds, setSelectedLegIds] = useState<string[]>([]);
   const [partySize, setPartySize] = useState("1");
   const [message, setMessage] = useState("");
+  const [candidateInfo, setCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
+  const [candidateInfoPrefill, setCandidateInfoPrefill] = useState<CandidateInfo>(emptyCandidateInfo);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [myParticipations, setMyParticipations] = useState<MyParticipation[]>([]);
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
+  const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+  const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
     null
   );
+  const candidateInfoTouchedRef = useRef(false);
 
   const loadData = useCallback(async () => {
     if (!session?.user.id) {
@@ -90,7 +113,7 @@ const UserBookings = () => {
       return;
     }
     setBusy(true);
-    const [voyagesRes, requestsRes] = await Promise.all([
+    const [voyagesRes, requestsRes, profileRes] = await Promise.all([
       typedSupabase
         .from("voyages")
         .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
@@ -102,16 +125,29 @@ const UserBookings = () => {
         .select("*")
         .eq("profile_id", session.user.id)
         .order("requested_at", { ascending: false }),
+      typedSupabase
+        .from("profiles")
+        .select("preferred_language,secondary_language")
+        .eq("id", session.user.id),
     ]);
 
-    if (voyagesRes.error || requestsRes.error) {
-      toast.error(voyagesRes.error?.message || requestsRes.error?.message || "Unable to load bookings");
+    if (voyagesRes.error || requestsRes.error || profileRes.error) {
+      toast.error(voyagesRes.error?.message || requestsRes.error?.message || profileRes.error?.message || "Unable to load bookings");
       setBusy(false);
       return;
     }
 
     let loadedVoyages = ((voyagesRes.data as BookingVoyage[] | null) || []);
     const loadedRequests = ((requestsRes.data as BookingRequest[] | null) || []);
+    const profile = Array.isArray(profileRes.data) ? profileRes.data[0] as { preferred_language?: string | null; secondary_language?: string | null } | undefined : undefined;
+    const latestReusableInfo = loadedRequests.find((request) => request.candidate_info)?.candidate_info as Partial<CandidateInfo> | null | undefined;
+    const prefill = buildCandidateInfoPrefill({
+      latestCandidateInfo: latestReusableInfo,
+      preferredLanguage: profile?.preferred_language,
+      secondaryLanguage: profile?.secondary_language,
+    });
+    setCandidateInfoPrefill(prefill);
+    if (!candidateInfoTouchedRef.current) setCandidateInfo(prefill);
     const requestedVoyageIds = [...new Set(loadedRequests.map((request) => request.voyage_id))];
     const missingVoyageIds = requestedVoyageIds.filter((id) => !loadedVoyages.some((voyage) => voyage.id === id));
     if (missingVoyageIds.length) {
@@ -235,6 +271,13 @@ const UserBookings = () => {
   const selectedVoyageLegs = isVoyageBookableNow(selectedVoyage)
     ? legs.filter((leg) => leg.voyage_id === selectedVoyageId && isLegSelectable(leg))
     : [];
+  const selectedContributionOptions = useMemo(
+    () => ({
+      contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur,
+      fixedMinimumEur: shouldApplyContributionFixedMinimum(requests, selectedVoyageId) ? undefined : 0,
+    }),
+    [requests, selectedVoyage?.booking_contribution_per_nm_eur, selectedVoyageId],
+  );
 
   const toggleLeg = (legId: string) => {
     setSelectedLegIds((current) =>
@@ -249,6 +292,14 @@ const UserBookings = () => {
     }
     if (!isVoyageBookableNow(selectedVoyage)) {
       toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
+      return false;
+    }
+    if (candidateInfo.motivation.trim().length < 20) {
+      toast.error(
+        lang === "it"
+          ? "Scrivi qualche riga sul perche vorresti partecipare."
+          : "Write a few lines about why you would like to join."
+      );
       return false;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
@@ -278,6 +329,7 @@ const UserBookings = () => {
       _leg_ids: selectedLegIds,
       _party_size: parsedPartySize,
       _message: message,
+      _candidate_info: candidateInfo,
     });
     if (error) {
       setSaving(false);
@@ -335,6 +387,8 @@ const UserBookings = () => {
     setConfirmOpen(false);
     setSelectedLegIds([]);
     setMessage("");
+    candidateInfoTouchedRef.current = false;
+    setCandidateInfo(candidateInfoPrefill);
     await loadData();
   };
 
@@ -349,14 +403,24 @@ const UserBookings = () => {
     }
   };
 
-  const cancelBooking = async (requestId: string) => {
+  const cancelBooking = async (request: BookingRequest) => {
     if (!confirm(lang === "it" ? "Annullare questa partecipazione?" : "Cancel this participation?")) return;
     setSaving(true);
-    const { error } = await typedSupabase.rpc("cancel_voyage_booking", { _booking_request_id: requestId });
+    const result = await updateBookingStatusWithRefund({
+      bookingRequestId: request.id,
+      status: "cancelled",
+      trigger: request.plan_change_status === "pending_user_approval" ? "admin_plan_change_declined" : "user_cancelled",
+    });
     setSaving(false);
-    if (error) toast.error(error.message);
+    if (!result.ok) toast.error(result.error);
     else {
-      toast.success(lang === "it" ? "Partecipazione annullata." : "Participation cancelled.");
+      const refundMessage =
+        result.refundAmountEur > 0
+          ? lang === "it"
+            ? ` Rimborso automatico: EUR ${result.refundAmountEur.toFixed(2)}.`
+            : ` Automatic refund: EUR ${result.refundAmountEur.toFixed(2)}.`
+          : "";
+      toast.success((lang === "it" ? "Partecipazione annullata." : "Participation cancelled.") + refundMessage);
       await loadData();
     }
   };
@@ -381,11 +445,67 @@ const UserBookings = () => {
     await loadData();
   };
 
+  const respondToPlanChange = async (requestId: string, action: PlanChangeAction) => {
+    if (action === "cancel_with_full_refund") {
+      if (!confirm(lang === "it" ? "Annullare questa partecipazione con rimborso completo?" : "Cancel this participation with a full refund?")) return;
+      setSaving(true);
+      const result = await updateBookingStatusWithRefund({
+        bookingRequestId: requestId,
+        status: "cancelled",
+        trigger: "admin_plan_change_declined",
+      });
+      setSaving(false);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const refundMessage =
+        result.refundAmountEur > 0
+          ? lang === "it"
+            ? ` Rimborso automatico: EUR ${result.refundAmountEur.toFixed(2)}.`
+            : ` Automatic refund: EUR ${result.refundAmountEur.toFixed(2)}.`
+          : "";
+      toast.success((lang === "it" ? "Richiesta annullata." : "Booking cancelled.") + refundMessage);
+      setPlanChangeMessages((current) => ({ ...current, [requestId]: "" }));
+      await loadData();
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await typedSupabase.rpc("respond_voyage_booking_plan_change", {
+      _booking_request_id: requestId,
+      _action: action,
+      _message: planChangeMessages[requestId]?.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const successMessage: Record<PlanChangeAction, string> = {
+      accept_proposed_change: lang === "it" ? "Proposta accettata." : "Proposal accepted.",
+      request_different_route: lang === "it" ? "Controproposta inviata." : "Counterproposal sent.",
+      reject_proposed_change: lang === "it" ? "Proposta rifiutata." : "Proposal declined.",
+      cancel_with_full_refund: lang === "it" ? "Richiesta annullata." : "Booking cancelled.",
+    };
+    toast.success(successMessage[action]);
+    setPlanChangeMessages((current) => ({ ...current, [requestId]: "" }));
+    await loadData();
+  };
+
   const handleAcceptConfirm = async () => {
     if (!acceptTarget) return;
+    if (acceptCandidateInfo.motivation.trim().length < 20) {
+      toast.error(
+        lang === "it"
+          ? "Scrivi qualche riga sul perche vorresti partecipare."
+          : "Write a few lines about why you would like to join."
+      );
+      return;
+    }
     setAcceptSubmitting(true);
     try {
-      await acceptParticipation(acceptTarget.participant_id);
+      await acceptParticipation(acceptTarget.participant_id, acceptCandidateInfo);
       // Guests paying their own share are sent straight to Bunq.
       if (acceptTarget.requires_payment) {
         const payment = await startDepositPayment(acceptTarget.booking_request_id, acceptTarget.participant_id);
@@ -414,6 +534,7 @@ const UserBookings = () => {
         toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
       }
       setAcceptTarget(null);
+      setAcceptCandidateInfo(candidateInfoPrefill);
       await loadParticipations();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error");
@@ -491,7 +612,10 @@ const UserBookings = () => {
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
-                      onClick={() => setAcceptTarget(p)}
+                      onClick={() => {
+                        setAcceptCandidateInfo(candidateInfoPrefill);
+                        setAcceptTarget(p);
+                      }}
                       className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
                     >
                       <Check size={14} /> {lang === "it" ? "Accetta" : "Accept"}
@@ -513,11 +637,16 @@ const UserBookings = () => {
         <BookingConfirmDialog
           open={acceptTarget !== null}
           onOpenChange={(open) => {
-            if (!open) setAcceptTarget(null);
+            if (!open) {
+              setAcceptTarget(null);
+              setAcceptCandidateInfo(candidateInfoPrefill);
+            }
           }}
           lang={lang}
           voyageName={acceptTarget ? participationVoyageName(acceptTarget) : undefined}
           partySize={1}
+          candidateInfo={acceptCandidateInfo}
+          onCandidateInfoChange={setAcceptCandidateInfo}
           requiresPayment={acceptTarget?.requires_payment ?? false}
           submitting={acceptSubmitting}
           onConfirm={() => void handleAcceptConfirm()}
@@ -643,6 +772,27 @@ const UserBookings = () => {
                     </div>
                   </div>
 
+                  <div className="rounded-[24px] border border-border/70 bg-background/40 p-4">
+                    <div className="mb-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        {lang === "it" ? "Dicci di te" : "Tell us about you"}
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {lang === "it"
+                          ? "Ci serve per valutare incastri, sicurezza e vita a bordo. Evitiamo testo libero dove bastano scelte rapide."
+                          : "This helps us evaluate fit, safety and life aboard. We avoid free text where quick choices are enough."}
+                      </p>
+                    </div>
+                    <CandidateInfoForm
+                      value={candidateInfo}
+                      onChange={(nextInfo) => {
+                        candidateInfoTouchedRef.current = true;
+                        setCandidateInfo(nextInfo);
+                      }}
+                      lang={lang}
+                    />
+                  </div>
+
                   <button
                     type="button"
                     onClick={openBookingConfirm}
@@ -671,12 +821,12 @@ const UserBookings = () => {
               requiresPayment
               depositPerPersonEur={perPersonDepositEur(
                 selectedLegIds.map((id) => legsById[id]).filter(Boolean),
-                { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
+                selectedContributionOptions
               )}
               depositTotalEur={totalDepositEur(
                 selectedLegIds.map((id) => legsById[id]).filter(Boolean),
                 Math.max(1, Number.parseInt(partySize, 10) || 1),
-                { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
+                selectedContributionOptions
               )}
               contributionPerNmEur={selectedVoyage?.booking_contribution_per_nm_eur}
               submitting={saving}
@@ -716,6 +866,21 @@ const UserBookings = () => {
                       .map((link) => legsById[link.bookable_leg_id])
                       .filter(Boolean)
                       .map((leg) => getLegLabel(leg, waypointsById, lang));
+                    const proposedLegLabels = stringArrayFromMetadata(request.plan_change_metadata, "proposed_leg_ids")
+                      .map((legId) => legsById[legId])
+                      .filter(Boolean)
+                      .map((leg) => getLegLabel(leg, waypointsById, lang));
+                    const planChangeUserAction = stringFromMetadata(request.plan_change_metadata, "user_response_action");
+                    const showPendingPlanChange =
+                      request.plan_change_status === "pending_user_approval" &&
+                      !planChangeUserAction &&
+                      proposedLegLabels.length > 0;
+                    const showCounterWaiting =
+                      request.plan_change_status === "pending_user_approval" &&
+                      planChangeUserAction === "request_different_route";
+                    const adminPlanMessage =
+                      stringFromMetadata(request.plan_change_metadata, "admin_message") ||
+                      stringFromMetadata(request.plan_change_metadata, "admin_note");
 
                     return (
                       <article key={request.id} className="rounded-[22px] border border-border/70 bg-background/45 p-4">
@@ -747,6 +912,74 @@ const UserBookings = () => {
                           ))}
                         </div>
                         {request.message && <p className="mt-3 text-sm text-muted-foreground">{request.message}</p>}
+                        {showPendingPlanChange && (
+                          <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                            <div className="flex items-start gap-2">
+                              <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
+                              <div>
+                                <p className="font-semibold">
+                                  {lang === "it" ? "Proposta di modifica tratte" : "Route change proposal"}
+                                </p>
+                                {adminPlanMessage && <p className="mt-1 whitespace-pre-line text-sky-900/80">{adminPlanMessage}</p>}
+                              </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {proposedLegLabels.map((label) => (
+                                <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                            <textarea
+                              value={planChangeMessages[request.id] || ""}
+                              onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [request.id]: event.target.value }))}
+                              rows={3}
+                              className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                              placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
+                            />
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                              <button
+                                type="button"
+                                onClick={() => void respondToPlanChange(request.id, "accept_proposed_change")}
+                                disabled={saving}
+                                className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                              >
+                                {lang === "it" ? "Accetta" : "Accept"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void respondToPlanChange(request.id, "request_different_route")}
+                                disabled={saving}
+                                className="rounded-full border border-sky-300 bg-white/70 px-3 py-2 text-xs font-semibold text-sky-900 disabled:opacity-50"
+                              >
+                                {lang === "it" ? "Controproponi" : "Counter"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void respondToPlanChange(request.id, "reject_proposed_change")}
+                                disabled={saving}
+                                className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                              >
+                                {lang === "it" ? "Rifiuta" : "Decline"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void respondToPlanChange(request.id, "cancel_with_full_refund")}
+                                disabled={saving}
+                                className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                              >
+                                {lang === "it" ? "Annulla" : "Cancel"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {showCounterWaiting && (
+                          <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                            {lang === "it"
+                              ? "Controproposta inviata: il team la sta revisionando."
+                              : "Counterproposal sent: the team is reviewing it."}
+                          </div>
+                        )}
                         {(predepartureInfo || briefingContent || termsContent || voyageTasks.length > 0) && (
                           <div className="mt-4 space-y-3 rounded-[18px] border border-border/70 bg-background/45 p-3">
                             {predepartureInfo && (
@@ -818,7 +1051,7 @@ const UserBookings = () => {
                           {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(request.status) && (
                             <button
                               type="button"
-                              onClick={() => void cancelBooking(request.id)}
+                              onClick={() => void cancelBooking(request)}
                               className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-destructive"
                             >
                               <X size={14} /> {lang === "it" ? "Annulla" : "Cancel"}

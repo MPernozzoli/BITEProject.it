@@ -10,7 +10,7 @@
 import { createAuthClient, createServiceClient } from "../../../src/server/bunq/supabase.js";
 import { bunqConfigured } from "../../../src/server/bunq/client.js";
 import {
-  findIncomingPaymentByReference,
+  findIncomingPaymentDetailsByReference,
   getBunqPaymentRequest,
   isPaidStatus,
 } from "../../../src/server/bunq/payment-requests.js";
@@ -116,11 +116,19 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     // If still pending, ask Bunq whether the payer has settled it.
     if (row.status === "pending" && bunqConfigured()) {
       try {
-        const settled =
+        const request =
           row.payment_method === "bunq_link" && row.bunq_request_id
-            ? isPaidStatus((await getBunqPaymentRequest(row.bunq_request_id)).status)
+            ? await getBunqPaymentRequest(row.bunq_request_id)
+            : null;
+        const transfer =
+          row.payment_method === "bank_transfer"
+            ? await findIncomingPaymentDetailsByReference(row.reference, row.amount_cents / 100)
+            : null;
+        const settled =
+          row.payment_method === "bunq_link" && request
+            ? isPaidStatus(request.status)
             : row.payment_method === "bank_transfer"
-              ? await findIncomingPaymentByReference(row.reference, row.amount_cents / 100)
+              ? Boolean(transfer)
               : false;
         if (settled) {
           await db
@@ -128,6 +136,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
             .update({
               status: "paid",
               paid_at: new Date().toISOString(),
+              payer_alias: request?.counterpartyAlias ?? transfer?.counterpartyAlias ?? null,
               updated_at: new Date().toISOString(),
             })
             .eq("id", row.id)

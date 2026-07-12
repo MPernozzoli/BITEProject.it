@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
       supabase
         .from('email_notification_preferences')
         .select(
-          'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled'
+          'newsletter_enabled, digest_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled'
         )
         .eq('email', email)
         .maybeSingle(),
@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
 
   const nextPreferences = mailboxOneClick
     ? normalizeEmailNotificationPreferences({
+        ...currentPreferences,
         newsletter_enabled: false,
         digest_enabled: false,
         story_notifications_enabled: false,

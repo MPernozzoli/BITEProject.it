@@ -478,6 +478,21 @@ const AdminDashboard = () => {
                 Booking
               </Link>
               <Link
+                to="/admin/candidates"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void (async () => {
+                    if (!(await runRouteLeaveGuard())) return;
+                    navigate("/admin/candidates");
+                  })();
+                }}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                title="Candidati"
+              >
+                <User size={16} />
+                Candidati
+              </Link>
+              <Link
                 to="/admin/media"
                 onClick={(event) => {
                   event.preventDefault();

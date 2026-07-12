@@ -5,7 +5,13 @@ import {
   buildGreetingName,
   EditorialEmailShell,
   EmailBodyText,
+  EmailCallout,
   EmailCard,
+  EmailDetailRow,
+  EmailHighlightBox,
+  EmailRouteBox,
+  EmailSectionLabel,
+  EmailSignalPills,
   resolveEmailLanguage,
 } from './theme.tsx'
 
@@ -59,6 +65,8 @@ const COPY = {
     },
     cta: 'Apri gestione booking',
     voyageFallback: 'un viaggio',
+    summaryTitle: 'Riepilogo operativo',
+    planTitle: 'Cambio planning',
     legsTitle: 'Tratte',
     oldLegsTitle: 'Prima',
     proposedLegsTitle: 'Proposta',
@@ -66,6 +74,14 @@ const COPY = {
     amount: 'Importo',
     paymentReference: 'Riferimento',
     travelerTitle: 'Richiedente',
+    status: {
+      admin_new_booking: 'Nuova richiesta',
+      admin_cancelled: 'Annullato',
+      admin_modified: 'Aggiornato',
+      admin_payment_pending: 'Pagamento in sospeso',
+      admin_payment_received: 'Pagamento ricevuto',
+      admin_plan_change: 'Da approvare',
+    },
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
   en: {
@@ -91,6 +107,8 @@ const COPY = {
     },
     cta: 'Open booking management',
     voyageFallback: 'a voyage',
+    summaryTitle: 'Operational summary',
+    planTitle: 'Plan change',
     legsTitle: 'Legs',
     oldLegsTitle: 'Before',
     proposedLegsTitle: 'Proposed',
@@ -98,6 +116,14 @@ const COPY = {
     amount: 'Amount',
     paymentReference: 'Reference',
     travelerTitle: 'Requester',
+    status: {
+      admin_new_booking: 'New request',
+      admin_cancelled: 'Cancelled',
+      admin_modified: 'Updated',
+      admin_payment_pending: 'Payment pending',
+      admin_payment_received: 'Payment received',
+      admin_plan_change: 'Needs approval',
+    },
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
 } as const
@@ -163,39 +189,36 @@ const VoyageBookingAdminNotificationEmail = ({
       footerReason={copy.footerReason}
       unsubscribeUrl={unsubscribeUrl}
     >
+      <EmailSignalPills
+        items={[
+          copy.status[normalizedEventType],
+          partySize ? `${copy.partySize}: ${partySize}` : null,
+          travelerEmail || resolvedTravelerName || null,
+        ]}
+      />
+
       <EmailCard>
+        <EmailSectionLabel>{copy.summaryTitle}</EmailSectionLabel>
         <EmailBodyText>
           <strong>{resolvedVoyageName}</strong>
         </EmailBodyText>
-        {resolvedTravelerName || travelerEmail ? (
-          <EmailBodyText muted>
-            {copy.travelerTitle}: {[resolvedTravelerName, travelerEmail].filter(Boolean).join(' · ')}
-          </EmailBodyText>
-        ) : null}
-        {partySize ? (
-          <EmailBodyText muted>
-            {copy.partySize}: {partySize}
-          </EmailBodyText>
-        ) : null}
-        {safeLegs.length ? (
-          <EmailBodyText muted>
-            {copy.legsTitle}: {safeLegs.join(' · ')}
-          </EmailBodyText>
-        ) : null}
-        {amountLabel ? <EmailBodyText muted>{copy.amount}: {amountLabel}</EmailBodyText> : null}
-        {paymentReference ? <EmailBodyText muted>{copy.paymentReference}: {paymentReference}</EmailBodyText> : null}
-        {safeOldLegs.length ? (
-          <EmailBodyText muted>
-            {copy.oldLegsTitle}: {safeOldLegs.join(' · ')}
-          </EmailBodyText>
-        ) : null}
-        {safeProposedLegs.length ? (
-          <EmailBodyText muted>
-            {copy.proposedLegsTitle}: {safeProposedLegs.join(' · ')}
-          </EmailBodyText>
-        ) : null}
-        {message?.trim() ? <EmailBodyText muted>{message.trim()}</EmailBodyText> : null}
+        <EmailDetailRow
+          label={copy.travelerTitle}
+          value={[resolvedTravelerName, travelerEmail].filter(Boolean).join(' · ') || null}
+        />
+        <EmailDetailRow label={copy.partySize} value={partySize ? String(partySize) : null} />
+        <EmailRouteBox label={copy.legsTitle} routes={safeLegs} />
+        {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
+        <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
+        {message?.trim() ? <EmailCallout>{message.trim()}</EmailCallout> : null}
       </EmailCard>
+      {safeOldLegs.length || safeProposedLegs.length ? (
+        <EmailCard>
+          <EmailSectionLabel>{copy.planTitle}</EmailSectionLabel>
+          <EmailRouteBox label={copy.oldLegsTitle} routes={safeOldLegs} />
+          <EmailRouteBox label={copy.proposedLegsTitle} routes={safeProposedLegs} />
+        </EmailCard>
+      ) : null}
     </EditorialEmailShell>
   )
 }

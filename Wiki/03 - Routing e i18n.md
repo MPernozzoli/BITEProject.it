@@ -42,7 +42,7 @@ Definite in `LocalizedRoutes` (App.tsx):
 Protette da `AdminRoute`. Vedi [[16 - Admin]].
 - `/admin/login`
 - `/admin` (dashboard)
-- `/admin/bookings`, `/admin/media`, `/admin/trackers`
+- `/admin/bookings`, `/admin/candidates`, `/admin/media`, `/admin/trackers`
 - `/admin/article/:id` (editor)
 
 `RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.

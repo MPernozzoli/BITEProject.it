@@ -50,6 +50,9 @@ import {
   isLegComplexityAuto,
 } from "@/lib/booking-utils";
 import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
+import { sendBookingInvites } from "@/lib/booking-participants";
+import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
+import { useI18n } from "@/lib/i18n";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -196,6 +199,7 @@ const buildBookingSettingsSnapshot = (settings: BookingSettings) => JSON.stringi
 const AdminVoyageBookings = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang } = useI18n();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [voyages, setVoyages] = useState<BookingVoyage[]>([]);
@@ -632,6 +636,25 @@ const AdminVoyageBookings = () => {
 
   const updateRequestStatus = async (requestId: string, status: VoyageBookingStatus) => {
     const request = requests.find((item) => item.id === requestId);
+    if (status === "cancelled" || status === "rejected") {
+      setSaving(true);
+      const result = await updateBookingStatusWithRefund({
+        bookingRequestId: requestId,
+        status,
+        trigger: status === "rejected" ? "admin_rejected" : "admin_cancelled",
+      });
+      setSaving(false);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.refundAmountEur > 0) {
+        toast.success(`Booking aggiornato. Rimborso automatico: EUR ${result.refundAmountEur.toFixed(2)}.`);
+      }
+      await loadVoyageDetails(selectedVoyageId);
+      return;
+    }
+
     const overCapacity = request ? requestWouldExceedCapacity(request, status) : false;
     if (overCapacity && !confirm("Questa conferma supera il limite persone impostato per almeno una tratta. Procedere comunque?")) {
       return;
@@ -656,13 +679,30 @@ const AdminVoyageBookings = () => {
   const approveRequest = (requestId: string) => updateRequestStatus(requestId, "admin_approved");
   const rejectRequest = (requestId: string) => updateRequestStatus(requestId, "rejected");
 
-  /** Commits a Gantt-bar drag-resize: nextLegIds is the request's full new leg set. */
+  /** Converts a Gantt-bar drag-resize into a traveller-facing route proposal. */
   const resizeBookingLegs = async (requestId: string, nextLegIds: string[]) => {
+    const request = requests.find((item) => item.id === requestId);
+    const currentLegIds = requestLegs
+      .filter((link) => link.booking_request_id === requestId)
+      .map((link) => link.bookable_leg_id)
+      .sort();
+    const proposedLegIds = [...nextLegIds].sort();
+    if (currentLegIds.length === proposedLegIds.length && currentLegIds.every((id, index) => id === proposedLegIds[index])) {
+      return;
+    }
+    const adminNote = window.prompt(
+      "Messaggio per il viaggiatore sulla modifica proposta",
+      "Ti proponiamo una modifica alle tratte per incastrare meglio equipaggio, meteo e disponibilità."
+    );
+    if (adminNote === null) {
+      await loadVoyageDetails(selectedVoyageId);
+      return;
+    }
     setSaving(true);
-    const { data, error } = await typedSupabase.rpc("admin_update_booking_legs", {
+    const { error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
       _booking_request_id: requestId,
-      _leg_ids: nextLegIds,
-      _allow_over_capacity: false,
+      _proposed_leg_ids: nextLegIds,
+      _admin_note: adminNote.trim() || null,
     });
     setSaving(false);
     if (error) {
@@ -670,19 +710,26 @@ const AdminVoyageBookings = () => {
       await loadVoyageDetails(selectedVoyageId);
       return;
     }
-    const result = Array.isArray(data) ? (data[0] as { over_capacity: boolean } | undefined) : undefined;
-    if (result?.over_capacity) toast.warning("Tratta aggiornata oltre il limite impostato.");
+    toast.success(request?.is_crew ? "Proposta registrata." : "Proposta inviata al viaggiatore.");
     await loadVoyageDetails(selectedVoyageId);
   };
 
-  /** Creates brand-new single-leg bookings from the Gantt table's "+" column pill. */
-  const addPeopleToLeg = async (legId: string, profileIds: string[]) => {
+  /** Creates brand-new single-leg bookings/invites from the Gantt table's "+" column pill. */
+  const addPeopleToLeg = async (legId: string, profileIds: string[], inviteEmails: string[] = []) => {
     const uniqueProfileIds = [...new Set(profileIds)];
-    if (uniqueProfileIds.length === 0) return;
+    const uniqueInviteEmails = [...new Set(inviteEmails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
+    if (uniqueProfileIds.length === 0 && uniqueInviteEmails.length === 0) return;
 
     const remainingSeats = Math.max(0, (selectedVoyage?.booking_max_guests || 4) - (legCapacity[legId] || 0));
-    if (uniqueProfileIds.length > remainingSeats) {
+    if (uniqueProfileIds.length + uniqueInviteEmails.length > remainingSeats) {
       toast.error("Hai selezionato più persone dei posti disponibili su questa tratta.");
+      return;
+    }
+    const selectedProfileEmail = uniqueProfileIds
+      .map((profileId) => profilesById[profileId]?.email?.trim().toLowerCase())
+      .find((email): email is string => Boolean(email && uniqueInviteEmails.includes(email)));
+    if (selectedProfileEmail) {
+      toast.error(`${selectedProfileEmail} è già selezionato come profilo registrato.`);
       return;
     }
 
@@ -699,8 +746,23 @@ const AdminVoyageBookings = () => {
       return;
     }
 
+    const duplicateInviteEmail = uniqueInviteEmails.find((email) =>
+      requests.some((request) => {
+        if (!duplicateBookingStatuses.has(request.status)) return false;
+        const profile = profilesById[request.profile_id];
+        if (profile?.email?.trim().toLowerCase() !== email) return false;
+        return requestLegs.some(
+          (link) => link.booking_request_id === request.id && link.bookable_leg_id === legId
+        );
+      })
+    );
+    if (duplicateInviteEmail) {
+      toast.error(`${duplicateInviteEmail} è già presente su questa tratta.`);
+      return;
+    }
+
     setSaving(true);
-    const results = await Promise.all(
+    const registeredResults = await Promise.all(
       uniqueProfileIds.map((profileId) =>
         typedSupabase.rpc("admin_create_voyage_booking", {
           _voyage_id: selectedVoyageId,
@@ -712,24 +774,56 @@ const AdminVoyageBookings = () => {
         })
       )
     );
-    setSaving(false);
+    const inviteResults = await Promise.all(
+      uniqueInviteEmails.map((email) =>
+        typedSupabase.rpc("admin_create_voyage_booking_invite_by_email", {
+          _voyage_id: selectedVoyageId,
+          _email: email,
+          _leg_ids: [legId],
+          _status: "admin_approved",
+          _admin_notes: "Invito creato manualmente da admin.",
+          _allow_over_capacity: false,
+        })
+      )
+    );
+    const results = [...registeredResults, ...inviteResults];
     const error = results.find((result) => result.error)?.error;
     if (error) {
+      setSaving(false);
       toast.error(error.message);
       await loadVoyageDetails(selectedVoyageId);
       return;
     }
+    const inviteRequestIds = inviteResults
+      .map(({ data }) => {
+        const result = Array.isArray(data) ? (data[0] as { booking_request_id?: string } | undefined) : undefined;
+        return result?.booking_request_id;
+      })
+      .filter((id): id is string => Boolean(id));
+    const inviteEmailResults = await Promise.allSettled(
+      inviteRequestIds.map((requestId) => sendBookingInvites(requestId, lang === "en" ? "en" : "it"))
+    );
+    setSaving(false);
     const overCapacity = results.some(({ data }) => {
       const result = Array.isArray(data) ? (data[0] as AdminBookingRpcResult | undefined) : undefined;
       return Boolean(result?.over_capacity);
     });
+    const sentInvites = inviteEmailResults.reduce((total, result) => {
+      if (result.status !== "fulfilled" || "notConfigured" in result.value) return total;
+      return total + result.value.sent;
+    }, 0);
+    const notConfiguredInvites = inviteEmailResults.some(
+      (result) => result.status === "fulfilled" && "notConfigured" in result.value
+    );
     toast.success(
       overCapacity
         ? "Persone aggiunte oltre capienza."
-        : uniqueProfileIds.length === 1
+        : uniqueProfileIds.length + uniqueInviteEmails.length === 1
           ? "Persona aggiunta."
-          : `${uniqueProfileIds.length} persone aggiunte.`
+          : `${uniqueProfileIds.length + uniqueInviteEmails.length} persone aggiunte.`
     );
+    if (sentInvites > 0) toast.success(`Inviti email inviati: ${sentInvites}.`);
+    if (notConfiguredInvites) toast.info("Inviti creati. Invio email non configurato in questo ambiente.");
     await loadVoyageDetails(selectedVoyageId);
   };
 

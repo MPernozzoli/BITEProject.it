@@ -94,6 +94,7 @@ export interface BookingRequest {
   party_size: number;
   status: VoyageBookingStatus;
   message: string | null;
+  candidate_info?: Record<string, unknown> | null;
   admin_notes: string | null;
   requested_at: string;
   expires_at: string | null;

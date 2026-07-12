@@ -66,7 +66,7 @@ export async function activateNewsletterSubscription({
       .maybeSingle(),
     supabase
       .from('email_notification_preferences')
-      .select('newsletter_enabled, digest_enabled, story_notifications_enabled')
+      .select('newsletter_enabled, digest_enabled, story_notifications_enabled, article_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled')
       .eq('email', normalizedEmail)
       .maybeSingle(),
     supabase

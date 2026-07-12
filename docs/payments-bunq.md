@@ -11,7 +11,9 @@ and are not included in this amount.
 
 Computed server-side (never trusted from the client) in `src/lib/booking-deposit.ts`:
 
-- Fixed minimum: €20 per person, applied once regardless of the number of selected legs.
+- Fixed minimum: €20 per person per voyage. It is applied to the user's first active
+  booking on that voyage only; later bookings for additional legs on the same voyage skip
+  this fixed part and charge only the variable leg contribution.
 - Variable part: planned nautical miles for each selected leg × the voyage's configurable
   `booking_contribution_per_nm_eur` coefficient. Default: €0.90/NM.
 - Leg modifiers apply additively to the variable part only:

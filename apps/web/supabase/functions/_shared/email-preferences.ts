@@ -7,6 +7,9 @@ export type EmailNotificationPreferences = {
   comment_notifications_frequency: EngagementNotificationFrequency
   push_engagement_enabled: boolean
   push_publication_enabled: boolean
+  push_mail_enabled: boolean
+  push_voyage_admin_enabled: boolean
+  push_voyage_user_enabled: boolean
 }
 
 export type EngagementNotificationFrequency =
@@ -25,6 +28,9 @@ const DEFAULT_PREFERENCES: EmailNotificationPreferences = {
   comment_notifications_frequency: 'instant',
   push_engagement_enabled: true,
   push_publication_enabled: true,
+  push_mail_enabled: true,
+  push_voyage_admin_enabled: true,
+  push_voyage_user_enabled: true,
 }
 
 function normalizeEngagementFrequency(
@@ -82,6 +88,18 @@ export function normalizeEmailNotificationPreferences(
       typeof value?.push_publication_enabled === 'boolean'
         ? value.push_publication_enabled
         : DEFAULT_PREFERENCES.push_publication_enabled,
+    push_mail_enabled:
+      typeof value?.push_mail_enabled === 'boolean'
+        ? value.push_mail_enabled
+        : DEFAULT_PREFERENCES.push_mail_enabled,
+    push_voyage_admin_enabled:
+      typeof value?.push_voyage_admin_enabled === 'boolean'
+        ? value.push_voyage_admin_enabled
+        : DEFAULT_PREFERENCES.push_voyage_admin_enabled,
+    push_voyage_user_enabled:
+      typeof value?.push_voyage_user_enabled === 'boolean'
+        ? value.push_voyage_user_enabled
+        : DEFAULT_PREFERENCES.push_voyage_user_enabled,
   }
 }
 

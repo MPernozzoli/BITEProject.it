@@ -688,7 +688,10 @@ export type Database = {
           like_notifications_frequency: string
           newsletter_enabled: boolean
           push_engagement_enabled: boolean
+          push_mail_enabled: boolean
           push_publication_enabled: boolean
+          push_voyage_admin_enabled: boolean
+          push_voyage_user_enabled: boolean
           story_notifications_enabled: boolean
           updated_at: string
         }
@@ -701,7 +704,10 @@ export type Database = {
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
           push_engagement_enabled?: boolean
+          push_mail_enabled?: boolean
           push_publication_enabled?: boolean
+          push_voyage_admin_enabled?: boolean
+          push_voyage_user_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }
@@ -714,7 +720,10 @@ export type Database = {
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
           push_engagement_enabled?: boolean
+          push_mail_enabled?: boolean
           push_publication_enabled?: boolean
+          push_voyage_admin_enabled?: boolean
+          push_voyage_user_enabled?: boolean
           story_notifications_enabled?: boolean
           updated_at?: string
         }

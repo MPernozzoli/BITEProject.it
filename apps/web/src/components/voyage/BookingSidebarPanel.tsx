@@ -1,5 +1,5 @@
-import type { TouchEvent } from "react";
-import { AlertTriangle, Loader2, TicketCheck, Users, X } from "lucide-react";
+import { useState, type TouchEvent } from "react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, TicketCheck, Users, X } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
   type BookableLegAvailability,
@@ -13,6 +13,9 @@ import type { Voyage } from "@/lib/voyage-utils";
 import { getLocalizedVoyageName } from "@/lib/voyage-utils";
 import { getDangerReasonDef } from "@/lib/danger-reasons";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
+import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import type { CandidateInfo } from "@/lib/booking-candidate-info";
+import { formatDepositEur } from "@/lib/booking-deposit";
 
 interface BookingSidebarPanelProps {
   voyage: Voyage | null;
@@ -22,6 +25,9 @@ interface BookingSidebarPanelProps {
   rejectedLegIds: string[];
   partySize: number;
   message: string;
+  candidateInfo: CandidateInfo;
+  depositPerPersonEur?: number;
+  depositTotalEur?: number;
   submitting: boolean;
   isSignedIn: boolean;
   lang: Language;
@@ -34,6 +40,7 @@ interface BookingSidebarPanelProps {
   onToggleLeg: (legId: string) => void;
   onPartySizeChange: (partySize: number) => void;
   onMessageChange: (message: string) => void;
+  onCandidateInfoChange: (candidateInfo: CandidateInfo) => void;
   onSubmit: () => void;
 }
 
@@ -45,6 +52,9 @@ const BookingSidebarPanel = ({
   rejectedLegIds,
   partySize,
   message,
+  candidateInfo,
+  depositPerPersonEur,
+  depositTotalEur,
   submitting,
   isSignedIn,
   lang,
@@ -57,8 +67,10 @@ const BookingSidebarPanel = ({
   onToggleLeg,
   onPartySizeChange,
   onMessageChange,
+  onCandidateInfoChange,
   onSubmit,
 }: BookingSidebarPanelProps) => {
+  const [step, setStep] = useState<"legs" | "about">("legs");
   const selectedLegs = selectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
   const rejectedLegs = rejectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
 
@@ -123,7 +135,60 @@ const BookingSidebarPanel = ({
         className={`min-h-0 flex-1 overflow-y-auto px-3 py-3 ${isMobile ? "overscroll-contain" : ""}`}
         style={isMobile ? { touchAction: "pan-y" } : undefined}
       >
-        {legs.length === 0 ? (
+        {step === "about" ? (
+          <div className="space-y-4">
+            <div className="rounded-[22px] border border-amber-300/60 bg-amber-50/65 p-4 text-xs leading-relaxed text-amber-950">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-800">
+                {lang === "it" ? "Riepilogo tratte" : "Leg summary"}
+              </p>
+              <div className="mt-3 space-y-1.5">
+                {selectedLegs.map((leg) => (
+                  <p key={leg.id} className="font-medium text-foreground">
+                    {getLegLabel(leg, waypointsById, lang)}
+                  </p>
+                ))}
+              </div>
+              <p className="mt-3 text-muted-foreground">
+                {lang === "it" ? "Persone" : "People"}: <span className="font-medium text-foreground">{partySize}</span>
+              </p>
+              {typeof depositTotalEur === "number" && (
+                <div className="mt-3 rounded-2xl border border-amber-300/70 bg-white/65 p-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-800">
+                      {lang === "it" ? "Contributo spese vive" : "Cost contribution"}
+                    </span>
+                    <span className="text-base font-bold text-amber-950">
+                      {formatDepositEur(depositTotalEur, lang === "it" ? "it" : "en")}
+                    </span>
+                  </div>
+                  {typeof depositPerPersonEur === "number" && partySize > 1 && (
+                    <p className="mt-1 text-[11px] text-amber-900">
+                      {formatDepositEur(depositPerPersonEur, lang === "it" ? "it" : "en")} × {partySize}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[11px] leading-relaxed text-amber-950/85">
+                    {lang === "it"
+                      ? "Non e un prezzo, un biglietto o un servizio commerciale: e una quota equa delle spese vive di un viaggio privato che l'equipaggio deve comunque effettuare."
+                      : "This is not a price, ticket, or commercial service: it is a fair share of the out-of-pocket costs of a private voyage the crew is already making."}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="rounded-[24px] border border-white/60 bg-white/45 p-4">
+              <div className="mb-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  {lang === "it" ? "Dicci di te" : "Tell us about you"}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {lang === "it"
+                    ? "Ci serve per capire incastri, sicurezza e vita a bordo prima di confermare la partecipazione."
+                    : "This helps us understand fit, safety and life aboard before confirming participation."}
+                </p>
+              </div>
+              <CandidateInfoForm value={candidateInfo} onChange={onCandidateInfoChange} lang={lang} compact />
+            </div>
+          </div>
+        ) : legs.length === 0 ? (
           <div className="rounded-[20px] border border-dashed border-emerald-300/70 bg-emerald-50/75 px-3 py-3 text-xs text-emerald-800">
             {lang === "it"
               ? "Al momento non ci sono tratte disponibili su questo viaggio."
@@ -254,15 +319,34 @@ const BookingSidebarPanel = ({
           </label>
           <button
             type="button"
-            onClick={onSubmit}
+            onClick={() => {
+              if (step === "legs") {
+                setStep("about");
+                return;
+              }
+              onSubmit();
+            }}
             disabled={submitting || selectedLegIds.length === 0}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground px-4 py-2.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : <TicketCheck size={14} />}
-            {isSignedIn
-              ? (lang === "it" ? "Partecipa" : "Join")
-              : (lang === "it" ? "Accedi" : "Sign in")}
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : step === "legs" ? <ArrowRight size={14} /> : <TicketCheck size={14} />}
+            {!isSignedIn
+              ? (lang === "it" ? "Accedi" : "Sign in")
+              : step === "legs"
+                ? (lang === "it" ? "Riepilogo e dati" : "Summary and info")
+                : (lang === "it" ? "Continua al contributo" : "Continue to contribution")}
           </button>
+          {step === "about" && (
+            <button
+              type="button"
+              onClick={() => setStep("legs")}
+              disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/70 bg-white/60 px-4 py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-white/80 disabled:opacity-50"
+            >
+              <ArrowLeft size={14} />
+              {lang === "it" ? "Modifica tratte" : "Edit legs"}
+            </button>
+          )}
         </div>
       </div>
     </div>

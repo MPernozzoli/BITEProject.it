@@ -15,6 +15,20 @@ type ResendPayload = {
   [key: string]: unknown;
 };
 
+type ReceivedEmailContent = {
+  id?: string;
+  from?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  html?: string | null;
+  text?: string | null;
+  headers?: Record<string, unknown> | Array<{ name?: unknown; value?: unknown }>;
+  attachments?: unknown[];
+  message_id?: string;
+};
+
 function normalizeHeaders(raw: unknown): Array<{ name: string; value: string }> {
   if (!raw) return [];
   if (Array.isArray(raw)) {
@@ -61,6 +75,27 @@ function nestedEmailId(data: Record<string, unknown>): string {
   return "";
 }
 
+function receivedEmailId(data: Record<string, unknown>): string {
+  return typeof data.email_id === "string" ? data.email_id : typeof data.id === "string" ? data.id : nestedEmailId(data);
+}
+
+async function retrieveReceivedEmailContent(emailId: string): Promise<ReceivedEmailContent | null> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || !emailId) return null;
+
+  const response = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}?html_format=cid`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    console.error("[webhooks/email/inbound] received email fetch failed", response.status, details);
+    return null;
+  }
+
+  return (await response.json()) as ReceivedEmailContent;
+}
+
 async function isSpamSender(address: string): Promise<boolean> {
   const db = createMailServiceClient();
   const { data } = await db.from("email_spam_senders").select("id").eq("address", normalizeAddress(address)).maybeSingle();
@@ -92,29 +127,36 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const db = createMailServiceClient();
 
   try {
-    if (eventType === "email.received" || typeof data.from === "string") {
-      const from = String(data.from ?? "");
-      const to = asStringArray(data.to);
+    if (eventType === "email.received" || (!eventType && typeof data.from === "string")) {
+      const inboundEmailId = receivedEmailId(data);
+      const content = inboundEmailId ? await retrieveReceivedEmailContent(inboundEmailId) : null;
+      const from = String(content?.from ?? data.from ?? "");
+      const to = content?.to?.length ? content.to : asStringArray(data.to);
       if (!from || to.length === 0) {
         sendJson(res, 400, { error: "missing_from_to" });
         return;
       }
 
       const parsedFrom = parseEmailAddress(from);
-      const headers = normalizeHeaders(data.headers);
+      const headers = normalizeHeaders(content?.headers ?? data.headers);
       const brand = detectMailBrand(to);
       const assignment = await resolveMailAssignment(db, to);
       const { data: insertedEmail, error } = await db.from("inbound_emails").insert({
-        resend_email_id: typeof data.email_id === "string" ? data.email_id : typeof data.id === "string" ? data.id : null,
-        message_id: typeof data.message_id === "string" ? data.message_id : extractMessageId(headers),
+        resend_email_id: inboundEmailId || null,
+        message_id:
+          typeof content?.message_id === "string"
+            ? content.message_id
+            : typeof data.message_id === "string"
+              ? data.message_id
+              : extractMessageId(headers),
         from_address: parsedFrom.address,
         from_name: parsedFrom.name,
         to_addresses: to,
-        subject: typeof data.subject === "string" ? data.subject : "(nessun oggetto)",
-        text_body: typeof data.text === "string" ? data.text : null,
-        html_body: typeof data.html === "string" ? data.html : null,
+        subject: typeof content?.subject === "string" ? content.subject : typeof data.subject === "string" ? data.subject : "(nessun oggetto)",
+        text_body: typeof content?.text === "string" ? content.text : typeof data.text === "string" ? data.text : null,
+        html_body: typeof content?.html === "string" ? content.html : typeof data.html === "string" ? data.html : null,
         headers,
-        attachments: Array.isArray(data.attachments) ? data.attachments : [],
+        attachments: Array.isArray(content?.attachments) ? content.attachments : Array.isArray(data.attachments) ? data.attachments : [],
         brand,
         assigned_to_profile_id: assignment.assignedProfileId,
         assignment_reason: assignment.reason,
@@ -124,7 +166,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
       const pushSent = await sendMailPushNotification(db, assignment.notifyProfileIds, {
         title: assignment.assignedProfileId ? "Nuova mail assegnata" : "Nuova mail BITE",
-        body: `${parsedFrom.name || parsedFrom.address}: ${typeof data.subject === "string" ? data.subject : "(nessun oggetto)"}`,
+        body: `${parsedFrom.name || parsedFrom.address}: ${typeof content?.subject === "string" ? content.subject : typeof data.subject === "string" ? data.subject : "(nessun oggetto)"}`,
         url: "/admin/mail",
       }).catch((pushError) => {
         console.error("[webhooks/email/inbound] push failed", pushError);

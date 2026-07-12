@@ -13,6 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
+import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import type { CandidateInfo } from "@/lib/booking-candidate-info";
 import {
   getComplexityLabel,
   getLegComplexity,
@@ -125,6 +127,8 @@ interface BookingConfirmDialogProps {
   message?: string;
   /** When true, shows the contribution conditions + payment box (Bunq flow). */
   requiresPayment?: boolean;
+  candidateInfo?: CandidateInfo;
+  onCandidateInfoChange?: (candidateInfo: CandidateInfo) => void;
   /** Per-person contribution (EUR), shown when requiresPayment. */
   depositPerPersonEur?: number;
   /** Total contribution charged (per-person × pax), shown when requiresPayment. */
@@ -145,6 +149,8 @@ const BookingConfirmDialog = ({
   partySize,
   message,
   requiresPayment = false,
+  candidateInfo,
+  onCandidateInfoChange,
   depositPerPersonEur,
   depositTotalEur,
   contributionPerNmEur,
@@ -264,6 +270,22 @@ const BookingConfirmDialog = ({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {candidateInfo && onCandidateInfoChange && (
+            <div className="mb-4 rounded-2xl border border-border/70 bg-muted/25 p-4">
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {lang === "it" ? "Dicci di te" : "Tell us about you"}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {lang === "it"
+                    ? "Prima di accettare l'invito ci serve qualche informazione utile per bordo, sicurezza e convivenza."
+                    : "Before accepting the invitation we need a few useful details for life aboard, safety and fit."}
+                </p>
+              </div>
+              <CandidateInfoForm value={candidateInfo} onChange={onCandidateInfoChange} lang={lang} compact />
             </div>
           )}
 
