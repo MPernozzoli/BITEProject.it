@@ -330,6 +330,50 @@ export function buildSailGeometry(luffHeight: number, footLength: number, belly:
   return geometry;
 }
 
+// Headsail (jib/genoa) in sail-local space: the LUFF runs straight up the local
+// +Y axis (that axis is aligned to the forestay when assembled), the tack sits
+// at the origin, and the clew is aft-and-low at local (-chord, clewHeight). The
+// belly bulges in +z. Sheeting is a rotation of the whole sail about this luff
+// axis, so the luff never leaves the stay — only the clew swings to leeward.
+function buildJibGeometry(luffLen: number, chord: number, clewHeight: number, belly: number): THREE.BufferGeometry {
+  const rows = 12;
+  const cols = 6;
+  const head = new THREE.Vector3(0, luffLen, 0);
+  const clew = new THREE.Vector3(-chord, clewHeight, 0);
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const luffPt = new THREE.Vector3();
+  const trailing = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  for (let r = 0; r <= rows; r++) {
+    const v = r / rows;
+    luffPt.set(0, v * luffLen, 0); // on the forestay
+    trailing.copy(clew).lerp(head, v); // leech, converging to the head
+    for (let c = 0; c <= cols; c++) {
+      const u = c / cols; // 0 = luff, 1 = leech/clew
+      p.copy(luffPt).lerp(trailing, u);
+      // Zero draft at luff (attached to the stay) and at the leech; fullest low.
+      const draft = Math.sin(Math.PI * Math.pow(u, 0.8)) * Math.sin(Math.PI * Math.min(1, 0.12 + v * 0.94)) * belly;
+      positions.push(p.x, p.y, p.z + draft);
+      uvs.push(u, v);
+    }
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const a = r * (cols + 1) + c;
+      const b = (r + 1) * (cols + 1) + c;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 // Thin cylindrical strut between two points — used for spreaders, the boom
 // vang, the wheel pedestal and spokes, and pulpit/pushpit stanchions.
 function addStrut(
@@ -353,7 +397,8 @@ export interface SpritzBoat {
   group: THREE.Group;
   /** Pivot at the mast: rotate on Y to swing boom + mainsail (sheeting). */
   mainPivot: THREE.Group;
-  /** Pivot at the jib tack: rotate on Y to sheet the jib. */
+  /** Inner headsail group whose local Y is the forestay/luff axis: rotate on Y to
+   *  sheet the jib. The luff stays pinned to the stay; only the clew swings. */
   jibPivot: THREE.Group;
   mainSail: THREE.Mesh;
   jib: THREE.Mesh;
@@ -463,6 +508,10 @@ export function buildSpritzBoat(): SpritzBoat {
   mast.position.set(0.1, 1.15, 0);
   boat.add(mast);
 
+  // Rig anchor points shared by the headsail and the standing rigging below.
+  const mastTop = new THREE.Vector3(0.1, 2.28, 0);
+  const bowTip = new THREE.Vector3(1.2, 0.15, 0);
+
   // Spreaders, angled slightly up and out, bending the cap shrouds below.
   const spreaderMastPt = new THREE.Vector3(0.1, 1.55, 0);
   const spreaderTipS = new THREE.Vector3(0.1, 1.6, 0.3);
@@ -489,14 +538,26 @@ export function buildSpritzBoat(): SpritzBoat {
   mainSail.rotation.y = Math.PI; // boom toward the stern
   mainPivot.add(mainSail);
 
+  // Headsail hanked to the forestay. Two nested groups: `jibStay` is fixed and
+  // orients the sail's luff along the forestay (tack -> just below the masthead);
+  // `jibPivot` (the inner group) rotates about that luff axis to sheet the sail,
+  // so the luff stays pinned to the stay and only the clew swings to leeward.
+  const jibTack = new THREE.Vector3().copy(bowTip).lerp(mastTop, 0.02);
+  const jibHead = new THREE.Vector3().copy(bowTip).lerp(mastTop, 0.86);
+  const jibStay = new THREE.Group();
+  jibStay.position.copy(jibTack);
+  jibStay.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    jibHead.clone().sub(jibTack).normalize()
+  );
+  boat.add(jibStay);
   const jibPivot = new THREE.Group();
-  jibPivot.position.set(0.16, 0, 0);
-  boat.add(jibPivot);
+  jibPivot.rotation.y = 0.28; // default leeward sheet, so the splash reads as sailing
+  jibStay.add(jibPivot);
   const jib = new THREE.Mesh(
-    buildSailGeometry(1.6, 0.85, 0.13),
+    buildJibGeometry(jibTack.distanceTo(jibHead), 1.2, 0.7, 0.16),
     new THREE.MeshStandardMaterial({ map: sailTexture, roughness: 0.85, side: THREE.DoubleSide })
   );
-  jib.position.set(0, 0.3, 0);
   jibPivot.add(jib);
 
   // Stern arch carrying the solar panel, and the cream sprayhood over the companionway.
@@ -552,8 +613,6 @@ export function buildSpritzBoat(): SpritzBoat {
   }
 
   // Rigging: forestay, backstay and cap shrouds bent over the spreaders.
-  const mastTop = new THREE.Vector3(0.1, 2.28, 0);
-  const bowTip = new THREE.Vector3(1.2, 0.15, 0);
   const sternPt = new THREE.Vector3(-1.16, 0.12, 0);
   const chainplateS = new THREE.Vector3(0.05, 0.02, 0.34);
   const chainplateP = new THREE.Vector3(0.05, 0.02, -0.34);

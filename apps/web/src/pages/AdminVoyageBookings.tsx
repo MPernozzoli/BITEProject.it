@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarClock, Check, Clock, Loader2, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, X } from "lucide-react";
+import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, Users, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import BookingGanttTable from "@/components/admin/BookingGanttTable";
+import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -202,6 +203,15 @@ const buildRoutePlanningSnapshot = (
 
 const buildBookingSettingsSnapshot = (settings: BookingSettings) => JSON.stringify(settings);
 
+type BookingTabKey = "overview" | "soste" | "rotte" | "candidature" | "briefing";
+const BOOKING_TABS: { key: BookingTabKey; label: string; icon: LucideIcon }[] = [
+  { key: "overview", label: "Overview", icon: LayoutGrid },
+  { key: "soste", label: "Soste", icon: Anchor },
+  { key: "rotte", label: "Rotte", icon: CalendarClock },
+  { key: "candidature", label: "Candidature", icon: Users },
+  { key: "briefing", label: "Briefing", icon: Mail },
+];
+
 const AdminVoyageBookings = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -227,6 +237,7 @@ const AdminVoyageBookings = () => {
     () => new Set(["planned", "active"])
   );
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<BookingTabKey>("overview");
   const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
@@ -427,6 +438,19 @@ const AdminVoyageBookings = () => {
   const visibleRequests = useMemo(
     () => requests.filter((request) => statusFilter === "all" || request.status === statusFilter),
     [requests, statusFilter]
+  );
+  // Candidature "in revisione" for this voyage — drives the tab badge. Mirrors the panel's
+  // own filter (non-crew requests still awaiting a decision or with a pending plan change).
+  const candidatesInReview = useMemo(
+    () =>
+      requests.filter(
+        (request) =>
+          !request.is_crew &&
+          (request.status === "requested" ||
+            request.status === "waitlisted" ||
+            request.plan_change_status === "pending_user_approval")
+      ).length,
+    [requests]
   );
 
   const legCapacity = useMemo(() => {
@@ -1001,6 +1025,36 @@ const AdminVoyageBookings = () => {
     await loadVoyageDetails(selectedVoyageId);
   };
 
+  // Shared save controls for the route-planning tabs (Soste / Rotte). The Overview tab keeps
+  // its own copy inline. All three save the same pending route-planning changes.
+  const routePlanningActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {isRoutePlanningDirty && (
+        <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+          Modifiche non salvate
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => void saveRoutePlanning()}
+        disabled={saving || !selectedVoyageId}
+        className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
+        Salva planning
+      </button>
+      <button
+        type="button"
+        onClick={() => void saveRoutePlanning({ syncAfterSave: true })}
+        disabled={saving || !selectedVoyageId || !selectedVoyage?.booking_enabled}
+        className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+        Salva e ricalcola
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen px-5 pb-16 pt-24 md:px-10">
       <div className="mx-auto max-w-[92rem] space-y-6">
@@ -1014,17 +1068,6 @@ const AdminVoyageBookings = () => {
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 Monitora imbarchi programmati, disponibilità per tratta e stato delle persone a bordo.
               </p>
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <button
-                type="button"
-                onClick={syncLegs}
-                disabled={saving || !selectedVoyageId || !selectedVoyage?.booking_enabled}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
-                Sync tratte
-              </button>
             </div>
           </div>
 
@@ -1107,6 +1150,89 @@ const AdminVoyageBookings = () => {
           </div>
         </section>
 
+        <nav className="glass-panel flex flex-wrap gap-1.5 rounded-[26px] p-1.5">
+          {BOOKING_TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            const badge = tab.key === "candidature" ? candidatesInReview : 0;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm font-medium transition-colors ${
+                  active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <tab.icon size={16} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+                {badge > 0 && (
+                  <span
+                    className={`ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
+                      active ? "bg-background/25 text-background" : "bg-accent text-accent-foreground"
+                    }`}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {activeTab === "overview" && (
+        <section className="glass-panel rounded-[34px] p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">Gantt · Matrice</p>
+              <h2 className="editorial-heading text-3xl">
+                {selectedVoyage ? getLocalizedBookingVoyageName(selectedVoyage, "it") : "Booking"}
+              </h2>
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            >
+              <option value="all">Tutti gli stati</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {getBookingStatusLabel(status, "it")}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading ? (
+            <div className="rounded-[24px] border border-border/70 p-8 text-muted-foreground">
+              <Loader2 className="mr-2 inline animate-spin" size={16} /> Loading matrix...
+            </div>
+          ) : legs.length === 0 ? (
+            <div className="rounded-[24px] border border-border/70 p-8 text-sm text-muted-foreground">
+              Nessuna tratta prenotabile. Usa “Sync tratte” dopo aver creato waypoint pubblici.
+            </div>
+          ) : (
+            <BookingGanttTable
+              legs={legs}
+              waypointsById={waypointsById}
+              requests={visibleRequests}
+              requestLegs={requestLegs}
+              profilesById={profilesById}
+              availableProfiles={combinedProfiles}
+              legCapacity={legCapacity}
+              maxGuests={selectedVoyage?.booking_max_guests || 4}
+              saving={saving}
+              statusOptions={statusOptions}
+              onApprove={(requestId) => void approveRequest(requestId)}
+              onReject={(requestId) => void rejectRequest(requestId)}
+              onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
+              onResize={resizeBookingLegs}
+              onAddPeople={addPeopleToLeg}
+            />
+          )}
+        </section>
+        )}
+
+        {activeTab === "overview" && (
         <section className="grid gap-4 md:grid-cols-4">
           {[
             { label: "Richieste", value: requests.filter((r) => r.status === "requested").length },
@@ -1120,14 +1246,16 @@ const AdminVoyageBookings = () => {
             </div>
           ))}
         </section>
+        )}
 
+        {activeTab === "overview" && (
         <section className="glass-panel rounded-[30px] p-5 md:p-6">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
               <MapPinned size={18} className="text-accent" />
               <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Route planning</p>
-                <h2 className="editorial-heading text-2xl">Percorso, soste e tratte future</h2>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Parametri booking</p>
+                <h2 className="editorial-heading text-2xl">Configurazione del viaggio</h2>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1241,9 +1369,22 @@ const AdminVoyageBookings = () => {
               </div>
             </div>
           </div>
+        </section>
+        )}
 
-          <div className="mt-6 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-            <div>
+        {activeTab === "soste" && (
+        <section className="glass-panel rounded-[30px] p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <Anchor size={18} className="text-accent" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Soste</p>
+                <h2 className="editorial-heading text-2xl">Durata delle soste ai waypoint</h2>
+              </div>
+            </div>
+            {routePlanningActions}
+          </div>
+          <div>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Soste waypoint</p>
                 <span className="text-xs text-muted-foreground">Durata prevista in sosta</span>
@@ -1409,11 +1550,36 @@ const AdminVoyageBookings = () => {
                 })}
                 {publicPlanningWaypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint pubblico caricato per questa rotta.</p>}
               </div>
-            </div>
+          </div>
+        </section>
+        )}
 
-            <div>
+        {activeTab === "rotte" && (
+        <section className="glass-panel rounded-[30px] p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <CalendarClock size={18} className="text-accent" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Rotte</p>
+                <h2 className="editorial-heading text-2xl">Tratte di navigazione</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={syncLegs}
+                disabled={saving || !selectedVoyageId || !selectedVoyage?.booking_enabled}
+                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+                Sync tratte
+              </button>
+              {routePlanningActions}
+            </div>
+          </div>
+          <div>
               <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Tratte di navigazione</p>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Finestre e disponibilità</p>
                 <span className="text-xs text-muted-foreground">Finestre e disponibilità</span>
               </div>
               <div className="space-y-2">
@@ -1558,61 +1724,17 @@ const AdminVoyageBookings = () => {
                 })}
                 {legs.length === 0 && <p className="text-sm text-muted-foreground">Nessuna tratta: abilita il booking e usa “Salva e ricalcola”.</p>}
               </div>
-            </div>
           </div>
         </section>
+        )}
 
+        {activeTab === "candidature" && (
         <section className="glass-panel rounded-[34px] p-5 md:p-6">
-          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">Matrice</p>
-              <h2 className="editorial-heading text-3xl">
-                {selectedVoyage ? getLocalizedBookingVoyageName(selectedVoyage, "it") : "Booking"}
-              </h2>
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-              className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-            >
-              <option value="all">Tutti gli stati</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {getBookingStatusLabel(status, "it")}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {loading ? (
-            <div className="rounded-[24px] border border-border/70 p-8 text-muted-foreground">
-              <Loader2 className="mr-2 inline animate-spin" size={16} /> Loading matrix...
-            </div>
-          ) : legs.length === 0 ? (
-            <div className="rounded-[24px] border border-border/70 p-8 text-sm text-muted-foreground">
-              Nessuna tratta prenotabile. Usa “Sync tratte” dopo aver creato waypoint pubblici.
-            </div>
-          ) : (
-            <BookingGanttTable
-              legs={legs}
-              waypointsById={waypointsById}
-              requests={visibleRequests}
-              requestLegs={requestLegs}
-              profilesById={profilesById}
-              availableProfiles={combinedProfiles}
-              legCapacity={legCapacity}
-              maxGuests={selectedVoyage?.booking_max_guests || 4}
-              saving={saving}
-              statusOptions={statusOptions}
-              onApprove={(requestId) => void approveRequest(requestId)}
-              onReject={(requestId) => void rejectRequest(requestId)}
-              onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
-              onResize={resizeBookingLegs}
-              onAddPeople={addPeopleToLeg}
-            />
-          )}
+          <VoyageCandidatesPanel voyageId={selectedVoyageId} />
         </section>
+        )}
 
+        {activeTab === "briefing" && (
         <section className="glass-panel rounded-[30px] p-5 md:p-6">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
@@ -1816,6 +1938,7 @@ const AdminVoyageBookings = () => {
             </div>
           </div>
         </section>
+        )}
       </div>
 
       <AlertDialog open={leaveDialogOpen}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, ExternalLink, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -58,7 +58,14 @@ type CandidateProfile = BookingProfile & {
   social_seapeople?: string | null;
 };
 
-const AdminVoyageCandidates = () => {
+type VoyageCandidatesPanelProps = {
+  /** When set, only candidates for this voyage are shown/loaded. */
+  voyageId?: string;
+  /** Called after every (re)load with the number of candidates in review. */
+  onCountChange?: (count: number) => void;
+};
+
+const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPanelProps) => {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
@@ -73,11 +80,11 @@ const AdminVoyageCandidates = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const requestsQuery = voyageId
+      ? typedSupabase.from("voyage_booking_requests").select("*").eq("voyage_id", voyageId).order("requested_at", { ascending: false })
+      : typedSupabase.from("voyage_booking_requests").select("*").order("requested_at", { ascending: false });
     const [requestsRes, voyagesRes, waypointsRes, legsRes] = await Promise.all([
-      typedSupabase
-        .from("voyage_booking_requests")
-        .select("*")
-        .order("requested_at", { ascending: false }),
+      requestsQuery,
       typedSupabase
         .from("voyages")
         .select("id,name,name_it,name_en,type,status,booking_enabled,booking_max_guests,booking_planning_speed_kn,booking_contribution_per_nm_eur,start_date,end_date")
@@ -126,7 +133,7 @@ const AdminVoyageCandidates = () => {
     setRequestLegs((requestLegsRes.data as BookingRequestLeg[] | null) || []);
     setProfiles((profilesRes.data as CandidateProfile[] | null) || []);
     setLoading(false);
-  }, []);
+  }, [voyageId]);
 
   useEffect(() => {
     void load();
@@ -153,7 +160,14 @@ const AdminVoyageCandidates = () => {
   }, [requestLegs]);
   const legsById = useMemo(() => Object.fromEntries(legs.map((leg) => [leg.id, leg])), [legs]);
 
-  const candidates = requests.filter((request) => reviewStatuses.has(request.status) || request.plan_change_status === "pending_user_approval");
+  const candidates = useMemo(
+    () => requests.filter((request) => reviewStatuses.has(request.status) || request.plan_change_status === "pending_user_approval"),
+    [requests],
+  );
+
+  useEffect(() => {
+    onCountChange?.(candidates.length);
+  }, [candidates.length, onCountChange]);
 
   const setStatus = async (request: BookingRequest, status: VoyageBookingStatus) => {
     const adminMessage = decisionMessages[request.id]?.trim() || null;
@@ -164,7 +178,7 @@ const AdminVoyageCandidates = () => {
             bookingRequestId: request.id,
             status: "rejected",
             trigger: "admin_rejected",
-            adminNotes: adminMessage || "Candidatura scartata da /admin/candidates.",
+            adminNotes: adminMessage || "Candidatura scartata da /admin/bookings.",
           })
         : await typedSupabase.rpc("admin_set_voyage_booking_status", {
             _booking_request_id: request.id,
@@ -296,208 +310,200 @@ const AdminVoyageCandidates = () => {
   };
 
   return (
-    <div className="min-h-screen px-5 pb-16 pt-24 md:px-10">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <section className="glass-panel rounded-[34px] px-6 py-8 md:px-9">
-          <Link to="/admin" className="glass-chip mb-6 inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft size={14} /> Dashboard
-          </Link>
-          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">Admin / booking</p>
-              <h1 className="editorial-heading text-4xl md:text-5xl">Candidati</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                Revisiona le richieste di partecipazione, valuta le informazioni personali e approva, scarta o proponi tratte diverse prima del pagamento/conferma.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent"
-            >
-              <RefreshCw size={15} /> Aggiorna
-            </button>
-          </div>
-        </section>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Candidature in revisione</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Valuta le informazioni, approva, scarta o proponi tratte diverse prima del pagamento/conferma.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="glass-chip inline-flex items-center gap-2 self-start px-4 py-2 text-sm text-foreground hover:text-accent"
+        >
+          <RefreshCw size={15} /> Aggiorna
+        </button>
+      </div>
 
-        {loading ? (
-          <div className="glass-panel rounded-[30px] p-8 text-muted-foreground">
-            <Loader2 className="mr-2 inline animate-spin" size={16} /> Loading candidates...
-          </div>
-        ) : candidates.length === 0 ? (
-          <div className="glass-panel rounded-[30px] p-8 text-sm text-muted-foreground">
-            Nessuna candidatura in revisione.
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {candidates.map((request) => {
-              const profile = profilesById[request.profile_id];
-              const voyage = voyagesById[request.voyage_id];
-              const currentLegIds = legIdsByRequest[request.id] || [];
-              const currentLegs = currentLegIds.map((id) => legsById[id]).filter(Boolean);
-              const voyageLegs = legsByVoyage[request.voyage_id] || [];
-              const selectedProposal = proposalLegIds[request.id] || [];
-              const voyageRequests = requests.filter((item) => item.voyage_id === request.voyage_id);
-              const socialLinks = profileSocialLinks(profile);
-              return (
-                <article key={request.id} className="glass-panel rounded-[30px] p-5 md:p-6">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="editorial-heading text-2xl">
-                          {profile?.name || profile?.email || "Candidato"}
-                        </h2>
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] ${getBookingStatusClass(request.status)}`}>
-                          {getBookingStatusLabel(request.status, "it")}
+      {loading ? (
+        <div className="rounded-[24px] border border-border/70 p-8 text-muted-foreground">
+          <Loader2 className="mr-2 inline animate-spin" size={16} /> Loading candidates...
+        </div>
+      ) : candidates.length === 0 ? (
+        <div className="rounded-[24px] border border-border/70 p-8 text-sm text-muted-foreground">
+          Nessuna candidatura in revisione.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {candidates.map((request) => {
+            const profile = profilesById[request.profile_id];
+            const voyage = voyagesById[request.voyage_id];
+            const currentLegIds = legIdsByRequest[request.id] || [];
+            const currentLegs = currentLegIds.map((id) => legsById[id]).filter(Boolean);
+            const voyageLegs = legsByVoyage[request.voyage_id] || [];
+            const selectedProposal = proposalLegIds[request.id] || [];
+            const voyageRequests = requests.filter((item) => item.voyage_id === request.voyage_id);
+            const socialLinks = profileSocialLinks(profile);
+            return (
+              <article key={request.id} className="rounded-[30px] border border-border/70 bg-background/40 p-5 md:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="editorial-heading text-2xl">
+                        {profile?.name || profile?.email || "Candidato"}
+                      </h2>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] ${getBookingStatusClass(request.status)}`}>
+                        {getBookingStatusLabel(request.status, "it")}
+                      </span>
+                      {request.plan_change_status === "pending_user_approval" && (
+                        <span className="rounded-full border border-sky-300/70 bg-sky-100/70 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                          Proposta inviata
                         </span>
-                        {request.plan_change_status === "pending_user_approval" && (
-                          <span className="rounded-full border border-sky-300/70 bg-sky-100/70 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
-                            Proposta inviata
-                          </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {profile?.email || "No email"} · {getLocalizedBookingVoyageName(voyage, "it") || request.voyage_id} · {request.party_size} pax · {formatBookingDate(request.requested_at, "it-IT")}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      to={`/profile/${request.profile_id}`}
+                      className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      <ExternalLink size={13} /> Profilo pubblico
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
+                  <section className="rounded-[24px] border border-border/70 bg-background/45 p-4">
+                    <div className="mb-4 flex items-start gap-3">
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-border bg-accent/10">
+                        <ProfileAvatar
+                          name={profile?.name || profile?.email || "Candidato"}
+                          avatarUrl={profile?.avatar_url ?? null}
+                          fallback={<span className="flex h-full w-full items-center justify-center text-sm font-semibold text-accent">{(profile?.name || profile?.email || "?").slice(0, 2).toUpperCase()}</span>}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground">{profile?.name || "Nome non impostato"}</p>
+                        <p className="text-xs text-muted-foreground">{profile?.email || "No email"}</p>
+                        {(profile?.preferred_language || profile?.secondary_language) && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Lingue profilo: {[profile.preferred_language, profile.secondary_language].filter(Boolean).join(", ")}
+                          </p>
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {profile?.email || "No email"} · {getLocalizedBookingVoyageName(voyage, "it") || request.voyage_id} · {request.party_size} pax · {formatBookingDate(request.requested_at, "it-IT")}
+                    </div>
+                    {profile?.bio && (
+                      <p className="mb-4 whitespace-pre-line rounded-2xl border border-border/60 bg-background/60 p-3 text-sm leading-relaxed text-muted-foreground">
+                        {profile.bio}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        to={`/profile/${request.profile_id}`}
-                        className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-                      >
-                        <ExternalLink size={13} /> Profilo pubblico
-                      </Link>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
-                    <section className="rounded-[24px] border border-border/70 bg-background/45 p-4">
-                      <div className="mb-4 flex items-start gap-3">
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-border bg-accent/10">
-                          <ProfileAvatar
-                            name={profile?.name || profile?.email || "Candidato"}
-                            avatarUrl={profile?.avatar_url ?? null}
-                            fallback={<span className="flex h-full w-full items-center justify-center text-sm font-semibold text-accent">{(profile?.name || profile?.email || "?").slice(0, 2).toUpperCase()}</span>}
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-foreground">{profile?.name || "Nome non impostato"}</p>
-                          <p className="text-xs text-muted-foreground">{profile?.email || "No email"}</p>
-                          {(profile?.preferred_language || profile?.secondary_language) && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Lingue profilo: {[profile.preferred_language, profile.secondary_language].filter(Boolean).join(", ")}
-                            </p>
-                          )}
-                        </div>
+                    )}
+                    {socialLinks.length > 0 && (
+                      <div className="mb-4 flex flex-wrap gap-2">
+                        {socialLinks.map((link) => (
+                          <a
+                            key={`${link.label}-${link.value}`}
+                            href={normalizeSocialUrl(link.label, link.value)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full border border-border/70 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            {link.label}
+                          </a>
+                        ))}
                       </div>
-                      {profile?.bio && (
-                        <p className="mb-4 whitespace-pre-line rounded-2xl border border-border/60 bg-background/60 p-3 text-sm leading-relaxed text-muted-foreground">
-                          {profile.bio}
+                    )}
+                    <p className="mb-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Informazioni candidatura</p>
+                    {renderCandidateInfo(request.candidate_info)}
+                  </section>
+
+                  <section className="space-y-4 rounded-[24px] border border-border/70 bg-background/45 p-4">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Tratte richieste</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {currentLegs.map((leg) => (
+                          <span key={leg.id} className="rounded-full border border-border/70 px-3 py-1 text-xs text-muted-foreground">
+                            {getLegLabel(leg, waypointsById, "it")}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border/70 pt-4">
+                      <div className="mb-3">
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Gantt revisione</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Vista di contesto: mostra dove entrerebbe il candidato e con chi. I click sulla riga del candidato compongono una proposta, non modificano la booking.
                         </p>
-                      )}
-                      {socialLinks.length > 0 && (
-                        <div className="mb-4 flex flex-wrap gap-2">
-                          {socialLinks.map((link) => (
-                            <a
-                              key={`${link.label}-${link.value}`}
-                              href={normalizeSocialUrl(link.label, link.value)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-full border border-border/70 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-                            >
-                              {link.label}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                      <p className="mb-3 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Informazioni candidatura</p>
-                      {renderCandidateInfo(request.candidate_info)}
-                    </section>
-
-                    <section className="space-y-4 rounded-[24px] border border-border/70 bg-background/45 p-4">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Tratte richieste</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {currentLegs.map((leg) => (
-                            <span key={leg.id} className="rounded-full border border-border/70 px-3 py-1 text-xs text-muted-foreground">
-                              {getLegLabel(leg, waypointsById, "it")}
-                            </span>
-                          ))}
-                        </div>
                       </div>
+                      <CandidateReviewGantt
+                        request={request}
+                        requests={voyageRequests}
+                        profilesById={profilesById}
+                        legs={voyageLegs}
+                        requestLegIds={legIdsByRequest}
+                        selectedProposalLegIds={selectedProposal}
+                        onToggleProposalLeg={(legId) => toggleProposalLeg(request.id, legId)}
+                        onSetProposalRange={(legId) => setProposalRange(request.id, voyageLegs, legId)}
+                      />
+                      <textarea
+                        value={proposalNotes[request.id] || ""}
+                        onChange={(event) => setProposalNotes((current) => ({ ...current, [request.id]: event.target.value }))}
+                        rows={3}
+                        className="mt-3 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                        placeholder="Nota per la proposta (es. meglio imbarco dopo, tratta piu breve, aggiungere tappa...)"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void proposeLegs(request)}
+                        disabled={savingId === request.id}
+                        className="glass-chip mt-3 inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                      >
+                        {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        Invia proposta al candidato
+                      </button>
+                    </div>
 
-                      <div className="border-t border-border/70 pt-4">
-                        <div className="mb-3">
-                          <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Gantt revisione</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Vista di contesto: mostra dove entrerebbe il candidato e con chi. I click sulla riga del candidato compongono una proposta, non modificano la booking.
-                          </p>
-                        </div>
-                        <CandidateReviewGantt
-                          request={request}
-                          requests={voyageRequests}
-                          profilesById={profilesById}
-                          legs={voyageLegs}
-                          requestLegIds={legIdsByRequest}
-                          selectedProposalLegIds={selectedProposal}
-                          onToggleProposalLeg={(legId) => toggleProposalLeg(request.id, legId)}
-                          onSetProposalRange={(legId) => setProposalRange(request.id, voyageLegs, legId)}
-                        />
-                        <textarea
-                          value={proposalNotes[request.id] || ""}
-                          onChange={(event) => setProposalNotes((current) => ({ ...current, [request.id]: event.target.value }))}
-                          rows={3}
-                          className="mt-3 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          placeholder="Nota per la proposta (es. meglio imbarco dopo, tratta piu breve, aggiungere tappa...)"
-                        />
+                    <div className="border-t border-border/70 pt-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Messaggio decisione</p>
+                      <textarea
+                        value={decisionMessages[request.id] || ""}
+                        onChange={(event) => setDecisionMessages((current) => ({ ...current, [request.id]: event.target.value }))}
+                        rows={3}
+                        className="mt-3 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                        placeholder="Messaggio opzionale per approvazione o rifiuto"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => void proposeLegs(request)}
+                          onClick={() => void setStatus(request, "admin_approved")}
                           disabled={savingId === request.id}
-                          className="glass-chip mt-3 inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                          className="glass-chip inline-flex flex-1 items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
                         >
-                          {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                          Invia proposta al candidato
+                          {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                          Approva
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void setStatus(request, "rejected")}
+                          disabled={savingId === request.id}
+                          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-destructive/40 px-3 py-2 text-xs font-semibold text-destructive disabled:opacity-50"
+                        >
+                          <X size={14} /> Scarta
                         </button>
                       </div>
-
-                      <div className="border-t border-border/70 pt-4">
-                        <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Messaggio decisione</p>
-                        <textarea
-                          value={decisionMessages[request.id] || ""}
-                          onChange={(event) => setDecisionMessages((current) => ({ ...current, [request.id]: event.target.value }))}
-                          rows={3}
-                          className="mt-3 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          placeholder="Messaggio opzionale per approvazione o rifiuto"
-                        />
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void setStatus(request, "admin_approved")}
-                            disabled={savingId === request.id}
-                            className="glass-chip inline-flex flex-1 items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
-                          >
-                            {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                            Approva
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void setStatus(request, "rejected")}
-                            disabled={savingId === request.id}
-                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-destructive/40 px-3 py-2 text-xs font-semibold text-destructive disabled:opacity-50"
-                          >
-                            <X size={14} /> Scarta
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    </div>
+                  </section>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
@@ -625,4 +631,4 @@ const CandidateReviewGantt = ({
   );
 };
 
-export default AdminVoyageCandidates;
+export default VoyageCandidatesPanel;

@@ -188,43 +188,69 @@ const HUD_CSS = /* css */ `
   @keyframes spritz-game-title-out { to { opacity: 0; } }
   .spritz-game-hud {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 26px;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 30px;
-    letter-spacing: 0.18em;
+    gap: 22px;
+    padding: 12px 24px;
+    border-radius: 16px;
+    background: rgba(9, 20, 34, 0.42);
+    border: 1px solid rgba(246, 239, 226, 0.1);
+    backdrop-filter: blur(9px);
+    -webkit-backdrop-filter: blur(9px);
+    letter-spacing: 0.16em;
     font-size: 12px;
     text-transform: uppercase;
     pointer-events: none;
     text-shadow: 0 1px 8px rgba(5, 11, 20, 0.8);
   }
-  .spritz-game-hud .spritz-wind-dial {
-    width: 54px;
-    height: 54px;
-    border: 1px solid rgba(246, 239, 226, 0.35);
-    border-radius: 50%;
-    position: relative;
-    flex: none;
-  }
-  .spritz-game-hud .spritz-wind-dial svg {
+  .spritz-game-hud .spritz-sep { width: 1px; height: 34px; background: rgba(246, 239, 226, 0.14); }
+  .spritz-game-hud .spritz-wind-dial { width: 58px; height: 58px; position: relative; flex: none; }
+  .spritz-game-hud .spritz-wind-dial .spritz-dial-rose { position: absolute; inset: 0; opacity: 0.6; }
+  .spritz-game-hud .spritz-wind-dial .spritz-dial-arrow {
     position: absolute;
     inset: 0;
-    transition: transform 300ms ease-out;
+    transition: transform 220ms ease-out;
+    transform-origin: 50% 50%;
   }
-  .spritz-game-hud .spritz-wind-dial .spritz-bow-tick {
-    position: absolute;
-    top: -1px;
-    left: 50%;
-    width: 1px;
-    height: 7px;
-    background: rgba(246, 239, 226, 0.7);
-  }
-  .spritz-game-hud .spritz-hud-value { opacity: 0.92; }
+  .spritz-game-hud .spritz-readout { display: flex; flex-direction: column; align-items: center; min-width: 42px; }
+  .spritz-game-hud .spritz-hud-value { opacity: 0.94; white-space: nowrap; }
   .spritz-game-hud .spritz-hud-value.is-gust { color: #ffd9a0; }
-  .spritz-game-hud .spritz-hud-label { opacity: 0.5; font-size: 9px; display: block; margin-top: 4px; }
+  .spritz-game-hud .spritz-hud-value.spritz-hud-pos { color: #9fcfd6; letter-spacing: 0.1em; }
+  .spritz-game-hud .spritz-hud-label { opacity: 0.45; font-size: 8.5px; margin-top: 5px; letter-spacing: 0.2em; }
+  /* Sail-trim gauge: marker chases the green target band. */
+  .spritz-trim { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .spritz-trim-track {
+    position: relative;
+    width: 116px;
+    height: 7px;
+    border-radius: 4px;
+    background: rgba(246, 239, 226, 0.12);
+    overflow: hidden;
+  }
+  .spritz-trim-band {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(120, 200, 140, 0.4);
+    transition: left 200ms ease-out, width 200ms ease-out;
+  }
+  .spritz-trim-marker {
+    position: absolute;
+    top: -2px;
+    width: 3px;
+    height: 11px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: #f6efe2;
+    transition: left 90ms linear, background 200ms;
+  }
+  .spritz-trim-marker.is-tuned { background: #7fe0a0; box-shadow: 0 0 8px rgba(127, 224, 160, 0.9); }
+  .spritz-trim-hint { font-size: 8.5px; letter-spacing: 0.2em; opacity: 0.6; height: 10px; }
+  .spritz-trim-hint.is-tuned { color: #7fe0a0; opacity: 0.95; }
+  .spritz-trim-hint .spritz-trim-labels { display: flex; justify-content: space-between; width: 116px; opacity: 0.5; }
   .spritz-game-hint {
     position: absolute;
     right: 26px;
@@ -232,7 +258,7 @@ const HUD_CSS = /* css */ `
     font-size: 10px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    opacity: 0.55;
+    opacity: 0.5;
     pointer-events: none;
     text-align: right;
     line-height: 2;
@@ -337,21 +363,36 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   overlay.insertAdjacentHTML(
     "beforeend",
     `<div class="spritz-game-title">S/Y Spritz<small>Raccogli le lanterne · Buon vento</small></div>
-     <div class="spritz-game-hint">W/S — vele<br>A/D — timone<br>ESC — esci</div>
+     <div class="spritz-game-hint">A/D — timone<br>W lasca · S cazza<br>ESC — esci</div>
      <div class="spritz-lantern-toast">Lanterna recuperata</div>
      <div class="spritz-game-hud">
        <div class="spritz-wind-dial">
-         <span class="spritz-bow-tick"></span>
-         <svg viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
-           <path d="M27 10 L32 30 L27 26 L22 30 Z" fill="#9fcfd6" opacity="0.9"/>
+         <svg class="spritz-dial-rose" viewBox="0 0 58 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <circle cx="29" cy="29" r="27" stroke="rgba(246,239,226,0.32)" stroke-width="1"/>
+           <path d="M29 29 L20.6 4.4 A26 26 0 0 1 37.4 4.4 Z" fill="rgba(255,120,120,0.16)"/>
+           <path d="M29 2 L29 8" stroke="rgba(246,239,226,0.7)" stroke-width="1.4"/>
+           <path d="M25.5 9 L29 3.5 L32.5 9 Z" fill="rgba(246,239,226,0.75)"/>
+         </svg>
+         <svg class="spritz-dial-arrow" viewBox="0 0 58 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <path d="M29 8 L34 30 L29 25.5 L24 30 Z" fill="#9fcfd6"/>
          </svg>
        </div>
-       <div><span class="spritz-hud-value spritz-hud-wind">--</span><span class="spritz-hud-label">Vento</span></div>
-       <div><span class="spritz-hud-value spritz-hud-speed">--</span><span class="spritz-hud-label">Velocità</span></div>
-       <div><span class="spritz-hud-value spritz-hud-course">--</span><span class="spritz-hud-label">Rotta</span></div>
-       <div><span class="spritz-hud-value spritz-hud-trip">0.00</span><span class="spritz-hud-label">Miglia</span></div>
-       <div><span class="spritz-hud-value spritz-hud-trim">--</span><span class="spritz-hud-label">Vele</span></div>
-       <div><span class="spritz-hud-value spritz-hud-lanterns">0</span><span class="spritz-hud-label">Lanterne</span></div>
+       <div class="spritz-sep"></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-wind">--</span><span class="spritz-hud-label">Vento</span></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-pos spritz-hud-position">--</span><span class="spritz-hud-label">Andatura</span></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-speed">--</span><span class="spritz-hud-label">Velocità</span></div>
+       <div class="spritz-sep"></div>
+       <div class="spritz-trim">
+         <div class="spritz-trim-track">
+           <div class="spritz-trim-band"></div>
+           <div class="spritz-trim-marker"></div>
+         </div>
+         <div class="spritz-trim-hint"><span class="spritz-trim-msg">Regola le vele</span></div>
+       </div>
+       <div class="spritz-sep"></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-course">--</span><span class="spritz-hud-label">Rotta</span></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-trip">0.00</span><span class="spritz-hud-label">Miglia</span></div>
+       <div class="spritz-readout"><span class="spritz-hud-value spritz-hud-lanterns">0</span><span class="spritz-hud-label">Lanterne</span></div>
      </div>`
   );
   document.body.appendChild(overlay);
@@ -365,13 +406,17 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     overlay.style.opacity = "1";
   }, 900);
 
-  const windDialArrow = overlay.querySelector<SVGElement>(".spritz-wind-dial svg")!;
+  const windDialArrow = overlay.querySelector<SVGElement>(".spritz-dial-arrow")!;
   const hudWind = overlay.querySelector<HTMLElement>(".spritz-hud-wind")!;
+  const hudPosition = overlay.querySelector<HTMLElement>(".spritz-hud-position")!;
   const hudSpeed = overlay.querySelector<HTMLElement>(".spritz-hud-speed")!;
   const hudCourse = overlay.querySelector<HTMLElement>(".spritz-hud-course")!;
   const hudTrip = overlay.querySelector<HTMLElement>(".spritz-hud-trip")!;
-  const hudTrim = overlay.querySelector<HTMLElement>(".spritz-hud-trim")!;
   const hudLanterns = overlay.querySelector<HTMLElement>(".spritz-hud-lanterns")!;
+  const trimBand = overlay.querySelector<HTMLElement>(".spritz-trim-band")!;
+  const trimMarker = overlay.querySelector<HTMLElement>(".spritz-trim-marker")!;
+  const trimHint = overlay.querySelector<HTMLElement>(".spritz-trim-hint")!;
+  const trimMsg = overlay.querySelector<HTMLElement>(".spritz-trim-msg")!;
   const lanternToast = overlay.querySelector<HTMLElement>(".spritz-lantern-toast")!;
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -631,17 +676,39 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     pos: new THREE.Vector2(0, 0),
     heading: 0,
     speed: 0,
-    trim: 0.85,
+    sheetEase: 0.85, // 0 = sheeted flat amidships, 1 = boom right out; set to match the opening broad reach
     heel: 0,
     trip: 0, // world units sailed
     windBase: Math.PI * 0.75, // wind initially from the aft-port quarter: a broad reach, so the boat moves right away
   };
   const keys = new Set<string>();
-  const NO_GO = 0.55; // ~32° either side of the wind: sails just luff
+  const NO_GO = 0.55; // ~31° either side of the apparent wind: sails can't drive
+  const KN = 7.8; // world-units/sec -> knots, for both the display and the apparent-wind maths
+  const MAX_BOOM = 1.45; // boom angle (rad) at full ease
+  const THRUST = 0.075;
+  const DRAG = 0.5;
+
+  // Point-of-sail power envelope over the apparent wind angle: nothing in the
+  // no-go zone, peak on a reach (~105°), reduced dead downwind (sails blanket).
+  const pointOfSailPower = (awa: number) => {
+    if (awa < NO_GO) return 0;
+    const ramp = THREE.MathUtils.smoothstep(awa, NO_GO, NO_GO + 0.45);
+    const hump = 0.55 + 0.45 * Math.sin(Math.min(awa, Math.PI) * 0.9 + 0.15);
+    return ramp * THREE.MathUtils.clamp(hump, 0, 1);
+  };
+  // The boom angle that keeps the sail at its best angle of attack for a given
+  // apparent wind angle — the target the player trims toward.
+  const idealBoomFor = (awa: number) => THREE.MathUtils.clamp((awa - 0.35) * 0.85, 0.1, 1.35);
+  const pointOfSailName = (awa: number) => {
+    if (awa < NO_GO) return "In stallo";
+    if (awa < 1.05) return "Bolina";
+    if (awa < 1.6) return "Traverso";
+    if (awa < 2.5) return "Lasco";
+    return "Poppa";
+  };
 
   const windFromAngle = (t: number) => state.windBase + 0.5 * Math.sin(t * 0.023) + 0.25 * Math.sin(t * 0.011 + 2);
   const windKnots = (t: number) => 9 + 2.5 * Math.sin(t * 0.05) + Math.sin(t * 0.13);
-  const wrapPi = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
   // Travelling gusts: pockets of stronger wind drifting downwind past the boat.
   interface Gust {
@@ -765,22 +832,45 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     const windKn = baseWindKn * gustFactor;
 
     const rudder = (keys.has("a") ? 1 : 0) - (keys.has("d") ? 1 : 0);
-    state.trim = THREE.MathUtils.clamp(state.trim + ((keys.has("w") ? 1 : 0) - (keys.has("s") ? 1 : 0)) * dt * 0.7, 0, 1);
+    // W eases the sheet (boom out), S trims it in (boom toward centreline).
+    state.sheetEase = THREE.MathUtils.clamp(
+      state.sheetEase + ((keys.has("w") ? 1 : 0) - (keys.has("s") ? 1 : 0)) * dt * 0.5,
+      0,
+      1
+    );
 
-    // Angle between the bow and where the wind comes from; sign = wind on port(+)/starboard(-).
-    const beta = wrapPi(windFrom - state.heading);
-    const a = Math.abs(beta);
-    const luffing = a < NO_GO + 0.08 && state.trim > 0.15;
+    const fwd = new THREE.Vector2(Math.cos(state.heading), -Math.sin(state.heading));
 
-    // Simple polar: dead upwind gives nothing, beam reach is best, a run still pulls.
-    const polar = a < NO_GO ? 0 : THREE.MathUtils.smoothstep(a, NO_GO, 1.0) * (0.55 + 0.45 * Math.sin(Math.min(a, 1.92) - 0.35));
-    const thrust = windKn * 0.06 * state.trim * polar;
-    state.speed = Math.max(0, state.speed + (thrust - 0.45 * state.speed) * dt);
+    // Apparent wind = true wind minus the boat's own motion. As the boat speeds
+    // up on a reach the apparent wind draws forward, so the player must trim in —
+    // the core wind/point-of-sail/trim relationship.
+    const boatKn = state.speed * KN;
+    const trueVx = -windKn * Math.cos(windFrom);
+    const trueVz = windKn * Math.sin(windFrom);
+    const appVx = trueVx - boatKn * fwd.x;
+    const appVz = trueVz - boatKn * fwd.y;
+    const appSpeed = Math.hypot(appVx, appVz) || 0.0001;
+    const appFromX = -appVx / appSpeed;
+    const appFromY = -appVz / appSpeed;
+    const awa = Math.acos(THREE.MathUtils.clamp(appFromX * fwd.x + appFromY * fwd.y, -1, 1));
+    // Which side the wind is on: sign of the 2D cross product bow × wind-from.
+    const windSide = fwd.x * appFromY - fwd.y * appFromX >= 0 ? 1 : -1;
+
+    // Trim: how close the boom is to its ideal angle for this apparent wind angle.
+    const idealBoom = idealBoomFor(awa);
+    const boom = state.sheetEase * MAX_BOOM;
+    const trimErr = boom - idealBoom; // >0 = eased too far (luffs), <0 = over-trimmed (stalls)
+    const trimEff = Math.exp(-Math.pow(trimErr / 0.5, 2));
+    const power = pointOfSailPower(awa);
+    const luffing = awa < NO_GO + 0.05 || trimErr > 0.55;
+
+    const thrust = appSpeed * THRUST * power * trimEff;
+    state.speed = Math.max(0, state.speed + (thrust - DRAG * state.speed) * dt);
     // Turning scrubs a little speed, like a real rudder.
     state.speed *= 1 - 0.2 * Math.abs(rudder) * dt;
     state.heading += rudder * (0.35 + 0.75 * Math.min(state.speed, 1.2) / 1.2) * dt;
 
-    const fwd = new THREE.Vector2(Math.cos(state.heading), -Math.sin(state.heading));
+    fwd.set(Math.cos(state.heading), -Math.sin(state.heading));
     state.pos.addScaledVector(fwd, state.speed * dt);
     state.trip += state.speed * dt;
 
@@ -809,28 +899,32 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     boat.position.set(state.pos.x, (hBow + hMid + hStern) / 3 + 0.075, state.pos.y);
     boat.rotation.y = state.heading;
     boat.rotation.z = Math.atan2(hBow - hStern, 1.7) * 0.7 + 0.02 + state.speed * 0.02; // pitch + speed trim
-    const heelTarget = Math.sign(beta) * Math.min(1, thrust * 1.6) * 0.16 * gustFactor; // gusts press the boat over
+    // Heel to leeward, driven by the actual sail force (power × trim), harder in gusts.
+    const heelTarget = -windSide * Math.min(1, power * trimEff * (appSpeed / 12)) * 0.19;
     state.heel += (heelTarget - state.heel) * Math.min(1, dt * 2.2);
     boat.rotation.x = -Math.atan2(hStar - hPort, 1.2) * 0.45 + state.heel;
 
     // ------------------------------------------------ Sails
-    // Boom eases out as the boat bears away; it always swings to leeward.
-    const sheet = THREE.MathUtils.lerp(0.14, 1.02, Math.min(1, a / 2.6));
-    const leeSign = Math.sign(beta) || 1;
-    spritz.mainPivot.rotation.y += (leeSign * sheet - spritz.mainPivot.rotation.y) * Math.min(1, dt * 3);
-    spritz.jibPivot.rotation.y += (leeSign * sheet * 0.8 - spritz.jibPivot.rotation.y) * Math.min(1, dt * 3);
-    const trimVisual = 0.06 + 0.94 * state.trim;
-    spritz.mainSail.scale.x = trimVisual;
-    spritz.jib.scale.x = trimVisual;
+    // The boom is sheeted to the angle the player set, always to leeward.
+    const boomTarget = -windSide * boom;
+    spritz.mainPivot.rotation.y += (boomTarget - spritz.mainPivot.rotation.y) * Math.min(1, dt * 3);
+    // The headsail's clew swings about the forestay axis — luff stays on the stay.
+    const jibTarget = -windSide * Math.min(boom * 0.85, 0.9);
+    spritz.jibPivot.rotation.y += (jibTarget - spritz.jibPivot.rotation.y) * Math.min(1, dt * 3);
 
     // Running lights once under way, the masthead anchor light once she's stopped
     // (in irons or sails doused) — mirrors real navigation-light rules.
     const targetUnderway = THREE.MathUtils.smoothstep(state.speed, 0.04, 0.13);
     animateSpritzBoatDetails(spritz, t, luffing ? 2.2 : Math.min(1.8, gustFactor), targetUnderway);
     if (luffing) {
-      // Head to wind: cloth shakes instead of drawing.
-      spritz.mainSail.scale.z = 1 + 0.07 * Math.sin(t * 26);
-      spritz.jib.scale.z = 1 + 0.06 * Math.sin(t * 31 + 1);
+      // Sail flogging: either head-to-wind or the sheet eased too far to fill.
+      spritz.mainSail.scale.z = 1 + 0.08 * Math.sin(t * 26);
+      spritz.jib.scale.z = 1 + 0.07 * Math.sin(t * 31 + 1);
+    } else {
+      // Fuller cloth the better it's trimmed; slack a touch when badly stalled.
+      const fill = 0.9 + 0.25 * trimEff;
+      spritz.mainSail.scale.z += (fill - spritz.mainSail.scale.z) * Math.min(1, dt * 4);
+      spritz.jib.scale.z += (fill - spritz.jib.scale.z) * Math.min(1, dt * 4);
     }
 
     // ------------------------------------------------ World follows the boat
@@ -1002,15 +1096,34 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     soundscape?.update(windKn, state.speed, gustFactor - 1, t);
 
     // ------------------------------------------------ HUD
-    windDialArrow.style.transform = `rotate(${((beta + Math.PI) * 180) / Math.PI}deg)`;
-    hudWind.textContent = `${windKn.toFixed(0)} kn`;
+    // Dial is bow-up; the arrow points to where the apparent wind blows FROM.
+    windDialArrow.style.transform = `rotate(${windSide * awa * (180 / Math.PI)}deg)`;
+    hudWind.textContent = `${appSpeed.toFixed(0)} kn`;
     hudWind.classList.toggle("is-gust", gustFactor > 1.18);
-    hudSpeed.textContent = `${(state.speed * 7.8).toFixed(1)} kn`;
+    hudPosition.textContent = pointOfSailName(awa);
+    hudSpeed.textContent = `${(state.speed * KN).toFixed(1)} kn`;
     // Bearing with world -z as north.
     const bearing = ((Math.atan2(fwd.x, -fwd.y) * 180) / Math.PI + 360) % 360;
     const cardinal = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"][Math.round(bearing / 45) % 8];
     hudCourse.textContent = `${bearing.toFixed(0).padStart(3, "0")}° ${cardinal}`;
-    hudTrip.textContent = (state.trip * 4 / 1852).toFixed(2);
-    hudTrim.textContent = luffing ? "a collo!" : `${Math.round(state.trim * 100)}%`;
+    hudTrip.textContent = ((state.trip * 4) / 1852).toFixed(2);
+
+    // Trim gauge: marker = current sheet ease, green band = the ideal for this angle.
+    const idealEase = THREE.MathUtils.clamp(idealBoom / MAX_BOOM, 0, 1);
+    const bandHalf = 0.09;
+    trimBand.style.left = `${Math.max(0, idealEase - bandHalf) * 100}%`;
+    trimBand.style.width = `${(Math.min(1, idealEase + bandHalf) - Math.max(0, idealEase - bandHalf)) * 100}%`;
+    trimMarker.style.left = `${state.sheetEase * 100}%`;
+    const tuned = Math.abs(state.sheetEase - idealEase) < bandHalf && power > 0.02;
+    trimMarker.classList.toggle("is-tuned", tuned);
+    trimHint.classList.toggle("is-tuned", tuned);
+    trimMsg.textContent =
+      power < 0.02
+        ? "Poggia per ripartire"
+        : tuned
+          ? "Vele a segno"
+          : state.sheetEase > idealEase
+            ? "◀ Cazza"
+            : "Lasca ▶";
   });
 }

@@ -1292,12 +1292,31 @@ export async function buildVoyageGeometry(
   const fullRoute: [number, number][] = [];
 
   if (useWaterwayRouting) {
+    // Primo tentativo: un'unica richiesta per tutta la catena (geometria migliore, 1 sola chiamata).
     const fullChain = await fetchBRouterWaterwayRoute(waypoints);
     if (fullChain?.coordinates?.length && fullChain.coordinates.length >= 2) {
       return fullChain.coordinates;
     }
-    // Un solo tentativo BRouter: se un via è fuori dal grafo idrico la risposta è 400 — evitiamo N−1 richieste uguali.
-    return getStraightVoyageGeometry(waypoints);
+
+    // Se la catena intera non è instradabile (un via è fuori dal grafo idrico, BRouter risponde 400
+    // "no track found"), NON buttiamo via tutta la rotta: instradiamo tratto per tratto, così solo i
+    // segmenti senza via navigabile restano in linea retta — gli altri seguono comunque il canale/fiume.
+    const waterwayRoute: [number, number][] = [];
+    for (let index = 1; index < waypoints.length; index += 1) {
+      const start = waypoints[index - 1];
+      const end = waypoints[index];
+      const segment = await fetchBRouterWaterwaySegment(start, end);
+      if (segment?.coordinates && segment.coordinates.length >= 2) {
+        appendRouteCoordinates(waterwayRoute, segment.coordinates);
+      } else {
+        appendRouteCoordinates(waterwayRoute, [
+          [start.lng, start.lat],
+          [end.lng, end.lat],
+        ]);
+      }
+    }
+
+    return waterwayRoute.length >= 2 ? waterwayRoute : getStraightVoyageGeometry(waypoints);
   }
 
   for (let index = 1; index < waypoints.length; index += 1) {

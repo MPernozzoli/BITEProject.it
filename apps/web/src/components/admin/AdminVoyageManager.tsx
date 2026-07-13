@@ -3381,26 +3381,54 @@ const AdminVoyageManager = ({
             </div>
 
             {voyageForm.type === "water" && (
-              <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={voyageForm.waterway_autoroute}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({ ...form, waterway_autoroute: event.target.checked }))
-                  }
-                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-                    Mare · autoroute vie navigabili
-                  </span>
-                  <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
-                    Routing su canali/fiumi (OpenStreetMap tramite BRouter, profilo river). I waypoint devono essere
-                    vicini all&apos;asse navigabile; dove non c&apos;è grafo utile resta il segmento in linea retta. Sul
-                    sito il voyage resta acqua come gli altri (nessuna etichetta diversa).
-                  </span>
+              <div className="rounded-[20px] border border-border px-4 py-3">
+                <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
+                  Tipo di navigazione
                 </span>
-              </label>
+                <div
+                  role="radiogroup"
+                  aria-label="Tipo di navigazione"
+                  className="mt-3 grid grid-cols-2 gap-1 rounded-[14px] border border-border bg-muted/30 p-1"
+                >
+                  {([
+                    {
+                      value: false,
+                      label: "Mare",
+                      hint: "Rotta in alto mare: la linea segue i waypoint in linea retta.",
+                    },
+                    {
+                      value: true,
+                      label: "Canali · fiumi",
+                      hint: "Autoroute su vie navigabili (OpenStreetMap via BRouter): la linea segue canali e fiumi tra i waypoint.",
+                    },
+                  ] as const).map((option) => {
+                    const active = voyageForm.waterway_autoroute === option.value;
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() =>
+                          setVoyageForm((form) => ({ ...form, waterway_autoroute: option.value }))
+                        }
+                        className={`rounded-[10px] px-3 py-2 text-xs font-sans uppercase tracking-[0.16em] transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="mt-2 block text-[11px] font-sans text-muted-foreground">
+                  {voyageForm.waterway_autoroute
+                    ? "Autoroute su vie navigabili: i waypoint devono essere vicini all’asse del canale/fiume; dove non c’è grafo utile quel tratto resta in linea retta. Sul sito resta un voyage acqua come gli altri."
+                    : "Alto mare: nessun instradamento, la rotta collega i waypoint in linea retta."}
+                </span>
+              </div>
             )}
 
             <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">

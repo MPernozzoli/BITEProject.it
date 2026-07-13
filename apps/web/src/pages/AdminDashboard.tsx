@@ -10,7 +10,6 @@ import {
   Clock,
   FileText,
   Send,
-  User,
   BookOpen,
   X,
   Navigation,
@@ -177,6 +176,7 @@ const AdminDashboard = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [voyages, setVoyages] = useState<VoyageSummary[]>([]);
+  const [pendingCandidates, setPendingCandidates] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
     if (typeof window === "undefined") return "articles";
@@ -263,10 +263,13 @@ const AdminDashboard = () => {
     if (!session?.user) return;
 
     setLoading(true);
-    const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
+    const [articlesRes, storiesRes, voyagesRes, candidatesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
       supabase.from("voyages").select("id,name,name_en,name_it,type,status,is_published,sort_order").order("sort_order", { ascending: true }),
+      (supabase as unknown as { from: (table: string) => { select: (columns?: string) => Promise<{ data: unknown; error: unknown }> } })
+        .from("voyage_booking_requests")
+        .select("status,is_crew,plan_change_status"),
     ]);
     const err = articlesRes.error || storiesRes.error || voyagesRes.error;
     if (err && isAuthFailureError(err)) {
@@ -278,6 +281,15 @@ const AdminDashboard = () => {
     if (articlesRes.data) setArticles(articlesRes.data as unknown as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     if (voyagesRes.data) setVoyages(voyagesRes.data as VoyageSummary[]);
+    // Booking chip badge: candidature still awaiting an admin decision across all voyages.
+    const candidateRows = (candidatesRes.data as { status?: string; is_crew?: boolean; plan_change_status?: string }[] | null) || [];
+    setPendingCandidates(
+      candidateRows.filter(
+        (row) =>
+          !row.is_crew &&
+          (row.status === "requested" || row.status === "waitlisted" || row.plan_change_status === "pending_user_approval")
+      ).length
+    );
     setLoading(false);
   }, [navigate, session?.user]);
 
@@ -495,11 +507,10 @@ const AdminDashboard = () => {
   const activeSectionMeta = sectionTabs.find((tab) => tab.id === activeSection) ?? sectionTabs[0];
   const publicationRate = articles.length > 0 ? Math.round((publishedCount / articles.length) * 100) : 0;
   const adminQuickLinks = [
-    { to: "/admin/bookings", label: "Booking", description: "Richieste e partecipanti", icon: CalendarCheck },
-    { to: "/admin/candidates", label: "Candidati", description: "Revisione candidature", icon: User },
-    { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail },
-    { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud },
-    { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned },
+    { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
+    { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
+    { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
+    { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned, badge: 0 },
   ];
   const overviewMetrics = [
     { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },
@@ -583,8 +594,13 @@ const AdminDashboard = () => {
                       }}
                       className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
                     >
-                      <span className="glass-chip inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
+                      <span className="glass-chip relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
                         <Icon size={16} />
+                        {item.badge > 0 && (
+                          <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
+                            {item.badge}
+                          </span>
+                        )}
                       </span>
                       <span className="min-w-0">
                         <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
