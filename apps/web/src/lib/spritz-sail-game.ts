@@ -363,7 +363,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   overlay.insertAdjacentHTML(
     "beforeend",
     `<div class="spritz-game-title">S/Y Spritz<small>Raccogli le lanterne · Buon vento</small></div>
-     <div class="spritz-game-hint">A/D — timone<br>W lasca · S cazza<br>ESC — esci</div>
+     <div class="spritz-game-hint">A/D — timone<br>W lasca · S cazza<br>SPAZIO — issa/ammaina<br>ESC — esci</div>
      <div class="spritz-lantern-toast">Lanterna recuperata</div>
      <div class="spritz-game-hud">
        <div class="spritz-wind-dial">
@@ -606,19 +606,25 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     );
     glow.scale.setScalar(1.1);
     group.add(body, glow);
-    const angle = (i / 7) * Math.PI * 2;
-    const dist = 12 + (i % 3) * 9;
-    const lantern: FloatingLantern = {
-      group,
-      glow,
-      pos: new THREE.Vector2(Math.cos(angle) * dist, Math.sin(angle) * dist),
-      burstAt: -1,
-    };
+    // Start far astern so the first frame recycles every lantern out ahead of the bow.
+    const lantern: FloatingLantern = { group, glow, pos: new THREE.Vector2(-1000, -1000), burstAt: -1 };
     lanterns.push(lantern);
     scene.add(group);
   }
   let lanternsCollected = 0;
   let toastTimer = 0;
+  // Scatter a lantern ahead of the boat, within a wide cone around the current
+  // heading, so wherever the player chooses to sail the supply keeps coming.
+  const spawnLanternAhead = (lantern: FloatingLantern, fwd: THREE.Vector2, from: THREE.Vector2) => {
+    const ang = (Math.random() - 0.5) * 1.9; // ±~54° around the heading
+    const dist = 17 + Math.random() * 26;
+    const dirX = fwd.x * Math.cos(ang) - fwd.y * Math.sin(ang);
+    const dirY = fwd.x * Math.sin(ang) + fwd.y * Math.cos(ang);
+    lantern.pos.set(from.x + dirX * dist, from.y + dirY * dist);
+    lantern.glow.scale.setScalar(1.1);
+    (lantern.glow.material as THREE.SpriteMaterial).opacity = 1;
+    lantern.group.visible = true;
+  };
 
   // ---------------------------------------------------------------- Dolphin pod
   const dolphinMat = new THREE.MeshStandardMaterial({ color: "#3d5068", roughness: 0.4 });
@@ -677,28 +683,33 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     heading: 0,
     speed: 0,
     sheetEase: 0.85, // 0 = sheeted flat amidships, 1 = boom right out; set to match the opening broad reach
+    hoist: 1, // 1 = sails fully hoisted, 0 = doused (dropped onto boom / foredeck)
+    hoistTarget: 1,
     heel: 0,
     trip: 0, // world units sailed
     windBase: Math.PI * 0.75, // wind initially from the aft-port quarter: a broad reach, so the boat moves right away
   };
   const keys = new Set<string>();
-  const NO_GO = 0.55; // ~31° either side of the apparent wind: sails can't drive
+  const NO_GO = 0.4; // ~23° of apparent wind: a Bermudan sloop stops driving only this close
   const KN = 7.8; // world-units/sec -> knots, for both the display and the apparent-wind maths
   const MAX_BOOM = 1.45; // boom angle (rad) at full ease
-  const THRUST = 0.075;
-  const DRAG = 0.5;
+  const THRUST = 0.05;
+  const DRAG = 0.3; // linear hull drag
+  const DRAG2 = 0.3; // quadratic drag: caps top speed, compresses the polar
 
-  // Point-of-sail power envelope over the apparent wind angle: nothing in the
-  // no-go zone, peak on a reach (~105°), reduced dead downwind (sails blanket).
+  // Point-of-sail power envelope over the apparent wind angle. A marconi rig is
+  // efficient close-hauled, so power climbs steeply just out of the no-go zone;
+  // it peaks on a close/beam reach (~85° apparent) and eases toward a run.
   const pointOfSailPower = (awa: number) => {
     if (awa < NO_GO) return 0;
-    const ramp = THREE.MathUtils.smoothstep(awa, NO_GO, NO_GO + 0.45);
-    const hump = 0.55 + 0.45 * Math.sin(Math.min(awa, Math.PI) * 0.9 + 0.15);
+    const ramp = THREE.MathUtils.smoothstep(awa, NO_GO, NO_GO + 0.16);
+    const hump = 0.66 + 0.34 * Math.sin(Math.min(awa, Math.PI) * 0.86 + 0.42);
     return ramp * THREE.MathUtils.clamp(hump, 0, 1);
   };
   // The boom angle that keeps the sail at its best angle of attack for a given
-  // apparent wind angle — the target the player trims toward.
-  const idealBoomFor = (awa: number) => THREE.MathUtils.clamp((awa - 0.35) * 0.85, 0.1, 1.35);
+  // apparent wind angle — the target the player trims toward. Near-flat when
+  // close-hauled, right out on a run.
+  const idealBoomFor = (awa: number) => THREE.MathUtils.clamp((awa - 0.32) * 0.85, 0.1, 1.35);
   const pointOfSailName = (awa: number) => {
     if (awa < NO_GO) return "In stallo";
     if (awa < 1.05) return "Bolina";
@@ -754,6 +765,12 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     }
     soundscape?.resume();
     const k = normalizeKey(e);
+    if (k === " " || k === "spacebar") {
+      // Toggle hoist/douse: raise the sails or drop them onto the boom.
+      if (!e.repeat) state.hoistTarget = state.hoistTarget > 0.5 ? 0 : 1;
+      e.preventDefault();
+      return;
+    }
     if (["w", "a", "s", "d"].includes(k)) {
       keys.add(k);
       e.preventDefault();
@@ -857,15 +874,16 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     const windSide = fwd.x * appFromY - fwd.y * appFromX >= 0 ? 1 : -1;
 
     // Trim: how close the boom is to its ideal angle for this apparent wind angle.
+    state.hoist += (state.hoistTarget - state.hoist) * Math.min(1, dt * 1.6);
     const idealBoom = idealBoomFor(awa);
     const boom = state.sheetEase * MAX_BOOM;
     const trimErr = boom - idealBoom; // >0 = eased too far (luffs), <0 = over-trimmed (stalls)
     const trimEff = Math.exp(-Math.pow(trimErr / 0.5, 2));
-    const power = pointOfSailPower(awa);
-    const luffing = awa < NO_GO + 0.05 || trimErr > 0.55;
+    const power = pointOfSailPower(awa) * state.hoist; // doused sails don't drive
+    const luffing = state.hoist > 0.5 && (awa < NO_GO + 0.05 || trimErr > 0.55);
 
     const thrust = appSpeed * THRUST * power * trimEff;
-    state.speed = Math.max(0, state.speed + (thrust - DRAG * state.speed) * dt);
+    state.speed = Math.max(0, state.speed + (thrust - DRAG * state.speed - DRAG2 * state.speed * state.speed) * dt);
     // Turning scrubs a little speed, like a real rudder.
     state.speed *= 1 - 0.2 * Math.abs(rudder) * dt;
     state.heading += rudder * (0.35 + 0.75 * Math.min(state.speed, 1.2) / 1.2) * dt;
@@ -899,8 +917,13 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     boat.position.set(state.pos.x, (hBow + hMid + hStern) / 3 + 0.075, state.pos.y);
     boat.rotation.y = state.heading;
     boat.rotation.z = Math.atan2(hBow - hStern, 1.7) * 0.7 + 0.02 + state.speed * 0.02; // pitch + speed trim
-    // Heel to leeward, driven by the actual sail force (power × trim), harder in gusts.
-    const heelTarget = -windSide * Math.min(1, power * trimEff * (appSpeed / 12)) * 0.19;
+    // Heel to leeward. The heeling (sideways) component of the sail force is
+    // largest when the sails are sheeted flat close-hauled and grows with the
+    // square of the apparent wind — so she lays over on the ear upwind and in a
+    // gust, and sails nearly upright dead downwind.
+    const drawing = state.hoist * trimEff * THREE.MathUtils.smoothstep(awa, NO_GO, NO_GO + 0.16);
+    const heelForce = drawing * Math.pow(appSpeed / 11, 2) * (0.5 + 0.5 * Math.cos(boom));
+    const heelTarget = -windSide * THREE.MathUtils.clamp(heelForce, 0, 1.4) * 0.2;
     state.heel += (heelTarget - state.heel) * Math.min(1, dt * 2.2);
     boat.rotation.x = -Math.atan2(hStar - hPort, 1.2) * 0.45 + state.heel;
 
@@ -926,6 +949,11 @@ export function mountSpritzSailGame(onClose?: () => void): void {
       spritz.mainSail.scale.z += (fill - spritz.mainSail.scale.z) * Math.min(1, dt * 4);
       spritz.jib.scale.z += (fill - spritz.jib.scale.z) * Math.min(1, dt * 4);
     }
+    // Hoist: the sails drop straight down onto the boom / foredeck when doused
+    // (scale along the luff, anchored at the foot), never sideways to the mast.
+    const cloth = 0.05 + 0.95 * state.hoist;
+    spritz.mainSail.scale.y = cloth;
+    spritz.jib.scale.y = cloth;
 
     // ------------------------------------------------ World follows the boat
     oceanUniforms.uTime.value = t;
@@ -953,21 +981,23 @@ export function mountSpritzSailGame(onClose?: () => void): void {
       if (lantern.burstAt >= 0) {
         const p = (t - lantern.burstAt) / 0.7;
         if (p >= 1) {
-          // Respawn ahead of the boat, off to one side.
           lantern.burstAt = -1;
-          const side = (Math.random() - 0.5) * 36;
-          const ahead = 22 + Math.random() * 22;
-          lantern.pos.copy(state.pos).addScaledVector(fwd, ahead).addScaledVector(starboard, side);
-          lantern.glow.scale.setScalar(1.1);
-          (lantern.glow.material as THREE.SpriteMaterial).opacity = 1;
-          lantern.group.visible = true;
+          spawnLanternAhead(lantern, fwd, state.pos);
         } else {
           lantern.glow.scale.setScalar(1.1 + p * 3.2);
           (lantern.glow.material as THREE.SpriteMaterial).opacity = 1 - p;
         }
       } else {
         (lantern.glow.material as THREE.SpriteMaterial).opacity = 0.75 + 0.25 * Math.sin(t * 2.4 + lantern.pos.x);
-        if (state.pos.distanceTo(lantern.pos) < 1.35) {
+        // Recycle any lantern the player has left well astern or sailed far past,
+        // dropping it back into the cone ahead — an endless supply in whatever
+        // direction the boat is heading. (Off-screen, so the move is unseen.)
+        const relX = lantern.pos.x - state.pos.x;
+        const relY = lantern.pos.y - state.pos.y;
+        const along = relX * fwd.x + relY * fwd.y;
+        if (along < -12 || relX * relX + relY * relY > 52 * 52) {
+          spawnLanternAhead(lantern, fwd, state.pos);
+        } else if (state.pos.distanceTo(lantern.pos) < 1.35) {
           lantern.burstAt = t;
           lanternsCollected++;
           hudLanterns.textContent = String(lanternsCollected);
@@ -1114,11 +1144,13 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     trimBand.style.left = `${Math.max(0, idealEase - bandHalf) * 100}%`;
     trimBand.style.width = `${(Math.min(1, idealEase + bandHalf) - Math.max(0, idealEase - bandHalf)) * 100}%`;
     trimMarker.style.left = `${state.sheetEase * 100}%`;
-    const tuned = Math.abs(state.sheetEase - idealEase) < bandHalf && power > 0.02;
+    const doused = state.hoist < 0.6;
+    const tuned = !doused && Math.abs(state.sheetEase - idealEase) < bandHalf && power > 0.02;
     trimMarker.classList.toggle("is-tuned", tuned);
     trimHint.classList.toggle("is-tuned", tuned);
-    trimMsg.textContent =
-      power < 0.02
+    trimMsg.textContent = doused
+      ? "Vele ammainate"
+      : power < 0.02
         ? "Poggia per ripartire"
         : tuned
           ? "Vele a segno"

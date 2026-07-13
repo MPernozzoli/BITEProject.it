@@ -3,6 +3,7 @@ import { buildPublicVoyageGeometry, buildVoyageGeometry, buildVoyageSegmentGeome
 
 const createJsonResponse = (payload: unknown) =>
   Promise.resolve({
+    ok: true,
     json: async () => payload,
   } as Response);
 
@@ -127,6 +128,58 @@ describe("buildVoyageGeometry", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("brouter.de/brouter");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("profile=river");
+  });
+
+  it("routes waterway segment-by-segment when the full chain is not navigable in one request", async () => {
+    const okSegment = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [7.95, 48.57],
+              [7.955, 48.575],
+              [7.96, 48.58],
+            ],
+          },
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const lonlats = new URL(url).searchParams.get("lonlats") ?? "";
+      const viaCount = lonlats.split("|").length;
+      // Full-chain request (3 vias) is not navigable → BRouter 400.
+      if (viaCount > 2) return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      // Second leg (7.96,48.58 → 7.97,48.59) has no waterway → 400; first leg routes fine.
+      if (lonlats.startsWith("7.96,48.58")) {
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }
+      return createJsonResponse(okSegment);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const geometry = await buildVoyageGeometry(
+      [
+        { lat: 48.57, lng: 7.95 },
+        { lat: 48.58, lng: 7.96 },
+        { lat: 48.59, lng: 7.97 },
+      ],
+      "water",
+      { waterwayAutoroute: true }
+    );
+
+    // First leg follows the waterway; only the un-navigable second leg is a straight chord.
+    expect(geometry).toEqual([
+      [7.95, 48.57],
+      [7.955, 48.575],
+      [7.96, 48.58],
+      [7.97, 48.59],
+    ]);
+    // 1 full-chain attempt + 2 per-segment requests.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 

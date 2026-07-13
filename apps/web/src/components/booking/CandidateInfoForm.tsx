@@ -91,6 +91,17 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
     }
 
     const currentLevel = normalizedValue.languageLevels[language];
+    const isLastLevel = currentLevel === languageLevelOptions[languageLevelOptions.length - 1].value;
+    if (isLastLevel) {
+      const { [language]: _removed, ...remainingLevels } = normalizedValue.languageLevels;
+      onChange({
+        ...normalizedValue,
+        languages: normalizedValue.languages.filter((item) => item !== language),
+        languageLevels: remainingLevels,
+      });
+      return;
+    }
+
     const nextLevel = nextLanguageLevel(currentLevel);
     onChange({
       ...normalizedValue,
@@ -308,8 +319,11 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
 
       <fieldset className="space-y-3">
         <legend className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-          {lang === "it" ? "Lavoro e bordo" : "Work and life aboard"}
+          {lang === "it" ? "Lavoro a bordo" : "Work aboard"}
         </legend>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {lang === "it" ? "Lavorerai durante il viaggio?" : "Will you work during the voyage?"}
+        </p>
         <div className="flex flex-wrap gap-2">
           {workOptions.map((option) => (
             <button

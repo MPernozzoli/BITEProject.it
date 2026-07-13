@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_STOP_DEPARTURE_TIME,
   STOP_DEPARTURE_PRESETS,
+  estimateStopMinutes,
   getEffectiveStopHoursDefault,
   getWaypointStopUiMode,
 } from "@/lib/booking-utils";
@@ -277,6 +278,34 @@ const deriveWaypointLegEstimates = (waypoints: VoyageWaypoint[]) =>
       ];
     })
   ) as Record<string, WaypointLegEstimate | null>;
+
+/**
+ * Arrivo stimato all'ultimo waypoint = partenza + Σ(tratte a velocità di pianificazione) + Σ(soste intermedie).
+ * La sosta del primo waypoint non conta (la partenza è già `start`) né quella dell'ultimo (è l'arrivo stesso).
+ */
+const computeEstimatedArrivalDateTime = (
+  waypoints: VoyageWaypoint[],
+  startDate: string,
+  startTime: string,
+  speedKn: number
+): { date: string; time: string } | null => {
+  if (waypoints.length < 2 || !startDate) return null;
+  const start = parseDateTimeInput(startDate, startTime || null);
+  if (!start) return null;
+  const speed = Number.isFinite(speedKn) && speedKn > 0 ? speedKn : 5;
+  let totalMinutes = 0;
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const previous = waypoints[index - 1];
+    const current = waypoints[index];
+    totalMinutes += (haversineNM(previous.lat, previous.lng, current.lat, current.lng) / speed) * 60;
+    if (index < waypoints.length - 1) {
+      totalMinutes += estimateStopMinutes(current);
+    }
+  }
+  const arrival = new Date(start.getTime() + totalMinutes * 60 * 1000);
+  if (Number.isNaN(arrival.getTime())) return null;
+  return { date: formatDateInputValue(arrival), time: formatTimeInputValue(arrival) };
+};
 
 const formatVoyageDateWindowLabel = (value: string | null, flexDays: number | null | undefined) => {
   if (!value) return null;
@@ -1579,6 +1608,40 @@ const AdminVoyageManager = ({
     () => deriveWaypointLegEstimates(selectedWaypoints),
     [selectedWaypoints]
   );
+
+  // Waypoint del voyage attualmente in modifica nel form (indipendenti dalla selezione sulla mappa).
+  const voyageFormWaypoints = useMemo(
+    () => (editingVoyage ? sortWaypoints(waypoints[editingVoyage.id] || []) : []),
+    [editingVoyage, waypoints]
+  );
+  const estimatedVoyageArrival = useMemo(
+    () =>
+      voyageForm.dates_tbd
+        ? null
+        : computeEstimatedArrivalDateTime(
+            voyageFormWaypoints,
+            voyageForm.start_date,
+            voyageForm.start_time,
+            Number(voyageForm.booking_planning_speed_kn)
+          ),
+    [
+      voyageFormWaypoints,
+      voyageForm.dates_tbd,
+      voyageForm.start_date,
+      voyageForm.start_time,
+      voyageForm.booking_planning_speed_kn,
+    ]
+  );
+
+  // Precompila la data di arrivo quando manca: l'arrivo è calcolato dai waypoint, ma resta editabile.
+  useEffect(() => {
+    if (!showVoyageForm || !estimatedVoyageArrival) return;
+    setVoyageForm((form) =>
+      form.dates_tbd || form.end_date
+        ? form
+        : { ...form, end_date: estimatedVoyageArrival.date, end_time: estimatedVoyageArrival.time }
+    );
+  }, [showVoyageForm, estimatedVoyageArrival]);
 
   const createWaypointPopupContent = useCallback(
     (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
@@ -3623,7 +3686,9 @@ const AdminVoyageManager = ({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">End</label>
+              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">
+                End · arrivo stimato
+              </label>
               <div className="grid grid-cols-[1fr_140px] gap-3">
                 <input
                   type="date"
@@ -3675,12 +3740,42 @@ const AdminVoyageManager = ({
                   </div>
                 </div>
               )}
+              {!voyageForm.dates_tbd && estimatedVoyageArrival && (
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans text-muted-foreground">
+                  <span>
+                    Arrivo stimato all&apos;ultimo waypoint:{" "}
+                    <span className="text-foreground">
+                      {estimatedVoyageArrival.date} · {estimatedVoyageArrival.time}
+                    </span>{" "}
+                    (a {Number(voyageForm.booking_planning_speed_kn) || 5} kn + soste)
+                  </span>
+                  {(voyageForm.end_date !== estimatedVoyageArrival.date ||
+                    voyageForm.end_time !== estimatedVoyageArrival.time) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVoyageForm((form) => ({
+                          ...form,
+                          dates_tbd: false,
+                          end_date: estimatedVoyageArrival.date,
+                          end_time: estimatedVoyageArrival.time,
+                        }))
+                      }
+                      className="rounded-[8px] border border-border px-2 py-1 text-[10.5px] uppercase tracking-[0.14em] text-foreground transition-colors hover:bg-muted"
+                    >
+                      Usa stima
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="text-[11px] text-muted-foreground font-sans">
                 {voyageForm.dates_tbd
                   ? "Anche la finestra di arrivo resta aperta finché non viene pianificata."
-                  : voyageForm.status === "planned"
-                    ? "Usa ± giorni per rappresentare una finestra flessibile."
-                    : "Leave blank if the arrival is still open."}
+                  : estimatedVoyageArrival
+                    ? "Precompilata dai waypoint (distanza / velocità + soste). Puoi comunque modificarla a mano."
+                    : voyageForm.status === "planned"
+                      ? "Usa ± giorni per rappresentare una finestra flessibile."
+                      : "Leave blank if the arrival is still open."}
               </p>
             </div>
           </div>
