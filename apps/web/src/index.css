@@ -91,6 +91,19 @@
   }
 }
 
+@layer components {
+  .admin-action-strip {
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-inline: 0.5rem;
+    -ms-overflow-style: none;
+  }
+
+  .admin-action-strip::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

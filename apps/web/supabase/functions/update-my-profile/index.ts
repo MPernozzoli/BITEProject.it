@@ -125,6 +125,26 @@ Deno.serve(async (req) => {
   const commentNotificationsFrequency = readNotificationFrequency(
     body.comment_notifications_frequency
   )
+  const pushEngagementEnabled =
+    typeof body.push_engagement_enabled === 'boolean'
+      ? body.push_engagement_enabled
+      : undefined
+  const pushPublicationEnabled =
+    typeof body.push_publication_enabled === 'boolean'
+      ? body.push_publication_enabled
+      : undefined
+  const pushMailEnabled =
+    typeof body.push_mail_enabled === 'boolean'
+      ? body.push_mail_enabled
+      : undefined
+  const pushVoyageAdminEnabled =
+    typeof body.push_voyage_admin_enabled === 'boolean'
+      ? body.push_voyage_admin_enabled
+      : undefined
+  const pushVoyageUserEnabled =
+    typeof body.push_voyage_user_enabled === 'boolean'
+      ? body.push_voyage_user_enabled
+      : undefined
 
   const profilePayload = {
     id: user.id,
@@ -191,6 +211,16 @@ Deno.serve(async (req) => {
     comment_notifications_frequency:
       commentNotificationsFrequency ??
       currentPreferences.comment_notifications_frequency,
+    push_engagement_enabled:
+      pushEngagementEnabled ?? currentPreferences.push_engagement_enabled,
+    push_publication_enabled:
+      pushPublicationEnabled ?? currentPreferences.push_publication_enabled,
+    push_mail_enabled:
+      pushMailEnabled ?? currentPreferences.push_mail_enabled,
+    push_voyage_admin_enabled:
+      pushVoyageAdminEnabled ?? currentPreferences.push_voyage_admin_enabled,
+    push_voyage_user_enabled:
+      pushVoyageUserEnabled ?? currentPreferences.push_voyage_user_enabled,
   })
 
   if (subscribed) {

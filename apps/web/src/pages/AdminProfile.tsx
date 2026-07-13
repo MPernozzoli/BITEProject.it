@@ -765,7 +765,10 @@ const AdminProfile = () => {
     }
 
     try {
-      const subscription = await getExistingPushSubscription();
+      let subscription = await getExistingPushSubscription();
+      if (subscription && pushPublicKey && getPushPermission() === "granted") {
+        subscription = await subscribeToPushNotifications(pushPublicKey);
+      }
       const hasSubscription = Boolean(subscription);
       setHasPushSubscription(hasSubscription);
 
@@ -783,7 +786,7 @@ const AdminProfile = () => {
       setHasPushSubscription(false);
       return false;
     }
-  }, [canUseWebPush, savePushSubscription, session?.user]);
+  }, [canUseWebPush, pushPublicKey, savePushSubscription, session?.user]);
 
   const persistNotificationSettings = useCallback(
     async (updates: {
@@ -797,58 +800,25 @@ const AdminProfile = () => {
     }) => {
       if (!session?.user?.email) return;
 
-      const normalizedEmail = session.user.email.trim().toLowerCase();
-      const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
-        .from("email_notification_preferences")
-        .select(
-          "newsletter_enabled, digest_enabled, article_notifications_enabled, story_notifications_enabled, like_notifications_frequency, comment_notifications_frequency, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled",
-        )
-        .eq("email", normalizedEmail)
-        .maybeSingle();
-
-      if (currentPreferenceError) {
-        console.error("Push preference baseline load error:", currentPreferenceError);
-      }
-
-      const { error } = await supabase.from("email_notification_preferences").upsert({
-        email: normalizedEmail,
-        newsletter_enabled: currentPreferenceRow?.newsletter_enabled ?? newsletterSubscribed,
-        digest_enabled: currentPreferenceRow?.digest_enabled ?? newsletterSubscribed,
-        article_notifications_enabled:
-          updates.articleNotificationsEnabled
-          ?? currentPreferenceRow?.article_notifications_enabled
-          ?? articleNotificationsEnabled,
-        story_notifications_enabled:
-          updates.storyNotificationsEnabled
-          ?? currentPreferenceRow?.story_notifications_enabled
-          ?? storyNotificationsEnabled,
-        like_notifications_frequency:
-          currentPreferenceRow?.like_notifications_frequency
-          ?? notificationPreferences.like_notifications_frequency,
-        comment_notifications_frequency:
-          currentPreferenceRow?.comment_notifications_frequency
-          ?? notificationPreferences.comment_notifications_frequency,
-        push_engagement_enabled:
-          updates.pushEngagementEnabled
-          ?? currentPreferenceRow?.push_engagement_enabled
-          ?? pushEngagementEnabled,
-        push_publication_enabled:
-          updates.pushPublicationEnabled
-          ?? currentPreferenceRow?.push_publication_enabled
-          ?? pushPublicationEnabled,
-        push_mail_enabled:
-          updates.pushMailEnabled
-          ?? currentPreferenceRow?.push_mail_enabled
-          ?? pushMailEnabled,
-        push_voyage_admin_enabled:
-          updates.pushVoyageAdminEnabled
-          ?? currentPreferenceRow?.push_voyage_admin_enabled
-          ?? pushVoyageAdminEnabled,
-        push_voyage_user_enabled:
-          updates.pushVoyageUserEnabled
-          ?? currentPreferenceRow?.push_voyage_user_enabled
-          ?? pushVoyageUserEnabled,
-        updated_at: new Date().toISOString(),
+      const { error } = await supabase.functions.invoke("update-my-profile", {
+        body: {
+          name,
+          bio,
+          avatar_url: avatarUrl,
+          preferred_language: preferredLanguage,
+          secondary_language: isSiteNative ? null : secondaryLanguage,
+          newsletter_subscribed: newsletterSubscribed,
+          like_notifications_frequency: notificationPreferences.like_notifications_frequency,
+          comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
+          article_notifications_enabled: updates.articleNotificationsEnabled ?? articleNotificationsEnabled,
+          story_notifications_enabled: updates.storyNotificationsEnabled ?? storyNotificationsEnabled,
+          push_engagement_enabled: updates.pushEngagementEnabled ?? pushEngagementEnabled,
+          push_publication_enabled: updates.pushPublicationEnabled ?? pushPublicationEnabled,
+          push_mail_enabled: updates.pushMailEnabled ?? pushMailEnabled,
+          push_voyage_admin_enabled: updates.pushVoyageAdminEnabled ?? pushVoyageAdminEnabled,
+          push_voyage_user_enabled: updates.pushVoyageUserEnabled ?? pushVoyageUserEnabled,
+          ...socials,
+        },
       });
 
       if (error) {
@@ -857,15 +827,22 @@ const AdminProfile = () => {
     },
     [
       articleNotificationsEnabled,
+      avatarUrl,
+      bio,
+      isSiteNative,
+      name,
       newsletterSubscribed,
       notificationPreferences.comment_notifications_frequency,
       notificationPreferences.like_notifications_frequency,
+      preferredLanguage,
       pushEngagementEnabled,
       pushMailEnabled,
       pushPublicationEnabled,
       pushVoyageAdminEnabled,
       pushVoyageUserEnabled,
+      secondaryLanguage,
       session?.user?.email,
+      socials,
       storyNotificationsEnabled,
     ],
   );
@@ -1411,6 +1388,11 @@ const AdminProfile = () => {
             comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
             article_notifications_enabled: articleNotificationsEnabled,
             story_notifications_enabled: storyNotificationsEnabled,
+            push_engagement_enabled: pushEngagementEnabled,
+            push_publication_enabled: pushPublicationEnabled,
+            push_mail_enabled: pushMailEnabled,
+            push_voyage_admin_enabled: pushVoyageAdminEnabled,
+            push_voyage_user_enabled: pushVoyageUserEnabled,
             ...socials,
           },
         });
@@ -1437,33 +1419,26 @@ const AdminProfile = () => {
       }
 
       if (!notificationPreferencesSaved) {
-        const { data: currentPreferenceRow, error: currentPreferenceError } = await supabase
-          .from("email_notification_preferences")
-          .select("newsletter_enabled, digest_enabled, story_notifications_enabled, push_engagement_enabled, push_publication_enabled, push_mail_enabled, push_voyage_admin_enabled, push_voyage_user_enabled")
-          .eq("email", currentEmail)
-          .maybeSingle();
-
-        if (currentPreferenceError) {
-          console.error("Notification preference baseline load error:", currentPreferenceError);
-        }
-
-        const { error: preferenceError } = await supabase
-          .from("email_notification_preferences")
-          .upsert({
-            email: currentEmail,
-            newsletter_enabled: currentPreferenceRow?.newsletter_enabled ?? newsletterSubscribed,
-            digest_enabled: currentPreferenceRow?.digest_enabled ?? newsletterSubscribed,
-            article_notifications_enabled: articleNotificationsEnabled,
-            story_notifications_enabled: storyNotificationsEnabled,
+        const { error: preferenceError } = await supabase.functions.invoke("update-my-profile", {
+          body: {
+            name,
+            bio,
+            avatar_url: avatarUrl,
+            preferred_language: preferredLanguage,
+            secondary_language: isSiteNative ? null : secondaryLanguage,
+            newsletter_subscribed: newsletterSubscribed,
             like_notifications_frequency: notificationPreferences.like_notifications_frequency,
             comment_notifications_frequency: notificationPreferences.comment_notifications_frequency,
-            push_engagement_enabled: currentPreferenceRow?.push_engagement_enabled ?? pushEngagementEnabled,
-            push_publication_enabled: currentPreferenceRow?.push_publication_enabled ?? pushPublicationEnabled,
-            push_mail_enabled: currentPreferenceRow?.push_mail_enabled ?? pushMailEnabled,
-            push_voyage_admin_enabled: currentPreferenceRow?.push_voyage_admin_enabled ?? pushVoyageAdminEnabled,
-            push_voyage_user_enabled: currentPreferenceRow?.push_voyage_user_enabled ?? pushVoyageUserEnabled,
-            updated_at: new Date().toISOString(),
-          });
+            article_notifications_enabled: articleNotificationsEnabled,
+            story_notifications_enabled: storyNotificationsEnabled,
+            push_engagement_enabled: pushEngagementEnabled,
+            push_publication_enabled: pushPublicationEnabled,
+            push_mail_enabled: pushMailEnabled,
+            push_voyage_admin_enabled: pushVoyageAdminEnabled,
+            push_voyage_user_enabled: pushVoyageUserEnabled,
+            ...socials,
+          },
+        });
 
         if (preferenceError) {
           console.error("Notification preference save error:", preferenceError);
@@ -1638,7 +1613,7 @@ const AdminProfile = () => {
   if (!session) return null;
 
   return (
-    <div className="min-h-screen pt-24 pb-20 px-6 md:px-12">
+    <div className="min-h-screen pt-24 pb-36 px-6 md:px-12 md:pb-20">
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
         <section className="relative overflow-hidden rounded-[38px] border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
           <div className="absolute -top-20 right-8 h-64 w-64 rounded-full bg-accent/12 blur-3xl" />
@@ -2287,7 +2262,7 @@ const AdminProfile = () => {
       </div>
 
       {isDirty && (
-        <div className="fixed inset-x-4 bottom-4 z-40 md:inset-x-auto md:right-6 md:bottom-6">
+        <div className="fixed inset-x-4 bottom-24 z-40 md:inset-x-auto md:right-6 md:bottom-6">
           <div className="ml-auto flex items-center justify-between gap-4 rounded-full border border-white/70 bg-[linear-gradient(145deg,rgba(20,33,54,0.94),rgba(39,62,96,0.9))] px-4 py-3 text-white shadow-[0_24px_56px_rgba(15,23,42,0.28)] backdrop-blur-xl md:min-w-[360px]">
             <div className="min-w-0">
               <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/65">

@@ -55,9 +55,13 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |
 
-`AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, mostra il nome mittente quando disponibile o inferibile dalla firma e usa l'indirizzo solo come fallback. L'anteprima usa solo il testo nuovo prima del thread citato; nel corpo le citazioni restano collassabili con azioni "Mostra di più da..." / "Nascondi".
+`AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, con header compatto e ricerca per mittente/destinatario/corpo/data. Mostra il nome mittente quando disponibile o inferibile dalla firma e usa l'indirizzo solo come fallback. L'anteprima usa solo il testo nuovo prima del thread citato; nel corpo le citazioni restano collassabili con azioni "Mostra di più da..." / "Nascondi".
 
 `AdminVoyageBookings.tsx` nella sezione settings gestisce i contenuti bilingue delle due mail briefing viaggio (`first_briefing_content_*`, `second_briefing_content_*`) oltre a prepartenza, note operative e checklist.
+
+Su iPhone/PWA, `Layout.tsx` aggiunge un dock mobile admin persistente su `/admin/*` e `/profile` per utenti con ruolo admin. Le pagine secondarie e il profilo hanno quindi sempre un link diretto alla Home admin (`/admin`) e alle altre aree operative.
+
+`AdminDashboard.tsx` usa una gerarchia da workspace: CTA primaria per nuovo articolo, shortcut solo per aree operative frequenti, KPI editoriali e navigazione interna per gruppi Contenuti/Operazioni/Audience. Il Profilo resta fuori dagli shortcut principali perché già coperto dalla propic e dal dock mobile.
 
 ## Collegamenti
 - Componenti usati: [[06 - Frontend - Componenti]]

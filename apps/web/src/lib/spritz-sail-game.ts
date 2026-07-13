@@ -1,8 +1,10 @@
 // Easter egg: sail S/Y Spritz across the night ocean. Triggered by typing
 // "spritz" anywhere on the site (see main.tsx). A/D steer, W/S trim the sails,
-// ESC leaves. Arcade-grade wind simulation: the wind slowly wanders, sails only
-// pull on a reach (no-go zone upwind), heel and wake follow boat speed.
-// Reuses the exact Spritz model and wave field from src/lib/spritz-boat.ts.
+// ESC leaves. Arcade wind simulation with wandering wind and travelling gusts
+// (visible as cat's paws on the water), floating lanterns to collect, a
+// lighthouse with a sweeping beam, the occasional dolphin pod, bow spray and
+// procedural wind/water audio. Reuses the exact Spritz model and wave field
+// from src/lib/spritz-boat.ts.
 import * as THREE from "three";
 import {
   buildSpritzBoat,
@@ -17,7 +19,8 @@ import {
 // World-space ocean: the plane is recentered on the boat every frame and the
 // shader samples the wave field at true world coordinates (uOffset), so the
 // water stays put while the boat sails through it. Wake and bow spray live in
-// the boat's frame (uBoatPos/uForward) and scale with speed (uWake).
+// the boat's frame (uBoatPos/uForward) and scale with speed (uWake). Gust cells
+// (uGusts: xy pos, z radius, w strength) darken and roughen the surface.
 const GAME_OCEAN_VERTEX = /* glsl */ `
   uniform float uTime;
   uniform vec2 uOffset;
@@ -77,6 +80,7 @@ const GAME_OCEAN_FRAGMENT = /* glsl */ `
   uniform vec2 uBoatPos;
   uniform vec2 uForward;
   uniform float uWake;
+  uniform vec4 uGusts[3];
   uniform vec3 uDeepColor;
   uniform vec3 uCrestColor;
   uniform vec3 uMoonDir;
@@ -113,6 +117,15 @@ const GAME_OCEAN_FRAGMENT = /* glsl */ `
     float foam = smoothstep(0.62, 0.95, vHeight) * smoothstep(0.6, 0.95, foamNoise);
     color = mix(color, vec3(0.78, 0.86, 0.88), foam * 0.3);
 
+    // Cat's paws: gusts darken and roughen the water as they travel downwind.
+    float gust = 0.0;
+    for (int i = 0; i < 3; i++) {
+      float d = length(vWorldPos.xz - uGusts[i].xy);
+      gust += smoothstep(uGusts[i].z, uGusts[i].z * 0.3, d) * uGusts[i].w;
+    }
+    float catsPaw = hash(floor(vWorldPos.xz * 9.0) + floor(uTime * 6.0));
+    color *= 1.0 - clamp(gust, 0.0, 0.6) * (0.2 + 0.12 * catsPaw);
+
     // Wake in the boat's frame; the churn pattern is pinned to the water so the
     // boat visibly slides past it. Everything scales with speed (uWake).
     vec2 rel = vWorldPos.xz - uBoatPos;
@@ -133,7 +146,7 @@ const GAME_OCEAN_FRAGMENT = /* glsl */ `
     color = mix(color, vec3(0.8, 0.88, 0.9), clamp(wakeFoam + bowFoam, 0.0, 1.0) * 0.6);
 
     float dist = length(vWorldPos.xz - uCameraPos.xz);
-    float alpha = 1.0 - smoothstep(18.0, 34.0, dist);
+    float alpha = 1.0 - smoothstep(24.0, 44.0, dist);
     gl_FragColor = vec4(color, alpha * 0.96);
   }
 `;
@@ -162,7 +175,7 @@ const HUD_CSS = /* css */ `
     text-transform: uppercase;
     font-size: 15px;
     opacity: 0.9;
-    animation: spritz-game-title-out 1200ms ease-in 3.4s forwards;
+    animation: spritz-game-title-out 1200ms ease-in 4.2s forwards;
     pointer-events: none;
   }
   .spritz-game-title small {
@@ -181,7 +194,7 @@ const HUD_CSS = /* css */ `
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 34px;
+    gap: 30px;
     letter-spacing: 0.18em;
     font-size: 12px;
     text-transform: uppercase;
@@ -210,6 +223,7 @@ const HUD_CSS = /* css */ `
     background: rgba(246, 239, 226, 0.7);
   }
   .spritz-game-hud .spritz-hud-value { opacity: 0.92; }
+  .spritz-game-hud .spritz-hud-value.is-gust { color: #ffd9a0; }
   .spritz-game-hud .spritz-hud-label { opacity: 0.5; font-size: 9px; display: block; margin-top: 4px; }
   .spritz-game-hint {
     position: absolute;
@@ -223,7 +237,81 @@ const HUD_CSS = /* css */ `
     text-align: right;
     line-height: 2;
   }
+  .spritz-lantern-toast {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 24%;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: #ffd9a0;
+    opacity: 0;
+    transition: opacity 400ms ease-out;
+    pointer-events: none;
+  }
+  .spritz-lantern-toast.is-visible { opacity: 0.9; }
 `;
+
+// Procedural night-sailing soundscape: filtered noise for wind and hull water.
+// Created on mount (the "spritz" keystrokes count as the user gesture).
+function createSoundscape() {
+  let ctx: AudioContext;
+  try {
+    ctx = new AudioContext();
+  } catch {
+    return null;
+  }
+  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  let brown = 0;
+  for (let i = 0; i < data.length; i++) {
+    const white = Math.random() * 2 - 1;
+    brown = (brown + 0.02 * white) / 1.02;
+    data[i] = brown * 3.5;
+  }
+  const master = ctx.createGain();
+  master.gain.value = 0;
+  master.connect(ctx.destination);
+
+  const makeVoice = (type: BiquadFilterType, freq: number, q: number) => {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = freq;
+    filter.Q.value = q;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    src.start();
+    return { filter, gain };
+  };
+  const wind = makeVoice("bandpass", 650, 0.55);
+  const water = makeVoice("lowpass", 420, 0.7);
+
+  return {
+    resume() {
+      if (ctx.state === "suspended") void ctx.resume();
+    },
+    update(windKn: number, speed: number, gust: number, t: number) {
+      // Fade the master in over the first seconds, keep the mix subtle.
+      master.gain.value = Math.min(0.16, master.gain.value + 0.0015);
+      const windTarget = Math.min(1, windKn / 14) * (0.5 + gust * 0.5);
+      wind.gain.gain.value += (windTarget * 0.5 - wind.gain.gain.value) * 0.02;
+      wind.filter.frequency.value = 550 + 250 * Math.sin(t * 0.4) + gust * 300;
+      const waterTarget = Math.min(1, speed / 1.2) * (0.65 + 0.35 * Math.sin(t * 1.9));
+      water.gain.gain.value += (waterTarget * 0.6 - water.gain.gain.value) * 0.03;
+    },
+    dispose() {
+      void ctx.close();
+    },
+  };
+}
 
 let gameActive = false;
 
@@ -248,8 +336,9 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   overlay.appendChild(renderer.domElement);
   overlay.insertAdjacentHTML(
     "beforeend",
-    `<div class="spritz-game-title">S/Y Spritz<small>Buon vento</small></div>
+    `<div class="spritz-game-title">S/Y Spritz<small>Raccogli le lanterne · Buon vento</small></div>
      <div class="spritz-game-hint">W/S — vele<br>A/D — timone<br>ESC — esci</div>
+     <div class="spritz-lantern-toast">Lanterna recuperata</div>
      <div class="spritz-game-hud">
        <div class="spritz-wind-dial">
          <span class="spritz-bow-tick"></span>
@@ -259,7 +348,10 @@ export function mountSpritzSailGame(onClose?: () => void): void {
        </div>
        <div><span class="spritz-hud-value spritz-hud-wind">--</span><span class="spritz-hud-label">Vento</span></div>
        <div><span class="spritz-hud-value spritz-hud-speed">--</span><span class="spritz-hud-label">Velocità</span></div>
+       <div><span class="spritz-hud-value spritz-hud-course">--</span><span class="spritz-hud-label">Rotta</span></div>
+       <div><span class="spritz-hud-value spritz-hud-trip">0.00</span><span class="spritz-hud-label">Miglia</span></div>
        <div><span class="spritz-hud-value spritz-hud-trim">--</span><span class="spritz-hud-label">Vele</span></div>
+       <div><span class="spritz-hud-value spritz-hud-lanterns">0</span><span class="spritz-hud-label">Lanterne</span></div>
      </div>`
   );
   document.body.appendChild(overlay);
@@ -276,10 +368,16 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   const windDialArrow = overlay.querySelector<SVGElement>(".spritz-wind-dial svg")!;
   const hudWind = overlay.querySelector<HTMLElement>(".spritz-hud-wind")!;
   const hudSpeed = overlay.querySelector<HTMLElement>(".spritz-hud-speed")!;
+  const hudCourse = overlay.querySelector<HTMLElement>(".spritz-hud-course")!;
+  const hudTrip = overlay.querySelector<HTMLElement>(".spritz-hud-trip")!;
   const hudTrim = overlay.querySelector<HTMLElement>(".spritz-hud-trim")!;
+  const hudLanterns = overlay.querySelector<HTMLElement>(".spritz-hud-lanterns")!;
+  const lanternToast = overlay.querySelector<HTMLElement>(".spritz-lantern-toast")!;
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const soundscape = createSoundscape();
 
   // ---------------------------------------------------------------- Scene
   const scene = new THREE.Scene();
@@ -293,12 +391,14 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   const fillLight = new THREE.DirectionalLight(0xffd9b0, 0.5);
   scene.add(fillLight);
 
+  const gustUniform = [new THREE.Vector4(999, 999, 8, 0), new THREE.Vector4(999, 999, 8, 0), new THREE.Vector4(999, 999, 8, 0)];
   const oceanUniforms = {
     uTime: { value: 0 },
     uOffset: { value: new THREE.Vector2() },
     uBoatPos: { value: new THREE.Vector2() },
     uForward: { value: new THREE.Vector2(1, 0) },
     uWake: { value: 0 },
+    uGusts: { value: gustUniform },
     uDeepColor: { value: new THREE.Color("#14304a") },
     uCrestColor: { value: new THREE.Color("#3a6f86") },
     uMoonDir: { value: moonDir },
@@ -392,6 +492,139 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   skyGroup.add(shootingStar);
   const meteor = { active: false, nextAt: 4, startAt: 0, duration: 1.1, from: new THREE.Vector3(), dir: new THREE.Vector3() };
 
+  // ---------------------------------------------------------------- Lighthouse island
+  const LIGHTHOUSE_POS = new THREE.Vector2(34, -26);
+  const lighthouse = new THREE.Group();
+  lighthouse.position.set(LIGHTHOUSE_POS.x, -0.25, LIGHTHOUSE_POS.y);
+  const rockMat = new THREE.MeshStandardMaterial({ color: "#1c2836", roughness: 0.95, flatShading: true });
+  for (const [rx, rz, rs, ry] of [[0, 0, 2.6, -0.6], [1.8, 1.2, 1.7, -0.9], [-1.6, -1.0, 1.9, -0.8], [0.6, -1.8, 1.4, -0.9]] as const) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rs, 0), rockMat);
+    rock.position.set(rx, ry, rz);
+    rock.scale.y = 0.55;
+    lighthouse.add(rock);
+  }
+  const tower = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.32, 0.5, 2.8, 12),
+    new THREE.MeshStandardMaterial({ color: "#cfc9ba", roughness: 0.7 })
+  );
+  tower.position.y = 2.1;
+  lighthouse.add(tower);
+  const lampRoom = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.24, 0.24, 0.42, 10),
+    new THREE.MeshStandardMaterial({ color: "#7a3b2a", roughness: 0.6 })
+  );
+  lampRoom.position.y = 3.7;
+  lighthouse.add(lampRoom);
+  const lampGlowTexture = makeGlowTexture("rgba(255,226,170,0.95)", "rgba(255,226,170,0)", 0.25);
+  const lampGlow = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: lampGlowTexture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+  );
+  lampGlow.position.y = 3.7;
+  lampGlow.scale.setScalar(1.6);
+  lighthouse.add(lampGlow);
+  // Two opposed sweeping beams, built from the streak texture.
+  const beamPivot = new THREE.Group();
+  beamPivot.position.y = 3.7;
+  lighthouse.add(beamPivot);
+  const beamMat = new THREE.MeshBasicMaterial({
+    map: streakTexture,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+  for (const flip of [0, Math.PI]) {
+    const beam = new THREE.Mesh(new THREE.PlaneGeometry(13, 1.1), beamMat);
+    beam.position.x = flip === 0 ? 6.8 : -6.8;
+    beam.rotation.y = flip;
+    beamPivot.add(beam);
+  }
+  scene.add(lighthouse);
+
+  // ---------------------------------------------------------------- Lanterns to collect
+  const lanternGlowTexture = makeGlowTexture("rgba(255,196,120,0.9)", "rgba(255,196,120,0)", 0.18);
+  interface FloatingLantern {
+    group: THREE.Group;
+    glow: THREE.Sprite;
+    pos: THREE.Vector2;
+    burstAt: number; // -1 = idle
+  }
+  const lanterns: FloatingLantern[] = [];
+  const lanternBodyMat = new THREE.MeshBasicMaterial({ color: "#ffc478" });
+  for (let i = 0; i < 7; i++) {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), lanternBodyMat);
+    body.scale.y = 1.25;
+    const glow = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: lanternGlowTexture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    glow.scale.setScalar(1.1);
+    group.add(body, glow);
+    const angle = (i / 7) * Math.PI * 2;
+    const dist = 12 + (i % 3) * 9;
+    const lantern: FloatingLantern = {
+      group,
+      glow,
+      pos: new THREE.Vector2(Math.cos(angle) * dist, Math.sin(angle) * dist),
+      burstAt: -1,
+    };
+    lanterns.push(lantern);
+    scene.add(group);
+  }
+  let lanternsCollected = 0;
+  let toastTimer = 0;
+
+  // ---------------------------------------------------------------- Dolphin pod
+  const dolphinMat = new THREE.MeshStandardMaterial({ color: "#3d5068", roughness: 0.4 });
+  const makeDolphin = () => {
+    const d = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.3, 4, 10), dolphinMat);
+    body.rotation.z = Math.PI / 2;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 8), dolphinMat);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 0.26;
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 4), dolphinMat);
+    tail.rotation.z = Math.PI / 2;
+    tail.scale.z = 0.35;
+    tail.position.x = -0.26;
+    const fin = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 4), dolphinMat);
+    fin.scale.z = 0.4;
+    fin.position.y = 0.09;
+    d.add(body, nose, tail, fin);
+    return d;
+  };
+  const pod = [makeDolphin(), makeDolphin()];
+  pod.forEach((d) => {
+    d.visible = false;
+    scene.add(d);
+  });
+  const podState = {
+    active: false,
+    nextAt: 14,
+    startAt: 0,
+    duration: 8,
+    from: new THREE.Vector2(),
+    dir: new THREE.Vector2(),
+  };
+
+  // ---------------------------------------------------------------- Bow spray particles
+  const sprayTexture = makeGlowTexture("rgba(214,233,238,0.9)", "rgba(214,233,238,0)", 0.2);
+  interface SprayParticle {
+    sprite: THREE.Sprite;
+    vel: THREE.Vector3;
+    life: number; // remaining seconds; <= 0 = dead
+  }
+  const sprayPool: SprayParticle[] = [];
+  for (let i = 0; i < 26; i++) {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: sprayTexture, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    sprite.visible = false;
+    scene.add(sprite);
+    sprayPool.push({ sprite, vel: new THREE.Vector3(), life: 0 });
+  }
+
   // ---------------------------------------------------------------- Simulation state
   // Heading convention: forward = (cos h, 0, -sin h); h grows turning to port.
   const state = {
@@ -400,6 +633,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     speed: 0,
     trim: 0.85,
     heel: 0,
+    trip: 0, // world units sailed
     windBase: Math.PI * 0.75, // wind initially from the aft-port quarter: a broad reach, so the boat moves right away
   };
   const keys = new Set<string>();
@@ -408,6 +642,37 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   const windFromAngle = (t: number) => state.windBase + 0.5 * Math.sin(t * 0.023) + 0.25 * Math.sin(t * 0.011 + 2);
   const windKnots = (t: number) => 9 + 2.5 * Math.sin(t * 0.05) + Math.sin(t * 0.13);
   const wrapPi = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+  // Travelling gusts: pockets of stronger wind drifting downwind past the boat.
+  interface Gust {
+    pos: THREE.Vector2;
+    radius: number;
+    strength: number; // extra wind fraction at the core
+  }
+  const gusts: Gust[] = [];
+  const respawnGust = (g: Gust, t: number, near: boolean) => {
+    const windTo = windFromAngle(t) + Math.PI;
+    const toDir = new THREE.Vector2(Math.cos(windTo), -Math.sin(windTo));
+    const side = new THREE.Vector2(-toDir.y, toDir.x);
+    // Spawn upwind of the boat so the gust sweeps across its path.
+    const upwind = near ? 10 + Math.random() * 20 : 25 + Math.random() * 30;
+    g.pos.copy(state.pos).addScaledVector(toDir, -upwind).addScaledVector(side, (Math.random() - 0.5) * 40);
+    g.radius = 6 + Math.random() * 5;
+    g.strength = 0.3 + Math.random() * 0.3;
+  };
+  for (let i = 0; i < 3; i++) {
+    const g: Gust = { pos: new THREE.Vector2(), radius: 8, strength: 0.4 };
+    respawnGust(g, 0, true);
+    gusts.push(g);
+  }
+  const gustFactorAt = (p: THREE.Vector2) => {
+    let f = 0;
+    for (const g of gusts) {
+      const d = p.distanceTo(g.pos);
+      f += THREE.MathUtils.smoothstep(1 - Math.min(1, d / g.radius), 0.3, 1) * g.strength;
+    }
+    return 1 + Math.min(0.8, f);
+  };
 
   // ---------------------------------------------------------------- Input
   const KEY_ALIAS: Record<string, string> = { arrowup: "w", arrowdown: "s", arrowleft: "a", arrowright: "d" };
@@ -420,6 +685,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
       teardown();
       return;
     }
+    soundscape?.resume();
     const k = normalizeKey(e);
     if (["w", "a", "s", "d"].includes(k)) {
       keys.add(k);
@@ -443,6 +709,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", onResize);
+    soundscape?.dispose();
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       mesh.geometry?.dispose?.();
@@ -453,6 +720,9 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     moonTexture.dispose();
     cloudTexture.dispose();
     streakTexture.dispose();
+    lampGlowTexture.dispose();
+    lanternGlowTexture.dispose();
+    sprayTexture.dispose();
     spritz.textures.forEach((texture) => texture.dispose());
     renderer.dispose();
   };
@@ -482,9 +752,18 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     const dt = Math.min(t - lastT, 0.05);
     lastT = t;
 
-    // ------------------------------------------------ Wind & controls
+    // ------------------------------------------------ Wind, gusts & controls
     const windFrom = windFromAngle(t);
-    const windKn = windKnots(t);
+    const windTo = windFrom + Math.PI;
+    const windToDir = new THREE.Vector2(Math.cos(windTo), -Math.sin(windTo));
+    const baseWindKn = windKnots(t);
+    for (const g of gusts) {
+      g.pos.addScaledVector(windToDir, baseWindKn * 0.09 * dt);
+      if (g.pos.distanceTo(state.pos) > 75) respawnGust(g, t, false);
+    }
+    const gustFactor = gustFactorAt(state.pos);
+    const windKn = baseWindKn * gustFactor;
+
     const rudder = (keys.has("a") ? 1 : 0) - (keys.has("d") ? 1 : 0);
     state.trim = THREE.MathUtils.clamp(state.trim + ((keys.has("w") ? 1 : 0) - (keys.has("s") ? 1 : 0)) * dt * 0.7, 0, 1);
 
@@ -503,6 +782,15 @@ export function mountSpritzSailGame(onClose?: () => void): void {
 
     const fwd = new THREE.Vector2(Math.cos(state.heading), -Math.sin(state.heading));
     state.pos.addScaledVector(fwd, state.speed * dt);
+    state.trip += state.speed * dt;
+
+    // Soft collision with the lighthouse island.
+    const toIsland = new THREE.Vector2().subVectors(state.pos, LIGHTHOUSE_POS);
+    if (toIsland.length() < 4.2) {
+      toIsland.normalize();
+      state.pos.copy(LIGHTHOUSE_POS).addScaledVector(toIsland, 4.2);
+      state.speed *= Math.pow(0.25, dt * 4);
+    }
 
     // ------------------------------------------------ Boat pose on the waves
     const starboard = new THREE.Vector2(Math.sin(state.heading), Math.cos(state.heading));
@@ -521,7 +809,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     boat.position.set(state.pos.x, (hBow + hMid + hStern) / 3 + 0.075, state.pos.y);
     boat.rotation.y = state.heading;
     boat.rotation.z = Math.atan2(hBow - hStern, 1.7) * 0.7 + 0.02 + state.speed * 0.02; // pitch + speed trim
-    const heelTarget = Math.sign(beta) * Math.min(1, thrust * 1.6) * 0.16; // wind on port -> heel to starboard
+    const heelTarget = Math.sign(beta) * Math.min(1, thrust * 1.6) * 0.16 * gustFactor; // gusts press the boat over
     state.heel += (heelTarget - state.heel) * Math.min(1, dt * 2.2);
     boat.rotation.x = -Math.atan2(hStar - hPort, 1.2) * 0.45 + state.heel;
 
@@ -535,7 +823,10 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     spritz.mainSail.scale.x = trimVisual;
     spritz.jib.scale.x = trimVisual;
 
-    animateSpritzBoatDetails(spritz, t, luffing ? 2.2 : 1);
+    // Running lights once under way, the masthead anchor light once she's stopped
+    // (in irons or sails doused) — mirrors real navigation-light rules.
+    const targetUnderway = THREE.MathUtils.smoothstep(state.speed, 0.04, 0.13);
+    animateSpritzBoatDetails(spritz, t, luffing ? 2.2 : Math.min(1.8, gustFactor), targetUnderway);
     if (luffing) {
       // Head to wind: cloth shakes instead of drawing.
       spritz.mainSail.scale.z = 1 + 0.07 * Math.sin(t * 26);
@@ -549,11 +840,119 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     oceanUniforms.uBoatPos.value.copy(state.pos);
     oceanUniforms.uForward.value.copy(fwd);
     oceanUniforms.uWake.value = Math.min(1, state.speed / 0.9);
+    for (let i = 0; i < 3; i++) {
+      gustUniform[i].set(gusts[i].pos.x, gusts[i].pos.y, gusts[i].radius, gusts[i].strength);
+    }
     skyGroup.position.set(state.pos.x, 0, state.pos.y);
     starUniforms.uTime.value = t;
     fillLight.position.set(boat.position.x + 4, 3, boat.position.z + 9);
     fillLight.target = boat;
 
+    // ------------------------------------------------ Lighthouse
+    beamPivot.rotation.y = t * 0.55;
+    lampGlow.material.opacity = 0.55 + 0.45 * Math.pow(Math.abs(Math.sin(t * 0.55 + 0.4)), 6);
+
+    // ------------------------------------------------ Lanterns
+    for (const lantern of lanterns) {
+      const bob = waveHeight(lantern.pos.x, lantern.pos.y, t);
+      lantern.group.position.set(lantern.pos.x, bob + 0.12, lantern.pos.y);
+      if (lantern.burstAt >= 0) {
+        const p = (t - lantern.burstAt) / 0.7;
+        if (p >= 1) {
+          // Respawn ahead of the boat, off to one side.
+          lantern.burstAt = -1;
+          const side = (Math.random() - 0.5) * 36;
+          const ahead = 22 + Math.random() * 22;
+          lantern.pos.copy(state.pos).addScaledVector(fwd, ahead).addScaledVector(starboard, side);
+          lantern.glow.scale.setScalar(1.1);
+          (lantern.glow.material as THREE.SpriteMaterial).opacity = 1;
+          lantern.group.visible = true;
+        } else {
+          lantern.glow.scale.setScalar(1.1 + p * 3.2);
+          (lantern.glow.material as THREE.SpriteMaterial).opacity = 1 - p;
+        }
+      } else {
+        (lantern.glow.material as THREE.SpriteMaterial).opacity = 0.75 + 0.25 * Math.sin(t * 2.4 + lantern.pos.x);
+        if (state.pos.distanceTo(lantern.pos) < 1.35) {
+          lantern.burstAt = t;
+          lanternsCollected++;
+          hudLanterns.textContent = String(lanternsCollected);
+          lanternToast.classList.add("is-visible");
+          toastTimer = t + 1.6;
+        }
+      }
+    }
+    if (toastTimer && t > toastTimer) {
+      lanternToast.classList.remove("is-visible");
+      toastTimer = 0;
+    }
+
+    // ------------------------------------------------ Dolphins
+    if (!podState.active && t >= podState.nextAt) {
+      podState.active = true;
+      podState.startAt = t;
+      podState.duration = 7 + Math.random() * 2;
+      const side = Math.random() > 0.5 ? 1 : -1;
+      podState.from.copy(state.pos).addScaledVector(fwd, 9).addScaledVector(starboard, side * 11);
+      podState.dir.copy(starboard).multiplyScalar(-side).add(fwd.clone().multiplyScalar(0.25)).normalize();
+      pod.forEach((d) => (d.visible = true));
+    }
+    if (podState.active) {
+      const pt = (t - podState.startAt) / podState.duration;
+      if (pt >= 1) {
+        podState.active = false;
+        podState.nextAt = t + 22 + Math.random() * 18;
+        pod.forEach((d) => (d.visible = false));
+      } else {
+        pod.forEach((dolphin, i) => {
+          const lag = i * 0.85;
+          const dist = (pt * podState.duration) * 2.6 - lag;
+          const px = podState.from.x + podState.dir.x * dist;
+          const pz = podState.from.y + podState.dir.y * dist;
+          const leapPhase = dist * 0.55;
+          const py = Math.sin(leapPhase * Math.PI) * 0.55 - 0.18 + waveHeight(px, pz, t) * 0.4;
+          dolphin.position.set(px, py, pz);
+          dolphin.rotation.y = Math.atan2(-podState.dir.y, podState.dir.x);
+          dolphin.rotation.z = Math.cos(leapPhase * Math.PI) * 0.7;
+        });
+      }
+    }
+
+    // ------------------------------------------------ Bow spray
+    if (state.speed > 0.45) {
+      for (const p of sprayPool) {
+        if (p.life > 0) continue;
+        if (Math.random() > state.speed * 0.35) break;
+        p.life = 0.55 + Math.random() * 0.25;
+        p.sprite.visible = true;
+        p.sprite.position.set(
+          boat.position.x + fwd.x * 1.12,
+          boat.position.y + 0.06,
+          boat.position.z + fwd.y * 1.12
+        );
+        p.vel.set(
+          fwd.x * state.speed * 0.6 + starboard.x * (Math.random() - 0.5) * 0.9,
+          0.6 + Math.random() * 0.7,
+          fwd.y * state.speed * 0.6 + starboard.y * (Math.random() - 0.5) * 0.9
+        );
+        break; // at most one new droplet per frame
+      }
+    }
+    for (const p of sprayPool) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.sprite.visible = false;
+        continue;
+      }
+      p.vel.y -= 2.6 * dt;
+      p.sprite.position.addScaledVector(p.vel, dt);
+      const lp = 1 - p.life / 0.8;
+      p.sprite.scale.setScalar(0.08 + lp * 0.16);
+      (p.sprite.material as THREE.SpriteMaterial).opacity = (1 - lp) * 0.55;
+    }
+
+    // ------------------------------------------------ Clouds & meteors
     for (const cloud of clouds) {
       cloud.sprite.position.x += cloud.speed * 0.016;
       if (cloud.sprite.position.x > 30) cloud.sprite.position.x = -30;
@@ -591,13 +990,27 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     camPos.lerp(desired, 1 - Math.exp(-dt * 3));
     camera.position.copy(camPos);
     camera.lookAt(boat.position.x + fwd.x * 1.5, boat.position.y + 0.7, boat.position.z + fwd.y * 1.5);
+    // Speed widens the view a touch.
+    const targetFov = 52 + Math.min(state.speed, 1.4) * 5;
+    if (Math.abs(camera.fov - targetFov) > 0.05) {
+      camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 2);
+      camera.updateProjectionMatrix();
+    }
 
     renderer.render(scene, camera);
+
+    soundscape?.update(windKn, state.speed, gustFactor - 1, t);
 
     // ------------------------------------------------ HUD
     windDialArrow.style.transform = `rotate(${((beta + Math.PI) * 180) / Math.PI}deg)`;
     hudWind.textContent = `${windKn.toFixed(0)} kn`;
+    hudWind.classList.toggle("is-gust", gustFactor > 1.18);
     hudSpeed.textContent = `${(state.speed * 7.8).toFixed(1)} kn`;
+    // Bearing with world -z as north.
+    const bearing = ((Math.atan2(fwd.x, -fwd.y) * 180) / Math.PI + 360) % 360;
+    const cardinal = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"][Math.round(bearing / 45) % 8];
+    hudCourse.textContent = `${bearing.toFixed(0).padStart(3, "0")}° ${cardinal}`;
+    hudTrip.textContent = (state.trip * 4 / 1852).toFixed(2);
     hudTrim.textContent = luffing ? "a collo!" : `${Math.round(state.trim * 100)}%`;
   });
 }

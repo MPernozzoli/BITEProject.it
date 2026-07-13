@@ -8,6 +8,7 @@ tags: [frontend, componenti, ui]
 ## Componenti di layout & navigazione
 - `Layout.tsx` — shell dell'app (header + footer + main)
 - `Navbar.tsx`, `NavLink.tsx`, `Footer.tsx`
+- `admin/AdminMobileNavigation.tsx` — dock mobile della PWA admin, visibile agli admin su `/admin/*` e `/profile`, con shortcut persistenti a Home admin, booking, candidati, media, mail, tracker e profilo → [[16 - Admin]]
 - `AppErrorBoundary.tsx` — error boundary globale
 - `AdminRoute.tsx` — guard rotte admin → [[16 - Admin]]
 - `LegacyLangRedirect.tsx` — redirect URL legacy → [[03 - Routing e i18n]]

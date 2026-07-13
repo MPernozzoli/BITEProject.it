@@ -275,6 +275,28 @@ export function buildRailCurve(side: 1 | -1): THREE.CatmullRomCurve3 {
   );
 }
 
+// Bow pulpit and stern pushpit guardrails — horseshoe arcs standing up off the
+// deck at the two points of the double-ender hull.
+function buildPulpitCurve(): THREE.CatmullRomCurve3 {
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.74, 0.1, -0.27),
+    new THREE.Vector3(0.98, 0.27, -0.2),
+    new THREE.Vector3(1.11, 0.29, 0),
+    new THREE.Vector3(0.98, 0.27, 0.2),
+    new THREE.Vector3(0.74, 0.1, 0.27),
+  ]);
+}
+
+function buildPushpitCurve(): THREE.CatmullRomCurve3 {
+  return new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.86, 0.09, -0.22),
+    new THREE.Vector3(-1.03, 0.24, -0.17),
+    new THREE.Vector3(-1.13, 0.27, 0),
+    new THREE.Vector3(-1.03, 0.24, 0.17),
+    new THREE.Vector3(-0.86, 0.09, 0.22),
+  ]);
+}
+
 export function buildSailGeometry(luffHeight: number, footLength: number, belly: number): THREE.BufferGeometry {
   // Full cloth grid: belly curves both across the chord and up the luff,
   // with a gentle roach (outward curve) on the leech.
@@ -308,6 +330,25 @@ export function buildSailGeometry(luffHeight: number, footLength: number, belly:
   return geometry;
 }
 
+// Thin cylindrical strut between two points — used for spreaders, the boom
+// vang, the wheel pedestal and spokes, and pulpit/pushpit stanchions.
+function addStrut(
+  group: THREE.Object3D,
+  from: THREE.Vector3,
+  to: THREE.Vector3,
+  radius: number,
+  material: THREE.Material,
+  radialSegments = 6
+): THREE.Mesh {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const length = dir.length();
+  const strut = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, radialSegments), material);
+  strut.position.copy(from).addScaledVector(dir, 0.5);
+  strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+  group.add(strut);
+  return strut;
+}
+
 export interface SpritzBoat {
   group: THREE.Group;
   /** Pivot at the mast: rotate on Y to swing boom + mainsail (sheeting). */
@@ -320,8 +361,20 @@ export interface SpritzBoat {
   flagPositions: Float32Array;
   flagSegments: number;
   flagLength: number;
+  /** Masthead anchor light: warm all-round white, lit when the boat is stopped. */
   lantern: THREE.Sprite;
   lanternLight: THREE.PointLight;
+  /** Running lights: red port / green starboard / white stern, lit underway. */
+  navLights: {
+    port: THREE.Sprite;
+    portLight: THREE.PointLight;
+    starboard: THREE.Sprite;
+    starboardLight: THREE.PointLight;
+    stern: THREE.Sprite;
+    sternLight: THREE.PointLight;
+  };
+  /** 0 = at anchor (masthead lantern lit), 1 = underway (running lights lit). Smoothed internally by animateSpritzBoatDetails. */
+  lightsUnderway: number;
   textures: THREE.CanvasTexture[];
 }
 
@@ -334,9 +387,11 @@ export function buildSpritzBoat(): SpritzBoat {
   const sailTexture = makeSailTexture();
   const flagTexture = makeFlagTexture();
   const lanternTexture = makeGlowTexture("rgba(255,214,150,0.9)", "rgba(255,214,150,0)", 0.2);
+  const navGlowTexture = makeGlowTexture("rgba(255,255,255,0.95)", "rgba(255,255,255,0)", 0.24);
 
   const hullMat = new THREE.MeshStandardMaterial({ map: hullTexture, roughness: 0.45, metalness: 0.05 });
   const darkWoodMat = new THREE.MeshStandardMaterial({ color: "#6e3d1e", roughness: 0.55 });
+  const teakMat = new THREE.MeshStandardMaterial({ color: "#b8875a", roughness: 0.55 });
   // Spritz's mast and boom are painted blue.
   const sparMat = new THREE.MeshStandardMaterial({ color: "#41598a", roughness: 0.55 });
   const steelMat = new THREE.MeshStandardMaterial({ color: "#9aa4ad", roughness: 0.35, metalness: 0.7 });
@@ -352,6 +407,37 @@ export function buildSpritzBoat(): SpritzBoat {
   const railGeometryPort = new THREE.TubeGeometry(buildRailCurve(1), 32, 0.02, 6);
   const railGeometryStar = new THREE.TubeGeometry(buildRailCurve(-1), 32, 0.02, 6);
   boat.add(new THREE.Mesh(railGeometryPort, darkWoodMat), new THREE.Mesh(railGeometryStar, darkWoodMat));
+
+  // Bow pulpit and stern pushpit guardrails, each on two stanchions.
+  boat.add(new THREE.Mesh(new THREE.TubeGeometry(buildPulpitCurve(), 24, 0.012, 6), steelMat));
+  addStrut(boat, new THREE.Vector3(0.74, 0.02, -0.27), new THREE.Vector3(0.74, 0.1, -0.27), 0.01, steelMat);
+  addStrut(boat, new THREE.Vector3(0.74, 0.02, 0.27), new THREE.Vector3(0.74, 0.1, 0.27), 0.01, steelMat);
+  boat.add(new THREE.Mesh(new THREE.TubeGeometry(buildPushpitCurve(), 24, 0.012, 6), steelMat));
+  addStrut(boat, new THREE.Vector3(-0.86, 0.02, -0.22), new THREE.Vector3(-0.86, 0.09, -0.22), 0.01, steelMat);
+  addStrut(boat, new THREE.Vector3(-0.86, 0.02, 0.22), new THREE.Vector3(-0.86, 0.09, 0.22), 0.01, steelMat);
+
+  // Bow roller + a small ground-tackle silhouette tucked against the stem.
+  const bowRoller = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.07, 8), steelMat);
+  bowRoller.rotation.x = Math.PI / 2;
+  bowRoller.position.set(1.15, 0.12, 0);
+  boat.add(bowRoller);
+  const anchorShank = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.22, 6), steelMat);
+  anchorShank.rotation.z = Math.PI / 2.6;
+  anchorShank.position.set(1.06, 0.03, 0);
+  boat.add(anchorShank);
+  const anchorFluke = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.09, 4), steelMat);
+  anchorFluke.rotation.z = Math.PI / 2.6 - 0.3;
+  anchorFluke.position.set(0.98, -0.06, 0);
+  boat.add(anchorFluke);
+
+  // Cleats at bow and stern.
+  const cleatGeometry = new THREE.CapsuleGeometry(0.009, 0.05, 2, 6);
+  for (const [cx, cz] of [[0.92, 0.19], [0.92, -0.19], [-1.0, 0.13], [-1.0, -0.13]] as const) {
+    const cleat = new THREE.Mesh(cleatGeometry, steelMat);
+    cleat.rotation.z = Math.PI / 2;
+    cleat.position.set(cx, 0.12, cz);
+    boat.add(cleat);
+  }
 
   // Cabin: cream sides, wood roof, brass-ringed porthole glowing warm.
   const cabin = new THREE.Mesh(
@@ -377,6 +463,13 @@ export function buildSpritzBoat(): SpritzBoat {
   mast.position.set(0.1, 1.15, 0);
   boat.add(mast);
 
+  // Spreaders, angled slightly up and out, bending the cap shrouds below.
+  const spreaderMastPt = new THREE.Vector3(0.1, 1.55, 0);
+  const spreaderTipS = new THREE.Vector3(0.1, 1.6, 0.3);
+  const spreaderTipP = new THREE.Vector3(0.1, 1.6, -0.3);
+  addStrut(boat, spreaderMastPt, spreaderTipS, 0.011, sparMat);
+  addStrut(boat, spreaderMastPt, spreaderTipP, 0.011, sparMat);
+
   // Main + boom swing together around the mast when sheeting.
   const mainPivot = new THREE.Group();
   mainPivot.position.set(0.1, 0, 0);
@@ -385,6 +478,9 @@ export function buildSpritzBoat(): SpritzBoat {
   boom.rotation.z = Math.PI / 2;
   boom.position.set(-0.5, 0.3, 0);
   mainPivot.add(boom);
+  // Boom vang: mast base to boom, swings with the boom (both points sit on the
+  // pivot's rotation axis or ride along with it).
+  addStrut(mainPivot, new THREE.Vector3(0, 0.14, 0), new THREE.Vector3(0.02, 0.3, 0), 0.008, steelMat);
   const mainSail = new THREE.Mesh(
     buildSailGeometry(1.95, 0.98, 0.17),
     new THREE.MeshStandardMaterial({ map: sailTexture, roughness: 0.85, side: THREE.DoubleSide })
@@ -424,13 +520,48 @@ export function buildSpritzBoat(): SpritzBoat {
   sprayhood.position.set(-0.76, 0.13, 0);
   boat.add(sprayhood);
 
-  // Rigging: forestay, backstay and two shrouds as thin lines.
+  // Destroyer wheel on a pedestal, under the stern arch — teak rim, steel spokes.
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.038, 0.22, 10), steelMat);
+  pedestal.position.set(-0.91, 0.14, 0);
+  boat.add(pedestal);
+  const wheelGroup = new THREE.Group();
+  wheelGroup.position.set(-0.91, 0.31, 0);
+  wheelGroup.rotation.y = Math.PI / 2;
+  wheelGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.011, 8, 20), teakMat));
+  const wheelHub = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 10), steelMat);
+  wheelHub.rotation.x = Math.PI / 2;
+  wheelGroup.add(wheelHub);
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    addStrut(
+      wheelGroup,
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(Math.cos(angle) * 0.12, Math.sin(angle) * 0.12, 0),
+      0.006,
+      steelMat
+    );
+  }
+  boat.add(wheelGroup);
+
+  // Cockpit winches, forward of the wheel.
+  const winchGeometry = new THREE.CylinderGeometry(0.026, 0.032, 0.045, 10);
+  for (const wz of [0.22, -0.22] as const) {
+    const winch = new THREE.Mesh(winchGeometry, steelMat);
+    winch.position.set(-0.66, 0.15, wz);
+    boat.add(winch);
+  }
+
+  // Rigging: forestay, backstay and cap shrouds bent over the spreaders.
   const mastTop = new THREE.Vector3(0.1, 2.28, 0);
+  const bowTip = new THREE.Vector3(1.2, 0.15, 0);
+  const sternPt = new THREE.Vector3(-1.16, 0.12, 0);
+  const chainplateS = new THREE.Vector3(0.05, 0.02, 0.34);
+  const chainplateP = new THREE.Vector3(0.05, 0.02, -0.34);
   const riggingGeometry = new THREE.BufferGeometry().setFromPoints([
-    mastTop, new THREE.Vector3(1.2, 0.15, 0),     // forestay -> bow tip
-    mastTop, new THREE.Vector3(-1.16, 0.12, 0),   // backstay -> stern point
-    mastTop, new THREE.Vector3(0.05, 0.02, 0.33), // shroud starboard
-    mastTop, new THREE.Vector3(0.05, 0.02, -0.33) // shroud port
+    mastTop, bowTip, // forestay -> bow tip
+    mastTop, sternPt, // backstay -> stern point
+    mastTop, spreaderTipS, spreaderTipS, chainplateS, // starboard cap shroud, bent at the spreader
+    mastTop, spreaderTipP, spreaderTipP, chainplateP, // port cap shroud
   ]);
   const riggingMat = new THREE.LineBasicMaterial({ color: 0xd8d2c4, transparent: true, opacity: 0.5 });
   boat.add(new THREE.LineSegments(riggingGeometry, riggingMat));
@@ -461,14 +592,32 @@ export function buildSpritzBoat(): SpritzBoat {
   flag.position.set(mastTop.x, mastTop.y - 0.18, mastTop.z);
   boat.add(flag);
 
-  // Warm masthead lantern: flickering glow sprite + a real point light.
+  // Masthead anchor light: flickering warm glow sprite + a real point light.
+  // Lit only when the boat is stopped — see animateSpritzBoatDetails.
   const lantern = new THREE.Sprite(new THREE.SpriteMaterial({ map: lanternTexture, transparent: true, depthWrite: false }));
   lantern.position.set(0.1, 2.34, 0);
   lantern.scale.setScalar(0.5);
   boat.add(lantern);
-  const lanternLight = new THREE.PointLight(0xffc98a, 0.8, 5, 2);
+  const lanternLight = new THREE.PointLight(0xffc98a, 0, 5, 2);
   lanternLight.position.copy(lantern.position);
   boat.add(lanternLight);
+
+  // Running lights — red port, green starboard, white stern — lit while underway.
+  const makeNavLight = (color: string, position: [number, number, number], scale: number, distance: number) => {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: navGlowTexture, color, transparent: true, opacity: 0, depthWrite: false })
+    );
+    sprite.position.set(...position);
+    sprite.scale.setScalar(scale);
+    boat.add(sprite);
+    const light = new THREE.PointLight(new THREE.Color(color).getHex(), 0, distance, 2);
+    light.position.set(...position);
+    boat.add(light);
+    return { sprite, light };
+  };
+  const port = makeNavLight("#ff3131", [0.78, 0.22, -0.33], 0.22, 3);
+  const starboard = makeNavLight("#1fae54", [0.78, 0.22, 0.33], 0.22, 3);
+  const stern = makeNavLight("#f2f5ee", [-1.12, 0.31, 0], 0.24, 3);
 
   return {
     group: boat,
@@ -482,13 +631,25 @@ export function buildSpritzBoat(): SpritzBoat {
     flagLength,
     lantern,
     lanternLight,
-    textures: [hullTexture, deckTexture, sailTexture, flagTexture, lanternTexture],
+    navLights: {
+      port: port.sprite,
+      portLight: port.light,
+      starboard: starboard.sprite,
+      starboardLight: starboard.light,
+      stern: stern.sprite,
+      sternLight: stern.light,
+    },
+    lightsUnderway: 0,
+    textures: [hullTexture, deckTexture, sailTexture, flagTexture, lanternTexture, navGlowTexture],
   };
 }
 
 // Life-of-the-boat details shared by splash and game: sail cloth breathing,
-// pennant flutter, lantern flicker. `flutter` > 1 shakes the flag harder.
-export function animateSpritzBoatDetails(spritz: SpritzBoat, t: number, flutter = 1): void {
+// pennant flutter, and the anchor-light/running-lights crossfade. `flutter` > 1
+// shakes the flag harder (used while luffing). `targetUnderway` is 0 (stopped —
+// masthead anchor light) to 1 (underway — red/green/white running lights);
+// the transition is smoothed internally via spritz.lightsUnderway.
+export function animateSpritzBoatDetails(spritz: SpritzBoat, t: number, flutter = 1, targetUnderway = 1): void {
   spritz.mainSail.scale.z = 1 + 0.16 * Math.sin(t * 0.7);
   spritz.jib.scale.z = 1 + 0.14 * Math.sin(t * 0.9 + 1.7);
 
@@ -508,7 +669,21 @@ export function animateSpritzBoatDetails(spritz: SpritzBoat, t: number, flutter 
   }
   spritz.flagGeometry.attributes.position.needsUpdate = true;
 
-  const flicker = 0.75 + 0.18 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
-  spritz.lanternLight.intensity = flicker;
-  spritz.lantern.scale.setScalar(0.34 + flicker * 0.1);
+  spritz.lightsUnderway += (THREE.MathUtils.clamp(targetUnderway, 0, 1) - spritz.lightsUnderway) * 0.06;
+  const underway = spritz.lightsUnderway;
+  const atAnchor = 1 - underway;
+
+  const anchorFlicker = 0.75 + 0.18 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
+  spritz.lanternLight.intensity = anchorFlicker * atAnchor * 0.85;
+  spritz.lantern.scale.setScalar(0.34 + anchorFlicker * 0.1);
+  (spritz.lantern.material as THREE.SpriteMaterial).opacity = atAnchor;
+
+  const navFlicker = 0.94 + 0.06 * Math.sin(t * 11);
+  const { port, portLight, starboard, starboardLight, stern, sternLight } = spritz.navLights;
+  portLight.intensity = navFlicker * underway * 0.55;
+  starboardLight.intensity = navFlicker * underway * 0.55;
+  sternLight.intensity = navFlicker * underway * 0.4;
+  (port.material as THREE.SpriteMaterial).opacity = underway;
+  (starboard.material as THREE.SpriteMaterial).opacity = underway;
+  (stern.material as THREE.SpriteMaterial).opacity = underway;
 }

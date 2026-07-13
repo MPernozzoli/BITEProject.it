@@ -3,6 +3,7 @@ import { firstQueryParam, sendJson, type NodeRequest, type NodeResponse } from "
 import { jsonMethodNotAllowed, MAIL_FROM_OPTIONS, requireAdmin } from "../../src/server/mail.js";
 
 const PAGE_SIZE = 40;
+const SEARCH_RESULT_LIMIT = 500;
 
 type MailboxView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";
 
@@ -24,10 +25,36 @@ type InboundMessage = {
   id: string;
   message_id?: string | null;
   resend_email_id?: string | null;
+  thread_key?: string | null;
+  in_reply_to?: string | null;
+  references?: string[] | null;
   text_body?: string | null;
   html_body?: string | null;
   headers?: unknown;
   assigned_to_profile_id?: string | null;
+  [key: string]: unknown;
+};
+
+type ThreadMailMessage = SearchableMessage & {
+  id: string;
+  created_at: string;
+  thread_key?: string | null;
+  assigned_to_profile_id?: string | null;
+  source?: "inbound" | "sent";
+  thread_messages?: ThreadMailMessage[];
+};
+
+type SearchableMessage = {
+  created_at?: unknown;
+  from_address?: unknown;
+  from_name?: unknown;
+  to_addresses?: unknown;
+  cc_addresses?: unknown;
+  bcc_addresses?: unknown;
+  subject?: unknown;
+  text_body?: unknown;
+  html_body?: unknown;
+  status?: unknown;
   [key: string]: unknown;
 };
 
@@ -46,6 +73,77 @@ function parsePage(value: string | null): number {
   return Number.isInteger(next) && next > 0 ? next : 1;
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function htmlToText(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ");
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function arrayText(value: unknown) {
+  return Array.isArray(value) ? value.map(stringValue).join(" ") : stringValue(value);
+}
+
+function dateSearchText(value: unknown) {
+  if (typeof value !== "string") return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return [
+    value,
+    date.toISOString(),
+    new Intl.DateTimeFormat("it-IT", { dateStyle: "short" }).format(date),
+    new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(date),
+    new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date),
+  ].join(" ");
+}
+
+function mailSearchHaystack(message: SearchableMessage) {
+  return normalizeSearchText(
+    [
+      stringValue(message.from_address),
+      stringValue(message.from_name),
+      arrayText(message.to_addresses),
+      arrayText(message.cc_addresses),
+      arrayText(message.bcc_addresses),
+      stringValue(message.subject),
+      stringValue(message.text_body),
+      htmlToText(message.html_body),
+      stringValue(message.status),
+      dateSearchText(message.created_at),
+    ].join(" "),
+  );
+}
+
+function matchesMailSearch(message: SearchableMessage, search: string) {
+  const terms = normalizeSearchText(search).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const haystack = mailSearchHaystack(message);
+  return terms.every((term) => haystack.includes(term));
+}
+
+function pageMessages<T>(messages: T[], page: number) {
+  const from = (page - 1) * PAGE_SIZE;
+  return messages.slice(from, from + PAGE_SIZE);
+}
+
 async function hydrateInboundAssignments(db: SupabaseClient, messages: InboundMessage[]) {
   const profileIds = Array.from(
     new Set(messages.map((message) => message.assigned_to_profile_id).filter((value): value is string => Boolean(value))),
@@ -58,6 +156,40 @@ async function hydrateInboundAssignments(db: SupabaseClient, messages: InboundMe
   return messages.map((message) => ({
     ...message,
     assigned_profile: message.assigned_to_profile_id ? profilesById.get(message.assigned_to_profile_id) ?? null : null,
+  }));
+}
+
+async function attachThreadMessages<T extends ThreadMailMessage>(db: SupabaseClient, messages: T[]): Promise<T[]> {
+  const threadKeys = Array.from(new Set(messages.map((message) => message.thread_key).filter((value): value is string => Boolean(value))));
+  if (threadKeys.length === 0) {
+    return messages.map((message) => ({ ...message, source: message.source ?? "inbound", thread_messages: [message] }));
+  }
+
+  const [{ data: inboundRows, error: inboundError }, { data: sentRows, error: sentError }] = await Promise.all([
+    db.from("inbound_emails").select("*").in("thread_key", threadKeys).order("created_at", { ascending: true }),
+    db.from("sent_emails").select("*").in("thread_key", threadKeys).order("created_at", { ascending: true }),
+  ]);
+  if (inboundError) throw inboundError;
+  if (sentError) throw sentError;
+
+  const hydratedInbound = await hydrateInboundAssignments(db, (inboundRows ?? []) as InboundMessage[]);
+  const threadMessages = [
+    ...hydratedInbound.map((message) => ({ ...message, source: "inbound" as const })),
+    ...((sentRows ?? []) as ThreadMailMessage[]).map((message) => ({ ...message, source: "sent" as const })),
+  ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  const byThreadKey = new Map<string, ThreadMailMessage[]>();
+  for (const message of threadMessages) {
+    if (!message.thread_key) continue;
+    const current = byThreadKey.get(message.thread_key) ?? [];
+    current.push(message);
+    byThreadKey.set(message.thread_key, current);
+  }
+
+  return messages.map((message) => ({
+    ...message,
+    source: message.source ?? "inbound",
+    thread_messages: message.thread_key ? byThreadKey.get(message.thread_key) ?? [message] : [message],
   }));
 }
 
@@ -131,6 +263,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
   const view = parseView(firstQueryParam(req, "view"));
   const page = parsePage(firstQueryParam(req, "page"));
+  const search = (firstQueryParam(req, "q") ?? "").trim();
+  const isSearching = search.length > 0;
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -143,7 +277,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           .from("sent_emails")
           .select("*", { count: "exact" })
           .order("created_at", { ascending: false })
-          .range(from, to),
+          .range(isSearching ? 0 : from, isSearching ? SEARCH_RESULT_LIMIT - 1 : to),
         db
           .from("inbound_emails")
           .select("*", { count: "exact", head: true })
@@ -153,12 +287,17 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         db.from("inbound_emails").select("*", { count: "exact", head: true }).eq("archived", false).eq("spam", false),
       ]);
       if (error) throw error;
+      const filteredMessages = isSearching ? (data ?? []).filter((message) => matchesMailSearch(message, search)) : data ?? [];
+      const pageItems = (isSearching ? pageMessages(filteredMessages, page) : filteredMessages).map((message) => ({
+        ...(message as ThreadMailMessage),
+        source: "sent" as const,
+      }));
       sendJson(res, 200, {
         view,
         page,
         pageSize: PAGE_SIZE,
-        messages: data ?? [],
-        total: count ?? 0,
+        messages: await attachThreadMessages(db, pageItems),
+        total: isSearching ? filteredMessages.length : count ?? 0,
         counts: { inbox: inboxTotal ?? 0, unread: inboxUnread ?? 0 },
         fromOptions: MAIL_FROM_OPTIONS,
       });
@@ -169,7 +308,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       .from("inbound_emails")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .range(from, to);
+      .range(isSearching ? 0 : from, isSearching ? SEARCH_RESULT_LIMIT - 1 : to);
 
     if (view === "unread") query = query.eq("read", false).eq("archived", false).eq("spam", false);
     if (view === "starred") query = query.eq("starred", true).eq("spam", false);
@@ -191,13 +330,22 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     if (error) throw error;
 
     const hydratedMessages = await hydrateMissingInboundBodies(db, data ?? []);
+    const filteredMessages = isSearching
+      ? hydratedMessages.filter((message) => matchesMailSearch(message, search))
+      : hydratedMessages;
 
     sendJson(res, 200, {
       view,
       page,
       pageSize: PAGE_SIZE,
-      messages: await hydrateInboundAssignments(db, hydratedMessages),
-      total: count ?? 0,
+      messages: await attachThreadMessages(
+        db,
+        (await hydrateInboundAssignments(db, isSearching ? pageMessages(filteredMessages, page) : filteredMessages)).map((message) => ({
+          ...(message as ThreadMailMessage),
+          source: "inbound" as const,
+        })),
+      ),
+      total: isSearching ? filteredMessages.length : count ?? 0,
       counts: { inbox: inboxTotal ?? 0, unread: inboxUnread ?? 0, sent: sentTotal ?? 0 },
       fromOptions: MAIL_FROM_OPTIONS,
     });

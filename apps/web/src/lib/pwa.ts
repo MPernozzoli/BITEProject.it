@@ -106,6 +106,13 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+function buffersMatch(left: ArrayBuffer | null | undefined, right: Uint8Array) {
+  if (!left) return false;
+  const leftBytes = new Uint8Array(left);
+  if (leftBytes.length !== right.length) return false;
+  return leftBytes.every((byte, index) => byte === right[index]);
+}
+
 export async function getExistingPushSubscription() {
   if (!supportsWebPush()) return null;
 
@@ -126,7 +133,13 @@ export async function subscribeToPushNotifications(vapidPublicKey: string) {
 
   const existingSubscription = await registration.pushManager.getSubscription();
   if (existingSubscription) {
-    return existingSubscription;
+    const existingKey = existingSubscription.options?.applicationServerKey;
+    const nextKey = urlBase64ToUint8Array(vapidPublicKey);
+    if (buffersMatch(existingKey, nextKey)) {
+      return existingSubscription;
+    }
+
+    await existingSubscription.unsubscribe();
   }
 
   return registration.pushManager.subscribe({

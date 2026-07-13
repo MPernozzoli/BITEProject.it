@@ -7,10 +7,12 @@ import {
   Mail,
   RefreshCw,
   Reply,
+  Search,
   Send,
   ShieldAlert,
   Star,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +32,11 @@ type MailView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";
 type MailMessage = {
   id: string;
   created_at: string;
+  source?: "inbound" | "sent";
+  message_id?: string | null;
+  thread_key?: string | null;
+  in_reply_to?: string | null;
+  references?: string[] | null;
   from_address: string;
   from_name: string | null;
   to_addresses: string[];
@@ -51,6 +58,7 @@ type MailMessage = {
     name: string | null;
     email: string;
   } | null;
+  thread_messages?: MailMessage[];
 };
 
 type FromOption = {
@@ -171,6 +179,7 @@ const AdminMail = () => {
   const { session, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMessageId = searchParams.get("message");
   const [view, setView] = useState<MailView>("inbox");
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -179,6 +188,8 @@ const AdminMail = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [compose, setCompose] = useState({
     fromOptionId: fallbackFromOptions[0].id,
     to: "",
@@ -186,6 +197,7 @@ const AdminMail = () => {
     bcc: "",
     subject: "",
     body: "",
+    replyToMessageId: null as string | null,
   });
   const [showCcBcc, setShowCcBcc] = useState(false);
 
@@ -205,6 +217,7 @@ const AdminMail = () => {
       bcc: "",
       subject,
       body: "",
+      replyToMessageId: null,
     }));
     setShowCcBcc(false);
     setComposeOpen(true);
@@ -219,6 +232,17 @@ const AdminMail = () => {
     () => messages.find((message) => message.id === selectedId) ?? messages[0] ?? null,
     [messages, selectedId],
   );
+  const selectedThreadMessages = useMemo(() => {
+    const thread = selectedMessage?.thread_messages?.length ? selectedMessage.thread_messages : selectedMessage ? [selectedMessage] : [];
+    return [...thread].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }, [selectedMessage]);
+
+  useEffect(() => {
+    if (!requestedMessageId) return;
+    if (messages.some((message) => message.id === requestedMessageId)) {
+      setSelectedId(requestedMessageId);
+    }
+  }, [messages, requestedMessageId]);
 
   const authHeaders = useCallback(async () => {
     const token = session?.access_token;
@@ -230,7 +254,9 @@ const AdminMail = () => {
     setLoading(true);
     try {
       const headers = await authHeaders();
-      const response = await fetch(`/api/email/inbox?view=${view}`, { headers, cache: "no-store" });
+      const params = new URLSearchParams({ view });
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      const response = await fetch(`/api/email/inbox?${params.toString()}`, { headers, cache: "no-store" });
       if (response.status === 401) {
         navigate("/login", { state: { from: "/admin/mail" } });
         return;
@@ -240,19 +266,29 @@ const AdminMail = () => {
       setMessages(data.messages);
       setCounts(data.counts ?? {});
       setFromOptions(data.fromOptions?.length ? data.fromOptions : fallbackFromOptions);
-      setSelectedId((current) => (current && data.messages.some((message) => message.id === current) ? current : data.messages[0]?.id ?? null));
+      setSelectedId((current) => {
+        return current && data.messages.some((message) => message.id === current) ? current : data.messages[0]?.id ?? null;
+      });
     } catch (error) {
       console.error("[AdminMail] load failed", error);
       toast.error("Impossibile caricare la casella mail.");
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, navigate, session?.access_token, view]);
+  }, [authHeaders, navigate, searchQuery, session?.access_token, view]);
 
   useEffect(() => {
     if (authLoading || !session) return;
     void loadMailbox();
   }, [authLoading, loadMailbox, session]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setSearchQuery(searchInput.trim());
+    }, 250);
+
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
 
   const runAction = async (id: string, action: string) => {
     try {
@@ -278,6 +314,7 @@ const AdminMail = () => {
       bcc: "",
       subject: message.subject.toLowerCase().startsWith("re:") ? message.subject : `Re: ${message.subject}`,
       body: "",
+      replyToMessageId: message.id,
     });
     setShowCcBcc(false);
     setComposeOpen(true);
@@ -297,11 +334,12 @@ const AdminMail = () => {
           bcc: compose.bcc,
           subject: compose.subject,
           text: compose.body,
+          replyToMessageId: compose.replyToMessageId,
         }),
       });
       if (!response.ok) throw new Error(await response.text());
       toast.success("Email inviata.");
-      setCompose({ fromOptionId: compose.fromOptionId, to: "", cc: "", bcc: "", subject: "", body: "" });
+      setCompose({ fromOptionId: compose.fromOptionId, to: "", cc: "", bcc: "", subject: "", body: "", replyToMessageId: null });
       setShowCcBcc(false);
       setComposeOpen(false);
       if (view === "sent") await loadMailbox();
@@ -322,34 +360,61 @@ const AdminMail = () => {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="glass-panel rounded-[34px] px-6 py-7 md:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Link to="/admin" className="mb-4 inline-flex items-center gap-2 text-sm font-sans text-muted-foreground hover:text-foreground">
+    <div className="min-h-screen px-6 pb-16 pt-24 md:px-12">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <section className="glass-panel rounded-[26px] px-5 py-4 md:px-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+              <Link to="/admin" className="inline-flex items-center gap-2 text-sm font-sans text-muted-foreground hover:text-foreground">
                 <ArrowLeft size={16} />
                 Dashboard
               </Link>
-              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Posta admin</p>
-              <h1 className="editorial-heading text-4xl md:text-5xl">Mail</h1>
-              <p className="mt-3 max-w-2xl text-sm font-sans leading-relaxed text-foreground/70">
-                Gestione casella ordinaria @biteproject.it e messaggi automatici/newsletter da @mail.biteproject.it.
-              </p>
+              <h1 className="editorial-heading text-3xl leading-none md:text-4xl">Mail</h1>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:min-w-[620px]">
+              <div className="relative min-w-0 flex-1">
+                <label htmlFor="mail-search" className="sr-only">
+                  Cerca mail per mittente, destinatario, corpo o data
+                </label>
+                <Search aria-hidden="true" size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="mail-search"
+                  type="search"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Cerca mittente, destinatario, corpo o data"
+                  className="h-11 w-full rounded-full border border-stone-200/80 bg-white/70 pl-11 pr-11 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput("");
+                      setSearchQuery("");
+                    }}
+                    className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-stone-100 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    aria-label="Svuota ricerca mail"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => void loadMailbox()}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground"
+                className="glass-chip inline-flex h-11 shrink-0 items-center justify-center gap-2 px-4 text-sm font-sans text-muted-foreground hover:text-foreground"
               >
                 <RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
                 Aggiorna
               </button>
               <button
                 type="button"
-                onClick={() => setComposeOpen(true)}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-foreground hover:text-accent"
+                onClick={() => {
+                  setCompose((current) => ({ ...current, to: "", cc: "", bcc: "", subject: "", body: "", replyToMessageId: null }));
+                  setShowCcBcc(false);
+                  setComposeOpen(true);
+                }}
+                className="glass-chip inline-flex h-11 shrink-0 items-center justify-center gap-2 px-4 text-sm font-sans text-foreground hover:text-accent"
               >
                 <Send size={16} />
                 Scrivi
@@ -393,7 +458,9 @@ const AdminMail = () => {
                 {loading ? (
                   <div className="p-6 text-sm text-muted-foreground">Caricamento mail...</div>
                 ) : messages.length === 0 ? (
-                  <div className="p-6 text-sm text-muted-foreground">Nessun messaggio in questa vista.</div>
+                  <div className="p-6 text-sm text-muted-foreground">
+                    {searchQuery ? "Nessuna mail trovata per questa ricerca." : "Nessun messaggio in questa vista."}
+                  </div>
                 ) : (
                   <div className="max-h-[680px] overflow-y-auto">
                     {messages.map((message) => {
@@ -406,6 +473,9 @@ const AdminMail = () => {
                           type="button"
                           onClick={() => {
                             setSelectedId(message.id);
+                            const nextSearchParams = new URLSearchParams(searchParams);
+                            nextSearchParams.set("message", message.id);
+                            setSearchParams(nextSearchParams, { replace: true });
                             if (view !== "sent" && !message.read) void runAction(message.id, "read");
                           }}
                           className={`block w-full border-b border-stone-200/60 px-4 py-4 text-left transition-colors ${
@@ -437,14 +507,19 @@ const AdminMail = () => {
                     <div className="flex flex-col gap-4 border-b border-stone-200/70 pb-5 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
                         <h2 className="editorial-heading text-3xl leading-tight">{selectedMessage.subject || "(nessun oggetto)"}</h2>
+                        {selectedThreadMessages.length > 1 && (
+                          <p className="mt-2 text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                            {selectedThreadMessages.length} messaggi nella conversazione
+                          </p>
+                        )}
                         <div className="mt-4 space-y-1.5 font-sans text-sm leading-relaxed">
                           <p className="grid gap-1 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
-                            <span className="text-muted-foreground">{view === "sent" ? "A" : "Da"}</span>
+                            <span className="text-muted-foreground">{selectedMessage.source === "sent" || view === "sent" ? "A" : "Da"}</span>
                             <span className="min-w-0 break-words text-foreground">
-                              {view === "sent" ? selectedMessage.to_addresses.join(", ") : mailDisplaySender(selectedMessage)}
+                              {selectedMessage.source === "sent" || view === "sent" ? selectedMessage.to_addresses.join(", ") : mailDisplaySender(selectedMessage)}
                             </span>
                           </p>
-                          {view !== "sent" && selectedMessage.from_name?.trim() && selectedMessage.from_address !== selectedMessage.from_name && (
+                          {selectedMessage.source !== "sent" && view !== "sent" && selectedMessage.from_name?.trim() && selectedMessage.from_address !== selectedMessage.from_name && (
                             <p className="grid gap-1 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
                               <span className="text-muted-foreground">Mail</span>
                               <span className="min-w-0 break-words text-foreground/78">{selectedMessage.from_address}</span>
@@ -464,7 +539,7 @@ const AdminMail = () => {
                           </p>
                         )}
                       </div>
-                      {view !== "sent" && (
+                      {view !== "sent" && selectedMessage.source !== "sent" && (
                         <div className="flex flex-wrap gap-2">
                           <button className="glass-chip inline-flex h-10 w-10 items-center justify-center" title="Rispondi" onClick={() => openReply(selectedMessage)}>
                             <Reply size={15} />
@@ -485,14 +560,39 @@ const AdminMail = () => {
                       )}
                     </div>
 
-                    <div className="prose prose-stone max-w-none text-sm leading-relaxed">
-                      {selectedMessage.text_body?.trim() ? (
-                        <MailTextBody text={selectedMessage.text_body} />
-                      ) : selectedMessage.html_body ? (
-                        <div dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(selectedMessage.html_body) }} />
-                      ) : (
-                        <p>Messaggio senza corpo.</p>
-                      )}
+                    <div className="space-y-4">
+                      {selectedThreadMessages.map((message) => {
+                        const isSent = message.source === "sent";
+                        return (
+                          <section
+                            key={`${message.source ?? "inbound"}-${message.id}`}
+                            className={`rounded-[24px] border px-4 py-4 md:px-5 ${
+                              isSent ? "border-teal-100/80 bg-teal-50/45" : "border-stone-200/75 bg-white/45"
+                            }`}
+                          >
+                            <div className="mb-3 flex flex-col gap-1 border-b border-stone-200/60 pb-3 font-sans text-sm sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="font-medium text-foreground">
+                                  {isSent ? `A ${message.to_addresses.join(", ")}` : mailDisplaySender(message)}
+                                </p>
+                                {!isSent && message.from_name?.trim() && message.from_address !== message.from_name && (
+                                  <p className="break-words text-xs text-muted-foreground">{message.from_address}</p>
+                                )}
+                              </div>
+                              <p className="shrink-0 text-xs text-muted-foreground">{formatDate(message.created_at)}</p>
+                            </div>
+                            <div className="prose prose-stone max-w-none text-sm leading-relaxed">
+                              {message.text_body?.trim() ? (
+                                <MailTextBody text={message.text_body} />
+                              ) : message.html_body ? (
+                                <div dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.html_body) }} />
+                              ) : (
+                                <p>Messaggio senza corpo.</p>
+                              )}
+                            </div>
+                          </section>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -507,8 +607,10 @@ const AdminMail = () => {
           <div className="glass-panel w-full max-w-2xl rounded-[30px] p-5 md:p-6">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Nuovo messaggio</p>
-                <h2 className="editorial-heading text-3xl">Scrivi mail</h2>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                  {compose.replyToMessageId ? "Risposta" : "Nuovo messaggio"}
+                </p>
+                <h2 className="editorial-heading text-3xl">{compose.replyToMessageId ? "Rispondi" : "Scrivi mail"}</h2>
               </div>
               <button type="button" onClick={() => setComposeOpen(false)} className="glass-chip px-3 py-2 text-sm">
                 Chiudi

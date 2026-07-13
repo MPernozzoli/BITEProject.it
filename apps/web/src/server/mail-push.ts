@@ -1,4 +1,4 @@
-import * as webpush from "web-push";
+import webpush from "web-push";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AUTOMATIC_MAIL_DOMAIN, ORDINARY_MAIL_DOMAIN, normalizeAddress } from "./mail.js";
 

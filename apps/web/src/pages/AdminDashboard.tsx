@@ -29,6 +29,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useAuth } from "@/hooks/useAuth";
+import { getPushPermission, subscribeToPushNotifications, supportsWebPush } from "@/lib/pwa";
 import {
   AdminCollapsibleListFilters,
   adminFilterDateInputClass,
@@ -206,6 +207,57 @@ const AdminDashboard = () => {
   const [storyFiltersAdvanced, setStoryFiltersAdvanced] = useState(false);
   const navigate = useNavigate();
   const socialOAuthReturnHandled = useRef(false);
+
+  useEffect(() => {
+    if (!session?.user || !supportsWebPush() || getPushPermission() !== "granted") return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+        if (!supabaseUrl) return;
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/vapid-public-key`);
+        const data = (await response.json()) as { publicKey?: string };
+        if (cancelled || !data.publicKey) return;
+
+        const subscription = await subscribeToPushNotifications(data.publicKey);
+        if (cancelled) return;
+
+        const payload = subscription.toJSON();
+        const endpoint = payload.endpoint;
+        const p256dh = payload.keys?.p256dh;
+        const auth = payload.keys?.auth;
+        if (!endpoint || !p256dh || !auth) return;
+
+        const { error } = await supabase.from("push_subscriptions").upsert(
+          {
+            profile_id: session.user.id,
+            endpoint,
+            p256dh,
+            auth,
+            expiration_time:
+              typeof payload.expirationTime === "number"
+                ? new Date(payload.expirationTime).toISOString()
+                : null,
+            user_agent: navigator.userAgent,
+            enabled: true,
+            updated_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+          },
+          { onConflict: "endpoint" },
+        );
+
+        if (error) console.error("Admin push subscription sync error:", error);
+      } catch (error) {
+        console.error("Admin push subscription refresh failed:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user]);
 
   const fetchData = useCallback(async () => {
     if (!session?.user) return;
@@ -433,12 +485,32 @@ const AdminDashboard = () => {
   }, [filteredStories, storyListSort]);
 
   const sectionTabs = [
-    { id: "articles" as const, label: "Articoli", icon: FileText },
-    { id: "editorial" as const, label: "Piano editoriale", icon: CalendarDays },
-    { id: "stories" as const, label: "Stories", icon: BookOpen },
-    { id: "badges" as const, label: "Badge", icon: Award },
-    { id: "route" as const, label: "Rotte", icon: Navigation },
-    { id: "newsletter" as const, label: "Newsletter", icon: Mail },
+    { id: "articles" as const, label: "Articoli", eyebrow: "Publishing", description: "Lista, stati e modifiche rapide", icon: FileText, count: articles.length },
+    { id: "editorial" as const, label: "Piano editoriale", eyebrow: "Calendario", description: "Slot, assegnazioni e uscite", icon: CalendarDays, count: scheduledCount },
+    { id: "stories" as const, label: "Stories", eyebrow: "Narrativa", description: "Archi editoriali e slug", icon: BookOpen, count: stories.length },
+    { id: "route" as const, label: "Rotte", eyebrow: "Mappa", description: "Voyage, waypoint e geometrie", icon: Navigation, count: voyages.length },
+    { id: "newsletter" as const, label: "Newsletter", eyebrow: "Audience", description: "Campagne, liste e automazioni", icon: Mail, count: null },
+    { id: "badges" as const, label: "Badge", eyebrow: "Community", description: "Reward e profili collegati", icon: Award, count: null },
+  ];
+  const activeSectionMeta = sectionTabs.find((tab) => tab.id === activeSection) ?? sectionTabs[0];
+  const publicationRate = articles.length > 0 ? Math.round((publishedCount / articles.length) * 100) : 0;
+  const adminQuickLinks = [
+    { to: "/admin/bookings", label: "Booking", description: "Richieste e partecipanti", icon: CalendarCheck },
+    { to: "/admin/candidates", label: "Candidati", description: "Revisione candidature", icon: User },
+    { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail },
+    { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud },
+    { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned },
+  ];
+  const overviewMetrics = [
+    { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },
+    { label: "Schedulati", value: scheduledCount, detail: "uscite pianificate", icon: CalendarClock },
+    { label: "Bozze", value: draftCount, detail: "contenuti da chiudere", icon: FileText },
+    { label: "Stories", value: stories.length, detail: "archi narrativi", icon: BookOpen },
+  ];
+  const sectionGroups = [
+    { label: "Contenuti", items: sectionTabs.filter((tab) => tab.id === "articles" || tab.id === "editorial" || tab.id === "stories") },
+    { label: "Operazioni", items: sectionTabs.filter((tab) => tab.id === "route" || tab.id === "badges") },
+    { label: "Audience", items: sectionTabs.filter((tab) => tab.id === "newsletter") },
   ];
 
   if (authLoading || !session) {
@@ -452,132 +524,92 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
       <div className="max-w-7xl mx-auto space-y-8">
-        <section className="glass-panel rounded-[38px] px-6 py-8 md:px-10 md:py-10">
-          <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-3xl">
-              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Logbook Dashboard</h1>
-              <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
-                Gestisci articoli, stories, rotte e newsletter dentro un’unica interfaccia coerente con il nuovo linguaggio del progetto.
+        <section className="glass-panel rounded-[34px] px-5 py-6 md:px-8 md:py-8">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.9fr)] xl:items-start">
+            <div className="min-w-0">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.24em] text-accent">
+                  Admin workspace
+                </span>
+                <span className="text-xs font-sans text-muted-foreground">
+                  Sezione attiva: {activeSectionMeta.label}
+                </span>
+              </div>
+              <h1 className="editorial-heading text-3xl md:text-5xl">Dashboard</h1>
+              <p className="mt-3 max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
+                Punto di ingresso per pubblicazione, viaggi, mail e asset. Le aree personali restano fuori da questa vista per non appesantire il lavoro quotidiano.
               </p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link
+                  to="/admin/article/new"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void (async () => {
+                      if (!(await runRouteLeaveGuard())) return;
+                      navigate("/admin/article/new");
+                    })();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-sans text-primary-foreground shadow-[0_16px_34px_rgba(15,23,42,0.16)] transition-transform duration-interaction ease-out-expo hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                >
+                  <Plus size={16} />
+                  Nuovo articolo
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+                  title="Logout"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 self-start">
-              <Link
-                to="/admin/bookings"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/admin/bookings");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Booking"
-              >
-                <CalendarCheck size={16} />
-                Booking
-              </Link>
-              <Link
-                to="/admin/candidates"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/admin/candidates");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Candidati"
-              >
-                <User size={16} />
-                Candidati
-              </Link>
-              <Link
-                to="/admin/media"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/admin/media");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Media"
-              >
-                <UploadCloud size={16} />
-                Media
-              </Link>
-              <Link
-                to="/admin/mail"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/admin/mail");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Mail"
-              >
-                <Mail size={16} />
-                Mail
-              </Link>
-              <Link
-                to="/admin/trackers"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/admin/trackers");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Tracker mappa"
-              >
-                <MapPinned size={16} />
-                Tracker
-              </Link>
-              <Link
-                to="/profile"
-                onClick={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    if (!(await runRouteLeaveGuard())) return;
-                    navigate("/profile");
-                  })();
-                }}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Profilo"
-              >
-                <User size={16} />
-                Profilo
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                title="Logout"
-              >
-                <LogOut size={16} />
-                Logout
-              </button>
+            <div className="glass-panel-soft rounded-[26px] p-4 md:p-5">
+              <p className="mb-3 text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Shortcut operativi</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                {adminQuickLinks.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void (async () => {
+                          if (!(await runRouteLeaveGuard())) return;
+                          navigate(item.to);
+                        })();
+                      }}
+                      className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
+                    >
+                      <span className="glass-chip inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
+                        <Icon size={16} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
+                        <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
-            {[
-              { label: "Pubblicati", value: publishedCount, icon: Send },
-              { label: "Schedulati", value: scheduledCount, icon: CalendarClock },
-              { label: "Bozze", value: draftCount, icon: FileText },
-              { label: "Stories", value: stories.length, icon: BookOpen },
-            ].map((item) => {
+          <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {overviewMetrics.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.label} className="glass-panel-soft rounded-[26px] p-5">
-                  <div className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground mb-4">
-                    <Icon size={16} />
+                <div key={item.label} className="rounded-[24px] border border-white/55 bg-white/45 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
+                    <span className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
+                      <Icon size={15} />
+                    </span>
                   </div>
-                  <p className="editorial-heading text-3xl leading-none mb-2">{item.value}</p>
-                  <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">{item.label}</p>
+                  <p className="font-sans text-3xl font-semibold leading-none text-foreground tabular-nums">{item.value}</p>
+                  <p className="mt-2 text-xs font-sans text-muted-foreground">{item.detail}</p>
                 </div>
               );
             })}
@@ -600,42 +632,47 @@ const AdminDashboard = () => {
                 {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
               </button>
             </div>
-            <div className="space-y-2">
-              {sectionTabs.map((tab) => {
-                const Icon = tab.icon;
-                const active = activeSection === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => void handleSectionChange(tab.id)}
-                    className={`w-full rounded-[22px] py-3 text-left transition-[color,background-color,border-color,box-shadow,transform] duration-reveal ease-out-expo active:scale-[0.99] ${
-                      active
-                        ? "bg-white/82 border border-stone-200/90 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
-                        : "glass-panel-soft hover:border-accent"
-                    } ${sidebarCollapsed ? "px-2" : "px-4"}`}
-                    title={sidebarCollapsed ? tab.label : undefined}
-                  >
-                    <span className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
-                      <span className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
-                        <Icon size={15} className={active ? "text-accent" : undefined} />
-                      </span>
-                      {!sidebarCollapsed && (
-                        <span>
-                          <span className="block font-sans text-sm text-foreground">{tab.label}</span>
-                          <span className="block text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground mt-1">
-                            {tab.id === "articles" && "Publishing"}
-                            {tab.id === "editorial" && "Calendario interno"}
-                            {tab.id === "stories" && "Narrative arcs"}
-                            {tab.id === "badges" && "Profile rewards"}
-                            {tab.id === "route" && "Voyage map"}
-                            {tab.id === "newsletter" && "Audience"}
+            <div className="space-y-5">
+              {sectionGroups.map((group) => (
+                <div key={group.label} className="space-y-2">
+                  {!sidebarCollapsed && (
+                    <p className="px-2 text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground/80">{group.label}</p>
+                  )}
+                  {group.items.map((tab) => {
+                    const Icon = tab.icon;
+                    const active = activeSection === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => void handleSectionChange(tab.id)}
+                        className={`w-full rounded-[22px] py-3 text-left transition-[color,background-color,border-color,box-shadow,transform] duration-reveal ease-out-expo active:scale-[0.99] ${
+                          active
+                            ? "border border-accent/30 bg-white/86 shadow-[0_14px_30px_rgba(15,23,42,0.07)]"
+                            : "border border-transparent bg-white/28 hover:border-accent/40 hover:bg-white/56"
+                        } ${sidebarCollapsed ? "px-2" : "px-3"}`}
+                        title={sidebarCollapsed ? tab.label : undefined}
+                      >
+                        <span className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
+                          <span className={`glass-chip inline-flex h-9 w-9 shrink-0 items-center justify-center ${active ? "text-accent" : "text-muted-foreground"}`}>
+                            <Icon size={15} />
                           </span>
+                          {!sidebarCollapsed && (
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center justify-between gap-3">
+                                <span className="truncate font-sans text-sm font-medium text-foreground">{tab.label}</span>
+                                {typeof tab.count === "number" && (
+                                  <span className="font-sans text-xs tabular-nums text-muted-foreground">{tab.count}</span>
+                                )}
+                              </span>
+                              <span className="mt-1 block truncate text-xs font-sans text-muted-foreground">{tab.description}</span>
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
 
             {!sidebarCollapsed && (

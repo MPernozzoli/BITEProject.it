@@ -3,10 +3,18 @@ import { sendJson, type NodeRequest, type NodeResponse } from "../../src/server/
 import {
   fromOptionById,
   jsonMethodNotAllowed,
+  ORDINARY_MAIL_DOMAIN,
   readMailJsonBody,
   requireAdmin,
   userDisplayName,
 } from "../../src/server/mail.js";
+import {
+  fallbackThreadKey,
+  generateOutboundMessageId,
+  resolveConversationThreadKey,
+  threadParticipants,
+  type ThreadableMail,
+} from "../../src/server/mail-threading.js";
 
 type SendBody = {
   fromOptionId?: string;
@@ -16,6 +24,7 @@ type SendBody = {
   subject?: string;
   html?: string;
   text?: string;
+  replyToMessageId?: string;
 };
 
 function splitRecipients(value: string): string[] {
@@ -43,6 +52,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const subject = (body.subject ?? "").trim();
   const html = (body.html ?? "").trim();
   const text = (body.text ?? "").trim();
+  const replyToMessageId = (body.replyToMessageId ?? "").trim();
 
   if (to.length === 0 || !subject || (!html && !text)) {
     sendJson(res, 400, { error: "missing_fields" });
@@ -59,6 +69,45 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const emailHtml = html || text.replace(/\n/g, "<br>");
 
   try {
+    let replyToMessage: ThreadableMail | null = null;
+    if (replyToMessageId) {
+      const { data: inboundReplyTarget, error: inboundReplyError } = await auth.db
+        .from("inbound_emails")
+        .select("id,message_id,thread_key,in_reply_to,references,from_address,to_addresses,cc_addresses,subject")
+        .eq("id", replyToMessageId)
+        .maybeSingle();
+      if (inboundReplyError) throw inboundReplyError;
+
+      if (inboundReplyTarget) {
+        replyToMessage = inboundReplyTarget as ThreadableMail;
+      } else {
+        const { data: sentReplyTarget, error: sentReplyError } = await auth.db
+          .from("sent_emails")
+          .select("id,message_id,thread_key,in_reply_to,references,from_address,to_addresses,cc_addresses,bcc_addresses,subject")
+          .eq("id", replyToMessageId)
+          .maybeSingle();
+        if (sentReplyError) throw sentReplyError;
+        replyToMessage = (sentReplyTarget as ThreadableMail | null) ?? null;
+      }
+    }
+
+    const parsedFrom = parseEmailAddress(fromOption.from);
+    const outboundMessageId = generateOutboundMessageId(ORDINARY_MAIL_DOMAIN);
+    const replyMessageId = replyToMessage?.message_id ?? null;
+    const replyReferences = Array.from(
+      new Set([...(replyToMessage?.references ?? []), ...(replyMessageId ? [replyMessageId] : [])]),
+    );
+    const threadKey =
+      replyToMessage?.thread_key ??
+      (await resolveConversationThreadKey(
+        auth.db,
+        replyReferences.length > 0 ? replyReferences : replyMessageId ? [replyMessageId] : [outboundMessageId],
+        fallbackThreadKey({
+          subject,
+          addresses: [parsedFrom.address, ...to, ...cc, ...bcc, ...(replyToMessage ? threadParticipants(replyToMessage) : [])],
+        }),
+      ));
+
     const resendResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -72,6 +121,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         ...(bcc.length > 0 ? { bcc } : {}),
         subject,
         html: emailHtml,
+        headers: {
+          "Message-ID": `<${outboundMessageId}>`,
+          ...(replyMessageId ? { "In-Reply-To": `<${replyMessageId}>` } : {}),
+          ...(replyReferences.length > 0 ? { References: replyReferences.map((id) => `<${id}>`).join(" ") } : {}),
+        },
       }),
     });
 
@@ -83,9 +137,12 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     }
 
     const result = (await resendResponse.json()) as { id?: string };
-    const parsedFrom = parseEmailAddress(fromOption.from);
     const { error } = await auth.db.from("sent_emails").insert({
       resend_message_id: result.id ?? null,
+      message_id: outboundMessageId,
+      thread_key: threadKey,
+      in_reply_to: replyMessageId,
+      references: replyReferences,
       from_address: parsedFrom.address,
       from_name: parsedFrom.name,
       to_addresses: to,

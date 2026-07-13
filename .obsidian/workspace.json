@@ -11,10 +11,14 @@
             "id": "62e870696e5b08ca",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Vista grafo"
+              "type": "markdown",
+              "state": {
+                "file": "Home.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Home"
             }
           }
         ]
@@ -178,6 +182,18 @@
   },
   "active": "62e870696e5b08ca",
   "lastOpenFiles": [
+    "apps/web/dist/assets/input-Ce2uSvfI.js",
+    "apps/web/dist/assets/AdminMail-BSHXRfFq.js",
+    "apps/web/dist/assets/AdminEditorialPlan-C5vKRRBJ.js",
+    "apps/web/supabase/migrations/20260712235722_normalize_mail_thread_message_ids.sql",
+    "apps/web/dist/assets/index-CcNYI-YK.css",
+    "apps/web/dist/assets/dogs-marina-DoQz8HFa.webp",
+    "apps/web/dist/assets/supabase-DgMAuCm7.js",
+    "apps/web/dist/assets/react-vendor-DMSco0q6.js",
+    "apps/web/dist/assets/radix-FqVAD07s.js",
+    "apps/web/dist/assets/SeaPeopleIcon-CEtE6Me9.js",
+    "apps/web/dist/assets/NewsletterConfirm-BeKxsKjG.js",
+    "apps/web/dist/assets/LazyVoyageMap-B2ACCXSF.js",
     "node_modules/linkifyjs/README.md",
     "AGENTS.md",
     "Wiki/20 - Comandi e Workflow.md",
@@ -198,16 +214,6 @@
     "Wiki/05 - Frontend - Pagine.md",
     "Wiki/04 - Struttura Repository.md",
     "Wiki/03 - Routing e i18n.md",
-    "dist/assets/AdminEditorialPlan-D_qfJ7Yb.js",
-    "dist/assets/AdminBadgeManager-9rQfVwuM.js",
-    "dist/assets/AdminNewsletterManager-BkJIh2Kl.js",
-    "dist/assets/AdminVoyageManager-B4XOb8SR.js",
-    "dist/assets/ArticleMapAside-DUtjPvKQ.js",
-    "dist/assets/translate-editor-content-BfEwnb_Y.js",
-    "dist/assets/RichTextEditor-Cfas6v8g.js",
-    "dist/assets/select-DLe7bzHl.js",
-    "dist/assets/alert-dialog-CrkgzqrQ.js",
-    "dist/assets/button-CpVplOg9.js",
     "Wiki/02 - Stack Tecnologico.md",
     "Wiki/01 - Architettura.md",
     "Home.md"
