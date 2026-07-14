@@ -785,7 +785,7 @@ const UserBookings = () => {
             <Loader2 className="mr-2 inline animate-spin" size={16} /> Loading bookings...
           </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-6">
             <section className="glass-panel rounded-[30px] p-5 md:p-6">
               <div className="mb-5 flex items-center gap-3">
                 <Ship size={18} className="text-accent" />
