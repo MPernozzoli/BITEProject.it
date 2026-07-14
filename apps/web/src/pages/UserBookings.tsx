@@ -6,6 +6,13 @@ import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
 import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
@@ -102,6 +109,7 @@ const UserBookings = () => {
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
   const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
+  const [detailsRequestId, setDetailsRequestId] = useState<string | null>(null);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
     null
   );
@@ -319,6 +327,60 @@ const UserBookings = () => {
     [requestLegs, ownRequestForSelectedVoyage]
   );
   const companionRows = useMemo(() => occupancy.filter((row) => !row.is_own), [occupancy]);
+
+  // Details modal: opened by clicking a booking's bar on the matrix. Keeps the matrix itself
+  // clean and moves all the status/briefing/checklist/plan-change detail behind one click.
+  const detailsRequest = detailsRequestId ? requests.find((request) => request.id === detailsRequestId) || null : null;
+  const detailsVoyage = detailsRequest ? voyagesById[detailsRequest.voyage_id] : null;
+  const detailsSettings = detailsRequest
+    ? bookingSettings.find((item) => item.voyage_id === detailsRequest.voyage_id)
+    : undefined;
+  const detailsVoyageTasks = detailsRequest ? bookingTasks.filter((task) => task.voyage_id === detailsRequest.voyage_id) : [];
+  const detailsCompletionSet = new Set(
+    detailsRequest
+      ? taskCompletions.filter((completion) => completion.booking_request_id === detailsRequest.id).map((completion) => completion.task_id)
+      : []
+  );
+  const detailsPredepartureInfo = detailsSettings
+    ? lang === "it"
+      ? detailsSettings.predeparture_info_it || detailsSettings.predeparture_info_en
+      : detailsSettings.predeparture_info_en || detailsSettings.predeparture_info_it
+    : null;
+  const detailsFirstBriefingContent = getBookingBriefingContent(detailsSettings, "first", lang);
+  const detailsSecondBriefingContent = getBookingBriefingContent(detailsSettings, "second", lang);
+  const detailsShowBriefings = detailsRequest?.status === "user_confirmed";
+  const detailsTermsContent = detailsSettings
+    ? lang === "it"
+      ? detailsSettings.terms_content_it || detailsSettings.terms_content_en
+      : detailsSettings.terms_content_en || detailsSettings.terms_content_it
+    : null;
+  const detailsLegLabels = detailsRequest
+    ? requestLegs
+        .filter((link) => link.booking_request_id === detailsRequest.id)
+        .map((link) => legsById[link.bookable_leg_id])
+        .filter(Boolean)
+        .map((leg) => getLegLabel(leg, waypointsById, lang))
+    : [];
+  const detailsProposedLegLabels = detailsRequest
+    ? stringArrayFromMetadata(detailsRequest.plan_change_metadata, "proposed_leg_ids")
+        .map((legId) => legsById[legId])
+        .filter(Boolean)
+        .map((leg) => getLegLabel(leg, waypointsById, lang))
+    : [];
+  const detailsPlanChangeUserAction = detailsRequest
+    ? stringFromMetadata(detailsRequest.plan_change_metadata, "user_response_action")
+    : null;
+  const detailsShowPendingPlanChange =
+    detailsRequest?.plan_change_status === "pending_user_approval" &&
+    !detailsPlanChangeUserAction &&
+    detailsProposedLegLabels.length > 0;
+  const detailsShowCounterWaiting =
+    detailsRequest?.plan_change_status === "pending_user_approval" && detailsPlanChangeUserAction === "request_different_route";
+  const detailsShowAwaitingAdminApproval = detailsRequest?.plan_change_status === "pending_admin_approval";
+  const detailsAdminPlanMessage = detailsRequest
+    ? stringFromMetadata(detailsRequest.plan_change_metadata, "admin_message") ||
+      stringFromMetadata(detailsRequest.plan_change_metadata, "admin_note")
+    : null;
 
   const validateBookingRequest = () => {
     if (!selectedVoyageId || selectedLegIds.length === 0) {
@@ -778,7 +840,7 @@ const UserBookings = () => {
                         onDraftLegIdsChange={setSelectedLegIds}
                         onSubmitDraft={openBookingConfirm}
                         onProposeChange={(requestId, proposedLegIds) => void proposeLegChange(requestId, proposedLegIds)}
-                        onCancelOwnRequest={(request) => void cancelBooking(request)}
+                        onOpenOwnRequest={(request) => setDetailsRequestId(request.id)}
                       />
                     )}
                   </div>
@@ -865,272 +927,241 @@ const UserBookings = () => {
               onConfirm={() => void submitRequest()}
             />
 
-            <section className="glass-panel rounded-[30px] p-5 md:p-6">
-              <h2 className="editorial-heading mb-5 text-2xl">
-                {lang === "it" ? "Le tue richieste" : "Your requests"}
-              </h2>
-              <div className="space-y-4">
-                {requests.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {lang === "it" ? "Non hai ancora richieste di imbarco." : "You do not have booking requests yet."}
-                  </p>
-                ) : (
-                  requests.map((request) => {
-                    const voyage = voyagesById[request.voyage_id];
-                    const settings = bookingSettings.find((item) => item.voyage_id === request.voyage_id);
-                    const voyageTasks = bookingTasks.filter((task) => task.voyage_id === request.voyage_id);
-                    const completionSet = new Set(
-                      taskCompletions
-                        .filter((completion) => completion.booking_request_id === request.id)
-                        .map((completion) => completion.task_id)
-                    );
-                    const predepartureInfo = lang === "it"
-                      ? settings?.predeparture_info_it || settings?.predeparture_info_en
-                      : settings?.predeparture_info_en || settings?.predeparture_info_it;
-                    const firstBriefingContent = getBookingBriefingContent(settings, "first", lang);
-                    const secondBriefingContent = getBookingBriefingContent(settings, "second", lang);
-                    const showBriefings = request.status === "user_confirmed";
-                    const termsContent = lang === "it"
-                      ? settings?.terms_content_it || settings?.terms_content_en
-                      : settings?.terms_content_en || settings?.terms_content_it;
-                    const legLabels = requestLegs
-                      .filter((link) => link.booking_request_id === request.id)
-                      .map((link) => legsById[link.bookable_leg_id])
-                      .filter(Boolean)
-                      .map((leg) => getLegLabel(leg, waypointsById, lang));
-                    const proposedLegLabels = stringArrayFromMetadata(request.plan_change_metadata, "proposed_leg_ids")
-                      .map((legId) => legsById[legId])
-                      .filter(Boolean)
-                      .map((leg) => getLegLabel(leg, waypointsById, lang));
-                    const planChangeUserAction = stringFromMetadata(request.plan_change_metadata, "user_response_action");
-                    const showPendingPlanChange =
-                      request.plan_change_status === "pending_user_approval" &&
-                      !planChangeUserAction &&
-                      proposedLegLabels.length > 0;
-                    const showCounterWaiting =
-                      request.plan_change_status === "pending_user_approval" &&
-                      planChangeUserAction === "request_different_route";
-                    const adminPlanMessage =
-                      stringFromMetadata(request.plan_change_metadata, "admin_message") ||
-                      stringFromMetadata(request.plan_change_metadata, "admin_note");
-
-                    return (
-                      <article key={request.id} className="rounded-[22px] border border-border/70 bg-background/45 p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <h3 className="font-serif text-xl">
-                              {getLocalizedBookingVoyageName(voyage, lang) || request.voyage_id}
-                            </h3>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {formatBookingDate(request.requested_at, locale)} · {request.party_size} pax
-                            </p>
-                          </div>
-                          <span className="flex items-center gap-2">
-                            {request.is_crew && (
-                              <span className="inline-flex items-center rounded-full border border-indigo-300/70 bg-indigo-100/70 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-indigo-800">
-                                {lang === "it" ? "Equipaggio" : "Crew"}
-                              </span>
-                            )}
-                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${getBookingStatusClass(request.status)}`}>
-                              {getBookingStatusLabel(request.status, lang)}
-                            </span>
+            <Dialog
+              open={detailsRequestId !== null}
+              onOpenChange={(open) => {
+                if (!open) setDetailsRequestId(null);
+              }}
+            >
+              <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto rounded-[24px] border-border bg-background p-5">
+                {detailsRequest && (
+                  <>
+                    <DialogHeader>
+                      <DialogTitle className="font-serif text-xl">
+                        {getLocalizedBookingVoyageName(detailsVoyage, lang) || detailsRequest.voyage_id}
+                      </DialogTitle>
+                      <DialogDescription className="flex flex-wrap items-center gap-2 pt-1">
+                        {formatBookingDate(detailsRequest.requested_at, locale)} · {detailsRequest.party_size} pax
+                        {detailsRequest.is_crew && (
+                          <span className="inline-flex items-center rounded-full border border-indigo-300/70 bg-indigo-100/70 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-indigo-800">
+                            {lang === "it" ? "Equipaggio" : "Crew"}
                           </span>
+                        )}
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${getBookingStatusClass(detailsRequest.status)}`}>
+                          {["requested", "waitlisted"].includes(detailsRequest.status)
+                            ? lang === "it"
+                              ? "In attesa di approvazione"
+                              : "Pending approval"
+                            : getBookingStatusLabel(detailsRequest.status, lang)}
+                        </span>
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {detailsLegLabels.map((label) => (
+                        <span key={label} className="rounded-full border border-border/70 px-3 py-1 text-xs text-muted-foreground">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                    {detailsRequest.message && <p className="mt-3 text-sm text-muted-foreground">{detailsRequest.message}</p>}
+
+                    {detailsShowAwaitingAdminApproval && (
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                        {lang === "it"
+                          ? "La tua richiesta di modifica tratte è in attesa di approvazione da parte del team."
+                          : "Your leg-change request is pending approval from the team."}
+                      </div>
+                    )}
+
+                    {detailsShowPendingPlanChange && (
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
+                          <div>
+                            <p className="font-semibold">
+                              {lang === "it" ? "Proposta di modifica tratte" : "Route change proposal"}
+                            </p>
+                            {detailsAdminPlanMessage && <p className="mt-1 whitespace-pre-line text-sky-900/80">{detailsAdminPlanMessage}</p>}
+                          </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {legLabels.map((label) => (
-                            <span key={label} className="rounded-full border border-border/70 px-3 py-1 text-xs text-muted-foreground">
+                          {detailsProposedLegLabels.map((label) => (
+                            <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
                               {label}
                             </span>
                           ))}
                         </div>
-                        {request.message && <p className="mt-3 text-sm text-muted-foreground">{request.message}</p>}
-                        {showPendingPlanChange && (
-                          <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
-                            <div className="flex items-start gap-2">
-                              <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
-                              <div>
-                                <p className="font-semibold">
-                                  {lang === "it" ? "Proposta di modifica tratte" : "Route change proposal"}
-                                </p>
-                                {adminPlanMessage && <p className="mt-1 whitespace-pre-line text-sky-900/80">{adminPlanMessage}</p>}
-                              </div>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {proposedLegLabels.map((label) => (
-                                <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
-                                  {label}
-                                </span>
-                              ))}
-                            </div>
-                            <textarea
-                              value={planChangeMessages[request.id] || ""}
-                              onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [request.id]: event.target.value }))}
-                              rows={3}
-                              className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
-                              placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
-                            />
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                              <button
-                                type="button"
-                                onClick={() => void respondToPlanChange(request.id, "accept_proposed_change")}
-                                disabled={saving}
-                                className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
-                              >
-                                {lang === "it" ? "Accetta" : "Accept"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void respondToPlanChange(request.id, "request_different_route")}
-                                disabled={saving}
-                                className="rounded-full border border-sky-300 bg-white/70 px-3 py-2 text-xs font-semibold text-sky-900 disabled:opacity-50"
-                              >
-                                {lang === "it" ? "Controproponi" : "Counter"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void respondToPlanChange(request.id, "reject_proposed_change")}
-                                disabled={saving}
-                                className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
-                              >
-                                {lang === "it" ? "Rifiuta" : "Decline"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void respondToPlanChange(request.id, "cancel_with_full_refund")}
-                                disabled={saving}
-                                className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
-                              >
-                                {lang === "it" ? "Annulla" : "Cancel"}
-                              </button>
-                            </div>
+                        <textarea
+                          value={planChangeMessages[detailsRequest.id] || ""}
+                          onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))}
+                          rows={3}
+                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                          placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
+                        />
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "accept_proposed_change")}
+                            disabled={saving}
+                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Accetta" : "Accept"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "request_different_route")}
+                            disabled={saving}
+                            className="rounded-full border border-sky-300 bg-white/70 px-3 py-2 text-xs font-semibold text-sky-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Controproponi" : "Counter"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "reject_proposed_change")}
+                            disabled={saving}
+                            className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Rifiuta" : "Decline"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "cancel_with_full_refund")}
+                            disabled={saving}
+                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Annulla" : "Cancel"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {detailsShowCounterWaiting && (
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                        {lang === "it"
+                          ? "Controproposta inviata: il team la sta revisionando."
+                          : "Counterproposal sent: the team is reviewing it."}
+                      </div>
+                    )}
+                    {(detailsPredepartureInfo || detailsShowBriefings || detailsTermsContent || detailsVoyageTasks.length > 0) && (
+                      <div className="mt-4 space-y-3 rounded-[18px] border border-border/70 bg-background/45 p-3">
+                        {detailsPredepartureInfo && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                              {lang === "it" ? "Info prepartenza" : "Predeparture info"}
+                            </p>
+                            <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{detailsPredepartureInfo}</p>
                           </div>
                         )}
-                        {showCounterWaiting && (
-                          <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
-                            {lang === "it"
-                              ? "Controproposta inviata: il team la sta revisionando."
-                              : "Counterproposal sent: the team is reviewing it."}
-                          </div>
-                        )}
-                        {(predepartureInfo || showBriefings || termsContent || voyageTasks.length > 0) && (
-                          <div className="mt-4 space-y-3 rounded-[18px] border border-border/70 bg-background/45 p-3">
-                            {predepartureInfo && (
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                                  {lang === "it" ? "Info prepartenza" : "Predeparture info"}
-                                </p>
-                                <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{predepartureInfo}</p>
-                              </div>
-                            )}
-                            {showBriefings && (
-                              <div className="space-y-3">
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                                  {lang === "it" ? "Mail briefing" : "Briefing emails"}
-                                </p>
-                                <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
-                                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
-                                    {lang === "it" ? "1. Prima mail di briefing" : "1. First briefing email"}
-                                  </p>
-                                  <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{firstBriefingContent}</p>
+                        {detailsShowBriefings && (
+                          <div className="space-y-3">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                              {lang === "it" ? "Mail briefing" : "Briefing emails"}
+                            </p>
+                            <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
+                                {lang === "it" ? "1. Prima mail di briefing" : "1. First briefing email"}
+                              </p>
+                              <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{detailsFirstBriefingContent}</p>
+                            </div>
+                            <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
+                                {lang === "it" ? "2. Seconda mail operativa" : "2. Second operational email"}
+                              </p>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type L</p>
+                                  <div className="mt-2 flex h-12 items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/80">
+                                    <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                    <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                    <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
+                                  </div>
                                 </div>
-                                <div className="rounded-[16px] border border-border/70 bg-background/55 p-3">
-                                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
-                                    {lang === "it" ? "2. Seconda mail operativa" : "2. Second operational email"}
-                                  </p>
-                                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                    <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
-                                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type L</p>
-                                      <div className="mt-2 flex h-12 items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/80">
-                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
-                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
-                                        <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
-                                      </div>
-                                    </div>
-                                    <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
-                                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type F</p>
-                                      <div className="mt-2 flex h-12 items-center justify-center rounded-xl border border-border/60 bg-background/80">
-                                        <div className="flex h-9 w-9 items-center justify-center gap-3 rounded-full border-2 border-foreground/70">
-                                          <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
-                                          <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
-                                        </div>
-                                      </div>
+                                <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type F</p>
+                                  <div className="mt-2 flex h-12 items-center justify-center rounded-xl border border-border/60 bg-background/80">
+                                    <div className="flex h-9 w-9 items-center justify-center gap-3 rounded-full border-2 border-foreground/70">
+                                      <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
+                                      <span className="h-2.5 w-2.5 rounded-full bg-foreground/70" />
                                     </div>
                                   </div>
-                                  <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">{secondBriefingContent}</p>
                                 </div>
                               </div>
-                            )}
-                            {termsContent && (
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                                  {lang === "it" ? "Note operative" : "Operational notes"}
-                                </p>
-                                <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{termsContent}</p>
-                              </div>
-                            )}
-                            {voyageTasks.length > 0 && !request.is_crew && (
-                              <div>
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                                  {lang === "it" ? "Checklist" : "Checklist"}
-                                </p>
-                                <div className="mt-2 space-y-2">
-                                  {voyageTasks.map((task) => {
-                                    const completed = completionSet.has(task.id);
-                                    const label = lang === "it"
-                                      ? task.title_it || task.title_en
-                                      : task.title_en || task.title_it;
-                                    return (
-                                      <label key={task.id} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                        <input
-                                          type="checkbox"
-                                          checked={completed}
-                                          disabled={saving || ["cancelled", "rejected", "expired"].includes(request.status)}
-                                          onChange={() => void toggleTaskCompletion(request.id, task.id, completed)}
-                                          className="mt-1 h-4 w-4 accent-[hsl(var(--accent))]"
-                                        />
-                                        <span>
-                                          {label}
-                                          {task.required && <span className="ml-2 text-[11px] uppercase tracking-[0.18em] text-accent">required</span>}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
+                              <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">{detailsSecondBriefingContent}</p>
+                            </div>
                           </div>
                         )}
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {request.status === "admin_approved" && (
-                            <button
-                              type="button"
-                              onClick={() => void confirmBooking(request.id)}
-                              className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent"
-                            >
-                              <Check size={14} /> {lang === "it" ? "Conferma" : "Confirm"}
-                            </button>
-                          )}
-                          {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(request.status) && (
-                            <button
-                              type="button"
-                              onClick={() => void cancelBooking(request)}
-                              className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-destructive"
-                            >
-                              <X size={14} /> {lang === "it" ? "Annulla" : "Cancel"}
-                            </button>
-                          )}
-                          {voyage && (
-                            <Link to="/voyages" className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
-                              {lang === "it" ? "Vedi viaggi" : "View voyages"}
-                            </Link>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })
+                        {detailsTermsContent && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                              {lang === "it" ? "Note operative" : "Operational notes"}
+                            </p>
+                            <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{detailsTermsContent}</p>
+                          </div>
+                        )}
+                        {detailsVoyageTasks.length > 0 && !detailsRequest.is_crew && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                              {lang === "it" ? "Checklist" : "Checklist"}
+                            </p>
+                            <div className="mt-2 space-y-2">
+                              {detailsVoyageTasks.map((task) => {
+                                const completed = detailsCompletionSet.has(task.id);
+                                const label = lang === "it"
+                                  ? task.title_it || task.title_en
+                                  : task.title_en || task.title_it;
+                                return (
+                                  <label key={task.id} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                    <input
+                                      type="checkbox"
+                                      checked={completed}
+                                      disabled={saving || ["cancelled", "rejected", "expired"].includes(detailsRequest.status)}
+                                      onChange={() => void toggleTaskCompletion(detailsRequest.id, task.id, completed)}
+                                      className="mt-1 h-4 w-4 accent-[hsl(var(--accent))]"
+                                    />
+                                    <span>
+                                      {label}
+                                      {task.required && <span className="ml-2 text-[11px] uppercase tracking-[0.18em] text-accent">required</span>}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {detailsRequest.status === "admin_approved" && (
+                        <button
+                          type="button"
+                          onClick={() => void confirmBooking(detailsRequest.id)}
+                          className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent"
+                        >
+                          <Check size={14} /> {lang === "it" ? "Conferma" : "Confirm"}
+                        </button>
+                      )}
+                      {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void cancelBooking(detailsRequest);
+                            setDetailsRequestId(null);
+                          }}
+                          className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-destructive"
+                        >
+                          <X size={14} /> {lang === "it" ? "Annulla" : "Cancel"}
+                        </button>
+                      )}
+                      {detailsVoyage && (
+                        <Link to="/voyages" className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+                          {lang === "it" ? "Vedi viaggi" : "View voyages"}
+                        </Link>
+                      )}
+                    </div>
+                  </>
                 )}
-              </div>
-            </section>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>

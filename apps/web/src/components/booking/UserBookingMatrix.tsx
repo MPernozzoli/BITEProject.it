@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Hourglass, X } from "lucide-react";
 import {
   type BookableLeg,
   type BookingRequest,
@@ -12,6 +12,9 @@ import {
   getLegLabel,
 } from "@/lib/booking-utils";
 import type { Language } from "@/lib/language";
+
+/** Statuses shown with a unified "pending approval" hint on the bar. */
+const pendingApprovalStatuses = new Set<BookingRequest["status"]>(["requested", "waitlisted"]);
 
 const COLUMN_WIDTH = 150;
 const LABEL_COL_WIDTH = 96;
@@ -32,7 +35,8 @@ interface UserBookingMatrixProps {
   onDraftLegIdsChange: (legIds: string[]) => void;
   onSubmitDraft: () => void;
   onProposeChange: (requestId: string, proposedLegIds: string[]) => void;
-  onCancelOwnRequest: (request: BookingRequest) => void;
+  /** A plain click (no drag) on the traveller's own bar — opens the details modal (cancel lives there too). */
+  onOpenOwnRequest: (request: BookingRequest) => void;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -77,7 +81,7 @@ const UserBookingMatrix = ({
   onDraftLegIdsChange,
   onSubmitDraft,
   onProposeChange,
-  onCancelOwnRequest,
+  onOpenOwnRequest,
 }: UserBookingMatrixProps) => {
   const it = lang === "it";
   const legIndexById = useMemo(() => {
@@ -94,6 +98,7 @@ const UserBookingMatrix = ({
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
+  const hasMovedRef = useRef(false);
   const [pendingProposalRange, setPendingProposalRange] = useState<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
@@ -104,25 +109,42 @@ const UserBookingMatrix = ({
       const deltaCols = Math.round((event.clientX - current.originClientX) / COLUMN_WIDTH);
       if (current.mode === "start") {
         const nextStart = clamp(current.segStart + deltaCols, 0, current.segEnd);
-        if (nextStart !== current.previewStart) setDrag({ ...current, previewStart: nextStart });
+        if (nextStart !== current.previewStart) {
+          hasMovedRef.current = true;
+          setDrag({ ...current, previewStart: nextStart });
+        }
       } else if (current.mode === "end") {
         const nextEnd = clamp(current.segEnd + deltaCols, current.segStart, legs.length - 1);
-        if (nextEnd !== current.previewEnd) setDrag({ ...current, previewEnd: nextEnd });
+        if (nextEnd !== current.previewEnd) {
+          hasMovedRef.current = true;
+          setDrag({ ...current, previewEnd: nextEnd });
+        }
       } else {
         const width = current.segEnd - current.segStart;
         const nextStart = clamp(current.segStart + deltaCols, 0, legs.length - 1 - width);
         const nextEnd = nextStart + width;
-        if (nextStart !== current.previewStart) setDrag({ ...current, previewStart: nextStart, previewEnd: nextEnd });
+        if (nextStart !== current.previewStart) {
+          hasMovedRef.current = true;
+          setDrag({ ...current, previewStart: nextStart, previewEnd: nextEnd });
+        }
       }
     };
     const handleUp = () => {
       const current = dragRef.current;
       setDrag(null);
       if (!current) return;
+      // A "move"-mode press that never actually moved is a plain click: open the details
+      // modal instead of registering a (no-op) change proposal.
+      if (current.mode === "move" && !hasMovedRef.current) {
+        if (hasOwnRequest && ownRequest) onOpenOwnRequest(ownRequest);
+        return;
+      }
       const nextLegIds = indicesToLegIds(current.previewStart, current.previewEnd, legs);
       if (nextLegIds.length === 0) return;
       if (hasOwnRequest) {
-        setPendingProposalRange({ start: current.previewStart, end: current.previewEnd });
+        const unchanged =
+          ownRange && current.previewStart === ownRange.start && current.previewEnd === ownRange.end;
+        if (!unchanged) setPendingProposalRange({ start: current.previewStart, end: current.previewEnd });
       } else {
         onDraftLegIdsChange(nextLegIds);
       }
@@ -133,12 +155,13 @@ const UserBookingMatrix = ({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [drag, legs, hasOwnRequest, onDraftLegIdsChange]);
+  }, [drag, legs, hasOwnRequest, ownRequest, ownRange, onDraftLegIdsChange, onOpenOwnRequest]);
 
   const startDrag = (event: React.PointerEvent, mode: DragMode, range: { start: number; end: number }) => {
     if (saving) return;
     event.preventDefault();
     event.stopPropagation();
+    hasMovedRef.current = false;
     setDrag({
       mode,
       segStart: range.start,
@@ -248,7 +271,14 @@ const UserBookingMatrix = ({
                       title={it ? "Trascina per allungare/accorciare" : "Drag to extend/shorten"}
                     />
                   )}
-                  <span className="truncate">{getBookingStatusLabel(ownRequest.status, lang)}</span>
+                  <span className="flex items-center gap-1 truncate">
+                    {pendingApprovalStatuses.has(ownRequest.status) && <Hourglass size={11} className="shrink-0" />}
+                    {pendingApprovalStatuses.has(ownRequest.status)
+                      ? it
+                        ? "In attesa di approvazione"
+                        : "Pending approval"
+                      : getBookingStatusLabel(ownRequest.status, lang)}
+                  </span>
                   {!ownPlanChangePending && (
                     <span
                       onPointerDown={(event) => ownRange && startDrag(event, "end", ownRange)}
@@ -306,43 +336,39 @@ const UserBookingMatrix = ({
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Actions: only contextual ones tied to the drag itself — everything else (cancel, full
+          details) lives behind the details modal opened by clicking the bar, to keep this
+          view uncluttered. */}
       {hasOwnRequest && ownRequest ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {pendingProposalRange && (
-            <>
-              <button
-                type="button"
-                onClick={submitProposal}
-                disabled={saving}
-                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
-              >
-                <Check size={13} /> {it ? "Richiedi modifica" : "Request change"}
-              </button>
-              <button
-                type="button"
-                onClick={discardProposal}
-                disabled={saving}
-                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground disabled:opacity-50"
-              >
-                <X size={13} /> {it ? "Annulla modifica" : "Discard"}
-              </button>
-            </>
-          )}
-          {ownPlanChangePending && (
-            <span className="text-xs text-muted-foreground">
-              {it ? "Modifica in attesa di risposta." : "Change pending a response."}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => onCancelOwnRequest(ownRequest)}
-            disabled={saving}
-            className="glass-chip ml-auto inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive disabled:opacity-50"
-          >
-            <X size={13} /> {it ? "Annulla prenotazione" : "Cancel booking"}
-          </button>
-        </div>
+        (pendingProposalRange || ownPlanChangePending) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {pendingProposalRange && (
+              <>
+                <button
+                  type="button"
+                  onClick={submitProposal}
+                  disabled={saving}
+                  className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+                >
+                  <Check size={13} /> {it ? "Richiedi modifica" : "Request change"}
+                </button>
+                <button
+                  type="button"
+                  onClick={discardProposal}
+                  disabled={saving}
+                  className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground disabled:opacity-50"
+                >
+                  <X size={13} /> {it ? "Annulla modifica" : "Discard"}
+                </button>
+              </>
+            )}
+            {ownPlanChangePending && (
+              <span className="text-xs text-muted-foreground">
+                {it ? "Modifica in attesa di risposta." : "Change pending a response."}
+              </span>
+            )}
+          </div>
+        )
       ) : (
         <button
           type="button"
