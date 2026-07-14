@@ -17,6 +17,20 @@ const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 const LANGS = ["it", "en"] as const;
 const DEFAULT_LANG = "it";
 
+/**
+ * Fallbacks for when the `VITE_`-prefixed env vars (inlined into the client
+ * bundle at build time) are not present in the serverless-function runtime
+ * environment. Without these, every article/voyage would fail to fetch and be
+ * served as a 404 (noindex) to crawlers, while static pages kept working —
+ * mirrors the fallback already used in api/sitemap.ts and api/llms.ts.
+ *
+ * The publishable ("anon") key is public by design: it is already shipped in
+ * the client JS bundle and gated by row-level security.
+ */
+const FALLBACK_SUPABASE_URL = "https://ekwloweuicrqjjgabfdp.supabase.co";
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrd2xvd2V1aWNycWpqZ2FiZmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5Njk0NDgsImV4cCI6MjA5NTU0NTQ0OH0.8zzIIA3yrIdBe2T-L0GTIy75Cdv3p1hSR7HroZmEfqY";
+
 type Lang = (typeof LANGS)[number];
 
 const DEFAULT_DESCRIPTION: Record<Lang, string> = {
@@ -124,8 +138,8 @@ const extractParagraphs = (content: unknown): string[] => {
 };
 
 const supabaseFetch = async (pathAndQuery: string): Promise<any[] | null> => {
-  const baseUrl = process.env.VITE_SUPABASE_URL;
-  const apikey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const baseUrl = process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  const apikey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
   if (!baseUrl || !apikey) return null;
   try {
     const response = await fetch(`${baseUrl}/rest/v1/${pathAndQuery}`, {
