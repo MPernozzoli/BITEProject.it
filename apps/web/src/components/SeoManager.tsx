@@ -34,11 +34,14 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
   },
   "/manifesto": {
+    // Temporarily withheld while the Manifesto is being reworked: not linked in
+    // the header/footer and kept out of indexing until it's ready again.
     title: { en: "Manifesto | BITE", it: "Manifesto | BITE" },
     description: {
       en: "Read the values behind BITE: life at sea, intentional living, and independent storytelling.",
       it: "I valori dietro BITE: vita in mare, scelte intenzionali e narrazione indipendente.",
     },
+    robots: "noindex, nofollow",
   },
   "/logbook": {
     title: { en: "Logbook | BITE", it: "Diario di bordo | BITE" },

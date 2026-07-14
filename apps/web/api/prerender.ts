@@ -17,6 +17,20 @@ const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 const LANGS = ["it", "en"] as const;
 const DEFAULT_LANG = "it";
 
+/**
+ * Fallbacks for when the `VITE_`-prefixed env vars (inlined into the client
+ * bundle at build time) are not present in the serverless-function runtime
+ * environment. Without these, every article/voyage would fail to fetch and be
+ * served as a 404 (noindex) to crawlers, while static pages kept working —
+ * mirrors the fallback already used in api/sitemap.ts and api/llms.ts.
+ *
+ * The publishable ("anon") key is public by design: it is already shipped in
+ * the client JS bundle and gated by row-level security.
+ */
+const FALLBACK_SUPABASE_URL = "https://ekwloweuicrqjjgabfdp.supabase.co";
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrd2xvd2V1aWNycWpqZ2FiZmRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5Njk0NDgsImV4cCI6MjA5NTU0NTQ0OH0.8zzIIA3yrIdBe2T-L0GTIy75Cdv3p1hSR7HroZmEfqY";
+
 type Lang = (typeof LANGS)[number];
 
 const DEFAULT_DESCRIPTION: Record<Lang, string> = {
@@ -25,7 +39,7 @@ const DEFAULT_DESCRIPTION: Record<Lang, string> = {
 };
 
 /** Static-route meta, mirroring src/components/SeoManager.tsx. */
-const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: Record<Lang, string> }> = {
+const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: Record<Lang, string>; robots?: string }> = {
   "/": {
     title: { en: "BITE — Stories from S/Y Spritz", it: "BITE — Storie da S/Y Spritz" },
     description: DEFAULT_DESCRIPTION,
@@ -38,11 +52,15 @@ const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: 
     },
   },
   "/manifesto": {
+    // Temporarily withheld: the Manifesto is being reworked and must not be
+    // exposed to crawlers/AI. Kept here (as noindex) so a direct bot hit gets
+    // a proper 200 page rather than a soft 404; not linked or in the sitemap.
     title: { en: "Manifesto | BITE", it: "Manifesto | BITE" },
     description: {
       en: "Read the values behind BITE: life at sea, intentional living, and independent storytelling.",
       it: "I valori dietro BITE: vita in mare, scelte intenzionali e narrazione indipendente.",
     },
+    robots: "noindex, nofollow",
   },
   "/logbook": {
     title: { en: "Logbook | BITE", it: "Diario di bordo | BITE" },
@@ -124,8 +142,8 @@ const extractParagraphs = (content: unknown): string[] => {
 };
 
 const supabaseFetch = async (pathAndQuery: string): Promise<any[] | null> => {
-  const baseUrl = process.env.VITE_SUPABASE_URL;
-  const apikey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const baseUrl = process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  const apikey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
   if (!baseUrl || !apikey) return null;
   try {
     const response = await fetch(`${baseUrl}/rest/v1/${pathAndQuery}`, {
@@ -179,7 +197,7 @@ const buildStaticPage = (lang: Lang, path: string): PageData | null => {
     paths: { it: path, en: path },
     ogType: "website",
     status: 200,
-    robots: "index, follow",
+    robots: meta.robots ?? "index, follow",
   };
 };
 
@@ -634,7 +652,7 @@ const renderHtml = (lang: Lang, page: PageData): string => {
     })
     .join("\n    ");
 
-  const navLinks = ["/logbook", "/voyages", "/crew", "/manifesto", "/collaborations", "/contact"]
+  const navLinks = ["/logbook", "/voyages", "/crew", "/collaborations", "/contact"]
     .map((path) => `<a href="${withLang(lang, path)}">${escapeHtml(STATIC_ROUTES[path]?.title[lang] ?? path)}</a>`)
     .join(" · ");
 

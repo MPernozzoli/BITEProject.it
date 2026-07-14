@@ -10,7 +10,6 @@ BITE is the shared narrative of a couple — Massimo and Sami — living aboard 
 - [Logbook](/logbook): All published stories and articles from life aboard Spritz.
 - [Voyages](/voyages): Planned and completed sailing routes with dates, waypoints, and route metadata.
 - [Crew](/crew): Who is aboard — the humans and the dogs.
-- [Manifesto](/manifesto): The project's values and intentions.
 - [Collaborations](/collaborations): Partnerships and sponsorships.
 - [Contact](/contact): How to get in touch.
 - [Links](/links): Curated links and resources.
