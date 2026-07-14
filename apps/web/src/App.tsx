@@ -54,6 +54,7 @@ const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
+const AdminSpritzDiscoveries = lazy(() => import("./pages/AdminSpritzDiscoveries"));
 const AdminMedia = lazy(() => import("./pages/AdminMedia"));
 const AdminMail = lazy(() => import("./pages/AdminMail"));
 const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
@@ -178,6 +179,7 @@ const App = () => {
                     <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
                     <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />
                     <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />
+                    <Route path="/admin/spritz" element={<AdminRoute><AdminSpritzDiscoveries /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                     <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
                     <Route path="/profile" element={<AdminProfile />} />

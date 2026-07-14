@@ -23,6 +23,7 @@ import {
   CalendarDays,
   MapPinned,
   UploadCloud,
+  Wine,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -511,6 +512,7 @@ const AdminDashboard = () => {
     { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
     { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
     { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned, badge: 0 },
+    { to: "/admin/spritz", label: "Spritz", description: "Easter egg trovato da", icon: Wine, badge: 0 },
   ];
   const overviewMetrics = [
     { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },

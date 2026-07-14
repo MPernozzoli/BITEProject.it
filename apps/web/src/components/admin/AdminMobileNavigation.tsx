@@ -1,4 +1,4 @@
-import { CalendarCheck, Home, Mail, MapPinned, User, Images } from "lucide-react";
+import { CalendarCheck, Home, Mail, MapPinned, User, Images, Wine } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,7 @@ const adminNavItems = [
   { to: "/admin/media", label: "Media", icon: Images },
   { to: "/admin/mail", label: "Mail", icon: Mail },
   { to: "/admin/trackers", label: "Tracker", icon: MapPinned },
+  { to: "/admin/spritz", label: "Spritz", icon: Wine },
   { to: "/profile", label: "Profilo", icon: User, exact: true },
 ];
 

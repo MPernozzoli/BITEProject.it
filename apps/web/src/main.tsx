@@ -24,6 +24,7 @@ function initSpritzEasterEgg() {
     if (buffer !== "spritz") return;
     buffer = "";
     launching = true;
+    void import("./lib/spritz-discovery").then((mod) => mod.recordSpritzDiscovery());
     import("./lib/spritz-sail-game")
       .then((mod) => mod.mountSpritzSailGame(() => (launching = false)))
       .catch(() => (launching = false));
