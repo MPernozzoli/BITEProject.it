@@ -7,6 +7,7 @@
  *  - €20 fixed minimum per person, independent of how many legs are selected.
  *  - Variable part = planned nautical miles × configurable EUR/NM coefficient.
  *  - Modifiers are additive on each leg's variable part: night +10%, offshore +20%, danger +20%.
+ *  - The per-person amount is always rounded up to the next whole euro.
  *  - The total charged is the per-person amount multiplied by the party size.
  *
  * The contribution covers navigation and vessel operating expenses during the crossing.
@@ -50,6 +51,11 @@ export type PriorVoyageContributionBooking = {
 
 function roundCurrency(amount: number): number {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+/** Round up to the next whole euro (e.g. €103.45 → €104.00), immune to float noise. */
+function roundUpToNextEuro(amount: number): number {
+  return Math.ceil(roundCurrency(amount));
 }
 
 export function contributionPerNmEur(value?: number | null): number {
@@ -101,7 +107,7 @@ export function legDepositEur(leg: DepositLeg, opts: ContributionOptions = {}): 
 export function perPersonDepositEur(legs: DepositLeg[], opts: ContributionOptions = {}): number {
   if (legs.length === 0) return 0;
   const variable = legs.reduce((acc, leg) => acc + legDepositEur(leg, opts), 0);
-  return roundCurrency(contributionFixedMinimumEur(opts.fixedMinimumEur) + variable);
+  return roundUpToNextEuro(contributionFixedMinimumEur(opts.fixedMinimumEur) + variable);
 }
 
 /** Total contribution charged to the booker: per-person amount × party size. */

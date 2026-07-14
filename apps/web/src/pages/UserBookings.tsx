@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarCheck, Check, Clock3, Loader2, MessageSquare, Ship, X } from "lucide-react";
+import { CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
+import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
 import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
@@ -29,11 +29,9 @@ import {
   type BookingTaskCompletion,
   type BookingVoyage,
   type BookingWaypoint,
+  type VoyageBookingOccupancyRow,
   formatBookingDate,
-  formatBookingWindow,
   getBookingStatusClass,
-  getLegComplexity,
-  getLegDangerLevel,
   getBookingStatusLabel,
   getLegLabel,
   getLocalizedBookingVoyageName,
@@ -103,6 +101,7 @@ const UserBookings = () => {
   const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
+  const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
     null
   );
@@ -258,6 +257,27 @@ const UserBookings = () => {
     if (!loading && session?.user.id) void loadParticipations();
   }, [loadParticipations, loading, session?.user.id]);
 
+  const loadOccupancy = useCallback(async (voyageId: string) => {
+    if (!voyageId) {
+      setOccupancy([]);
+      return;
+    }
+    const { data, error } = await typedSupabase.rpc("list_voyage_booking_occupancy", { _voyage_id: voyageId });
+    if (error) {
+      // Non-fatal: the matrix just shows no companion rows.
+      setOccupancy([]);
+      return;
+    }
+    setOccupancy((data as VoyageBookingOccupancyRow[] | null) || []);
+  }, []);
+
+  useEffect(() => {
+    // Re-runs whenever `requests`/`requestLegs` refresh too, so occupancy stays in sync
+    // after a submit/cancel/propose-change round-trip without threading a reload call
+    // through every handler.
+    if (!loading && session?.user.id && selectedVoyageId) void loadOccupancy(selectedVoyageId);
+  }, [loadOccupancy, loading, session?.user.id, selectedVoyageId, requests, requestLegs]);
+
   const waypointsById = useMemo(
     () => Object.fromEntries(waypoints.map((waypoint) => [waypoint.id, waypoint])),
     [waypoints]
@@ -280,11 +300,25 @@ const UserBookings = () => {
     [requests, selectedVoyage?.booking_contribution_per_nm_eur, selectedVoyageId],
   );
 
-  const toggleLeg = (legId: string) => {
-    setSelectedLegIds((current) =>
-      current.includes(legId) ? current.filter((id) => id !== legId) : [...current, legId]
-    );
-  };
+  // The matrix edits a single active request per voyage; with several active requests
+  // (allowed server-side when their legs don't overlap) it targets the most recent one.
+  const ownRequestForSelectedVoyage = useMemo(
+    () =>
+      requests
+        .filter((request) => request.voyage_id === selectedVoyageId && !["cancelled", "rejected", "expired"].includes(request.status))
+        .sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime())[0] || null,
+    [requests, selectedVoyageId]
+  );
+  const ownRequestLegIdsForSelectedVoyage = useMemo(
+    () =>
+      ownRequestForSelectedVoyage
+        ? requestLegs
+            .filter((link) => link.booking_request_id === ownRequestForSelectedVoyage.id)
+            .map((link) => link.bookable_leg_id)
+        : [],
+    [requestLegs, ownRequestForSelectedVoyage]
+  );
+  const companionRows = useMemo(() => occupancy.filter((row) => !row.is_own), [occupancy]);
 
   const validateBookingRequest = () => {
     if (!selectedVoyageId || selectedLegIds.length === 0) {
@@ -443,6 +477,23 @@ const UserBookings = () => {
       toast.error(error.message);
       return;
     }
+    await loadData();
+  };
+
+  /** Traveller drags their own bar on the matrix: opens an admin-approval proposal, mirroring resizeBookingLegs on the admin Gantt. */
+  const proposeLegChange = async (requestId: string, proposedLegIds: string[]) => {
+    setSaving(true);
+    const { error } = await typedSupabase.rpc("user_propose_voyage_booking_legs", {
+      _booking_request_id: requestId,
+      _proposed_leg_ids: proposedLegIds,
+      _user_message: null,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(lang === "it" ? "Richiesta di modifica inviata al team." : "Change request sent to the team.");
     await loadData();
   };
 
@@ -715,94 +766,74 @@ const UserBookings = () => {
                           : "Legs have not been generated yet."}
                       </p>
                     ) : (
-                      selectedVoyageLegs.map((leg) => (
-                        <label key={leg.id} className="flex gap-3 rounded-[18px] border border-border/70 p-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={selectedLegIds.includes(leg.id)}
-                            onChange={() => toggleLeg(leg.id)}
-                            className="mt-1 h-4 w-4 accent-[hsl(var(--accent))]"
-                          />
-                          <span>
-                            <span className="block text-foreground">{getLegLabel(leg, waypointsById, lang)}</span>
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              {[
-                                formatBookingWindow(leg.starts_at_window_start, leg.starts_at_window_end, locale),
-                                formatBookingWindow(leg.ends_at_window_start, leg.ends_at_window_end, locale),
-                              ]
-                                .filter(Boolean)
-                                .join(" → ") || (lang === "it" ? "Date in definizione" : "Dates being refined")}
-                            </span>
-                            <ComplexityIndicator
-                              className="mt-2"
-                              level={getLegComplexity(leg)}
-                              dangerLevel={getLegDangerLevel(leg)}
-                              leg={leg}
-                              lang={lang}
-                            />
-                          </span>
-                        </label>
-                      ))
+                      <UserBookingMatrix
+                        lang={lang}
+                        legs={selectedVoyageLegs}
+                        waypointsById={waypointsById}
+                        saving={saving}
+                        ownRequest={ownRequestForSelectedVoyage}
+                        ownRequestLegIds={ownRequestLegIdsForSelectedVoyage}
+                        companions={companionRows}
+                        draftLegIds={selectedLegIds}
+                        onDraftLegIdsChange={setSelectedLegIds}
+                        onSubmitDraft={openBookingConfirm}
+                        onProposeChange={(requestId, proposedLegIds) => void proposeLegChange(requestId, proposedLegIds)}
+                        onCancelOwnRequest={(request) => void cancelBooking(request)}
+                      />
                     )}
                   </div>
 
-                  <div className="grid grid-cols-[120px_1fr] gap-3">
-                    <div>
-                      <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                        Persone
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={selectedVoyage?.booking_max_guests || undefined}
-                        value={partySize}
-                        onChange={(event) => setPartySize(event.target.value)}
-                        className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                        Note
-                      </label>
-                      <input
-                        value={message}
-                        onChange={(event) => setMessage(event.target.value)}
-                        className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                        placeholder={lang === "it" ? "Messaggio opzionale" : "Optional message"}
-                      />
-                    </div>
-                  </div>
+                  {!ownRequestForSelectedVoyage && (
+                    <>
+                      <div className="grid grid-cols-[120px_1fr] gap-3">
+                        <div>
+                          <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                            Persone
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max={selectedVoyage?.booking_max_guests || undefined}
+                            value={partySize}
+                            onChange={(event) => setPartySize(event.target.value)}
+                            className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                            Note
+                          </label>
+                          <input
+                            value={message}
+                            onChange={(event) => setMessage(event.target.value)}
+                            className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            placeholder={lang === "it" ? "Messaggio opzionale" : "Optional message"}
+                          />
+                        </div>
+                      </div>
 
-                  <div className="rounded-[24px] border border-border/70 bg-background/40 p-4">
-                    <div className="mb-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                        {lang === "it" ? "Dicci di te" : "Tell us about you"}
-                      </p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {lang === "it"
-                          ? "Ci serve per valutare incastri, sicurezza e vita a bordo. Evitiamo testo libero dove bastano scelte rapide."
-                          : "This helps us evaluate fit, safety and life aboard. We avoid free text where quick choices are enough."}
-                      </p>
-                    </div>
-                    <CandidateInfoForm
-                      value={candidateInfo}
-                      onChange={(nextInfo) => {
-                        candidateInfoTouchedRef.current = true;
-                        setCandidateInfo(nextInfo);
-                      }}
-                      lang={lang}
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={openBookingConfirm}
-                    disabled={saving || selectedLegIds.length === 0}
-                    className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm text-foreground transition-colors hover:text-accent disabled:opacity-50"
-                  >
-                    {saving ? <Loader2 size={15} className="animate-spin" /> : <Clock3 size={15} />}
-                    {lang === "it" ? "Invia richiesta" : "Send request"}
-                  </button>
+                      <div className="rounded-[24px] border border-border/70 bg-background/40 p-4">
+                        <div className="mb-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            {lang === "it" ? "Dicci di te" : "Tell us about you"}
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            {lang === "it"
+                              ? "Ci serve per valutare incastri, sicurezza e vita a bordo. Evitiamo testo libero dove bastano scelte rapide."
+                              : "This helps us evaluate fit, safety and life aboard. We avoid free text where quick choices are enough."}
+                          </p>
+                        </div>
+                        <CandidateInfoForm
+                          value={candidateInfo}
+                          onChange={(nextInfo) => {
+                            candidateInfoTouchedRef.current = true;
+                            setCandidateInfo(nextInfo);
+                          }}
+                          lang={lang}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </section>

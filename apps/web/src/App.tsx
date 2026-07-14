@@ -18,7 +18,7 @@ import {
   LegacyArticleRedirect,
   LegacyStoryRedirect,
 } from "@/components/LegacyLangRedirect";
-import { isCurrentAdminHostname } from "@/lib/admin-host";
+import { getMainSiteUrl, isCurrentAdminHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
 
 const createAppQueryClient = () =>
@@ -99,6 +99,24 @@ const RequireMainHost = () => {
   return <Outlet />;
 };
 
+/**
+ * Sends /profile to the main site even when reached from the admin subdomain — passkey/WebAuthn
+ * registration and sign-in fail there because Supabase's Relying Party ID/origins are scoped to
+ * the apex domain, not admin.biteproject.it. Uses a hard redirect since it crosses hostnames.
+ */
+const RequireMainHostForProfile = ({ children }: { children: JSX.Element }) => {
+  const location = useLocation();
+
+  if (isCurrentAdminHostname()) {
+    if (typeof window !== "undefined") {
+      window.location.replace(getMainSiteUrl(`${location.pathname}${location.search}${location.hash}`));
+    }
+    return null;
+  }
+
+  return children;
+};
+
 /** Localized routes used identically under /it and /en prefixes. */
 const LocalizedRoutes = () => (
   <Routes>
@@ -168,7 +186,8 @@ const App = () => {
                       <Route path="*" element={<NotFound />} />
                     </Route>
 
-                    {/* Auth, profile, and admin routes — shared across the main site and admin subdomain */}
+                    {/* Auth and admin routes — shared across the main site and admin subdomain. /profile is
+                        the exception: it's forced onto the main site below (see RequireMainHostForProfile). */}
                     <Route path="/login" element={<UserLogin />} />
                     <Route path="/signup" element={<UserLogin />} />
                     <Route path="/complete-profile" element={<CompleteProfile />} />
@@ -182,7 +201,14 @@ const App = () => {
                     <Route path="/admin/spritz" element={<AdminRoute><AdminSpritzDiscoveries /></AdminRoute>} />
                     <Route path="/admin/article/:id" element={<AdminRoute><ArticleEditor /></AdminRoute>} />
                     <Route path="/admin/profile" element={<Navigate to="/profile" replace />} />
-                    <Route path="/profile" element={<AdminProfile />} />
+                    <Route
+                      path="/profile"
+                      element={
+                        <RequireMainHostForProfile>
+                          <AdminProfile />
+                        </RequireMainHostForProfile>
+                      }
+                    />
                   </Routes>
                 </Suspense>
               </Layout>

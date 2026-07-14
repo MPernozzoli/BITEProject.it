@@ -101,7 +101,7 @@ export interface BookingRequest {
   confirmed_at: string | null;
   cancelled_at: string | null;
   updated_at: string;
-  plan_change_status?: "none" | "pending_user_approval" | "auto_accepted";
+  plan_change_status?: "none" | "pending_user_approval" | "pending_admin_approval" | "auto_accepted";
   plan_change_metadata?: Record<string, unknown> | null;
   plan_change_requested_at?: string | null;
   plan_change_resolved_at?: string | null;
@@ -112,6 +112,18 @@ export interface BookingRequest {
 export interface BookingRequestLeg {
   booking_request_id: string;
   bookable_leg_id: string;
+}
+
+/** Row returned by the `list_voyage_booking_occupancy` RPC for the public booking matrix. */
+export interface VoyageBookingOccupancyRow {
+  booking_request_id: string;
+  leg_ids: string[];
+  party_size: number;
+  status: VoyageBookingStatus;
+  is_own: boolean;
+  is_crew: boolean;
+  /** Only populated for requests overlapping the caller's own CONFIRMED legs, once both sides are confirmed. */
+  display_name: string | null;
 }
 
 export interface BookableLegAvailability extends BookableLeg {
@@ -573,6 +585,23 @@ export function getLegDurationHours(
   const arrMs = new Date(arr).getTime();
   if (Number.isNaN(depMs) || Number.isNaN(arrMs)) return null;
   return Math.max(0, (arrMs - depMs) / 3_600_000);
+}
+
+/**
+ * Estimated leg duration in whole/half days for the matrix header, e.g. "1 gg" or "2,5 gg" —
+ * never finer-grained values like "2,7 gg". Returns null when the duration is unknown.
+ */
+export function formatLegDurationDays(
+  hours: number | null | undefined,
+  lang: Language | "it" | "en" = "it"
+): string | null {
+  if (hours == null || Number.isNaN(hours) || hours <= 0) return null;
+  const days = Math.round((hours / 24) * 2) / 2;
+  if (days <= 0) return null;
+  const numberLabel = Number.isInteger(days)
+    ? `${days}`
+    : days.toFixed(1).replace(".", lang === "it" ? "," : ".");
+  return lang === "it" ? `${numberLabel} gg` : `${numberLabel} d`;
 }
 
 /** Fractional local (Europe/Rome) hour of an instant, e.g. 19.5 for 19:30. */

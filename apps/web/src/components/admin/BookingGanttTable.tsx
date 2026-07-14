@@ -29,8 +29,11 @@ import {
   type VoyageBookingStatus,
   capacityBlockingStatuses,
   formatBookingDate,
+  formatBookingWindow,
+  formatLegDurationDays,
   getBookingStatusClass,
   getBookingStatusLabel,
+  getLegDurationHours,
   getLegLabel,
 } from "@/lib/booking-utils";
 
@@ -543,9 +546,16 @@ const BookingGanttTable = ({
           {legs.map((leg) => {
             const occupied = legCapacity[leg.id] || 0;
             const full = occupied >= maxGuests;
+            const dateRange = formatBookingWindow(leg.starts_at_window_start, leg.ends_at_window_start, "it-IT");
+            const durationLabel = formatLegDurationDays(getLegDurationHours(leg), "it");
             return (
               <div key={leg.id} className="min-w-0 border-l border-border p-3 align-bottom">
                 <span className="block text-xs font-medium leading-snug">{getLegLabel(leg, waypointsById, "it")}</span>
+                {(dateRange || durationLabel) && (
+                  <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                    {[dateRange, durationLabel].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <div className="mt-1 flex items-center justify-between gap-1">
                   <span className={`text-[11px] ${full ? "text-amber-700" : "text-muted-foreground"}`}>
                     {occupied}/{maxGuests} pax

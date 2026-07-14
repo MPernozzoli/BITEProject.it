@@ -182,6 +182,8 @@
   },
   "active": "62e870696e5b08ca",
   "lastOpenFiles": [
+    "apps/web/src/components/booking/UserBookingMatrix.tsx",
+    "apps/web/supabase/migrations/20260714120000_user_booking_matrix.sql",
     "apps/web/src/pages/AdminSpritzDiscoveries.tsx",
     "apps/web/src/components/admin/AdminSpritzDiscoveries.tsx",
     "apps/web/src/lib/spritz-discovery.ts",
@@ -191,8 +193,6 @@
     "apps/web/dist/assets/useAuth-DcXymfhi.js",
     "apps/web/dist/assets/useArticleReads-BFKQvgJJ.js",
     "apps/web/dist/assets/spritz-sail-game-CdbkNze-.js",
-    "apps/web/dist/assets/booking-candidate-info-BHzf82GY.js",
-    "apps/web/dist/assets/article-instagram-story-Cc6DehgK.js",
     "apps/web/dist/assets/dogs-marina-DoQz8HFa.webp",
     "node_modules/linkifyjs/README.md",
     "AGENTS.md",

@@ -744,6 +744,23 @@ const AdminVoyageBookings = () => {
     await loadVoyageDetails(selectedVoyageId);
   };
 
+  /** Admin accepts/rejects a traveller-initiated leg-change proposal from the public matrix. */
+  const respondToUserPlanChange = async (requestId: string, action: "accept" | "reject") => {
+    setSaving(true);
+    const { error } = await typedSupabase.rpc("admin_respond_voyage_booking_plan_change", {
+      _booking_request_id: requestId,
+      _action: action,
+      _admin_note: null,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(action === "accept" ? "Modifica accettata." : "Modifica rifiutata.");
+    await loadVoyageDetails(selectedVoyageId);
+  };
+
   /** Creates brand-new single-leg bookings/invites from the Gantt table's "+" column pill. */
   const addPeopleToLeg = async (legId: string, profileIds: string[], inviteEmails: string[] = []) => {
     const uniqueProfileIds = [...new Set(profileIds)];
@@ -1201,6 +1218,57 @@ const AdminVoyageBookings = () => {
               ))}
             </select>
           </div>
+
+          {(() => {
+            const pendingUserProposals = requests.filter((request) => request.plan_change_status === "pending_admin_approval");
+            if (pendingUserProposals.length === 0) return null;
+            return (
+              <div className="mb-5 space-y-3">
+                {pendingUserProposals.map((request) => {
+                  const profile = profilesById[request.profile_id];
+                  const proposedLegIds = (request.plan_change_metadata?.proposed_leg_ids as string[] | undefined) || [];
+                  const proposedLabels = proposedLegIds
+                    .map((legId) => legs.find((leg) => leg.id === legId))
+                    .filter((leg): leg is BookableLeg => Boolean(leg))
+                    .map((leg) => getLegLabel(leg, waypointsById, "it"));
+                  const userMessage = request.plan_change_metadata?.user_message as string | undefined;
+                  return (
+                    <div key={request.id} className="rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                      <p className="font-semibold">
+                        {profile?.name || profile?.email || request.profile_id} · proposta modifica tratte
+                      </p>
+                      {userMessage && <p className="mt-1 text-sky-900/80">{userMessage}</p>}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {proposedLabels.map((label) => (
+                          <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void respondToUserPlanChange(request.id, "accept")}
+                          disabled={saving}
+                          className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                        >
+                          Accetta
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void respondToUserPlanChange(request.id, "reject")}
+                          disabled={saving}
+                          className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                        >
+                          Rifiuta
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {loading ? (
             <div className="rounded-[24px] border border-border/70 p-8 text-muted-foreground">

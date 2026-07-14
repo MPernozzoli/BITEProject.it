@@ -71,6 +71,11 @@ describe("booking deposit", () => {
     expect(perPersonDepositEur(legs, { fixedMinimumEur: 0 })).toBe(30 * DEFAULT_CONTRIBUTION_PER_NM_EUR);
   });
 
+  it("rounds the per-person amount up to the next whole euro", () => {
+    const legs = [makeLeg({ planned_nautical_miles: 92.72 })]; // €20 + €83.45 = €103.45 -> €104
+    expect(perPersonDepositEur(legs)).toBe(104);
+  });
+
   it("multiplies the per-person amount by the party size", () => {
     const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €20 + €9 = €29 per person
     expect(totalDepositEur(legs, 3)).toBe(87);
