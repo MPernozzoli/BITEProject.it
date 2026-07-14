@@ -1,15 +1,20 @@
 /**
- * Dynamic rendering for crawlers.
+ * Universal server-side rendering for every public URL.
  *
- * The public site is a client-rendered SPA, so social crawlers (which do not
- * execute JavaScript) would otherwise see the generic index.html meta on every
- * URL. middleware.ts rewrites bot requests here; this function returns a
- * lightweight HTML document with the correct per-page title, description,
- * canonical/hreflang, Open Graph tags, JSON-LD and text content.
+ * The public site is a client-rendered SPA. This function is served for ALL
+ * visitors (no User-Agent sniffing): it fetches the page content from Supabase
+ * with the public (publishable) key — the same data the SPA renders — and
+ * returns a complete HTML document that already contains the article title,
+ * body, metadata, canonical/hreflang, Open Graph/Twitter tags and JSON-LD.
  *
- * Content is fetched from Supabase REST with the public (publishable) key —
- * the same data the SPA itself renders.
+ * The document also embeds the built SPA shell (`index.html`), so React boots
+ * and takes over for interactive visitors. Content lives inside `#root`, so it
+ * is fully readable with JavaScript disabled and gets replaced on hydration —
+ * one single version of the content for browsers and crawlers alike.
  */
+
+import { getAppShell } from "./_lib/app-shell.js";
+import { renderTiptapToHtml, extractPlainText } from "./_lib/tiptap-html.js";
 
 const SITE_URL = "https://biteproject.it";
 const SITE_NAME = "BITE";
@@ -17,7 +22,7 @@ const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 const LANGS = ["it", "en"] as const;
 const DEFAULT_LANG = "it";
 
-type Lang = (typeof LANGS)[number];
+export type Lang = (typeof LANGS)[number];
 
 const DEFAULT_DESCRIPTION: Record<Lang, string> = {
   en: "BITE is a storytelling project from aboard S/Y Spritz about life at sea, refit, remote work, slow travel, and intentional living.",
@@ -138,7 +143,23 @@ const supabaseFetch = async (pathAndQuery: string): Promise<any[] | null> => {
   }
 };
 
-interface PageData {
+interface Breadcrumb {
+  label: string;
+  href?: string;
+}
+
+interface ArticleMeta {
+  intro?: string;
+  bodyHtml?: string;
+  breadcrumb?: Breadcrumb[];
+  authors?: Array<{ name: string; url?: string }>;
+  publishedAt?: string | null;
+  updatedAt?: string | null;
+  imageAlt?: string;
+  voyage?: { name: string; href: string } | null;
+}
+
+export interface PageData {
   title: string;
   description: string;
   /** Path without lang prefix, per language (for canonical + hreflang). */
@@ -151,6 +172,8 @@ interface PageData {
   links?: HtmlLink[];
   status: number;
   robots: string;
+  /** Rich article rendering (present only for article pages). */
+  article?: ArticleMeta;
 }
 
 interface HtmlLink {
@@ -364,9 +387,12 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
   if (!article) return notFoundPage(lang);
 
   const title = articleTitle(article, lang);
-  const paragraphs = extractParagraphs(lang === "it" ? article.content_it ?? article.content_en : article.content_en ?? article.content_it);
+  const contentDoc = lang === "it" ? article.content_it ?? article.content_en : article.content_en ?? article.content_it;
+  const paragraphs = extractParagraphs(contentDoc);
+  const bodyHtml = renderTiptapToHtml(contentDoc);
+  const intro = articleDescription(article, lang);
   const description =
-    articleDescription(article, lang) || paragraphs.join(" ").slice(0, 160) || DEFAULT_DESCRIPTION[lang];
+    intro || extractPlainText(contentDoc).slice(0, 160) || paragraphs.join(" ").slice(0, 160) || DEFAULT_DESCRIPTION[lang];
   const paths: Record<Lang, string> = {
     it: articlePath(article, "it"),
     en: articlePath(article, "en"),
@@ -407,6 +433,12 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
     });
   }
 
+  const breadcrumb: Breadcrumb[] = [
+    { label: "Home", href: withLang(lang, "/") },
+    { label: lang === "it" ? "Diario di bordo" : "Logbook", href: withLang(lang, "/logbook") },
+    { label: title },
+  ];
+
   return {
     title: `${title} | BITE`,
     description,
@@ -417,6 +449,18 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
     status: 200,
     robots: "index, follow",
     links: internalLinks,
+    article: {
+      intro,
+      bodyHtml,
+      breadcrumb,
+      authors: authors.map((author) => ({ name: author.name, url: absoluteUrl(`/profile/${author.id}`) })),
+      publishedAt: article.published_at || null,
+      updatedAt: article.updated_at || null,
+      imageAlt: title,
+      voyage: linkedVoyage
+        ? { name: voyageName(linkedVoyage, lang), href: withLang(lang, voyagePath(linkedVoyage)) }
+        : null,
+    },
     sections: [
       {
         heading: lang === "it" ? "Collegamenti interni" : "Internal links",
@@ -582,7 +626,101 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
   };
 };
 
-const renderHtml = (lang: Lang, page: PageData): string => {
+const renderLink = (link: HtmlLink) => {
+  const rel = link.rel ? ` rel="${escapeHtml(link.rel)}"` : "";
+  return `<li><a href="${escapeHtml(link.href)}"${rel}>${escapeHtml(link.label)}</a>${link.date ? ` <time datetime="${escapeHtml(link.date)}">${escapeHtml(link.date.slice(0, 10))}</time>` : ""}${link.description ? `<p>${escapeHtml(link.description)}</p>` : ""}</li>`;
+};
+
+/** ISO date rendered with a machine-readable <time> and a short label. */
+const timeTag = (iso: string | null | undefined, label: string): string => {
+  if (!iso) return "";
+  const day = iso.slice(0, 10);
+  return `<span class="ssr-meta-item">${escapeHtml(label)} <time datetime="${escapeHtml(iso)}">${escapeHtml(day)}</time></span>`;
+};
+
+/** Rich, JS-free article body rendered inside #root (replaced on hydration). */
+const renderArticleFragment = (lang: Lang, page: PageData): string => {
+  const article = page.article!;
+  const title = escapeHtml(page.title.replace(/ \| BITE$/, ""));
+  const breadcrumb = (article.breadcrumb || [])
+    .map((crumb, index, all) => {
+      const isLast = index === all.length - 1;
+      const label = escapeHtml(crumb.label);
+      const item = crumb.href && !isLast ? `<a href="${escapeHtml(crumb.href)}">${label}</a>` : `<span aria-current="page">${label}</span>`;
+      return `<li>${item}</li>`;
+    })
+    .join("");
+  const authors = (article.authors || [])
+    .map((author) => (author.url ? `<a href="${escapeHtml(author.url)}" rel="author">${escapeHtml(author.name)}</a>` : `<span>${escapeHtml(author.name)}</span>`))
+    .join(", ");
+  const publishedLabel = lang === "it" ? "Pubblicato il" : "Published on";
+  const updatedLabel = lang === "it" ? "Aggiornato il" : "Updated on";
+  const meta = [
+    authors ? `<span class="ssr-meta-item">${lang === "it" ? "Di" : "By"} ${authors}</span>` : "",
+    timeTag(article.publishedAt, publishedLabel),
+    article.updatedAt && article.updatedAt !== article.publishedAt ? timeTag(article.updatedAt, updatedLabel) : "",
+  ]
+    .filter(Boolean)
+    .join("");
+  const hero = page.image
+    ? `<img class="ssr-article-cover" src="${escapeHtml(page.image)}" alt="${escapeHtml(article.imageAlt || page.title)}" loading="eager" fetchpriority="high" />`
+    : "";
+  const intro = article.intro ? `<p class="ssr-article-intro">${escapeHtml(article.intro)}</p>` : "";
+  const voyage = article.voyage
+    ? `<p class="ssr-article-voyage">${lang === "it" ? "Viaggio collegato" : "Linked voyage"}: <a href="${escapeHtml(article.voyage.href)}">${escapeHtml(article.voyage.name)}</a></p>`
+    : "";
+  // article.bodyHtml is produced by the whitelisting server serializer — safe.
+  const body = article.bodyHtml
+    ? `<div class="ssr-article-body">${article.bodyHtml}</div>`
+    : (page.paragraphs || []).map((text) => `<p>${escapeHtml(text)}</p>`).join("");
+  const internalLinks = page.links?.length
+    ? `<nav class="ssr-internal-links" aria-label="${lang === "it" ? "Collegamenti interni" : "Internal links"}"><h2>${lang === "it" ? "Collegamenti interni" : "Internal links"}</h2><ul>${page.links.map(renderLink).join("")}</ul></nav>`
+    : "";
+
+  return `<div class="ssr-content" data-ssr="article">
+      <nav class="ssr-breadcrumb" aria-label="Breadcrumb"><ol>${breadcrumb}</ol></nav>
+      <article>
+        <header class="ssr-article-header">
+          <h1>${title}</h1>
+          ${meta ? `<div class="ssr-article-meta">${meta}</div>` : ""}
+        </header>
+        ${hero}
+        ${intro}
+        ${body}
+        ${voyage}
+      </article>
+      ${internalLinks}
+    </div>`;
+};
+
+/** Generic (non-article) content fragment: paragraphs + sections. */
+const renderGenericFragment = (lang: Lang, page: PageData): string => {
+  const title = escapeHtml(page.title.replace(/ \| BITE$/, ""));
+  const bodyParagraphs = (page.paragraphs || []).map((text) => `<p>${escapeHtml(text)}</p>`).join("");
+  const bodySections = (page.sections || [])
+    .map((section) => {
+      const body = section.body ? `<p>${escapeHtml(section.body)}</p>` : "";
+      const links = section.links?.length ? `<ul>${section.links.map(renderLink).join("")}</ul>` : "";
+      return `<section><h2>${escapeHtml(section.heading)}</h2>${body}${links}</section>`;
+    })
+    .join("");
+  const hero = page.image && page.ogType === "article"
+    ? `<img class="ssr-article-cover" src="${escapeHtml(page.image)}" alt="${title}" loading="eager" />`
+    : "";
+  return `<div class="ssr-content" data-ssr="${escapeHtml(page.ogType)}">
+      <h1>${title}</h1>
+      ${hero}
+      <p>${escapeHtml(page.description)}</p>
+      ${bodyParagraphs}
+      ${bodySections}
+    </div>`;
+};
+
+export const renderContentFragment = (lang: Lang, page: PageData): string =>
+  page.article ? renderArticleFragment(lang, page) : renderGenericFragment(lang, page);
+
+/** Build the per-page <head> tags (title, meta, canonical, OG, Twitter, JSON-LD). */
+export const buildHeadTags = (lang: Lang, page: PageData, includeBaseGraph: boolean): string => {
   const canonical = `${SITE_URL}${withLang(lang, page.paths[lang])}`;
   const image = page.image || DEFAULT_OG_IMAGE;
   const title = escapeHtml(page.title);
@@ -593,8 +731,9 @@ const renderHtml = (lang: Lang, page: PageData): string => {
     `<link rel="alternate" hreflang="x-default" href="${SITE_URL}${withLang(DEFAULT_LANG, page.paths[DEFAULT_LANG])}" />`,
   ].join("\n    ");
 
-  const jsonLdBlocks: Record<string, unknown>[] = [
-    {
+  const jsonLdBlocks: Record<string, unknown>[] = [];
+  if (includeBaseGraph) {
+    jsonLdBlocks.push({
       "@context": "https://schema.org",
       "@graph": [
         {
@@ -615,35 +754,11 @@ const renderHtml = (lang: Lang, page: PageData): string => {
           inLanguage: ["en", "it"],
         },
       ],
-    },
-  ];
+    });
+  }
   if (page.jsonLd) jsonLdBlocks.push(page.jsonLd);
 
-  const bodyParagraphs = (page.paragraphs || [])
-    .map((text) => `<p>${escapeHtml(text)}</p>`)
-    .join("\n      ");
-  const renderLink = (link: HtmlLink) => {
-    const rel = link.rel ? ` rel="${escapeHtml(link.rel)}"` : "";
-    return `<li><a href="${escapeHtml(link.href)}"${rel}>${escapeHtml(link.label)}</a>${link.date ? ` <time datetime="${escapeHtml(link.date)}">${escapeHtml(link.date.slice(0, 10))}</time>` : ""}${link.description ? `<p>${escapeHtml(link.description)}</p>` : ""}</li>`;
-  };
-  const bodySections = (page.sections || [])
-    .map((section) => {
-      const body = section.body ? `<p>${escapeHtml(section.body)}</p>` : "";
-      const links = section.links?.length ? `<ul>\n        ${section.links.map(renderLink).join("\n        ")}\n      </ul>` : "";
-      return `<section>\n      <h2>${escapeHtml(section.heading)}</h2>\n      ${body}\n      ${links}\n    </section>`;
-    })
-    .join("\n    ");
-
-  const navLinks = ["/logbook", "/voyages", "/crew", "/manifesto", "/collaborations", "/contact"]
-    .map((path) => `<a href="${withLang(lang, path)}">${escapeHtml(STATIC_ROUTES[path]?.title[lang] ?? path)}</a>`)
-    .join(" · ");
-
-  return `<!doctype html>
-<html lang="${lang}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${title}</title>
+  return `<title>${title}</title>
     <meta name="description" content="${description}" />
     <meta name="robots" content="${page.robots}" />
     <link rel="canonical" href="${canonical}" />
@@ -655,22 +770,63 @@ const renderHtml = (lang: Lang, page: PageData): string => {
     <meta property="og:url" content="${canonical}" />
     <meta property="og:locale" content="${lang === "it" ? "it_IT" : "en_US"}" />
     <meta property="og:image" content="${escapeHtml(image)}" />
+    <meta property="og:image:alt" content="${title}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:url" content="${canonical}" />
     <meta name="twitter:image" content="${escapeHtml(image)}" />
-    ${jsonLdBlocks.map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`).join("\n    ")}
+    ${jsonLdBlocks.map((block) => `<script type="application/ld+json">${JSON.stringify(block)}</script>`).join("\n    ")}`;
+};
+
+/**
+ * Merge the per-page head + server-rendered content into the built SPA shell,
+ * so the document is fully readable without JS AND boots React for interactivity.
+ * The shell already carries the base Organization/WebSite JSON-LD, so we only
+ * add the page-specific graph here to avoid duplication.
+ */
+export const injectIntoShell = (shell: string, lang: Lang, page: PageData): string => {
+  const headTags = buildHeadTags(lang, page, false);
+  const content = renderContentFragment(lang, page);
+
+  let html = shell;
+  // Correct <html lang>.
+  html = html.replace(/<html[^>]*>/i, `<html lang="${lang}">`);
+  // Remove the generic SEO tags baked into index.html that we override per page.
+  html = html
+    .replace(/<title>[\s\S]*?<\/title>/i, "")
+    .replace(/<meta\s+name="description"[^>]*>/i, "")
+    .replace(/<meta\s+name="robots"[^>]*>/i, "")
+    .replace(/<link\s+rel="canonical"[^>]*>/i, "")
+    .replace(/<link\s+rel="alternate"\s+hreflang="[^"]*"[^>]*>/gi, "")
+    .replace(/<meta\s+property="og:[^"]*"[^>]*>/gi, "")
+    .replace(/<meta\s+name="twitter:[^"]*"[^>]*>/gi, "");
+  // Inject per-page head tags.
+  html = html.replace(/<\/head>/i, `    ${headTags}\n  </head>`);
+  // Replace the generic <noscript> block; the real content covers no-JS users now.
+  html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, "");
+  // Inject the server-rendered content into #root (React replaces it on mount).
+  html = html.replace(/<div id="root">\s*<\/div>/i, `<div id="root">${content}</div>`);
+  return html;
+};
+
+/** Standalone document used only when the SPA shell cannot be loaded. */
+const renderStandaloneDocument = (lang: Lang, page: PageData): string => {
+  const headTags = buildHeadTags(lang, page, true);
+  const content = renderContentFragment(lang, page);
+  const navLinks = ["/logbook", "/voyages", "/crew", "/manifesto", "/collaborations", "/contact"]
+    .map((path) => `<a href="${withLang(lang, path)}">${escapeHtml(STATIC_ROUTES[path]?.title[lang] ?? path)}</a>`)
+    .join(" · ");
+  return `<!doctype html>
+<html lang="${lang}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    ${headTags}
   </head>
   <body>
     <header><a href="${SITE_URL}${withLang(lang, "/")}">${SITE_NAME}</a></header>
-    <main>
-      <h1>${title}</h1>
-      ${page.image ? `<img src="${escapeHtml(page.image)}" alt="${title}" loading="eager" fetchpriority="high" />` : ""}
-      <p>${description}</p>
-      ${bodyParagraphs}
-      ${bodySections}
-    </main>
+    <div id="root">${content}</div>
     <footer><nav>${navLinks}</nav></footer>
   </body>
 </html>
@@ -698,6 +854,7 @@ const buildPage = async (lang: Lang, path: string): Promise<PageData> => {
 
 interface NodeRequest {
   url?: string;
+  headers?: Record<string, unknown>;
 }
 
 interface NodeResponse {
@@ -706,21 +863,43 @@ interface NodeResponse {
   end(body: string): void;
 }
 
+/**
+ * Cache policy: short server freshness so newly published / edited articles
+ * appear within minutes without a rebuild, plus a long stale-while-revalidate
+ * window so the CDN serves instantly while it refreshes in the background.
+ * Never a permanent cache — content is dynamic.
+ */
+const CACHE_OK = "public, s-maxage=300, stale-while-revalidate=86400";
+const CACHE_NOT_FOUND = "public, s-maxage=60, stale-while-revalidate=300";
+
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {
   // req.url is path-relative on the Node runtime; the base is ignored if absolute.
   const url = new URL(req.url || "/", SITE_URL);
-  const rawPath = url.searchParams.get("path") || "/";
+  // Prefer the explicit ?path= set by the middleware rewrite; fall back to the
+  // real request path so the endpoint also works when hit directly.
+  const rawPath = url.searchParams.get("path") || url.pathname || "/";
   const pathname = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
 
   const lang = getLang(pathname);
   const path = stripLang(pathname);
 
-  const page = await buildPage(lang, path);
-  const html = renderHtml(lang, page);
+  let page: PageData;
+  try {
+    page = await buildPage(lang, path);
+  } catch {
+    // Supabase unreachable/slow: never 500 the public URL. Serve a minimal but
+    // valid document so crawlers and users still get a usable page.
+    page = notFoundPage(lang);
+    page.status = 503;
+  }
+
+  const shell = await getAppShell(req);
+  const html = shell ? injectIntoShell(shell, lang, page) : renderStandaloneDocument(lang, page);
 
   res.statusCode = page.status;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
-  res.setHeader("X-Bite-Prerender", "1");
+  res.setHeader("Cache-Control", page.status === 200 ? CACHE_OK : CACHE_NOT_FOUND);
+  res.setHeader("X-Bite-SSR", "1");
+  res.setHeader("Vary", "Accept-Encoding");
   res.end(html);
 }

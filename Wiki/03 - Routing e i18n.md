@@ -47,12 +47,14 @@ Protette da `AdminRoute`. Vedi [[16 - Admin]].
 
 `RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.
 
-## SEO & prerender
-- `SeoManager` + `StructuredData` (JSON-LD) sulle pagine pubbliche.
+## SEO & SSR universale
+- `SeoManager` + `StructuredData` (JSON-LD) gestiscono i metadati lato client dopo l'hydration.
 - Sitemap dinamica via `/api/sitemap` (rewrite in `vercel.json` da `/sitemap-live.xml`) e `scripts/generate-sitemap.mjs` in build.
 - `x-default` e la shell HTML iniziale puntano alla home italiana (`/it`) per evitare che Google Italia mostri titolo/descrizione inglesi sulla root.
-- Prerender per crawler: `apps/web/api/prerender.ts` + `middleware.ts`. Le pagine indice `/it|en/logbook` e `/it|en/voyages` servono HTML con link `<a>` bilingui verso tutti gli articoli/viaggi pubblici; le pagine dettaglio includono testo, metadati, JSON-LD e link interni.
-- Gli URL pubblici legacy senza prefisso lingua (`/logbook`, `/voyages`, `/manifesto`, ecc.) vengono reindirizzati a `/it/*` o `/en/*` già in middleware, prima del prerender, per evitare duplicati indicizzabili.
+- **SSR universale (nessuno sniffing dello User-Agent):** `middleware.ts` riscrive **ogni** richiesta GET/HEAD delle rotte pubbliche verso `apps/web/api/render.ts`, che recupera il contenuto da Supabase e restituisce un documento HTML completo (titolo, corpo articolo, metadati, canonical/hreflang, Open Graph/Twitter, JSON-LD `BlogPosting`/`Trip`). Il contenuto è iniettato dentro `#root` della shell SPA buildata, quindi è leggibile senza JavaScript **e** React fa il boot/hydration per l'interattività. Browser, crawler e agenti IA ricevono lo stesso HTML.
+- Status: `200` per contenuti pubblicati, `404` reale per slug inesistenti o non pubblicati (bozze/programmati).
+- Corpo articolo (TipTap JSON) serializzato server-side in HTML sanitizzato da `apps/web/api/_lib/tiptap-html.ts` (whitelist di tag/attributi, URL validati, iframe solo YouTube).
+- Gli URL pubblici legacy senza prefisso lingua (`/logbook`, `/voyages`, `/manifesto`, ecc.) vengono reindirizzati a `/it/*` o `/en/*` già in middleware, prima dell'SSR, per evitare duplicati indicizzabili.
 - Header `X-Robots-Tag: noindex` su `/admin*`, `/login`, `/signup`, `/bookings`, `/profile`, `/newsletter/confirm` (in `vercel.json`).
 
 ## Collegamenti

@@ -26,7 +26,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 ### Backend & Dati
 - [[08 - Supabase]] — Postgres, Auth, Storage, RLS
 - [[09 - Edge Functions]] — le 28 function serverless
-- [[10 - API Vercel]] — endpoint `/api/*` (pagamenti, sitemap, prerender)
+- [[10 - API Vercel]] — endpoint `/api/*` (pagamenti, sitemap, SSR)
 - [[17 - Content Model]] — modello dati editoriale/geospaziale
 
 ### Funzionalità chiave

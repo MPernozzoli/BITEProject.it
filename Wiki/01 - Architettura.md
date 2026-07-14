@@ -26,7 +26,7 @@ Browser ──► Vercel (SPA + edge middleware.ts) ──► index.html + bundl
                                                      │
    Supabase JS client ──► Postgres (RLS) / Auth / Storage / Edge Functions
                                                      │
-   /api/* (Vercel Functions) ──► pagamenti Bunq, sitemap, prerender
+   /api/* (Vercel Functions) ──► pagamenti Bunq, sitemap, SSR (render.ts)
 ```
 
 ## Principi architetturali

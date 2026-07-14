@@ -16,14 +16,16 @@ const rewrite = (destination: URL) =>
   });
 
 /**
- * Crawlers that don't (reliably) execute JavaScript get a prerendered HTML
- * document from /api/prerender with correct per-page meta and content.
+ * Public content routes are server-rendered for EVERY visitor (no User-Agent
+ * sniffing): the request is rewritten to /api/render, which returns a complete
+ * HTML document (title, body, meta, JSON-LD) that also boots the React SPA.
+ * This matches the localized public routes declared in the app router.
  */
-const BOT_UA_RE =
-  /googlebot|bingbot|yandex|baiduspider|duckduckbot|slurp|facebookexternalhit|facebot|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|pinterest(?:bot)?|redditbot|applebot|ia_archiver|embedly|quora link preview|outbrain|vkshare|skypeuripreview|gptbot|chatgpt-user|oai-searchbot|claudebot|claude-web|anthropic-ai|perplexitybot|ccbot|bytespider|amazonbot/i;
+const SSR_PATH_RE =
+  /^\/(it|en)(\/(crew|manifesto|links|collaborations|contact|logbook|voyages)(\/[^/]+)?(\/[^/]+)?)?$/i;
 
-/** Paths that must never be prerendered (private/system areas). */
-const PRERENDER_EXCLUDE_RE =
+/** Paths that are never server-rendered (private/system areas, assets, APIs). */
+const SSR_EXCLUDE_RE =
   /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter)(\/|$)/i;
 const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;
 const LEGACY_PUBLIC_PATH_RE =
@@ -84,17 +86,17 @@ export default function middleware(request: Request) {
       return Response.redirect(target, 302);
     }
 
-    // Dynamic rendering for crawlers: serve prerendered HTML with the
-    // correct per-page meta (the SPA shell is identical on every URL).
-    const userAgent = request.headers.get("user-agent") || "";
+    // Universal server-side rendering: every visitor (browser, crawler, AI
+    // agent) gets the same full HTML document with the article content already
+    // in the markup. No User-Agent detection, no bot-only variant.
     if (
-      request.method === "GET" &&
-      BOT_UA_RE.test(userAgent) &&
+      (request.method === "GET" || request.method === "HEAD") &&
       !PUBLIC_FILE_RE.test(url.pathname) &&
-      !PRERENDER_EXCLUDE_RE.test(url.pathname)
+      !SSR_EXCLUDE_RE.test(url.pathname) &&
+      SSR_PATH_RE.test(url.pathname)
     ) {
       const target = new URL(url);
-      target.pathname = "/api/prerender";
+      target.pathname = "/api/render";
       target.search = `?path=${encodeURIComponent(url.pathname)}`;
       return rewrite(target);
     }

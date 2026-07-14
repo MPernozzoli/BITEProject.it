@@ -30,7 +30,7 @@ iubgicrwfovrnvoqr/
 │   └── migration/     # schema storico/consolidato
 ├── scripts/           # copy-subapp-builds (composizione dist root)
 ├── dist/              # output build root generato: web + /pack + /Data
-├── middleware.ts      # edge middleware (prerender/routing)
+├── middleware.ts      # edge middleware (SSR/routing)
 ├── vercel.json        # rewrite + header → [[18 - Deploy e Configurazione]]
 └── package.json       # workspace + script root → [[20 - Comandi e Workflow]]
 ```
