@@ -7,6 +7,7 @@ export type CandidateInfo = {
   languageLevels: Record<string, CandidateLanguageLevel>;
   otherLanguages: string;
   workDuringVoyage: string;
+  workRole: string;
   foodRegimes: string[];
   allergies: string;
   motivation: string;
@@ -73,6 +74,7 @@ export const emptyCandidateInfo: CandidateInfo = {
   languageLevels: {},
   otherLanguages: "",
   workDuringVoyage: "",
+  workRole: "",
   foodRegimes: [],
   allergies: "",
   motivation: "",
@@ -105,6 +107,7 @@ const reusableCandidateKeys: Array<keyof CandidateInfo> = [
   "languageLevels",
   "otherLanguages",
   "workDuringVoyage",
+  "workRole",
   "foodRegimes",
   "allergies",
 ];

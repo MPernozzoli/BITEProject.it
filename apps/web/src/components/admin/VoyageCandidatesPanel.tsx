@@ -294,6 +294,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
         <InfoLine label="Eta" value={candidateInfo.ageRange || "Non indicata"} />
         <InfoLine label="Lingue" value={`${valueList(languageLabels)}${candidateInfo.otherLanguages ? `, ${candidateInfo.otherLanguages}` : ""}`} />
         <InfoLine label="Lavoro remoto" value={candidateInfo.workDuringVoyage || "Non indicato"} />
+        <InfoLine label="Professione" value={candidateInfo.workRole || "Non indicata"} />
         <InfoLine label="Cibo/allergie" value={`${valueList(candidateInfo.foodRegimes)}${candidateInfo.allergies ? ` · ${candidateInfo.allergies}` : ""}`} />
         <div className="md:col-span-2">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Motivazione</p>

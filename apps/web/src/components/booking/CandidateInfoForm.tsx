@@ -336,6 +336,21 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
             </button>
           ))}
         </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            {lang === "it" ? "Che lavoro fai? (facoltativo)" : "What do you do for work? (optional)"}
+          </span>
+          <input
+            value={normalizedValue.workRole}
+            onChange={(event) => update("workRole", event.target.value)}
+            placeholder={
+              lang === "it"
+                ? "Es. sviluppatore, medico, insegnante..."
+                : "E.g. developer, doctor, teacher..."
+            }
+            className="w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+          />
+        </label>
       </fieldset>
 
       <fieldset className="space-y-3">

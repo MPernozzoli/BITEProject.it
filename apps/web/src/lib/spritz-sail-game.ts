@@ -254,7 +254,7 @@ const HUD_CSS = /* css */ `
   .spritz-game-hint {
     position: absolute;
     right: 26px;
-    top: 22px;
+    top: 74px;
     font-size: 10px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
@@ -262,6 +262,77 @@ const HUD_CSS = /* css */ `
     pointer-events: none;
     text-align: right;
     line-height: 2;
+  }
+  /* Soundtrack control, top-right above the instructions. */
+  .spritz-audio {
+    position: absolute;
+    top: 20px;
+    right: 26px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px 7px 9px;
+    border-radius: 13px;
+    background: rgba(9, 20, 34, 0.42);
+    border: 1px solid rgba(246, 239, 226, 0.1);
+    backdrop-filter: blur(9px);
+    -webkit-backdrop-filter: blur(9px);
+    pointer-events: auto;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 8px rgba(5, 11, 20, 0.8);
+  }
+  .spritz-audio button {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(246, 239, 226, 0.3);
+    color: #f6efe2;
+    font-size: 9px;
+    line-height: 1;
+    transition: background 160ms;
+  }
+  .spritz-audio button:hover { background: rgba(246, 239, 226, 0.14); }
+  .spritz-audio .spritz-audio-label {
+    opacity: 0.72;
+    white-space: nowrap;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .spritz-audio input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 74px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(246, 239, 226, 0.25);
+    outline: none;
+    cursor: pointer;
+  }
+  .spritz-audio input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #9fcfd6;
+    cursor: pointer;
+  }
+  .spritz-audio input[type="range"]::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border: none;
+    border-radius: 50%;
+    background: #9fcfd6;
+    cursor: pointer;
   }
   .spritz-lantern-toast {
     position: absolute;
@@ -363,6 +434,11 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   overlay.insertAdjacentHTML(
     "beforeend",
     `<div class="spritz-game-title">S/Y Spritz<small>Raccogli le lanterne · Buon vento</small></div>
+     <div class="spritz-audio">
+       <button class="spritz-audio-toggle" type="button" aria-label="Play/pausa musica">❚❚</button>
+       <span class="spritz-audio-label">♪ Any Day Now</span>
+       <input class="spritz-audio-vol" type="range" min="0" max="100" value="35" aria-label="Volume musica" />
+     </div>
      <div class="spritz-game-hint">A/D — timone<br>W lasca · S cazza<br>SPAZIO — issa/ammaina<br>ESC — esci</div>
      <div class="spritz-lantern-toast">Lanterna recuperata</div>
      <div class="spritz-game-hud">
@@ -423,6 +499,37 @@ export function mountSpritzSailGame(onClose?: () => void): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   const soundscape = createSoundscape();
+
+  // ---------------------------------------------------------------- Soundtrack
+  const audioToggle = overlay.querySelector<HTMLButtonElement>(".spritz-audio-toggle")!;
+  const audioVol = overlay.querySelector<HTMLInputElement>(".spritz-audio-vol")!;
+  const music = new Audio("/audio/any-day-now-spritz.mp3");
+  music.loop = true;
+  music.volume = Number(audioVol.value) / 100; // medium/low default (35%)
+  let musicWanted = true; // false only if the player explicitly pauses
+  const tryPlayMusic = () => {
+    if (!musicWanted) return;
+    music.play().catch(() => {
+      /* autoplay blocked — the first keypress gesture will start it */
+    });
+  };
+  music.addEventListener("play", () => (audioToggle.textContent = "❚❚"));
+  music.addEventListener("pause", () => (audioToggle.textContent = "▶"));
+  audioToggle.addEventListener("click", () => {
+    if (music.paused) {
+      musicWanted = true;
+      tryPlayMusic();
+    } else {
+      musicWanted = false;
+      music.pause();
+    }
+    audioToggle.blur(); // hand keyboard focus back to the game
+  });
+  audioVol.addEventListener("input", () => {
+    music.volume = Number(audioVol.value) / 100;
+  });
+  audioVol.addEventListener("change", () => audioVol.blur());
+  tryPlayMusic();
 
   // ---------------------------------------------------------------- Scene
   const scene = new THREE.Scene();
@@ -764,6 +871,7 @@ export function mountSpritzSailGame(onClose?: () => void): void {
       return;
     }
     soundscape?.resume();
+    tryPlayMusic(); // start the soundtrack on the first key gesture if autoplay was blocked
     const k = normalizeKey(e);
     if (k === " " || k === "spacebar") {
       // Toggle hoist/douse: raise the sails or drop them onto the boom.
@@ -794,6 +902,8 @@ export function mountSpritzSailGame(onClose?: () => void): void {
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", onResize);
     soundscape?.dispose();
+    music.pause();
+    music.src = "";
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       mesh.geometry?.dispose?.();

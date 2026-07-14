@@ -21,6 +21,14 @@ Supabase è il **backend unico** del progetto.
 | **RLS** | policy di sicurezza per riga (definite nelle migrazioni) |
 | **RPC** | funzioni SQL richiamate dal client (es. `request_voyage_booking`) |
 
+## Account di test (agenti)
+Esiste un utente di test creato per far autenticare gli agenti AI e verificare i flussi loggati (booking, `candidate_info`, ecc.).
+
+- **email:** `claude-test@biteproject.it` · **user id:** `f1b264cf-1f1c-4540-9d67-c00d1cb4d1f1` · non admin.
+- **Credenziali (password) solo in `AGENTS.md`** (file gitignored): mai committarle né duplicarle in note tracciate.
+- Creato via SQL admin: riga `auth.users` (email confermata), `auth.identities` provider `email`, `public.profiles` (`preferred_language = it`).
+- La UI di login è **passwordless** (OTP email / magic link, OAuth, passkey): la password serve solo per il **login programmatico** in test, es. `supabase.auth.signInWithPassword(...)` da console del browser. Il provider email/password è attivo a livello API anche se non esposto nella UI → dettagli e snippet in `AGENTS.md`.
+
 ## Migrazioni (`apps/web/supabase/migrations/`)
 **37+ file**, naming `AAAAMMGGhhmmss_descrizione.sql`. Le più recenti riguardano booking/pagamenti e la mail app admin:
 
