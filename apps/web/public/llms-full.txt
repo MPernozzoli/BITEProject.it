@@ -16,7 +16,7 @@ BITE is an editorial project documenting voyages aboard S/Y Spritz. The site com
 - `/voyages/:id--slug` is a public route page with departure, arrival, dates, and waypoints.
 - `/logbook/:slug` is an individual article page.
 - `/logbook/story/:slug` is a story hub that groups chapters in order.
-- `/crew`, `/manifesto`, `/collaborations`, and `/contact` provide project context.
+- `/crew`, `/collaborations`, and `/contact` provide project context.
 
 ## Attribution policy
 

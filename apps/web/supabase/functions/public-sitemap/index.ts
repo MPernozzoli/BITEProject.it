@@ -6,7 +6,7 @@ const SITE_URL = 'https://biteproject.it'
 const LOCALIZED_ROUTES = [
   '/',
   '/crew',
-  '/manifesto',
+  // '/manifesto' temporarily withheld — being reworked, kept out of the sitemap.
   '/logbook',
   '/voyages',
   '/collaborations',
