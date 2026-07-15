@@ -36,8 +36,16 @@ Note waypoint + scene/overlay mappa con coordinate esplicite. Campi: `observatio
 - **Rotte (LineString):** id, kind, title, slug, canonical_url, waypoint_count, geometry_points, route_type, status, distance_{nautical_miles,kilometers}, departure/arrival_label, start/end_date, related_article_ids.
 - **Waypoint (Point):** id, kind, title, canonical_url, voyage_id, voyage_title, sequence, visibility_mode, waypoint_type, date_start/end, event_date, related_article_ids.
 
+## Osservazioni citizen science → [[22 - Citizen Science e Osservazioni]]
+Modello separato da quello editoriale: **normalizzato in scrittura, wide in lettura**.
+
+- `observations` — il punto: `recorded_at` (timestamptz), `lat`/`lng` (fix GPS reale, **non** sulla rotta stimata), `gps_accuracy_m`, `depth_m`, `source` (`sensor`/`manual`/`simulated`), `qc_flag` (scala IODE), `voyage_id` risolto dal timestamp.
+- `observation_measurements` — la lettura: `parameter_code`, `value`/`value_text`, `qc_flag`.
+- `observation_parameters` — il catalogo: unità, tipo, range plausibile, rampa colore, accuratezza. **Aggiungere una variabile è una riga qui, non una migrazione.**
+- Vista `observations_export` — una riga per punto, una colonna per parametro (`sst_degc`, `sst_degc_qc`, …), ISO 8601 UTC: la forma che serve a un ricercatore in Excel. Rigenerata da trigger sul catalogo.
+
 ## Persistenza
-Tutto in Postgres su [[08 - Supabase]]; schema evoluto tramite le 36 migrazioni.
+Tutto in Postgres su [[08 - Supabase]]; schema evoluto tramite le migrazioni in `apps/web/supabase/migrations/`.
 
 ## Collegamenti
-- [[15 - Semantic Layer (AI Agents)]] · [[08 - Supabase]] · [[13 - Booking Voyage]]
+- [[15 - Semantic Layer (AI Agents)]] · [[08 - Supabase]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

@@ -23,6 +23,13 @@ type AdminBookingEvent =
   | 'admin_payment_received'
   | 'admin_plan_change'
 
+/**
+ * A delay reaches admins as admin_plan_change, but there is nothing to approve:
+ * the admin recorded the actual themselves and this is the receipt that the
+ * travellers were told.
+ */
+type AdminTemplateVariant = AdminBookingEvent | 'schedule_delayed'
+
 interface VoyageBookingAdminNotificationProps {
   language?: string | null
   recipientName?: string | null
@@ -36,6 +43,7 @@ interface VoyageBookingAdminNotificationProps {
   message?: string | null
   amountEur?: number | null
   paymentReference?: string | null
+  changeKind?: string | null
   oldLegs?: string[] | null
   proposedLegs?: string[] | null
   unsubscribeUrl?: string | null
@@ -52,10 +60,12 @@ const COPY = {
       admin_payment_pending: 'Pagamento booking in sospeso.',
       admin_payment_received: 'Pagamento booking ricevuto.',
       admin_plan_change: 'Cambio planning da approvare.',
+      schedule_delayed: 'Viaggio in ritardo: avvisati.',
     },
-    intro: (name: string, eventType: AdminBookingEvent, voyageName: string, travelerName: string) => {
+    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'Un utente'
+      if (eventType === 'schedule_delayed') return `${prefix}${voyageName} ha sforato la finestra di partenza prevista e le date si sono spostate. ${traveler} e stato avvisato: non serve approvare nulla, ma puo chiedere di annullare con rimborso completo.`
       if (eventType === 'admin_cancelled') return `${prefix}${traveler} ha annullato la propria prenotazione per ${voyageName}.`
       if (eventType === 'admin_modified') return `${prefix}${traveler} ha aggiornato la propria prenotazione per ${voyageName}.`
       if (eventType === 'admin_payment_pending') return `${prefix}${traveler} ha avviato un pagamento per ${voyageName}.`
@@ -81,6 +91,7 @@ const COPY = {
       admin_payment_pending: 'Pagamento in sospeso',
       admin_payment_received: 'Pagamento ricevuto',
       admin_plan_change: 'Da approvare',
+      schedule_delayed: 'In ritardo',
     },
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
@@ -94,10 +105,12 @@ const COPY = {
       admin_payment_pending: 'Booking payment pending.',
       admin_payment_received: 'Booking payment received.',
       admin_plan_change: 'Plan change approval needed.',
+      schedule_delayed: 'Voyage running late: travellers told.',
     },
-    intro: (name: string, eventType: AdminBookingEvent, voyageName: string, travelerName: string) => {
+    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'A user'
+      if (eventType === 'schedule_delayed') return `${prefix}${voyageName} slipped past its planned departure window and the dates moved. ${traveler} was notified: nothing needs approving, but they can ask to cancel with a full refund.`
       if (eventType === 'admin_cancelled') return `${prefix}${traveler} cancelled their booking for ${voyageName}.`
       if (eventType === 'admin_modified') return `${prefix}${traveler} updated their booking for ${voyageName}.`
       if (eventType === 'admin_payment_pending') return `${prefix}${traveler} started a payment for ${voyageName}.`
@@ -123,6 +136,7 @@ const COPY = {
       admin_payment_pending: 'Payment pending',
       admin_payment_received: 'Payment received',
       admin_plan_change: 'Needs approval',
+      schedule_delayed: 'Running late',
     },
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
@@ -140,6 +154,13 @@ function normalizeEventType(value?: string | null): AdminBookingEvent {
   return allowed.includes(value as AdminBookingEvent) ? (value as AdminBookingEvent) : 'admin_new_booking'
 }
 
+/** A delayed schedule rides in on admin_plan_change, but nothing needs approving. */
+function resolveVariant(eventType: AdminBookingEvent, changeKind?: string | null): AdminTemplateVariant {
+  return eventType === 'admin_plan_change' && changeKind === 'schedule_delayed'
+    ? 'schedule_delayed'
+    : eventType
+}
+
 const VoyageBookingAdminNotificationEmail = ({
   language,
   recipientName,
@@ -153,6 +174,7 @@ const VoyageBookingAdminNotificationEmail = ({
   message,
   amountEur,
   paymentReference,
+  changeKind,
   oldLegs,
   proposedLegs,
   unsubscribeUrl,
@@ -160,6 +182,7 @@ const VoyageBookingAdminNotificationEmail = ({
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
   const normalizedEventType = normalizeEventType(eventType)
+  const variant = resolveVariant(normalizedEventType, changeKind)
   const resolvedVoyageName = voyageName?.trim() || copy.voyageFallback
   const safeLegs = legs?.filter((item) => item?.trim()) ?? []
   const resolvedBookingUrl = bookingUrl?.trim() || `${PUBLIC_SITE_URL}/admin/bookings`
@@ -179,10 +202,10 @@ const VoyageBookingAdminNotificationEmail = ({
       language={lang}
       preview={copy.preview}
       eyebrow={copy.eyebrow}
-      title={copy.title[normalizedEventType]}
+      title={copy.title[variant]}
       intro={
         <EmailBodyText>
-          {copy.intro(buildGreetingName(recipientName), normalizedEventType, resolvedVoyageName, resolvedTravelerName)}
+          {copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, resolvedTravelerName)}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
@@ -191,7 +214,7 @@ const VoyageBookingAdminNotificationEmail = ({
     >
       <EmailSignalPills
         items={[
-          copy.status[normalizedEventType],
+          copy.status[variant],
           partySize ? `${copy.partySize}: ${partySize}` : null,
           travelerEmail || resolvedTravelerName || null,
         ]}
@@ -212,7 +235,8 @@ const VoyageBookingAdminNotificationEmail = ({
         <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
         {message?.trim() ? <EmailCallout>{message.trim()}</EmailCallout> : null}
       </EmailCard>
-      {safeOldLegs.length || safeProposedLegs.length ? (
+      {/* A delay leaves the legs untouched, so before/after would print them twice. */}
+      {variant !== 'schedule_delayed' && (safeOldLegs.length || safeProposedLegs.length) ? (
         <EmailCard>
           <EmailSectionLabel>{copy.planTitle}</EmailSectionLabel>
           <EmailRouteBox label={copy.oldLegsTitle} routes={safeOldLegs} />
@@ -229,7 +253,8 @@ export const template = {
     const language = resolveEmailLanguage(typeof data.language === 'string' ? data.language : null)
     const eventType = normalizeEventType(typeof data.eventType === 'string' ? data.eventType : null)
     const voyageName = typeof data.voyageName === 'string' ? data.voyageName.trim() : ''
-    const title = COPY[language].title[eventType]
+    const variant = resolveVariant(eventType, typeof data.changeKind === 'string' ? data.changeKind : null)
+    const title = COPY[language].title[variant]
     return voyageName ? `${title} ${voyageName} — BITE` : `${title} — BITE`
   },
   displayName: 'Voyage booking admin notifications',

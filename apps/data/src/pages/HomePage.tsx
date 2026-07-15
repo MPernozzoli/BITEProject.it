@@ -90,7 +90,7 @@ const HomePage = () => {
             <h2 className="editorial-heading text-3xl text-foreground mb-2">Latest missions</h2>
             <p className="text-muted-foreground font-sans text-sm">Recent voyages with active data collection</p>
           </div>
-          <Link to="/missions" className="text-sm font-sans font-medium text-teal hover:text-teal-light transition-colors inline-flex items-center gap-1">
+          <Link to="/missions" className="text-sm font-sans font-medium text-teal hover:text-teal-muted transition-colors inline-flex items-center gap-1">
             All missions <ArrowRight size={14} />
           </Link>
         </div>
@@ -135,7 +135,7 @@ const HomePage = () => {
                 { icon: <BookOpen size={18} />, label: "Students & educators" },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-3 text-primary-foreground/60 text-sm font-sans">
-                  <span className="text-teal-light">{item.icon}</span>
+                  <span className="text-teal-muted">{item.icon}</span>
                   {item.label}
                 </div>
               ))}
@@ -152,7 +152,7 @@ const HomePage = () => {
             <p className="font-sans text-muted-foreground leading-relaxed mb-4">
               Data is collected underway during normal sailing operations. We document sensor placement, sampling intervals, known limitations, and processing steps. We do not overclaim precision — every dataset includes metadata about conditions, coverage gaps, and measurement context.
             </p>
-            <Link to="/methodology" className="text-sm font-sans font-medium text-teal hover:text-teal-light transition-colors inline-flex items-center gap-1">
+            <Link to="/methodology" className="text-sm font-sans font-medium text-teal hover:text-teal-muted transition-colors inline-flex items-center gap-1">
               Full methodology <ArrowRight size={14} />
             </Link>
           </div>

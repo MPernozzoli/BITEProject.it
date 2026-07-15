@@ -33,7 +33,9 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[11 - Pagamenti Bunq]] — contributo viaggio e flusso pagamento
 - [[12 - Newsletter ed Email]] — newsletter + email transazionali
 - [[13 - Booking Voyage]] — prenotazione tratte e partecipanti
+- [[21 - Tracking Real-Time Viaggi]] — date effettive, ricalcolo a cascata, stati derivati
 - [[14 - Mappe e Layer Geospaziale]] — MapLibre, rotte, waypoint
+- [[22 - Citizen Science e Osservazioni]] — campionamenti, catalogo parametri, mappa e export su `data.`
 - [[15 - Semantic Layer (AI Agents)]] — llms.txt, JSON/GeoJSON pubblici
 - [[16 - Admin]] — dashboard, editor, gestione contenuti
 

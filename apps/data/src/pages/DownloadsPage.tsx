@@ -106,7 +106,7 @@ const DownloadsPage = () => (
                 return (
                   <button
                     key={fmt}
-                    className="glass-chip inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-sans font-medium text-teal hover:text-teal-light transition-colors"
+                    className="glass-chip inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-sans font-medium text-teal hover:text-teal-muted transition-colors"
                   >
                     <Icon size={14} />
                     {fmt}

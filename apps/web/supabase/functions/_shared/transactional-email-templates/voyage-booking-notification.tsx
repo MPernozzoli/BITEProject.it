@@ -31,6 +31,13 @@ type BookingEvent =
   | 'plan_change_pending'
   | 'plan_change_auto_accepted'
 
+/**
+ * A delay arrives as plan_change_pending, but reads nothing like one: the legs are
+ * unchanged, only the clock moved. It gets its own copy so we never tell someone
+ * we are "proposing new legs" when we are just running late.
+ */
+type TemplateVariant = BookingEvent | 'schedule_delayed'
+
 interface VoyageBookingNotificationProps {
   language?: string | null
   recipientName?: string | null
@@ -45,6 +52,10 @@ interface VoyageBookingNotificationProps {
   paymentReference?: string | null
   paymentExpiresAt?: string | null
   changeKind?: string | null
+  /** New effective departure of the first delayed leg; only set for schedule_delayed. */
+  newDepartureAt?: string | null
+  /** Latest departure the baseline plan allowed, i.e. what the new one slipped past. */
+  baselineDepartureBy?: string | null
   oldLegs?: string[] | null
   proposedLegs?: string[] | null
   unsubscribeUrl?: string | null
@@ -69,9 +80,11 @@ const COPY = {
       payment_expired: 'Pagamento scaduto.',
       plan_change_pending: 'La pianificazione del viaggio e cambiata.',
       plan_change_auto_accepted: 'Pianificazione aggiornata.',
+      schedule_delayed: 'Il viaggio sta procedendo in ritardo.',
     },
-    intro: (name: string, eventType: BookingEvent, voyageName: string) => {
+    intro: (name: string, eventType: TemplateVariant, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
+      if (eventType === 'schedule_delayed') return `${prefix}${voyageName} sta procedendo in ritardo rispetto alla finestra prevista. Le tue tratte non cambiano, ma le date si spostano: qui sotto trovi la nuova partenza. Se le nuove date non ti sono comode puoi annullare con rimborso completo.`
       if (eventType === 'admin_approved') return `${prefix}la richiesta per ${voyageName} e stata approvata. Apri la tua area booking per confermare.`
       if (eventType === 'promoted_from_waitlist') return `${prefix}si e liberata disponibilita su ${voyageName}: la tua richiesta e tornata in revisione.`
       if (eventType === 'waitlisted') return `${prefix}al momento i posti selezionati per ${voyageName} sono pieni. Ti avviseremo se si libera disponibilita.`
@@ -92,6 +105,9 @@ const COPY = {
     summaryTitle: 'Dettagli booking',
     paymentTitle: 'Pagamento',
     planTitle: 'Cambio planning',
+    delayTitle: 'Nuove date',
+    newDeparture: 'Nuova partenza',
+    plannedDeparture: 'Era prevista entro',
     messageTitle: 'Messaggio',
     legsTitle: 'Tratte',
     oldLegsTitle: 'Prima',
@@ -116,6 +132,7 @@ const COPY = {
       payment_expired: 'Pagamento scaduto',
       plan_change_pending: 'Richiede risposta',
       plan_change_auto_accepted: 'Aggiornato',
+      schedule_delayed: 'In ritardo',
     },
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
@@ -137,9 +154,11 @@ const COPY = {
       payment_expired: 'Payment expired.',
       plan_change_pending: 'The voyage plan changed.',
       plan_change_auto_accepted: 'Plan updated.',
+      schedule_delayed: 'The voyage is running late.',
     },
-    intro: (name: string, eventType: BookingEvent, voyageName: string) => {
+    intro: (name: string, eventType: TemplateVariant, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
+      if (eventType === 'schedule_delayed') return `${prefix}${voyageName} is running behind its planned window. Your legs do not change, but the dates shift: the new departure is below. If the new dates no longer suit you, you can cancel with a full refund.`
       if (eventType === 'admin_approved') return `${prefix}your request for ${voyageName} was approved. Open your booking area to confirm.`
       if (eventType === 'promoted_from_waitlist') return `${prefix}availability opened on ${voyageName}: your request is back in review.`
       if (eventType === 'waitlisted') return `${prefix}the selected legs for ${voyageName} are currently full. We will notify you if availability opens.`
@@ -160,6 +179,9 @@ const COPY = {
     summaryTitle: 'Booking details',
     paymentTitle: 'Payment',
     planTitle: 'Plan change',
+    delayTitle: 'New dates',
+    newDeparture: 'New departure',
+    plannedDeparture: 'Was planned by',
     messageTitle: 'Message',
     legsTitle: 'Legs',
     oldLegsTitle: 'Before',
@@ -184,6 +206,7 @@ const COPY = {
       payment_expired: 'Payment expired',
       plan_change_pending: 'Needs reply',
       plan_change_auto_accepted: 'Updated',
+      schedule_delayed: 'Running late',
     },
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
@@ -209,6 +232,13 @@ function normalizeEventType(value?: string | null): BookingEvent {
   return allowed.includes(value as BookingEvent) ? (value as BookingEvent) : 'requested'
 }
 
+/** A delayed schedule rides in on plan_change_pending, but reads as its own thing. */
+function resolveVariant(eventType: BookingEvent, changeKind?: string | null): TemplateVariant {
+  return eventType === 'plan_change_pending' && changeKind === 'schedule_delayed'
+    ? 'schedule_delayed'
+    : eventType
+}
+
 function formatDateTime(value: string | null | undefined, language: 'it' | 'en') {
   if (!value) return null
   const date = new Date(value)
@@ -232,6 +262,9 @@ const VoyageBookingNotificationEmail = ({
   paymentMethod,
   paymentReference,
   paymentExpiresAt,
+  changeKind,
+  newDepartureAt,
+  baselineDepartureBy,
   oldLegs,
   proposedLegs,
   unsubscribeUrl,
@@ -239,6 +272,8 @@ const VoyageBookingNotificationEmail = ({
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
   const normalizedEventType = normalizeEventType(eventType)
+  const variant = resolveVariant(normalizedEventType, changeKind)
+  const isDelay = variant === 'schedule_delayed'
   const resolvedVoyageName = voyageName?.trim() || copy.voyageFallback
   const safeLegs = legs?.filter((item) => item?.trim()) ?? []
   const safeOldLegs = oldLegs?.filter((item) => item?.trim()) ?? []
@@ -252,16 +287,18 @@ const VoyageBookingNotificationEmail = ({
         }).format(amountEur)
       : null
   const paymentExpiresAtLabel = formatDateTime(paymentExpiresAt, lang)
+  const newDepartureLabel = formatDateTime(newDepartureAt, lang)
+  const baselineDepartureLabel = formatDateTime(baselineDepartureBy, lang)
 
   return (
     <EditorialEmailShell
       language={lang}
       preview={copy.preview}
       eyebrow={copy.eyebrow}
-      title={copy.title[normalizedEventType]}
+      title={copy.title[variant]}
       intro={
         <EmailBodyText>
-          {copy.intro(buildGreetingName(recipientName), normalizedEventType, resolvedVoyageName)}
+          {copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
@@ -270,7 +307,7 @@ const VoyageBookingNotificationEmail = ({
     >
       <EmailSignalPills
         items={[
-          copy.status[normalizedEventType],
+          copy.status[variant],
           partySize ? `${copy.partySize}: ${partySize}` : null,
           safeLegs.length ? `${safeLegs.length} ${copy.legsTitle.toLowerCase()}` : null,
         ]}
@@ -294,7 +331,17 @@ const VoyageBookingNotificationEmail = ({
           <EmailDetailRow label={copy.paymentExpiresAt} value={paymentExpiresAtLabel} />
         </EmailCard>
       ) : null}
-      {safeOldLegs.length || safeProposedLegs.length ? (
+      {isDelay ? (
+        newDepartureLabel ? (
+          <EmailCard>
+            <EmailSectionLabel>{copy.delayTitle}</EmailSectionLabel>
+            <EmailHighlightBox label={copy.newDeparture} value={newDepartureLabel} />
+            <EmailDetailRow label={copy.plannedDeparture} value={baselineDepartureLabel} />
+          </EmailCard>
+        ) : null
+      ) : safeOldLegs.length || safeProposedLegs.length ? (
+        // A delay leaves the legs untouched, so a before/after list would print the
+        // same routes twice.
         <EmailCard>
           <EmailSectionLabel>{copy.planTitle}</EmailSectionLabel>
           <EmailRouteBox label={copy.oldLegsTitle} routes={safeOldLegs} />
@@ -311,7 +358,8 @@ export const template = {
     const language = resolveEmailLanguage(typeof data.language === 'string' ? data.language : null)
     const eventType = normalizeEventType(typeof data.eventType === 'string' ? data.eventType : null)
     const voyageName = typeof data.voyageName === 'string' ? data.voyageName.trim() : ''
-    const title = COPY[language].title[eventType]
+    const variant = resolveVariant(eventType, typeof data.changeKind === 'string' ? data.changeKind : null)
+    const title = COPY[language].title[variant]
     return voyageName ? `${title} ${voyageName} — BITE` : `${title} — BITE`
   },
   displayName: 'Voyage booking notifications',

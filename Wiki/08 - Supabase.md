@@ -58,6 +58,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._normalize_candidate_info_defaults.sql` — normalizza i valori nulli e rende `candidate_info` obbligatorio con default `{}` su richieste e partecipanti booking.
 - `..._bunq_booking_refunds.sql` — estende `voyage_booking_deposits` con alias pagatore e campi audit rimborso (`refund_amount_cents`, `refund_policy`, `refund_reference`, `refund_payment_id`) e aggiunge lo stato `partially_refunded`.
 - `..._voyage_booking_briefings.sql` — aggiunge i contenuti bilingue per prima/seconda mail briefing in `voyage_booking_settings`, estende `voyage_booking_notifications` con `first_briefing`/`second_briefing` e accoda automaticamente il primo briefing alla conferma booking o all'accettazione di un partecipante.
+- `..._citizen_science_observations.sql` — introduce il dominio **citizen science** (`observation_parameters`, `observation_devices`, `observation_device_keys`, `observations`, `observation_measurements`), l'attribuzione automatica del viaggio dal timestamp e le viste `observations_map` / `observations_export` → [[22 - Citizen Science e Osservazioni]].
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -67,12 +68,16 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `respond_voyage_booking_plan_change` (RPC utente) — risponde a una proposta pending: accetta e applica le tratte proposte, contropropone con messaggio, rifiuta o annulla la richiesta con notifica admin.
 - `admin_create_voyage_booking_invite_by_email` (RPC admin) — crea una prenotazione da email esterna e una partecipazione pending invitabile via mail → [[13 - Booking Voyage]]
 - `accept_booking_participation` (RPC) — collega l'invito all'utente autenticato, salva `candidate_info` e, per gli inviti admin one-person, trasferisce la richiesta dal profilo placeholder al profilo reale.
-- `sync_voyage_bookable_legs` (RPC admin) — ricalcola le tratte prenotabili e riconcilia le prenotazioni esistenti con il planning corrente
+- `sync_voyage_bookable_legs` (RPC admin) — ricalcola le tratte prenotabili e riconcilia le prenotazioni esistenti con il planning corrente; congela poi il piano come baseline e rideriva lo schedule effettivo dagli actual. Il corpo storico vive in `sync_voyage_bookable_legs_plan` (interno) → [[21 - Tracking Real-Time Viaggi]]
+- `compute_voyage_schedule` / `apply_voyage_schedule` / `set_voyage_waypoint_actual` — motore schedule, ricalcolo a cascata dalle date effettive e RPC di registrazione arrivo/partenza → [[21 - Tracking Real-Time Viaggi]]
+- `voyage_leg_phase` / `voyage_derived_status` / `voyage_leg_is_bookable_now` — regole di fase viaggio/tratta e prenotabilità, mirrorate in `src/lib/voyage-schedule.ts` → [[21 - Tracking Real-Time Viaggi]]
+- `refresh_all_voyage_statuses` (RPC + `pg_cron` `refresh-voyage-statuses`, ogni 15 min) — aggiorna la cache `voyages.status`; la UI ricalcola comunque dal vivo
 - `voyage_booking_plan_changes` — audit/predisposizione approvazione utente per cambi planning booking → [[13 - Booking Voyage]]
 - `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti, modifiche planning e briefing viaggio; gli eventi utente e `admin_*` registrano anche `push_sent_at` per Web Push filtrate dalle preferenze → [[12 - Newsletter ed Email]]
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound → [[12 - Newsletter ed Email]]
+- `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
 ## Hardening remoto applicato

@@ -39,6 +39,7 @@ import {
   isDateWithinRange,
 } from "@/components/admin/AdminCollapsibleListFilters";
 
+const VoyageLiveWidget = lazy(() => import("@/components/voyage/VoyageLiveWidget"));
 const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageManager"));
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
@@ -633,6 +634,10 @@ const AdminDashboard = () => {
             })}
           </div>
         </section>
+
+        <Suspense fallback={null}>
+          <VoyageLiveWidget />
+        </Suspense>
 
         <section className={`grid grid-cols-1 gap-6 ${sidebarCollapsed ? "xl:grid-cols-[96px_minmax(0,1fr)]" : "xl:grid-cols-[0.92fr_2.08fr]"}`}>
           <aside className={`glass-panel rounded-[34px] p-5 md:p-6 h-fit transition-[padding,width] duration-reveal ease-out-expo ${sidebarCollapsed ? "xl:px-3" : ""}`}>

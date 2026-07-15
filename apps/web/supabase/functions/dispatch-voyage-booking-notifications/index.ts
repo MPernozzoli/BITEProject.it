@@ -177,6 +177,7 @@ function buildAdminPushMessage(params: {
   travelerName?: string | null
   travelerEmail?: string | null
   legLabels: string[]
+  changeKind?: string | null
 }) {
   const traveler =
     params.travelerName?.trim() ||
@@ -184,8 +185,15 @@ function buildAdminPushMessage(params: {
     (params.language === 'en' ? 'A traveller' : 'Un utente')
   const voyageName = params.voyageName || (params.language === 'en' ? 'a voyage' : 'un viaggio')
   const legs = params.legLabels.length ? ` (${params.legLabels.join(', ')})` : ''
+  const isDelay = params.eventType === 'admin_plan_change' && params.changeKind === 'schedule_delayed'
 
   if (params.language === 'en') {
+    if (isDelay) {
+      return {
+        title: 'Voyage running late',
+        body: `${voyageName} slipped past its planned window${legs}. ${traveler} was notified.`,
+      }
+    }
     if (params.eventType === 'admin_cancelled') {
       return {
         title: 'Booking cancelled',
@@ -246,6 +254,12 @@ function buildAdminPushMessage(params: {
       body: `${traveler} ha completato un pagamento per ${voyageName}${legs}.`,
     }
   }
+  if (isDelay) {
+    return {
+      title: 'Viaggio in ritardo',
+      body: `${voyageName} ha sforato la finestra prevista${legs}. ${traveler} e stato avvisato.`,
+    }
+  }
   if (params.eventType === 'admin_plan_change') {
     return {
       title: 'Planning viaggio cambiato',
@@ -263,11 +277,16 @@ function buildUserPushMessage(params: {
   language: string
   voyageName: string
   legLabels: string[]
+  changeKind?: string | null
 }) {
   const voyageName = params.voyageName || (params.language === 'en' ? 'your voyage' : 'il tuo viaggio')
   const legs = params.legLabels.length ? ` (${params.legLabels.join(', ')})` : ''
+  const isDelay = params.eventType === 'plan_change_pending' && params.changeKind === 'schedule_delayed'
 
   if (params.language === 'en') {
+    if (isDelay) {
+      return { title: 'Voyage running late', body: `${voyageName}${legs} is behind plan: the dates moved.` }
+    }
     if (params.eventType === 'approved') {
       return { title: 'Booking approved', body: `Your booking for ${voyageName}${legs} was approved.` }
     }
@@ -307,6 +326,9 @@ function buildUserPushMessage(params: {
     return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
   }
 
+  if (isDelay) {
+    return { title: 'Viaggio in ritardo', body: `${voyageName}${legs} sta procedendo in ritardo: le date si sono spostate.` }
+  }
   if (params.eventType === 'approved') {
     return { title: 'Booking approvato', body: `La tua prenotazione per ${voyageName}${legs} e stata approvata.` }
   }
@@ -605,6 +627,7 @@ Deno.serve(async (req) => {
                 message: booking.message,
                 amountEur,
                 paymentReference,
+                changeKind: metadataString(metadata, 'change_kind'),
                 oldLegs,
                 proposedLegs,
               }
@@ -622,6 +645,8 @@ Deno.serve(async (req) => {
                 paymentReference,
                 paymentExpiresAt: metadataString(metadata, 'payment_expires_at'),
                 changeKind: metadataString(metadata, 'change_kind'),
+                newDepartureAt: metadataString(metadata, 'new_departure_at'),
+                baselineDepartureBy: metadataString(metadata, 'baseline_departure_window_end'),
                 oldLegs,
                 proposedLegs,
               },
@@ -680,12 +705,14 @@ Deno.serve(async (req) => {
                 travelerName: traveler?.name ?? null,
                 travelerEmail: traveler?.email ?? null,
                 legLabels,
+                changeKind: metadataString(notification.metadata ?? {}, 'change_kind'),
               })
             : buildUserPushMessage({
                 eventType: notification.event_type,
                 language,
                 voyageName,
                 legLabels,
+                changeKind: metadataString(notification.metadata ?? {}, 'change_kind'),
               })
           const pushUrl = isAdminEvent
             ? `${PUBLIC_SITE_URL}/admin/bookings?voyage=${booking.voyage_id}`

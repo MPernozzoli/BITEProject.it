@@ -28,7 +28,7 @@ const DataFooter = () => (
             href="https://biteproject.it"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 mt-4 text-xs font-sans font-medium text-teal hover:text-teal-light transition-colors"
+            className="inline-flex items-center gap-1.5 mt-4 text-xs font-sans font-medium text-teal hover:text-teal-muted transition-colors"
           >
             Visit BITE Project
             <ExternalLink size={12} />

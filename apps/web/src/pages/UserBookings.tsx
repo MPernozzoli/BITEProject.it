@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
+import VoyageLiveWidget from "@/components/voyage/VoyageLiveWidget";
 import {
   Dialog,
   DialogContent,
@@ -296,6 +297,11 @@ const UserBookings = () => {
   );
   const bookableVoyages = useMemo(() => voyages.filter(isVoyageBookableNow), [voyages]);
   const legsById = useMemo(() => Object.fromEntries(legs.map((leg) => [leg.id, leg])), [legs]);
+  /** Voyages the traveller is actually on, so the live widget only tracks their own. */
+  const bookedVoyageIds = useMemo(
+    () => [...new Set(requests.map((request) => request.voyage_id))],
+    [requests]
+  );
   const selectedVoyage = voyagesById[selectedVoyageId] || null;
   const selectedVoyageLegs = isVoyageBookableNow(selectedVoyage)
     ? legs.filter((leg) => leg.voyage_id === selectedVoyageId && isLegSelectable(leg))
@@ -699,6 +705,10 @@ const UserBookings = () => {
             <CalendarCheck className="text-accent" size={26} />
           </div>
         </section>
+
+        {bookedVoyageIds.length > 0 && (
+          <VoyageLiveWidget readOnly voyageIds={bookedVoyageIds} lang={lang} />
+        )}
 
         {pendingParticipations.length > 0 && (
           <section className="glass-panel rounded-[30px] border border-accent/40 p-5 md:p-6">

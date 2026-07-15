@@ -31,11 +31,11 @@ const DatasetCard = ({ title, date, location, variables, observations, status = 
     </div>
     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground font-sans">
       <span className="inline-flex items-center gap-1.5">
-        <Calendar size={14} className="text-slate-cool" />
+        <Calendar size={14} className="text-muted-foreground" />
         {date}
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <MapPin size={14} className="text-slate-cool" />
+        <MapPin size={14} className="text-muted-foreground" />
         {location}
       </span>
     </div>
@@ -47,7 +47,7 @@ const DatasetCard = ({ title, date, location, variables, observations, status = 
     <div className="flex items-center justify-between pt-2 border-t glass-divider">
       <span className="text-xs text-muted-foreground font-sans">{observations.toLocaleString()} observations</span>
       {status === "available" && (
-        <button className="inline-flex items-center gap-1.5 text-xs font-sans font-medium text-teal hover:text-teal-light transition-colors">
+        <button className="inline-flex items-center gap-1.5 text-xs font-sans font-medium text-teal hover:text-teal-muted transition-colors">
           <Download size={13} />
           Download
         </button>

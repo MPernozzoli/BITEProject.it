@@ -37,5 +37,16 @@ La function `public-geo` serve GeoJSON:
 
 Proprietà GeoJSON rotte/waypoint dettagliate in [[17 - Content Model]].
 
+## Mappa dati (`data.biteproject.it`) → [[22 - Citizen Science e Osservazioni]]
+`apps/data/src/pages/MapPage.tsx` è una mappa MapLibre indipendente da quella del logbook: disegna le rotte da `cached_geometry` e sopra la nuvola di punti dei campionamenti, **senza waypoint** (due tipi di pallino sulla stessa mappa sarebbero ambigui).
+
+Regole colore, codificate in `apps/data/src/lib/observation-scale.ts` e coperte da test in `apps/data/src/test/observation-scale.test.ts`:
+- una sola scala colore per volta: **identità** (viaggio, palette categorica a ordine fisso) senza parametro selezionato, **magnitudine** (rampa sequenziale a tonalità singola) con un parametro selezionato;
+- la palette dei viaggi si assegna dalla lista completa dei viaggi, così un filtro non ricolora i superstiti;
+- la rampa sequenziale parte dallo step 250 e non dal più chiaro: sono marker su un basemap chiaro, non un riempimento heatmap;
+- direzione del vento = scala **ciclica** fissa 0–360 (0° e 360° sono la stessa direzione).
+
+> ⚠️ Il container della mappa va dimensionato esplicitamente (`h-full w-full`), **non** con `absolute inset-0`: `maplibre-gl.css` marca `.maplibregl-map` con `position: relative` a pari specificità ma più avanti nel bundle, annulla il posizionamento assoluto e la mappa collassa a 0px.
+
 ## Collegamenti
-- [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]]
+- [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

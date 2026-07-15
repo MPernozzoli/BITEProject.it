@@ -36,6 +36,7 @@ tags: [frontend, lib, hooks, logica]
 - `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
 - `danger-reasons.ts` — modificatori navigazione pericolosa
+- `voyage-schedule.ts` — regole di fase viaggio/tratta (`getLegPhase`, `getVoyagePhase`, `isLegBookableNow`, `getPendingActual`, `isLegDelayed`, `shouldShowLiveWidget`). Mirror TS delle funzioni SQL omonime: vanno cambiati insieme → [[21 - Tracking Real-Time Viaggi]]
 - `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). L'admin può forzare il naming città o baia/cala dall'inspector WPT.
 
 ### Mappe → [[14 - Mappe e Layer Geospaziale]]

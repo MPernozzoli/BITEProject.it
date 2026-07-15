@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      observation_parameters: {
+        Row: {
+          accuracy: string | null
+          code: string
+          color_ramp: string
+          created_at: string
+          description_en: string | null
+          description_it: string | null
+          is_published: boolean
+          label_en: string
+          label_it: string | null
+          method_en: string | null
+          method_it: string | null
+          scale_max: number | null
+          scale_min: number | null
+          sort_order: number
+          unit: string
+          unit_code: string
+          updated_at: string
+          value_type: string
+        }
+        Insert: {
+          accuracy?: string | null
+          code: string
+          color_ramp?: string
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          is_published?: boolean
+          label_en: string
+          label_it?: string | null
+          method_en?: string | null
+          method_it?: string | null
+          scale_max?: number | null
+          scale_min?: number | null
+          sort_order?: number
+          unit: string
+          unit_code: string
+          updated_at?: string
+          value_type?: string
+        }
+        Update: {
+          accuracy?: string | null
+          code?: string
+          color_ramp?: string
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          is_published?: boolean
+          label_en?: string
+          label_it?: string | null
+          method_en?: string | null
+          method_it?: string | null
+          scale_max?: number | null
+          scale_min?: number | null
+          sort_order?: number
+          unit?: string
+          unit_code?: string
+          updated_at?: string
+          value_type?: string
+        }
+        Relationships: []
+      }
       route_legs: {
         Row: {
           completed_at: string | null
@@ -210,7 +273,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      observations_map: {
+        Row: {
+          device_code: string | null
+          device_label: string | null
+          gps_accuracy_m: number | null
+          depth_m: number | null
+          id: string
+          lat: number
+          lng: number
+          measurements: Json
+          notes: string | null
+          qc_flag: number
+          recorded_at: string
+          source: string
+          voyage_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

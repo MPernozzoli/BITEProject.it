@@ -12,7 +12,7 @@ const AboutPage = () => (
       <div className="space-y-6 font-sans text-muted-foreground leading-relaxed">
         <p>
           <strong className="text-foreground">data.biteproject.it</strong> is the scientific data branch of the{" "}
-          <a href="https://biteproject.it" target="_blank" rel="noopener noreferrer" className="text-teal hover:text-teal-light transition-colors inline-flex items-center gap-1">
+          <a href="https://biteproject.it" target="_blank" rel="noopener noreferrer" className="text-teal hover:text-teal-muted transition-colors inline-flex items-center gap-1">
             BITE Project <ExternalLink size={12} />
           </a>
           , which documents life, travel, and long-range sailing aboard the vessel Spritz. While the main project tells the human story, this portal focuses on what the sea itself has to say — through data.

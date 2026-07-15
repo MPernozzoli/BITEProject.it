@@ -18,6 +18,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "apps/pack", "--", "--port", "5199"],
       "port": 5199
+    },
+    {
+      "name": "data",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/data", "--", "--port", "5197"],
+      "port": 5197
     }
   ]
 }
