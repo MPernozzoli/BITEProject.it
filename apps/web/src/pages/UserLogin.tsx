@@ -564,10 +564,9 @@ const UserLogin = () => {
     >
       {!isMobile && (
         <>
-          <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_28%,_hsl(var(--secondary))_58%,_hsl(var(--background))_100%)]" />
-          <div className="absolute left-[6%] top-28 -z-10 h-48 w-48 rounded-full bg-[hsl(var(--accent)/0.16)] blur-3xl" />
-          <div className="absolute right-[8%] top-40 -z-10 h-64 w-64 rounded-full bg-[hsl(var(--sand)/0.22)] blur-3xl" />
-          <div className="absolute bottom-16 left-1/3 -z-10 h-56 w-56 rounded-full bg-[hsl(var(--primary)/0.08)] blur-3xl" />
+          <div className="absolute inset-0 -z-20 bg-[linear-gradient(135deg,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_44%,_hsl(var(--secondary))_100%)]" />
+          <div className="absolute inset-x-0 top-0 -z-10 h-32 border-b border-white/70 bg-white/35 backdrop-blur-sm" />
+          <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,_hsl(var(--foreground)/0.045)_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--foreground)/0.035)_1px,_transparent_1px)] bg-[size:72px_72px] opacity-45" />
         </>
       )}
 
@@ -677,6 +676,28 @@ const UserLogin = () => {
                     </p>
                   )}
                 </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { key: "google" as const, label: "Google", icon: Compass },
+                    { key: "email" as const, label: "Email OTP", icon: MessageCircle },
+                    { key: "passkey" as const, label: "Passkey", icon: Fingerprint },
+                  ].map(({ key, label, icon: Icon }) => (
+                    <div
+                      key={key}
+                      className={cn(
+                        "flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs",
+                        lastUsedMethod === key
+                          ? "border-[hsl(var(--accent)/0.32)] bg-[hsl(var(--accent)/0.08)] text-foreground"
+                          : "border-white/70 bg-white/55 text-muted-foreground",
+                      )}
+                    >
+                      <Icon className="h-4 w-4 text-accent" aria-hidden />
+                      <span className="font-medium">{label}</span>
+                      {lastUsedMethod === key && <span className="ml-auto text-[10px] uppercase tracking-[0.14em]">{ui.form.lastUsed}</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {step === "email" && (
@@ -750,7 +771,9 @@ const UserLogin = () => {
                       </label>
                       <Input
                         id="name"
+                        name="name"
                         autoComplete="name"
+                        enterKeyHint="next"
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
                         placeholder={ui.form.namePlaceholder}
@@ -770,7 +793,10 @@ const UserLogin = () => {
                     <Input
                       id="email"
                       type="email"
-                      autoComplete="email"
+                      name="email"
+                      autoComplete="username"
+                      inputMode="email"
+                      enterKeyHint="next"
                       required
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}

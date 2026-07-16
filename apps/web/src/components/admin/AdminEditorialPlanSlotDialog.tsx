@@ -24,6 +24,7 @@ import {
 } from "@/lib/editorial-plan";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useNavigate } from "react-router-dom";
+import { BarChart3, Bookmark, Eye, Heart, MessageCircle, MousePointerClick, Share2, TrendingUp } from "lucide-react";
 
 type ArticleLite = {
   id: string;
@@ -40,6 +41,40 @@ type TargetDb = {
   status: string;
   syndication_batch_id: string | null;
   editorial_media_assets: { id: string; title: string } | null;
+};
+
+type InsightRow = {
+  id: string;
+  target_id: string;
+  captured_at: string;
+  source: string;
+  impressions: number;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+  follows: number;
+  sentiment: string | null;
+  notes: string | null;
+};
+
+type InsightDraft = {
+  targetId: string;
+  source: string;
+  impressions: string;
+  reach: string;
+  views: string;
+  likes: string;
+  comments: string;
+  shares: string;
+  saves: string;
+  clicks: string;
+  follows: string;
+  sentiment: string;
+  notes: string;
 };
 
 type Props = {
@@ -62,6 +97,11 @@ const generateSlug = (title: string) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .slice(0, 80) || `bozza-${Date.now().toString(36)}`;
+
+const PUBLISH_STATUS_OPTIONS = ["pending", "publishing", "published", "failed", "cancelled"] as const;
+const INSIGHT_SOURCE_OPTIONS = ["manual", "instagram", "youtube", "tiktok", "import"] as const;
+
+const formatMetric = (value: number) => new Intl.NumberFormat("it-IT").format(value);
 
 export default function AdminEditorialPlanSlotDialog({
   open,
@@ -87,6 +127,22 @@ export default function AdminEditorialPlanSlotDialog({
 
   const [slotFormat, setSlotFormat] = useState<string>("");
   const [targets, setTargets] = useState<TargetDb[]>([]);
+  const [insightsByTargetId, setInsightsByTargetId] = useState<Record<string, InsightRow[]>>({});
+  const [insightDraft, setInsightDraft] = useState<InsightDraft>({
+    targetId: "",
+    source: "manual",
+    impressions: "",
+    reach: "",
+    views: "",
+    likes: "",
+    comments: "",
+    shares: "",
+    saves: "",
+    clicks: "",
+    follows: "",
+    sentiment: "",
+    notes: "",
+  });
   const [assetTitle, setAssetTitle] = useState("");
   const [assetSynopsis, setAssetSynopsis] = useState("");
   const [assetEditorialType, setAssetEditorialType] = useState<EditorialArticleType>("support");
@@ -108,7 +164,32 @@ export default function AdminEditorialPlanSlotDialog({
       console.error(error);
       return;
     }
-    setTargets((data ?? []) as unknown as TargetDb[]);
+    const rows = (data ?? []) as unknown as TargetDb[];
+    setTargets(rows);
+    const targetIds = rows.map((row) => row.id);
+    if (targetIds.length === 0) {
+      setInsightsByTargetId({});
+      setInsightDraft((prev) => ({ ...prev, targetId: "" }));
+      return;
+    }
+
+    const { data: insightRows, error: insightError } = await supabase
+      .from("editorial_post_insights")
+      .select("*")
+      .in("target_id", targetIds)
+      .order("captured_at", { ascending: false });
+    if (insightError) {
+      console.error(insightError);
+      setInsightsByTargetId({});
+      return;
+    }
+    const next: Record<string, InsightRow[]> = {};
+    for (const row of (insightRows ?? []) as InsightRow[]) {
+      if (!next[row.target_id]) next[row.target_id] = [];
+      next[row.target_id].push(row);
+    }
+    setInsightsByTargetId(next);
+    setInsightDraft((prev) => ({ ...prev, targetId: prev.targetId || targetIds[0] }));
   }, [slot, isSite]);
 
   useEffect(() => {
@@ -149,6 +230,22 @@ export default function AdminEditorialPlanSlotDialog({
     setOverrideType("");
     setTab("quick");
     setTargets([]);
+    setInsightsByTargetId({});
+    setInsightDraft({
+      targetId: "",
+      source: "manual",
+      impressions: "",
+      reach: "",
+      views: "",
+      likes: "",
+      comments: "",
+      shares: "",
+      saves: "",
+      clicks: "",
+      follows: "",
+      sentiment: "",
+      notes: "",
+    });
     setAssetTitle("");
     setAssetSynopsis("");
     setStoragePath("");
@@ -167,6 +264,11 @@ export default function AdminEditorialPlanSlotDialog({
       setDraftType(sug);
     }
   }, [open, slot, isSite]);
+
+  const latestInsight = useMemo(() => {
+    const all = Object.values(insightsByTargetId).flat();
+    return all.sort((a, b) => b.captured_at.localeCompare(a.captured_at))[0] ?? null;
+  }, [insightsByTargetId]);
 
   if (!slot) return null;
 
@@ -279,6 +381,80 @@ export default function AdminEditorialPlanSlotDialog({
     }
     await loadTargets();
     setSaving(false);
+    await onDone();
+  };
+
+  const updateTargetField = async (id: string, patch: Partial<Pick<TargetDb, "caption" | "status">>) => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("editorial_publish_targets")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Target aggiornato.");
+    await loadTargets();
+    await onDone();
+  };
+
+  const addInsight = async () => {
+    if (!insightDraft.targetId) {
+      toast.error("Seleziona un target.");
+      return;
+    }
+    const toInt = (value: string) => Math.max(0, Number.parseInt(value, 10) || 0);
+    setSaving(true);
+    const { error } = await supabase.from("editorial_post_insights").insert({
+      target_id: insightDraft.targetId,
+      source: insightDraft.source || "manual",
+      impressions: toInt(insightDraft.impressions),
+      reach: toInt(insightDraft.reach),
+      views: toInt(insightDraft.views),
+      likes: toInt(insightDraft.likes),
+      comments: toInt(insightDraft.comments),
+      shares: toInt(insightDraft.shares),
+      saves: toInt(insightDraft.saves),
+      clicks: toInt(insightDraft.clicks),
+      follows: toInt(insightDraft.follows),
+      sentiment: insightDraft.sentiment || null,
+      notes: insightDraft.notes.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Insight salvato.");
+    setInsightDraft((prev) => ({
+      ...prev,
+      impressions: "",
+      reach: "",
+      views: "",
+      likes: "",
+      comments: "",
+      shares: "",
+      saves: "",
+      clicks: "",
+      follows: "",
+      notes: "",
+    }));
+    await loadTargets();
+    await onDone();
+  };
+
+  const deleteInsight = async (id: string) => {
+    setSaving(true);
+    const { error } = await supabase.from("editorial_post_insights").delete().eq("id", id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Insight rimosso.");
+    await loadTargets();
     await onDone();
   };
 
@@ -422,160 +598,375 @@ export default function AdminEditorialPlanSlotDialog({
 
   if (!isSite) {
     const storyNote = slot.counts_toward_mix === false;
+    const metricCards = latestInsight
+      ? [
+          { label: "Reach", value: latestInsight.reach, icon: TrendingUp },
+          { label: "Views", value: latestInsight.views, icon: Eye },
+          { label: "Like", value: latestInsight.likes, icon: Heart },
+          { label: "Commenti", value: latestInsight.comments, icon: MessageCircle },
+        ]
+      : [];
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-w-lg sm:rounded-[22px] border-stone-200/90 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-xl">
-              Slot social · {slot.slot_date} · {String(slot.slot_time).slice(0, 5)}
-            </DialogTitle>
-            {storyNote && (
-              <p className="text-xs text-muted-foreground">Storia: non conta nel mix pillar/support/utility.</p>
-            )}
+        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto border-stone-200/90 p-0 sm:rounded-[24px]">
+          <DialogHeader className="border-b border-border/60 bg-muted/20 px-6 py-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Slot social</p>
+                <DialogTitle className="mt-1 font-serif text-2xl">
+                  {slot.slot_date} · {String(slot.slot_time).slice(0, 5)}
+                </DialogTitle>
+                {storyNote && (
+                  <p className="mt-1 text-xs text-muted-foreground">Storia: non conta nel mix pillar/support/utility.</p>
+                )}
+              </div>
+              <div className="rounded-[16px] border border-border/70 bg-background/75 px-3 py-2 text-xs text-muted-foreground">
+                {targets.length} target · {Object.values(insightsByTargetId).flat().length} insight
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 text-sm">
-            <div className="flex flex-wrap gap-2 items-end">
-              <div className="flex-1 min-w-[10rem]">
-                <label className="text-[10px] uppercase text-muted-foreground">Formato ricorrenza slot</label>
-                <select
-                  value={slotFormat}
-                  onChange={(e) => setSlotFormat(e.target.value)}
-                  className="mt-1 w-full rounded-[14px] border border-border bg-background/80 px-2 py-2 text-xs"
-                >
-                  <option value="">(nessuno)</option>
-                  {formatOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+          <div className="space-y-5 px-6 py-5 text-sm">
+            {latestInsight ? (
+              <div className="grid gap-3 sm:grid-cols-4">
+                {metricCards.map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="rounded-[16px] border border-border/70 bg-background/75 p-3">
+                    <Icon className="mb-2 size-4 text-accent" aria-hidden />
+                    <p className="font-sans text-lg font-semibold tabular-nums">{formatMetric(value)}</p>
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+                  </div>
+                ))}
               </div>
-              <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={() => void applySlotFormat()}>
-                Applica a slot
-              </Button>
+            ) : (
+              <div className="rounded-[18px] border border-dashed border-border bg-muted/20 p-4">
+                <p className="font-medium">Nessun insight ancora raccolto</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Dopo la pubblicazione puoi salvare reach, views, salvataggi e note qualitative per confrontare i post nel calendario.
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-[18px] border border-border/80 bg-background/70 p-4">
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div>
+                  <label htmlFor="slot-format" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Formato ricorrenza slot
+                  </label>
+                  <select
+                    id="slot-format"
+                    value={slotFormat}
+                    onChange={(e) => setSlotFormat(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
+                  >
+                    <option value="">Nessun formato</option>
+                    {formatOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={() => void applySlotFormat()}>
+                  Applica formato
+                </Button>
+              </div>
             </div>
 
-            <div className="rounded-[16px] border border-border/80 p-3 space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Nuovo asset + uscita</p>
-              <input
-                placeholder="Titolo asset"
-                value={assetTitle}
-                onChange={(e) => setAssetTitle(e.target.value)}
-                className="w-full rounded-[14px] border border-border bg-background/80 px-3 py-2 text-sm"
-              />
-              <textarea
-                placeholder="Sinossi / note"
-                value={assetSynopsis}
-                onChange={(e) => setAssetSynopsis(e.target.value)}
-                rows={2}
-                className="w-full rounded-[14px] border border-border bg-background/80 px-3 py-2 text-sm resize-none"
-              />
-              <div>
-                <label className="text-[10px] uppercase text-muted-foreground">Tipo editoriale (mix)</label>
-                <select
-                  value={assetEditorialType}
-                  onChange={(e) => setAssetEditorialType(e.target.value as EditorialArticleType)}
-                  className="mt-1 w-full rounded-[14px] border border-border bg-background/80 px-3 py-2 text-sm"
-                >
-                  {(Object.keys(EDITORIAL_TYPE_LABELS) as EditorialArticleType[]).map((t) => (
-                    <option key={t} value={t}>
-                      {EDITORIAL_TYPE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
+            <div className="rounded-[18px] border border-border/80 p-4">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 className="size-4 text-accent" aria-hidden />
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Nuovo asset + uscita</p>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase text-muted-foreground">Carica file (bucket editorial-media)</label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label htmlFor="asset-title" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Titolo asset
+                  </label>
+                  <input
+                    id="asset-title"
+                    value={assetTitle}
+                    onChange={(e) => setAssetTitle(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="asset-synopsis" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Sinossi / note
+                  </label>
+                  <textarea
+                    id="asset-synopsis"
+                    value={assetSynopsis}
+                    onChange={(e) => setAssetSynopsis(e.target.value)}
+                    rows={2}
+                    className="mt-1 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="asset-type" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Tipo editoriale
+                  </label>
+                  <select
+                    id="asset-type"
+                    value={assetEditorialType}
+                    onChange={(e) => setAssetEditorialType(e.target.value as EditorialArticleType)}
+                    className="mt-1 min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm"
+                  >
+                    {(Object.keys(EDITORIAL_TYPE_LABELS) as EditorialArticleType[]).map((t) => (
+                      <option key={t} value={t}>
+                        {EDITORIAL_TYPE_LABELS[t]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="target-format" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Formato pubblicazione
+                  </label>
+                  <select
+                    id="target-format"
+                    value={newTargetFormat}
+                    onChange={(e) => setNewTargetFormat(e.target.value)}
+                    className="mt-1 min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm"
+                  >
+                    <option value="">Seleziona formato</option>
+                    {formatOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="asset-file" className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    File media
+                  </label>
+                  <input
+                    id="asset-file"
+                    type="file"
+                    accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp"
+                    disabled={uploading || saving}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      setUploading(true);
+                      const safe =
+                        typeof crypto !== "undefined" && crypto.randomUUID
+                          ? crypto.randomUUID()
+                          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                      const objectPath = `${channelId}/${safe}-${file.name.replace(/[^\w.-]+/g, "_")}`;
+                      const { error: uerr } = await supabase.storage.from("editorial-media").upload(objectPath, file, {
+                        upsert: false,
+                        contentType: file.type || undefined,
+                      });
+                      setUploading(false);
+                      if (uerr) {
+                        toast.error(uerr.message);
+                        return;
+                      }
+                      setStoragePath(objectPath);
+                      toast.success("File caricato.");
+                    }}
+                    className="mt-1 block w-full text-xs"
+                  />
+                </div>
                 <input
-                  type="file"
-                  accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp"
-                  disabled={uploading || saving}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (!file) return;
-                    setUploading(true);
-                    const safe =
-                      typeof crypto !== "undefined" && crypto.randomUUID
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-                    const objectPath = `${channelId}/${safe}-${file.name.replace(/[^\w.-]+/g, "_")}`;
-                    const { error: uerr } = await supabase.storage.from("editorial-media").upload(objectPath, file, {
-                      upsert: false,
-                      contentType: file.type || undefined,
-                    });
-                    setUploading(false);
-                    if (uerr) {
-                      toast.error(uerr.message);
-                      return;
-                    }
-                    setStoragePath(objectPath);
-                    toast.success("File caricato.");
-                  }}
-                  className="text-xs"
+                  aria-label="Path storage"
+                  placeholder="Path storage opzionale"
+                  value={storagePath}
+                  onChange={(e) => setStoragePath(e.target.value)}
+                  className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-mono sm:col-span-2"
                 />
-              </div>
-              <input
-                placeholder="Path storage (opzionale, es. cartella/file.mp4)"
-                value={storagePath}
-                onChange={(e) => setStoragePath(e.target.value)}
-                className="w-full rounded-[14px] border border-border bg-background/80 px-3 py-2 text-xs font-mono"
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <select
-                  value={newTargetFormat}
-                  onChange={(e) => setNewTargetFormat(e.target.value)}
-                  className="rounded-[14px] border border-border bg-background/80 px-2 py-2 text-xs"
-                >
-                  <option value="">Formato pubblicazione…</option>
-                  {formatOptions.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
                 <input
-                  placeholder="Syndication batch UUID (opz.)"
+                  aria-label="Syndication batch UUID"
+                  placeholder="Syndication batch UUID opzionale"
                   value={syndicationBatch}
                   onChange={(e) => setSyndicationBatch(e.target.value)}
-                  className="rounded-[14px] border border-border bg-background/80 px-2 py-2 text-xs font-mono"
+                  className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-mono sm:col-span-2"
+                />
+                <textarea
+                  aria-label="Caption piattaforma"
+                  placeholder="Caption piattaforma"
+                  value={newTargetCaption}
+                  onChange={(e) => setNewTargetCaption(e.target.value)}
+                  rows={3}
+                  className="rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm sm:col-span-2"
                 />
               </div>
-              <textarea
-                placeholder="Caption piattaforma"
-                value={newTargetCaption}
-                onChange={(e) => setNewTargetCaption(e.target.value)}
-                rows={2}
-                className="w-full rounded-[14px] border border-border bg-background/80 px-3 py-2 text-sm resize-none"
-              />
-              <Button type="button" disabled={saving} onClick={() => void addPublishTarget()}>
+              <Button type="button" disabled={saving} onClick={() => void addPublishTarget()} className="mt-4">
                 Crea asset e target
               </Button>
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] uppercase text-muted-foreground">Uscite pianificate</p>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Uscite pianificate</p>
               {targets.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nessun target.</p>
+                <p className="rounded-[16px] bg-muted/30 p-4 text-xs text-muted-foreground">Nessun target.</p>
               ) : (
                 <ul className="space-y-2">
-                  {targets.map((t) => (
-                    <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] bg-muted/40 px-3 py-2 text-xs">
-                      <span>
-                        {t.content_format} — {t.editorial_media_assets?.title ?? "—"} ({t.status})
-                      </span>
-                      <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => void deleteTarget(t.id)}>
-                        Elimina
-                      </Button>
-                    </li>
-                  ))}
+                  {targets.map((t) => {
+                    const insightCount = insightsByTargetId[t.id]?.length ?? 0;
+                    return (
+                      <li key={t.id} className="rounded-[16px] border border-border/70 bg-muted/20 p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-medium">{t.editorial_media_assets?.title ?? "Asset senza titolo"}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t.content_format} · {insightCount} insight · batch {t.syndication_batch_id ?? "non assegnato"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <select
+                              value={t.status}
+                              onChange={(e) => void updateTargetField(t.id, { status: e.target.value })}
+                              disabled={saving}
+                              className="min-h-9 rounded-[12px] border border-border bg-background/90 px-2 text-xs"
+                              aria-label="Stato target"
+                            >
+                              {PUBLISH_STATUS_OPTIONS.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                            <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => void deleteTarget(t.id)}>
+                              Elimina
+                            </Button>
+                          </div>
+                        </div>
+                        <textarea
+                          value={t.caption ?? ""}
+                          onChange={(e) =>
+                            setTargets((prev) => prev.map((row) => (row.id === t.id ? { ...row, caption: e.target.value } : row)))
+                          }
+                          onBlur={(e) => void updateTargetField(t.id, { caption: e.target.value.trim() || null })}
+                          rows={2}
+                          aria-label="Caption target"
+                          className="mt-3 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs"
+                          placeholder="Caption target"
+                        />
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
+
+            <div className="rounded-[18px] border border-border/80 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Insight post</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Snapshot manuali o importati, ordinati dal più recente.</p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <select
+                  value={insightDraft.targetId}
+                  onChange={(e) => setInsightDraft((prev) => ({ ...prev, targetId: e.target.value }))}
+                  className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs sm:col-span-2"
+                  aria-label="Target insight"
+                >
+                  <option value="">Seleziona target</option>
+                  {targets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.content_format} · {target.editorial_media_assets?.title ?? target.id}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={insightDraft.source}
+                  onChange={(e) => setInsightDraft((prev) => ({ ...prev, source: e.target.value }))}
+                  className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs"
+                  aria-label="Fonte insight"
+                >
+                  {INSIGHT_SOURCE_OPTIONS.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+                {(
+                  [
+                    ["impressions", "Impression"],
+                    ["reach", "Reach"],
+                    ["views", "Views"],
+                    ["likes", "Like"],
+                    ["comments", "Commenti"],
+                    ["shares", "Condivisioni"],
+                    ["saves", "Salvataggi"],
+                    ["clicks", "Click"],
+                    ["follows", "Follow"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <input
+                    key={key}
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    placeholder={label}
+                    value={insightDraft[key]}
+                    onChange={(e) => setInsightDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                    className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs"
+                    aria-label={label}
+                  />
+                ))}
+                <select
+                  value={insightDraft.sentiment}
+                  onChange={(e) => setInsightDraft((prev) => ({ ...prev, sentiment: e.target.value }))}
+                  className="min-h-11 rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs"
+                  aria-label="Sentiment"
+                >
+                  <option value="">Sentiment</option>
+                  <option value="positive">positive</option>
+                  <option value="neutral">neutral</option>
+                  <option value="negative">negative</option>
+                </select>
+                <textarea
+                  value={insightDraft.notes}
+                  onChange={(e) => setInsightDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Insight qualitativo: cosa ha funzionato, commenti ricorrenti, hook da riusare..."
+                  className="rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs sm:col-span-3"
+                />
+              </div>
+              <Button type="button" size="sm" disabled={saving || targets.length === 0} onClick={() => void addInsight()} className="mt-3">
+                Salva insight
+              </Button>
+
+              <div className="mt-5 space-y-2">
+                {Object.values(insightsByTargetId).flat().length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Non ci sono ancora snapshot per questo slot.</p>
+                ) : (
+                  Object.values(insightsByTargetId)
+                    .flat()
+                    .sort((a, b) => b.captured_at.localeCompare(a.captured_at))
+                    .map((insight) => (
+                      <div key={insight.id} className="rounded-[14px] bg-muted/30 p-3 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {new Date(insight.captured_at).toLocaleDateString("it-IT")} · {insight.source}
+                          </span>
+                          <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => void deleteInsight(insight.id)}>
+                            Rimuovi
+                          </Button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-muted-foreground">
+                          <span className="inline-flex items-center gap-1"><Eye className="size-3" />{formatMetric(insight.views)}</span>
+                          <span className="inline-flex items-center gap-1"><Heart className="size-3" />{formatMetric(insight.likes)}</span>
+                          <span className="inline-flex items-center gap-1"><MessageCircle className="size-3" />{formatMetric(insight.comments)}</span>
+                          <span className="inline-flex items-center gap-1"><Share2 className="size-3" />{formatMetric(insight.shares)}</span>
+                          <span className="inline-flex items-center gap-1"><Bookmark className="size-3" />{formatMetric(insight.saves)}</span>
+                          <span className="inline-flex items-center gap-1"><MousePointerClick className="size-3" />{formatMetric(insight.clicks)}</span>
+                        </div>
+                        {insight.notes && <p className="mt-2 leading-relaxed text-foreground/80">{insight.notes}</p>}
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
           </div>
 
-          <DialogFooter className="flex flex-wrap gap-2 sm:justify-between">
+          <DialogFooter className="border-t border-border/60 bg-muted/20 px-6 py-4 sm:justify-between">
             <Button type="button" variant="outline" disabled={saving} onClick={() => void freeSlot()}>
               Libera slot (rimuove tutti i target)
             </Button>

@@ -761,7 +761,7 @@ const AdminMail = () => {
                           <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-sm font-sans font-medium text-foreground">
                             {message.subject || "(nessun oggetto)"}
                           </span>
-                          <span className="mt-2 block line-clamp-2 text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                          <span className="mail-list-preview mt-2 text-[13px] leading-5 text-muted-foreground">
                             {preview || "Messaggio senza anteprima."}
                           </span>
                         </button>

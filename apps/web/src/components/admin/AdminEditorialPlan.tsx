@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { addDays, eachDayOfInterval, endOfWeek, format, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
-import { BookOpen, ChevronLeft, ChevronRight, Dog, Instagram, Music2, Plus, Settings2, Youtube } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, Music2, Plus, Settings2, TrendingUp, Youtube } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -46,6 +46,17 @@ type TargetRow = {
   editorial_media_assets: { title: string; editorial_type: EditorialArticleType | null } | null;
 };
 
+type InsightLite = {
+  target_id: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  captured_at: string;
+};
+
 function EditorialChannelLogo({ code, className }: { code: EditorialChannelCode; className?: string }) {
   const ic = cn("size-3.5 shrink-0 text-foreground/90", className);
   switch (code) {
@@ -79,6 +90,7 @@ export default function AdminEditorialPlan() {
   const [slots, setSlots] = useState<SlotForPlan[]>([]);
   const [articles, setArticles] = useState<ArticleLite[]>([]);
   const [targetsBySlotId, setTargetsBySlotId] = useState<Record<string, TargetRow[]>>({});
+  const [insightsBySlotId, setInsightsBySlotId] = useState<Record<string, InsightLite[]>>({});
 
   const channelIdToCode = useMemo(() => {
     const m = new Map<string, EditorialChannelCode>();
@@ -123,6 +135,7 @@ export default function AdminEditorialPlan() {
       setSlots([]);
       setArticles([]);
       setTargetsBySlotId({});
+      setInsightsBySlotId({});
       setLoading(false);
       return;
     }
@@ -256,11 +269,39 @@ export default function AdminEditorialPlan() {
           map[sid].push(row);
         }
         setTargetsBySlotId(map);
+        const targetToSlot = new Map<string, string>();
+        for (const row of tdata as unknown as TargetRow[]) {
+          if (row.editorial_plan_slot_id) targetToSlot.set(row.id, row.editorial_plan_slot_id);
+        }
+        const targetIds = Array.from(targetToSlot.keys());
+        if (targetIds.length > 0) {
+          const { data: insightData, error: insightErr } = await supabase
+            .from("editorial_post_insights")
+            .select("target_id, reach, views, likes, comments, shares, saves, captured_at")
+            .in("target_id", targetIds)
+            .order("captured_at", { ascending: false });
+          if (!insightErr && insightData) {
+            const insightMap: Record<string, InsightLite[]> = {};
+            for (const insight of insightData as InsightLite[]) {
+              const sid = targetToSlot.get(insight.target_id);
+              if (!sid) continue;
+              if (!insightMap[sid]) insightMap[sid] = [];
+              insightMap[sid].push(insight);
+            }
+            setInsightsBySlotId(insightMap);
+          } else {
+            setInsightsBySlotId({});
+          }
+        } else {
+          setInsightsBySlotId({});
+        }
       } else {
         setTargetsBySlotId({});
+        setInsightsBySlotId({});
       }
     } else {
       setTargetsBySlotId({});
+      setInsightsBySlotId({});
     }
 
     setLoading(false);
@@ -357,6 +398,43 @@ export default function AdminEditorialPlan() {
 
   const distTotal = distribution.pillar + distribution.support + distribution.utility_reflection || 1;
 
+  const socialSummary = useMemo(() => {
+    const socialSlots = slotsInMonth.filter((s) => slotChannelCode(s) !== "site");
+    const socialTargets = socialSlots.flatMap((slot) => targetsBySlotId[slot.id] ?? []);
+    const published = socialTargets.filter((target) => target.status === "published").length;
+    const pending = socialTargets.filter((target) => target.status === "pending" || target.status === "publishing").length;
+    const failed = socialTargets.filter((target) => target.status === "failed").length;
+    const insights = Object.entries(insightsBySlotId)
+      .filter(([slotId]) => {
+        const slot = slotsById.get(slotId);
+        return slot ? slotChannelCode(slot) !== "site" : false;
+      })
+      .flatMap(([, list]) => list);
+    const latestByTarget = new Map<string, InsightLite>();
+    for (const insight of insights) {
+      const current = latestByTarget.get(insight.target_id);
+      if (!current || insight.captured_at > current.captured_at) latestByTarget.set(insight.target_id, insight);
+    }
+    const latest = Array.from(latestByTarget.values());
+    const reach = latest.reduce((sum, insight) => sum + insight.reach, 0);
+    const views = latest.reduce((sum, insight) => sum + insight.views, 0);
+    const engagement = latest.reduce(
+      (sum, insight) => sum + insight.likes + insight.comments + insight.shares + insight.saves,
+      0
+    );
+    return {
+      slots: socialSlots.length,
+      targets: socialTargets.length,
+      published,
+      pending,
+      failed,
+      insightSnapshots: insights.length,
+      reach,
+      views,
+      engagement,
+    };
+  }, [insightsBySlotId, slotsById, slotChannelCode, slotsInMonth, targetsBySlotId]);
+
   const openSlot = (s: SlotForPlan) => {
     setSelectedSlot(s);
     setSlotDialogOpen(true);
@@ -392,56 +470,90 @@ export default function AdminEditorialPlan() {
         </div>
       </div>
 
-      <div className="glass-panel-soft rounded-[26px] p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground shrink-0">
-            Distribuzione vs target
-          </p>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:min-w-[220px]">
-            <span className="text-[10px] font-sans uppercase tracking-wider text-muted-foreground whitespace-nowrap">
-              Canale KPI
-            </span>
-            <Select value={kpiChannelCode} onValueChange={(v) => setKpiChannelCode(v as EditorialChannelCode)}>
-              <SelectTrigger className="h-9 rounded-[14px] text-xs font-sans w-full sm:w-[min(100%,280px)]">
-                <SelectValue placeholder="Seleziona canale..." />
-              </SelectTrigger>
-              <SelectContent>
-                {EDITORIAL_CHANNEL_ORDER.map((code) => (
-                  <SelectItem key={code} value={code} className="text-xs">
-                    <span className="flex items-center gap-2">
-                      <EditorialChannelLogo code={code} />
-                      {EDITORIAL_CHANNEL_LABELS[code]}
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="glass-panel-soft rounded-[26px] p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground shrink-0">
+              Distribuzione vs target
+            </p>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:min-w-[220px]">
+              <span className="text-[10px] font-sans uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                Canale KPI
+              </span>
+              <Select value={kpiChannelCode} onValueChange={(v) => setKpiChannelCode(v as EditorialChannelCode)}>
+                <SelectTrigger className="h-9 rounded-[14px] text-xs font-sans w-full sm:w-[min(100%,280px)]">
+                  <SelectValue placeholder="Seleziona canale..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {EDITORIAL_CHANNEL_ORDER.map((code) => (
+                    <SelectItem key={code} value={code} className="text-xs">
+                      <span className="flex items-center gap-2">
+                        <EditorialChannelLogo code={code} />
+                        {EDITORIAL_CHANNEL_LABELS[code]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {(
+              [
+                ["pillar", kpiMix.mix_pillar, distribution.pillar],
+                ["support", kpiMix.mix_support, distribution.support],
+                ["utility_reflection", kpiMix.mix_utility, distribution.utility_reflection],
+              ] as const
+            ).map(([key, target, count]) => {
+              const t = key as EditorialArticleType;
+              const curPct = (count / distTotal) * 100;
+              return (
+                <div key={key}>
+                  <div className="flex justify-between text-xs font-sans mb-1">
+                    <span>{EDITORIAL_TYPE_LABELS[t]}</span>
+                    <span className="text-muted-foreground">
+                      {curPct.toFixed(0)}% / {target}%
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-accent/80 transition-all" style={{ width: `${Math.min(100, curPct)}%` }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {(
-            [
-              ["pillar", kpiMix.mix_pillar, distribution.pillar],
-              ["support", kpiMix.mix_support, distribution.support],
-              ["utility_reflection", kpiMix.mix_utility, distribution.utility_reflection],
-            ] as const
-          ).map(([key, target, count]) => {
-            const t = key as EditorialArticleType;
-            const curPct = (count / distTotal) * 100;
-            return (
-              <div key={key}>
-                <div className="flex justify-between text-xs font-sans mb-1">
-                  <span>{EDITORIAL_TYPE_LABELS[t]}</span>
-                  <span className="text-muted-foreground">
-                    {curPct.toFixed(0)}% / {target}%
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-accent/80 transition-all" style={{ width: `${Math.min(100, curPct)}%` }} />
-                </div>
+
+        <div className="glass-panel-soft rounded-[26px] p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Social cockpit</p>
+              <p className="mt-1 text-xs text-muted-foreground">Target e insight del mese visibile.</p>
+            </div>
+            <BarChart3 className="size-5 text-accent" aria-hidden />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Slot social", value: socialSummary.slots, icon: CalendarDays },
+              { label: "Target", value: socialSummary.targets, icon: TrendingUp },
+              { label: "Reach", value: socialSummary.reach, icon: Eye },
+              { label: "Engagement", value: socialSummary.engagement, icon: BarChart3 },
+            ].map(({ label, value, icon: Icon }) => (
+              <div key={label} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                <Icon className="mb-2 size-4 text-accent" aria-hidden />
+                <p className="font-sans text-xl font-semibold tabular-nums">{value.toLocaleString("it-IT")}</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
               </div>
-            );
-          })}
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.pending} in coda</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.published} pubblicati</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.insightSnapshots} snapshot</span>
+            {socialSummary.failed > 0 && (
+              <span className="rounded-full bg-destructive/10 px-3 py-1 text-destructive">{socialSummary.failed} errori</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -513,6 +625,8 @@ export default function AdminEditorialPlan() {
                       const eff = effectiveSlotType(s, art);
                       const label = eff ? EDITORIAL_TYPE_LABELS[eff] : "—";
                       const tlist = targetsBySlotId[s.id];
+                      const insightList = insightsBySlotId[s.id] ?? [];
+                      const latestInsight = insightList[0];
                       const socialHint = tlist?.length
                         ? `${tlist.length} uscit${tlist.length === 1 ? "a" : "e"}`
                         : null;
@@ -534,7 +648,14 @@ export default function AdminEditorialPlan() {
                             <div className="text-[9px] text-muted-foreground truncate pl-[1.125rem]">{s.content_format}</div>
                           )}
                           {socialHint && (
-                            <div className="text-[9px] text-accent truncate pl-[1.125rem]">{socialHint}</div>
+                            <div className="flex items-center gap-1 pl-[1.125rem] text-[9px] text-accent">
+                              <span className="truncate">{socialHint}</span>
+                              {latestInsight && (
+                                <span className="shrink-0 rounded-full bg-accent/10 px-1.5 py-0.5 text-[8px] tabular-nums">
+                                  {latestInsight.reach.toLocaleString("it-IT")} reach
+                                </span>
+                              )}
+                            </div>
                           )}
                           {chCode === "site" && s.status === "assigned" && art && (
                             <div className="text-[9px] text-foreground truncate pl-[1.125rem]">

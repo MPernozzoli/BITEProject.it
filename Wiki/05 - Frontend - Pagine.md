@@ -32,6 +32,8 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `UserBookings.tsx` | `/bookings` |
 | `ManageBookingParticipants.tsx` | `/bookings/:id/participants` |
 
+`UserLogin.tsx` usa un layout passwordless con metodi espliciti (Google, email OTP, passkey), autocomplete `username` sull'email e stato "ultimo usato"; `/admin/login` continua a rimandare allo stesso flusso unificato.
+
 `UserBookings.tsx` mostra, per booking confermati, la sezione **Mail briefing** divisa in primo briefing e secondo briefing operativo; la seconda scheda include anche la visualizzazione delle prese tipo L/F presenti a bordo.
 
 ## Newsletter / legali → [[12 - Newsletter ed Email]]
@@ -62,6 +64,8 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 Su iPhone/PWA, `Layout.tsx` aggiunge un dock mobile admin persistente su `/admin/*` e `/profile` per utenti con ruolo admin. Le pagine secondarie e il profilo hanno quindi sempre un link diretto alla Home admin (`/admin`) e alle altre aree operative.
 
 `AdminDashboard.tsx` usa una gerarchia da workspace: CTA primaria per nuovo articolo, shortcut solo per aree operative frequenti, KPI editoriali e navigazione interna per gruppi Contenuti/Operazioni/Audience. Il Profilo resta fuori dagli shortcut principali perché già coperto dalla propic e dal dock mobile.
+
+Nel tab Piano editoriale, `AdminDashboard.tsx` monta `AdminEditorialPlan`: calendario multicanale con cockpit social mensile, target social gestibili e raccolta insight sui post tramite `editorial_post_insights` → [[16 - Admin]].
 
 ## Collegamenti
 - Componenti usati: [[06 - Frontend - Componenti]]

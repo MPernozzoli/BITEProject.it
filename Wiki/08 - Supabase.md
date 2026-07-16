@@ -61,6 +61,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._voyage_booking_briefings.sql` — aggiunge i contenuti bilingue per prima/seconda mail briefing in `voyage_booking_settings`, estende `voyage_booking_notifications` con `first_briefing`/`second_briefing` e accoda automaticamente il primo briefing alla conferma booking o all'accettazione di un partecipante.
 - `..._observation_parameter_limitations.sql` — aggiunge `limitations_en`/`limitations_it` a `observation_parameters`, portando nel catalogo il testo sui limiti che era hardcoded in `/Data/sensors` → [[22 - Citizen Science e Osservazioni]].
 - `..._citizen_science_observations.sql` — introduce il dominio **citizen science** (`observation_parameters`, `observation_devices`, `observation_device_keys`, `observations`, `observation_measurements`), l'attribuzione automatica del viaggio dal timestamp e le viste `observations_map` / `observations_export` → [[22 - Citizen Science e Osservazioni]].
+- `..._editorial_post_insights.sql` — aggiunge `editorial_post_insights`, snapshot metrici e note qualitative per ogni `editorial_publish_targets` social; RLS admin-only, utile al cockpit social del piano editoriale → [[16 - Admin]].
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -79,6 +80,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound; `inbound_emails.attachments` conserva metadata e URL firmati temporanei Resend, `sent_emails.attachments` conserva solo metadata degli allegati inviati → [[12 - Newsletter ed Email]]
+- `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, più snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 

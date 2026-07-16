@@ -26,6 +26,7 @@ import {
   MapPinned,
   UploadCloud,
   Wine,
+  ChevronDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -196,6 +197,7 @@ const AdminDashboard = () => {
       : "articles";
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const [showStoryForm, setShowStoryForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
   const [storyForm, setStoryForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
@@ -513,14 +515,37 @@ const AdminDashboard = () => {
   ];
   const activeSectionMeta = sectionTabs.find((tab) => tab.id === activeSection) ?? sectionTabs[0];
   const publicationRate = articles.length > 0 ? Math.round((publishedCount / articles.length) * 100) : 0;
-  const adminQuickLinks = [
-    { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
-    { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
-    { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
-    { to: "/admin/logbook-points", label: "Punti foto", description: "Foto sulla mappa", icon: Camera, badge: 0 },
-    { to: "/admin/pack-gallery", label: "Galleria pack", description: "Foto del sito cani", icon: ImageIcon, badge: 0 },
-    { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned, badge: 0 },
-    { to: "/admin/spritz", label: "Spritz", description: "Easter egg trovato da", icon: Wine, badge: 0 },
+  const quickLinkGroups = [
+    {
+      label: "Comunicazioni",
+      items: [
+        { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
+        { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
+      ],
+    },
+    {
+      label: "Mappa",
+      items: [
+        { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa, insieme alle rotte", icon: MapPinned, badge: 0 },
+      ],
+    },
+    {
+      label: "Media",
+      collapsible: true,
+      icon: UploadCloud,
+      description: "Asset, punti foto e galleria pack",
+      items: [
+        { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
+        { to: "/admin/logbook-points", label: "Punti foto", description: "Foto sulla mappa", icon: Camera, badge: 0 },
+        { to: "/admin/pack-gallery", label: "Galleria pack", description: "Foto del sito cani", icon: ImageIcon, badge: 0 },
+      ],
+    },
+    {
+      label: "Extra",
+      items: [
+        { to: "/admin/spritz", label: "Spritz", description: "Easter egg trovato da", icon: Wine, badge: 0 },
+      ],
+    },
   ];
   const overviewMetrics = [
     { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },
@@ -530,8 +555,8 @@ const AdminDashboard = () => {
   ];
   const sectionGroups = [
     { label: "Contenuti", items: sectionTabs.filter((tab) => tab.id === "articles" || tab.id === "editorial" || tab.id === "stories") },
-    { label: "Operazioni", items: sectionTabs.filter((tab) => tab.id === "route" || tab.id === "badges") },
-    { label: "Audience", items: sectionTabs.filter((tab) => tab.id === "newsletter") },
+    { label: "Mappa", items: sectionTabs.filter((tab) => tab.id === "route") },
+    { label: "Community", items: sectionTabs.filter((tab) => tab.id === "newsletter" || tab.id === "badges") },
   ];
 
   if (!isAdminDevBypassEnabled() && (authLoading || !session)) {
@@ -588,35 +613,97 @@ const AdminDashboard = () => {
 
             <div className="glass-panel-soft rounded-[26px] p-4 md:p-5">
               <p className="mb-3 text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Shortcut operativi</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                {adminQuickLinks.map((item) => {
-                  const Icon = item.icon;
+              <div className="space-y-4">
+                {quickLinkGroups.map((group) => {
+                  const GroupIcon = group.icon;
                   return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void (async () => {
-                          if (!(await runRouteLeaveGuard())) return;
-                          navigate(item.to);
-                        })();
-                      }}
-                      className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
-                    >
-                      <span className="glass-chip relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
-                        <Icon size={16} />
-                        {item.badge > 0 && (
-                          <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
-                            {item.badge}
-                          </span>
-                        )}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
-                        <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
-                      </span>
-                    </Link>
+                    <div key={group.label} className="space-y-2">
+                      <p className="px-1 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground/70">{group.label}</p>
+                      {group.collapsible ? (
+                        <div className="rounded-[20px] border border-white/55 bg-white/40 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setMediaMenuOpen((prev) => !prev)}
+                            className="group flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/60"
+                            aria-expanded={mediaMenuOpen}
+                          >
+                            <span className="glass-chip inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
+                              {GroupIcon && <GroupIcon size={16} />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-sans font-medium text-foreground">{group.label}</span>
+                              <span className="block truncate text-xs font-sans text-muted-foreground">{group.description}</span>
+                            </span>
+                            <ChevronDown
+                              size={16}
+                              className={`shrink-0 text-muted-foreground transition-transform duration-interaction ease-out-expo ${mediaMenuOpen ? "rotate-180" : ""}`}
+                            />
+                          </button>
+                          {mediaMenuOpen && (
+                            <div className="space-y-1 border-t glass-divider p-2">
+                              {group.items.map((item) => {
+                                const Icon = item.icon;
+                                return (
+                                  <Link
+                                    key={item.to}
+                                    to={item.to}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      void (async () => {
+                                        if (!(await runRouteLeaveGuard())) return;
+                                        navigate(item.to);
+                                      })();
+                                    }}
+                                    className="group flex items-center gap-3 rounded-[16px] px-3 py-2.5 text-left transition-colors hover:bg-white/70"
+                                  >
+                                    <span className="glass-chip inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
+                                      <Icon size={14} />
+                                    </span>
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
+                                      <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
+                                    </span>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className={`grid grid-cols-1 gap-2 ${group.items.length > 1 ? "sm:grid-cols-2 xl:grid-cols-1" : ""}`}>
+                          {group.items.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <Link
+                                key={item.to}
+                                to={item.to}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  void (async () => {
+                                    if (!(await runRouteLeaveGuard())) return;
+                                    navigate(item.to);
+                                  })();
+                                }}
+                                className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
+                              >
+                                <span className="glass-chip relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
+                                  <Icon size={16} />
+                                  {item.badge > 0 && (
+                                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
+                                      {item.badge}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
+                                  <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
+                                </span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

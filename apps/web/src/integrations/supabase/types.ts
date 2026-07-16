@@ -753,6 +753,74 @@ export type Database = {
           },
         ]
       }
+      editorial_post_insights: {
+        Row: {
+          captured_at: string
+          clicks: number
+          comments: number
+          created_at: string
+          follows: number
+          id: string
+          impressions: number
+          likes: number
+          notes: string | null
+          reach: number
+          saves: number
+          sentiment: string | null
+          shares: number
+          source: string
+          target_id: string
+          updated_at: string
+          views: number
+        }
+        Insert: {
+          captured_at?: string
+          clicks?: number
+          comments?: number
+          created_at?: string
+          follows?: number
+          id?: string
+          impressions?: number
+          likes?: number
+          notes?: string | null
+          reach?: number
+          saves?: number
+          sentiment?: string | null
+          shares?: number
+          source?: string
+          target_id: string
+          updated_at?: string
+          views?: number
+        }
+        Update: {
+          captured_at?: string
+          clicks?: number
+          comments?: number
+          created_at?: string
+          follows?: number
+          id?: string
+          impressions?: number
+          likes?: number
+          notes?: string | null
+          reach?: number
+          saves?: number
+          sentiment?: string | null
+          shares?: number
+          source?: string
+          target_id?: string
+          updated_at?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_post_insights_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_publish_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_notification_preferences: {
         Row: {
           article_notifications_enabled: boolean

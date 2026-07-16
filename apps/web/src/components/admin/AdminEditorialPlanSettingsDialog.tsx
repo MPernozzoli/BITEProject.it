@@ -25,7 +25,7 @@ import {
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Link2, LogIn, Trash2 } from "lucide-react";
+import { CheckCircle2, KeyRound, Link2, LogIn, ShieldCheck, Trash2 } from "lucide-react";
 
 export type WeeklySlotFormRow = {
   localKey: string;
@@ -503,40 +503,55 @@ export default function AdminEditorialPlanSettingsDialog({
                     <AccordionContent className="space-y-5 text-sm pb-6">
                       {code !== "site" && (
                         <>
-                          <div className="rounded-[16px] border border-border/80 bg-muted/20 p-4 space-y-3">
-                            <div className="flex items-center gap-2 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                              <Link2 size={14} className="shrink-0" />
-                              Accesso al profilo social
-                            </div>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                              Per ogni canale social c’è un pulsante dedicato (es. «Accedi con Instagram»): ti porta sul sito del provider,
-                              torni qui dopo l’autorizzazione e il token viene salvato solo lato server. Sotto puoi aggiungere o correggere
-                              metadati (etichetta, note scope) se ti serve in admin.
-                            </p>
-                            <div className="flex flex-col gap-1.5">
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="gap-1"
-                                  disabled={savingOAuthCode !== null || oauthRedirecting !== null}
-                                  onClick={() => void startPlatformOAuth(code, d.channelId)}
-                                >
-                                  <LogIn size={14} />
-                                  {oauthRedirecting === code ? "Reindirizzamento…" : oauthLoginButtonLabel(code)}
-                                </Button>
+                          <div className="rounded-[18px] border border-border/80 bg-background/70 p-4 space-y-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                                  <Link2 size={14} className="shrink-0" />
+                                  Accesso al profilo social
+                                </div>
+                                <p className="mt-2 max-w-prose text-xs text-muted-foreground leading-relaxed">
+                                  Il login ufficiale del provider salva il token solo lato server. I campi sotto restano utili per riconoscere
+                                  il profilo e annotare gli scope concessi.
+                                </p>
                               </div>
+                              <div
+                                className={cn(
+                                  "inline-flex items-center gap-2 rounded-[14px] border px-3 py-2 text-xs font-medium",
+                                  oauthActive
+                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                                    : oauthMetaOnly
+                                      ? "border-accent/25 bg-accent/10 text-accent"
+                                      : "border-border bg-muted/40 text-muted-foreground",
+                                )}
+                              >
+                                {oauthActive ? <ShieldCheck size={14} /> : oauthMetaOnly ? <KeyRound size={14} /> : <CheckCircle2 size={14} />}
+                                {oauthActive ? "Token attivo" : oauthMetaOnly ? "Solo profilo" : "Da collegare"}
+                              </div>
+                            </div>
+
+                            <div className="rounded-[16px] border border-border/70 bg-muted/20 p-3">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="w-full justify-center gap-2 sm:w-auto"
+                                disabled={savingOAuthCode !== null || oauthRedirecting !== null}
+                                onClick={() => void startPlatformOAuth(code, d.channelId)}
+                              >
+                                <LogIn size={14} />
+                                {oauthRedirecting === code ? "Reindirizzamento…" : oauthLoginButtonLabel(code)}
+                              </Button>
                               {oauthSubhint ? (
-                                <p className="text-[10px] text-muted-foreground leading-relaxed max-w-prose">{oauthSubhint}</p>
+                                <p className="mt-2 text-[10px] text-muted-foreground leading-relaxed max-w-prose">{oauthSubhint}</p>
                               ) : null}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
-                                <label className="text-[10px] uppercase text-muted-foreground block mb-1">Provider API</label>
+                                <label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground block mb-1">Provider API</label>
                                 <select
                                   value={d.oauthProvider}
                                   onChange={(e) => updateDraft(code, { oauthProvider: e.target.value })}
-                                  className="w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
+                                  className="min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
                                 >
                                   {OAUTH_PROVIDER_OPTIONS.map((o) => (
                                     <option key={o.value} value={o.value}>
@@ -546,23 +561,26 @@ export default function AdminEditorialPlanSettingsDialog({
                                 </select>
                               </div>
                               <div>
-                                <label className="text-[10px] uppercase text-muted-foreground block mb-1">Nome / @ profilo</label>
+                                <label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground block mb-1">Nome / @ profilo</label>
                                 <input
+                                  id={`${code}-oauth-account`}
+                                  name={`${code}-oauth-account`}
+                                  autoComplete="off"
                                   value={d.oauthAccountLabel}
                                   onChange={(e) => updateDraft(code, { oauthAccountLabel: e.target.value })}
                                   placeholder="es. @biteproject o nome pagina"
-                                  className="w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
+                                  className="min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
                                 />
                               </div>
                             </div>
                             <div>
-                              <label className="text-[10px] uppercase text-muted-foreground block mb-1">Scope (opzionale, testo)</label>
+                              <label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground block mb-1">Scope e note permessi</label>
                               <textarea
                                 value={d.oauthScopes}
                                 onChange={(e) => updateDraft(code, { oauthScopes: e.target.value })}
                                 rows={2}
                                 placeholder="Note sui permessi concessi…"
-                                className="w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans resize-none"
+                                className="w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-xs font-sans"
                               />
                             </div>
                             <div className="flex flex-wrap gap-2">
