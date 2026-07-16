@@ -842,6 +842,10 @@ const AdminVoyageManager = ({
   const [draggedWaypointId, setDraggedWaypointId] = useState<string | null>(null);
   const [dragOverWaypointId, setDragOverWaypointId] = useState<string | null>(null);
   const [isSavingRouteDraft, setIsSavingRouteDraft] = useState(false);
+  const [isSavingVoyage, setIsSavingVoyage] = useState(false);
+  // Synchronous twin of isSavingVoyage: two clicks landing in the same tick would
+  // both read a stale `false` from state and each insert a voyage.
+  const savingVoyageRef = useRef(false);
   const [routeSaveProgress, setRouteSaveProgress] = useState<{
     label: string;
     percent: number;
@@ -857,6 +861,7 @@ const AdminVoyageManager = ({
   const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
   const [isMapWorkspaceFullscreen, setIsMapWorkspaceFullscreen] = useState(false);
   const [isWaypointSidebarCollapsed, setIsWaypointSidebarCollapsed] = useState(false);
+  const isWaypointSidebarCollapsedRef = useRef(false);
   const [autoOpenWaypointPanel, setAutoOpenWaypointPanel] = useState(true);
   const waypointEditorPanelIdRef = useRef<string | null>(null);
 
@@ -1533,6 +1538,12 @@ const AdminVoyageManager = ({
   useEffect(() => {
     waypointEditorPanelIdRef.current = waypointEditorPanelId;
   }, [waypointEditorPanelId]);
+
+  // Read from the marker click handler, which must not depend on this state: doing so
+  // would rebuild every marker on each collapse toggle.
+  useEffect(() => {
+    isWaypointSidebarCollapsedRef.current = isWaypointSidebarCollapsed;
+  }, [isWaypointSidebarCollapsed]);
 
   useEffect(() => {
     setWaypointEditorPanelIdRef.current = setWaypointEditorPanelId;
@@ -2441,8 +2452,9 @@ const AdminVoyageManager = ({
       markerEl.addEventListener("click", (event) => {
         event.stopPropagation();
         queueMicrotask(() => void focusWaypointOnMapRef.current(waypoint.id));
-        if (!autoOpenWaypointPanel) return;
-        setIsWaypointSidebarCollapsed(false);
+        // Collapsing is an explicit "stop opening panels at me". Re-expanding here would
+        // undo it on the very next marker click, so the collapse could never stick.
+        if (!autoOpenWaypointPanel || isWaypointSidebarCollapsedRef.current) return;
         setWaypointEditorPanelIdRef.current((prev) => (prev === waypoint.id ? null : waypoint.id));
       });
 
@@ -2592,7 +2604,17 @@ const AdminVoyageManager = ({
     const map = mapRef.current;
     if (!map) return;
 
-    const draw = () => drawRouteOnMap(map);
+    // drawRouteOnMap issues raw removeLayer/addSource/marker calls. When the browser
+    // tears the map down mid-frame — e.g. a native confirm() dropping fullscreen during
+    // a waypoint delete — those can throw; unguarded, the throw reaches the error
+    // boundary and takes the whole panel down. Swallow it: the next state change redraws.
+    const draw = () => {
+      try {
+        drawRouteOnMap(map);
+      } catch (error) {
+        console.error("[AdminVoyageManager] route redraw failed; retrying on next change", error);
+      }
+    };
     if (map.isStyleLoaded()) draw();
     else map.once("load", draw);
   }, [drawRouteOnMap, routeGeometryTick, selectedVoyageId, waypoints]);
@@ -2666,7 +2688,7 @@ const AdminVoyageManager = ({
     onRequestEditVoyageConsumed?.();
   }, [requestEditVoyageId, voyages, openVoyageForm, onRequestEditVoyageConsumed]);
 
-  const saveVoyage = useCallback(async () => {
+  const performSaveVoyage = useCallback(async () => {
     const nameIt = voyageForm.name_it.trim();
     const nameEn = voyageForm.name_en.trim();
     const descriptionIt = voyageForm.description_it.trim();
@@ -2780,6 +2802,20 @@ const AdminVoyageManager = ({
     setShowVoyageForm(false);
     return true;
   }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, refreshVoyageStatus, setCurrentSelectedVoyageId, syncBookableLegs, syncVoyageGeometry, voyageForm]);
+
+  // The create branch inserts unconditionally, so every concurrent call is a new
+  // voyage row. Callers include both the Save button and the leave guard.
+  const saveVoyage = useCallback(async () => {
+    if (savingVoyageRef.current) return false;
+    savingVoyageRef.current = true;
+    setIsSavingVoyage(true);
+    try {
+      return await performSaveVoyage();
+    } finally {
+      savingVoyageRef.current = false;
+      setIsSavingVoyage(false);
+    }
+  }, [performSaveVoyage]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -3837,10 +3873,14 @@ const AdminVoyageManager = ({
           </div>
 
           <button
+            type="button"
             onClick={() => void saveVoyage()}
-            className="bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:opacity-90 transition-opacity"
+            disabled={isSavingVoyage}
+            aria-busy={isSavingVoyage}
+            className="bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
-            {editingVoyage ? "Update" : "Create"}
+            {isSavingVoyage ? <Loader2 size={14} className="animate-spin shrink-0" /> : null}
+            {isSavingVoyage ? "Salvataggio…" : editingVoyage ? "Update" : "Create"}
           </button>
         </div>
       )}
