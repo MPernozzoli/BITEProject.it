@@ -1,17 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   instagramProfile,
-  languages,
-  metrics as fallbackMetrics,
-  publicMetricsMethodology,
-  topCountries,
-  currentLanguage,
   uiCopy,
 } from "@/data/site";
 import { SectionHeader } from "@/components/SectionHeader";
 import { useReveal } from "@/hooks/use-reveal";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { useInstagramMetrics, type AudienceItem, type MetricItem } from "@/hooks/use-instagram-metrics";
 
 const formatNumber = (n: number) => {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
@@ -103,63 +98,13 @@ const BarRow = ({ label, value }: { label: string; value: number }) => (
   </div>
 );
 
-type MetricItem = {
-  label: string;
-  value: number;
-  suffix: string;
-};
-
-type AudienceItem = {
-  label: string;
-  value: number;
-};
-
-type SocialMetricsResponse = {
-  metrics?: MetricItem[];
-  topCountries?: AudienceItem[];
-  audienceBreakdown?: AudienceItem[];
-  updatedAt?: string;
-  mediaKitUrl?: string;
-  source?: string;
-};
-
 export const Metrics = () => {
-  const [liveMetrics, setLiveMetrics] = useState<MetricItem[] | null>(null);
-  const [liveCountries, setLiveCountries] = useState<AudienceItem[] | null>(null);
-  const [liveAudienceBreakdown, setLiveAudienceBreakdown] = useState<AudienceItem[] | null>(null);
-  const [updatedAt, setUpdatedAt] = useState(publicMetricsMethodology.capturedAt);
-
-  useEffect(() => {
-    const loadMetrics = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke<SocialMetricsResponse>(
-          instagramProfile.supabaseFunctionName,
-          {
-            body: {
-              slug: instagramProfile.handle,
-              mediaKitUrl: instagramProfile.mediaKitUrl,
-              profileInfoUrl: instagramProfile.profileInfoUrl,
-              language: currentLanguage,
-            },
-          },
-        );
-
-        if (error) throw error;
-        if (data?.metrics?.length) setLiveMetrics(data.metrics);
-        if (data?.topCountries?.length) setLiveCountries(data.topCountries);
-        if (data?.audienceBreakdown?.length) setLiveAudienceBreakdown(data.audienceBreakdown);
-        if (data?.updatedAt) setUpdatedAt(data.updatedAt);
-      } catch (error) {
-        console.warn("Unable to refresh metrics. Using embedded snapshot.", error);
-      }
-    };
-
-    void loadMetrics();
-  }, []);
-
-  const displayedMetrics = liveMetrics ?? fallbackMetrics;
-  const displayedCountries = liveCountries ?? topCountries;
-  const displayedAudienceBreakdown = liveAudienceBreakdown ?? languages;
+  const {
+    metrics: displayedMetrics,
+    topCountries: displayedCountries,
+    audienceBreakdown: displayedAudienceBreakdown,
+    updatedAt,
+  } = useInstagramMetrics();
 
   return (
     <section id="metrics" className="page-section pt-8 md:pt-10">

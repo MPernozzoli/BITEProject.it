@@ -108,7 +108,7 @@ export default function AdminEditorialPlanSettingsDialog({
   /** Cosa vede l’utente dopo il tap (login ufficiale del provider). */
   const oauthLoginSubhint = (code: EditorialChannelCode): string => {
     if (code === "instagram_bite" || code === "instagram_dogs") {
-      return "Si apre il login Meta (Facebook): non esiste un OAuth “solo Instagram” per la pubblicazione API; autorizzi Meta e colleghi l’Instagram Business legato a una Pagina.";
+      return "Si apre il login Instagram gestito da Meta: serve un account Instagram professionale e un’app configurata nel portale Meta Developers.";
     }
     if (code === "youtube") {
       return "Si apre Google: accedi con l’account che possiede il canale YouTube da usare per questo canale editoriale.";

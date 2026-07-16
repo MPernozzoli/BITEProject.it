@@ -5,7 +5,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ⬅️ [[Home]] · sorgente: `apps/web/supabase/functions/` · config JWT in `apps/web/supabase/config.toml`
 
-28 funzioni serverless Supabase (Deno). Raggruppate per dominio:
+29 funzioni serverless Supabase (Deno). Raggruppate per dominio:
 
 ## 📧 Email transazionale & sistema → [[12 - Newsletter ed Email]]
 - `send-transactional-email` (verify_jwt) — invio email transazionali
@@ -37,7 +37,8 @@ tags: [backend, edge-functions, serverless, supabase]
 - (geo servito da `public-geo`) → [[14 - Mappe e Layer Geospaziale]]
 
 ## 📱 Social & contenuti
-- `social-oauth-start`, `social-oauth-callback` — OAuth social publishing
+- `social-oauth-start`, `social-oauth-callback` — OAuth social publishing. Instagram usa il flusso **Instagram API with Instagram Login**: redirect su `https://www.instagram.com/oauth/authorize`, scope `instagram_business_basic` + `instagram_business_content_publish`, exchange su `api.instagram.com/oauth/access_token` e long-lived token su `graph.instagram.com/access_token`. La function richiede `SOCIAL_OAUTH_STATE_SECRET`, `SOCIAL_OAUTH_CALLBACK_URL`, `SOCIAL_OAUTH_FRONTEND_URL` e, per Instagram, `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` come secret Supabase.
+- `instagram-metrics` — endpoint pubblico per `apps/pack`: legge server-side solo la connessione OAuth del canale `instagram_dogs`, aggiorna `pack.external_metrics_cache` e restituisce metriche compatte per il sito cani. Se il profilo non è ancora collegato o Instagram fallisce, Pack mantiene lo snapshot statico.
 - `publish-social-queue` — coda pubblicazione social
 - `translate-editor-content` — traduzione contenuti editor (IT/EN)
 - `contact-form-submit` — invio form contatti

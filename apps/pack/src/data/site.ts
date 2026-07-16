@@ -31,11 +31,11 @@ export const instagramProfile = {
 };
 
 export const publicMetricsMethodology = {
-  capturedAt: "2026-04-18",
+  capturedAt: "2026-07-16",
   sampledPostCount: 25,
   excludesMostRecentPost: false,
   refreshWindow: "24h",
-  sourceLabel: "Not Just Analytics",
+  sourceLabel: "Instagram Graph API",
 };
 
 export const uiCopy = isItalian
@@ -316,12 +316,12 @@ export const castingSubsections = [
 ];
 
 export const metrics = [
-  { label: isItalian ? "Follower Instagram" : "Instagram followers", value: 863, suffix: "" },
-  { label: "Engagement rate", value: 12.16, suffix: "%" },
-  { label: isItalian ? "Like medi / post" : "Avg. likes / post", value: 74, suffix: "" },
-  { label: isItalian ? "Commenti medi / post" : "Avg. comments / post", value: 6, suffix: "" },
+  { label: isItalian ? "Follower Instagram" : "Instagram followers", value: 904, suffix: "" },
+  { label: "Engagement rate", value: 9.27, suffix: "%" },
+  { label: isItalian ? "Like medi / post" : "Avg. likes / post", value: 77, suffix: "" },
+  { label: isItalian ? "Commenti medi / post" : "Avg. comments / post", value: 7, suffix: "" },
   { label: isItalian ? "Post analizzati" : "Posts sampled", value: 25, suffix: "" },
-  { label: isItalian ? "Post totali" : "Total posts", value: 91, suffix: "" },
+  { label: isItalian ? "Post totali" : "Total posts", value: 92, suffix: "" },
 ];
 
 export const topCountries = [

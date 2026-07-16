@@ -4,7 +4,7 @@
  * Env:
  * - SOCIAL_OAUTH_STATE_SECRET (obbligatorio)
  * - SOCIAL_OAUTH_CALLBACK_URL: stesso URL su Meta / Google / TikTok (…/functions/v1/social-oauth-callback)
- * - META_APP_ID, META_APP_SECRET · GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET · TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
+ * - INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET · GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET · TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
  *
  * GET ?channel_id=<uuid>  (Authorization: Bearer <access_token utente admin>, header apikey anon)
  */
@@ -87,30 +87,30 @@ Deno.serve(async (req) => {
   const callbackUrl = Deno.env.get('SOCIAL_OAUTH_CALLBACK_URL')
 
   if (provider === 'meta_instagram') {
-    const appId = Deno.env.get('META_APP_ID')
+    const appId = Deno.env.get('INSTAGRAM_APP_ID') ?? Deno.env.get('META_APP_ID')
     if (!appId || !callbackUrl) {
       return json(
         {
           error: 'meta_not_configured',
-          hint: 'Imposta META_APP_ID e SOCIAL_OAUTH_CALLBACK_URL (URL function social-oauth-callback) nel progetto Supabase.',
+          hint:
+            'Imposta INSTAGRAM_APP_ID e SOCIAL_OAUTH_CALLBACK_URL (URL function social-oauth-callback) nel progetto Supabase. INSTAGRAM_APP_ID è l’ID in Instagram > API setup with Instagram login nel portale Meta.',
         },
         503,
       )
     }
     const redirect = callbackUrl
     const scopes = [
-      'pages_show_list',
-      'pages_read_engagement',
-      'instagram_basic',
-      'instagram_content_publish',
-      'business_management',
+      'instagram_business_basic',
+      'instagram_business_content_publish',
     ].join(',')
-    const auth = new URL('https://www.facebook.com/v21.0/dialog/oauth')
+    const auth = new URL('https://www.instagram.com/oauth/authorize')
     auth.searchParams.set('client_id', appId)
     auth.searchParams.set('redirect_uri', redirect)
     auth.searchParams.set('state', state)
     auth.searchParams.set('response_type', 'code')
     auth.searchParams.set('scope', scopes)
+    auth.searchParams.set('enable_fb_login', '0')
+    auth.searchParams.set('force_authentication', '1')
     return json({ authorization_url: auth.toString(), provider })
   }
 

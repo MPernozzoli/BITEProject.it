@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { duoPhotos } from "@/data/photos";
-import { instagramProfile, metrics, uiCopy } from "@/data/site";
+import { instagramProfile, uiCopy } from "@/data/site";
 import { profiles } from "@/data/profiles";
+import { useInstagramMetrics } from "@/hooks/use-instagram-metrics";
 import { cn } from "@/lib/utils";
 
 type HeroChapter = {
@@ -69,10 +70,6 @@ const heroChapters: HeroChapter[] = [
     align: "center",
     layout: "kit",
     image: { x: 0, y: -2, scale: 1.08 },
-    stats: [metrics[0], metrics[2], metrics[1], metrics[3]].map((metric) => ({
-      label: metric.label,
-      value: `${metric.value}${metric.suffix}`,
-    })),
   },
 ];
 
@@ -140,6 +137,7 @@ const ChapterStats = ({
 };
 
 export const Hero = () => {
+  const { metrics } = useInstagramMetrics();
   const sectionRef = useRef<HTMLElement>(null);
   const snapTimerRef = useRef<number>();
   const snapFrameRef = useRef<number>();
@@ -148,6 +146,21 @@ export const Hero = () => {
   const previousScrollBehaviorRef = useRef<string>();
   const [progress, setProgress] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const chapters = useMemo(
+    () =>
+      heroChapters.map((chapter) =>
+        chapter.id === "kit"
+          ? {
+              ...chapter,
+              stats: [metrics[0], metrics[2], metrics[1], metrics[3]].filter(Boolean).map((metric) => ({
+                label: metric.label,
+                value: `${metric.value}${metric.suffix}`,
+              })),
+            }
+          : chapter,
+      ),
+    [metrics],
+  );
 
   useEffect(() => {
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -296,7 +309,7 @@ export const Hero = () => {
 
   const imageStyle = useMemo(() => {
     if (reducedMotion) {
-      const { image } = heroChapters[0];
+      const { image } = chapters[0];
       return {
         transform: `translate3d(${image.x}%, ${image.y}%, 0) scale(${image.scale})`,
       };
@@ -304,14 +317,14 @@ export const Hero = () => {
 
     const clampedProgress = Math.min(progress, finalChapterProgress);
     const nextIndex = chapterProgress.findIndex((marker) => marker >= clampedProgress);
-    const endIndex = nextIndex === -1 ? heroChapters.length - 1 : nextIndex;
+    const endIndex = nextIndex === -1 ? chapters.length - 1 : nextIndex;
     const startIndex = Math.max(0, endIndex - 1);
     const startMarker = chapterProgress[startIndex];
     const endMarker = chapterProgress[endIndex];
     const localProgress =
       startIndex === endIndex ? 0 : smoothstep(clamp((clampedProgress - startMarker) / (endMarker - startMarker)));
-    const start = heroChapters[startIndex].image;
-    const end = heroChapters[endIndex].image;
+    const start = chapters[startIndex].image;
+    const end = chapters[endIndex].image;
 
     return {
       transform: `translate3d(${lerp(start.x, end.x, localProgress)}%, ${lerp(
@@ -320,10 +333,10 @@ export const Hero = () => {
         localProgress,
       )}%, 0) scale(${lerp(start.scale, end.scale, localProgress)})`,
     };
-  }, [progress, reducedMotion]);
+  }, [chapters, progress, reducedMotion]);
 
   const chapterOpacities = useMemo(() => {
-    if (reducedMotion) return heroChapters.map((_, index) => (index === 0 ? 1 : 0));
+    if (reducedMotion) return chapters.map((_, index) => (index === 0 ? 1 : 0));
 
     const clampedProgress = clamp(progress, 0, finalChapterProgress);
     let segment = chapterProgress.length - 2;
@@ -338,12 +351,12 @@ export const Hero = () => {
     const t = gap > 0 ? clamp((clampedProgress - chapterProgress[segment]) / gap) : 1;
     const eased = smoothstep(clamp((t - chapterCrossfadeStart) / (chapterCrossfadeEnd - chapterCrossfadeStart)));
 
-    return heroChapters.map((_, index) => {
+    return chapters.map((_, index) => {
       if (index === segment) return 1 - eased;
       if (index === segment + 1) return eased;
       return 0;
     });
-  }, [progress, reducedMotion]);
+  }, [chapters, progress, reducedMotion]);
 
   return (
     <section
@@ -365,7 +378,7 @@ export const Hero = () => {
         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-background to-transparent" />
 
         <div className="container-editorial relative z-10 flex h-full items-end pb-10 pt-28 md:items-center md:pb-0">
-          {heroChapters.map((chapter, index) => {
+          {chapters.map((chapter, index) => {
             const opacity = chapterOpacities[index];
             const lift = (1 - opacity) * 18;
             const isKit = chapter.layout === "kit";

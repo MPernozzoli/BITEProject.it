@@ -3,7 +3,7 @@
  *
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SOCIAL_OAUTH_STATE_SECRET, SOCIAL_OAUTH_CALLBACK_URL,
  * SOCIAL_OAUTH_FRONTEND_URL (es. https://tuodominio.it/admin — redirect finale dopo successo/errore),
- * META_APP_ID, META_APP_SECRET, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, TIKTOK_CLIENT_SECRET
+ * INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, TIKTOK_CLIENT_SECRET
  */
 
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url)
-  const code = url.searchParams.get('code')
+  const code = url.searchParams.get('code')?.replace(/#_$/, '')
   const state = url.searchParams.get('state')
   const oauthError = url.searchParams.get('error_description') ?? url.searchParams.get('error')
 
@@ -75,30 +75,41 @@ Deno.serve(async (req) => {
   let refreshOrLongToken: string
   let expiresAt: string | null = null
   let scopesNote: string | null = null
+  let providerAccountLabel: string | null = null
 
   try {
     if (provider === 'meta_instagram') {
-      const appId = Deno.env.get('META_APP_ID')
-      const appSecret = Deno.env.get('META_APP_SECRET')
+      const appId = Deno.env.get('INSTAGRAM_APP_ID') ?? Deno.env.get('META_APP_ID')
+      const appSecret = Deno.env.get('INSTAGRAM_APP_SECRET') ?? Deno.env.get('META_APP_SECRET')
       if (!appId || !appSecret) throw new Error('meta_secret_missing')
 
-      const tokenUrl = new URL('https://graph.facebook.com/v21.0/oauth/access_token')
-      tokenUrl.searchParams.set('client_id', appId)
-      tokenUrl.searchParams.set('redirect_uri', callbackUrl)
-      tokenUrl.searchParams.set('client_secret', appSecret)
-      tokenUrl.searchParams.set('code', code)
-
-      const tr = await fetch(tokenUrl.toString())
-      const tj = (await tr.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } }
+      const body = new URLSearchParams({
+        client_id: appId,
+        client_secret: appSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: callbackUrl,
+        code,
+      })
+      const tr = await fetch('https://api.instagram.com/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      })
+      const tj = (await tr.json()) as {
+        access_token?: string
+        user_id?: number | string
+        error_message?: string
+        error?: { message?: string } | string
+      }
       if (!tr.ok || !tj.access_token) {
-        throw new Error(tj.error?.message ?? 'meta_token_exchange_failed')
+        const metaError = typeof tj.error === 'string' ? tj.error : tj.error?.message
+        throw new Error(tj.error_message ?? metaError ?? 'instagram_token_exchange_failed')
       }
 
-      const llUrl = new URL('https://graph.facebook.com/v21.0/oauth/access_token')
-      llUrl.searchParams.set('grant_type', 'fb_exchange_token')
-      llUrl.searchParams.set('client_id', appId)
+      const llUrl = new URL('https://graph.instagram.com/access_token')
+      llUrl.searchParams.set('grant_type', 'ig_exchange_token')
       llUrl.searchParams.set('client_secret', appSecret)
-      llUrl.searchParams.set('fb_exchange_token', tj.access_token)
+      llUrl.searchParams.set('access_token', tj.access_token)
 
       const lr = await fetch(llUrl.toString())
       const lj = (await lr.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } }
@@ -113,7 +124,10 @@ Deno.serve(async (req) => {
           expiresAt = new Date(Date.now() + lj.expires_in * 1000).toISOString()
         }
       }
-      scopesNote = 'meta_instagram_graph'
+      scopesNote = `instagram_business_basic,instagram_business_content_publish${
+        tj.user_id ? `; instagram_user_id=${tj.user_id}` : ''
+      }`
+      providerAccountLabel = tj.user_id ? `Instagram ${tj.user_id}` : null
     } else if (provider === 'google_youtube') {
       const clientId = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID')
       const clientSecret = Deno.env.get('GOOGLE_OAUTH_CLIENT_SECRET')
@@ -200,7 +214,7 @@ Deno.serve(async (req) => {
       ...(existing?.id ? { id: existing.id } : {}),
       channel_id: channelId,
       provider,
-      account_label: existing?.account_label ?? null,
+      account_label: existing?.account_label ?? providerAccountLabel,
       refresh_token_encrypted: refreshOrLongToken,
       access_token_expires_at: expiresAt,
       scopes: scopesNote,

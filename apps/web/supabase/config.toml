@@ -50,5 +50,7 @@ project_id = "ekwloweuicrqjjgabfdp"
     verify_jwt = false
   [functions.social-oauth-callback]
     verify_jwt = false
+  [functions.instagram-metrics]
+    verify_jwt = false
   [functions.admin-storage-buckets]
     verify_jwt = true

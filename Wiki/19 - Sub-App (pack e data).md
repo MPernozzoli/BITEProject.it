@@ -40,6 +40,7 @@ Poi `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla 
 - Le migrazioni delle sub-app vivono comunque in `apps/web/supabase/migrations/`: il progetto Supabase è uno solo.
 - Dev server delle sub-app in `.claude/launch.json`: `pack` → 5199, `data` → 5197.
 - Stato di `apps/data`: la mappa (`/map`) legge dati reali; `Data Explorer`, `Sensors`, `Missions` e `Downloads` sono ancora **mock hardcoded** nei rispettivi file.
+- Stato di `apps/pack`: la galleria legge solo `pack_gallery_photos`/bucket `pack-gallery`; le metriche Instagram, inclusi i numeri nel capitolo hero del media kit, chiamano la Edge Function `instagram-metrics`, che usa esclusivamente la connessione OAuth del canale editoriale `instagram_dogs` e salva uno snapshot in `pack.external_metrics_cache`. Senza collegamento OAuth valido, il sito resta sul fallback statico embedded, allineato allo snapshot Instagram Graph del 16 luglio 2026.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[20 - Comandi e Workflow]] · [[15 - Semantic Layer (AI Agents)]] · [[22 - Citizen Science e Osservazioni]]
