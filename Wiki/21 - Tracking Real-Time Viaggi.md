@@ -66,6 +66,12 @@ Compare da **7 giorni prima** della partenza prevista e resta finché il viaggio
 
 Il tasto chiede sempre il dato mancante, deciso da `getPendingActual()` sull'actual e non sulla fase: se la data prevista passa senza che nessuno abbia premuto "parti ora", la tratta è `active` per orologio ma il widget continua a chiedere la **partenza**, non l'arrivo.
 
+Le date mostrate sono la **finestra intera**, con `formatBookingWindow` di `booking-utils.ts` — la stessa funzione e lo stesso formato della matrice booking: `10–13 set h 07:30`. Non si sceglie un bordo solo: mostrare solo l'early nasconderebbe la flessibilità, e accostare la partenza più presto all'arrivo più tardi farebbe sembrare Bari → Santa Maria di Leuca (21 ore) una traversata di quattro giorni.
+
+Quando arriva un actual la finestra collassa (`start == end`) e `formatBookingWindow` **degrada da sola a data singola** (`11 set h 07:30`), senza logica extra nel widget; l'etichetta passa da "Partenza prevista" a "Partito il". La fase invece usa `ends_at_window_end`, il bordo tardo: una tratta non è conclusa finché non è passato l'arrivo più tardi possibile.
+
+Nota: `formatBookingWindow` formatta nel fuso del browser, non forzando Europe/Rome. È il comportamento della matrice e il widget lo eredita per coerenza, ma per un equipaggio che naviga all'estero le due viste mostrerebbero l'ora locale del dispositivo.
+
 ## Funzioni SQL → [[08 - Supabase]]
 | Funzione | Ruolo |
 |---|---|

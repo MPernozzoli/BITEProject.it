@@ -11,6 +11,7 @@ import {
   shouldShowLiveWidget,
   type PhaseLeg,
 } from "@/lib/voyage-schedule";
+import { formatBookingWindow } from "@/lib/booking-utils";
 
 /** 12:00 Rome, so a test never straddles a day boundary by accident. */
 const at = (iso: string) => new Date(`${iso}T12:00:00+02:00`);
@@ -193,6 +194,38 @@ describe("isLegDelayed", () => {
 
   it("reports nothing without a baseline to compare against", () => {
     expect(isLegDelayed({ starts_at_window_start: "2026-09-15T05:30:00Z" })).toBe(false);
+  });
+});
+
+describe("leg window display", () => {
+  // Real Bari -> Santa Maria di Leuca bounds: a 21-hour hop on a voyage carrying
+  // 3 flex days, so each bound spans three days. The widget shows the whole window
+  // through formatBookingWindow, the same way the booking matrix does — showing one
+  // bound alone would either hide the flex or fake a four-day crossing.
+  const real = {
+    starts_at_window_start: "2026-09-10T05:30:00Z",
+    starts_at_window_end: "2026-09-13T05:30:00Z",
+    ends_at_window_start: "2026-09-11T02:39:24Z",
+    ends_at_window_end: "2026-09-14T02:39:24Z",
+  };
+
+  it("renders both ends of the flex window", () => {
+    expect(formatBookingWindow(real.starts_at_window_start, real.starts_at_window_end, "it-IT")).toContain("–");
+    expect(formatBookingWindow(real.ends_at_window_start, real.ends_at_window_end, "it-IT")).toContain("–");
+  });
+
+  it("collapses to one date once an actual pins both bounds", () => {
+    // Recording an actual sets start === end, so the range becomes a single moment
+    // with no extra work in the widget.
+    const pinned = formatBookingWindow(real.starts_at_window_start, real.starts_at_window_start, "it-IT");
+    expect(pinned).not.toContain("–");
+    expect(pinned).toBeTruthy();
+  });
+
+  it("still uses the late arrival bound to decide the phase", () => {
+    // Mid-window: the early bound has passed but the leg may not be over yet.
+    expect(getLegPhase(real, at("2026-09-12"))).toBe("active");
+    expect(getLegPhase(real, at("2026-09-15"))).toBe("completed");
   });
 });
 

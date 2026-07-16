@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import MapControlPanel from "@/components/MapControlPanel";
 import { useVoyages } from "@/hooks/use-voyages";
 import {
   useObservationParameters,
@@ -16,6 +17,8 @@ import {
   ROUTE_MUTED,
   valueScaleExpression,
 } from "@/lib/observation-scale";
+import { buildVoyageUrl } from "@/lib/voyage-link";
+import type { Voyage } from "@/hooks/use-voyages";
 
 const escapeHtml = (value: unknown) =>
   String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -25,9 +28,30 @@ const escapeHtml = (value: unknown) =>
 /** ISO 8601 UTC to the second — the precision the logger actually reports. */
 const isoUtc = (recordedAt: string) => new Date(recordedAt).toISOString().replace(/\.\d{3}Z$/, "Z");
 
+/** Human date for the popup badge; the exact ISO instant lives in the station module. */
+const badgeDate = (recordedAt: string) =>
+  new Date(recordedAt).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+const metaRow = (label: string, value: string) =>
+  `<div style="display:flex;gap:8px;justify-content:space-between;">
+    <span style="color:hsl(220 10% 48%);">${escapeHtml(label)}</span>
+    <span style="color:hsl(220 28% 14%);font-weight:600;text-align:right;">${value}</span>
+  </div>`;
+
+/**
+ * Built from the logbook's own popup classes (.voyage-popup*, defined in the shared
+ * stylesheet) so a researcher landing here meets the same object they'd meet on
+ * biteproject.it — and the voyage title is a way into its story, not a label.
+ */
 const buildPopupHtml = (
   observation: Observation,
-  voyageName: string | null,
+  voyage: Voyage | null,
+  accent: string,
   parameters: ObservationParameter[],
 ) => {
   const rows = parameters
@@ -36,13 +60,16 @@ const buildPopupHtml = (
       if (!reading) return null;
       const value =
         reading.value !== null && reading.value !== undefined
-          ? `${formatValue(reading.value, p)} ${escapeHtml(p.unit)}`
+          ? `${formatValue(reading.value, p)} <span style="color:hsl(220 10% 48%);font-weight:500;">${escapeHtml(p.unit)}</span>`
           : escapeHtml(reading.text);
-      const qc = QC_LABELS[reading.qc] ?? String(reading.qc);
+      // QC 1 = good is the expected case; only call out the readings that need judging.
+      const qc =
+        reading.qc === 1
+          ? ""
+          : `<span style="color:hsl(38 65% 38%);font-weight:600;"> · ${escapeHtml(QC_LABELS[reading.qc] ?? String(reading.qc))}</span>`;
       return `<tr>
-        <td style="padding:2px 10px 2px 0;color:hsl(var(--muted-foreground));white-space:nowrap;">${escapeHtml(p.label_en)}</td>
-        <td style="padding:2px 8px 2px 0;color:hsl(var(--foreground));font-weight:600;white-space:nowrap;">${value}</td>
-        <td style="padding:2px 0;color:hsl(var(--fog));white-space:nowrap;">QC: ${escapeHtml(qc)}</td>
+        <td style="padding:3px 10px 3px 0;color:hsl(220 10% 48%);">${escapeHtml(p.label_en)}</td>
+        <td style="padding:3px 0;color:hsl(220 28% 14%);font-weight:700;text-align:right;white-space:nowrap;">${value}${qc}</td>
       </tr>`;
     })
     .filter(Boolean)
@@ -50,27 +77,48 @@ const buildPopupHtml = (
 
   const simulated =
     observation.source === "simulated"
-      ? `<p style="margin:0 0 6px;padding:3px 6px;background:hsl(var(--data-amber) / 0.16);color:hsl(var(--data-amber) / 0.95);border-radius:calc(var(--radius) - 2px);font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;">Simulated — not a real measurement</p>`
+      ? `<section class="voyage-popup__module" style="border-color:hsl(38 65% 78%);background:hsl(38 80% 96%);padding:9px 11px;">
+          <div style="color:hsl(38 70% 30%);font-size:10px;font-weight:750;letter-spacing:0.04em;line-height:1.35;">
+            Simulated point — not a real measurement.
+          </div>
+        </section>`
       : "";
 
   const accuracy =
     observation.gps_accuracy_m !== null ? ` ±${escapeHtml(observation.gps_accuracy_m)} m` : "";
 
-  return `<div style="font-family:var(--font-sans);min-width:250px;max-width:320px;">
-    ${simulated}
-    <p style="margin:0;font-size:13px;font-weight:600;color:hsl(var(--foreground));">${escapeHtml(isoUtc(observation.recorded_at))}</p>
-    <p style="margin:2px 0 8px;font-size:11px;color:hsl(var(--muted-foreground));">
-      ${escapeHtml(voyageName ?? "Not attributed to a voyage")}
-    </p>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;">${rows}</table>
-    <dl style="margin:8px 0 0;padding-top:6px;border-top:1px solid hsl(var(--border));font-size:10px;color:hsl(var(--fog));line-height:1.5;">
-      <div>Position: ${observation.lat.toFixed(5)}, ${observation.lng.toFixed(5)}${accuracy}</div>
-      <div>Position QC: ${escapeHtml(QC_LABELS[observation.qc_flag] ?? observation.qc_flag)}</div>
-      <div>Instrument: ${escapeHtml(observation.device_label ?? "unknown")}${
-        observation.device_code ? ` (${escapeHtml(observation.device_code)})` : ""
-      }</div>
-      ${observation.notes ? `<div>Notes: ${escapeHtml(observation.notes)}</div>` : ""}
-    </dl>
+  const action = voyage
+    ? `<div class="voyage-popup__actions">
+        <a class="voyage-popup__action" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;"
+           href="${escapeHtml(buildVoyageUrl(voyage))}" target="_blank" rel="noopener noreferrer">
+          Read this voyage →
+        </a>
+      </div>`
+    : "";
+
+  return `<div class="voyage-popup" style="--voyage-popup-accent:${escapeHtml(accent)};">
+    <div class="voyage-popup__header">
+      <span class="voyage-popup__badge">${escapeHtml(badgeDate(observation.recorded_at))}</span>
+      <div class="voyage-popup__title">${escapeHtml(voyage ? voyage.name_en || voyage.name : "Unattributed observation")}</div>
+    </div>
+    <div class="voyage-popup__body">
+      ${simulated}
+      <section class="voyage-popup__module voyage-popup__module--article">
+        <div class="voyage-popup__module-kicker">Measurements</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">${rows}</table>
+      </section>
+      <section class="voyage-popup__module voyage-popup__module--booking">
+        <div class="voyage-popup__module-kicker">Station</div>
+        <div style="display:grid;gap:3px;font-size:10.5px;line-height:1.45;">
+          ${metaRow("Recorded", escapeHtml(isoUtc(observation.recorded_at)))}
+          ${metaRow("Position", `${observation.lat.toFixed(5)}, ${observation.lng.toFixed(5)}${accuracy}`)}
+          ${metaRow("Position QC", escapeHtml(QC_LABELS[observation.qc_flag] ?? observation.qc_flag))}
+          ${metaRow("Instrument", escapeHtml(observation.device_label ?? "unknown"))}
+          ${observation.notes ? metaRow("Notes", escapeHtml(observation.notes)) : ""}
+        </div>
+      </section>
+      ${action}
+    </div>
   </div>`;
 };
 
@@ -78,6 +126,12 @@ const MapPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const observationsById = useRef(new Map<string, Observation>());
+  /** What the once-registered click handler needs; kept in a ref so it never goes stale. */
+  const popupContext = useRef<{
+    voyagesById: Map<string, Voyage>;
+    voyageColors: Map<string, string>;
+    parameters: ObservationParameter[];
+  }>({ voyagesById: new Map(), voyageColors: new Map(), parameters: [] });
   const [mapLoaded, setMapLoaded] = useState(false);
   const [routesReady, setRoutesReady] = useState(false);
 
@@ -89,19 +143,24 @@ const MapPage = () => {
   const { data: parameters = [] } = useObservationParameters();
   const { data: observations = [], isLoading } = useObservations();
 
-  // Colour follows the voyage, so it is assigned from the full list rather than
-  // from whatever survives the current filter.
+  // Only voyages that have actually happened or are happening: a planned route carries no
+  // observations, so on a data map it is a promise, not a record.
   const waterVoyages = useMemo(
-    () => voyages.filter((v) => v.type === "water").sort((a, b) => a.sort_order - b.sort_order),
+    () =>
+      voyages
+        .filter((v) => v.type === "water" && (v.status === "completed" || v.status === "active"))
+        .sort((a, b) => a.sort_order - b.sort_order),
     [voyages],
   );
+  // Colour follows the voyage, so it is assigned from the full sailed list rather than
+  // from whatever survives the current filter.
   const voyageColors = useMemo(
     () => buildVoyageColorMap(waterVoyages.map((v) => v.id)),
     [waterVoyages],
   );
-  const voyageNames = useMemo(() => {
-    const map = new Map<string, string>();
-    waterVoyages.forEach((v) => map.set(v.id, v.name_en || v.name));
+  const voyagesById = useMemo(() => {
+    const map = new Map<string, Voyage>();
+    waterVoyages.forEach((v) => map.set(v.id, v));
     return map;
   }, [waterVoyages]);
 
@@ -152,6 +211,10 @@ const MapPage = () => {
   useEffect(() => {
     observationsById.current = new Map(observations.map((o) => [o.id, o]));
   }, [observations]);
+
+  useEffect(() => {
+    popupContext.current = { voyagesById, voyageColors, parameters };
+  }, [voyagesById, voyageColors, parameters]);
 
   // Init map
   useEffect(() => {
@@ -242,13 +305,27 @@ const MapPage = () => {
         },
       });
 
+      // Registered once, so it must read its context from refs: closing over the render's
+      // `parameters` would freeze the popup on whatever was loaded at map-init time.
       map.on("click", "observation-points", (e) => {
         const id = e.features?.[0]?.properties?.id as string | undefined;
         const observation = id ? observationsById.current.get(id) : undefined;
         if (!observation) return;
-        new maplibregl.Popup({ offset: 10, maxWidth: "340px", className: "data-popup" })
+        const voyage = observation.voyage_id
+          ? (popupContext.current.voyagesById.get(observation.voyage_id) ?? null)
+          : null;
+        const accent = (voyage && popupContext.current.voyageColors.get(voyage.id)) || ROUTE_MUTED;
+        new maplibregl.Popup({
+          offset: 14,
+          closeButton: true,
+          closeOnClick: false,
+          maxWidth: "340px",
+          // The logbook's own popup shell, so the card matches biteproject.it exactly;
+          // `observation-popup` only caps its height (see index.css).
+          className: "voyage-waypoint-popup observation-popup",
+        })
           .setLngLat([observation.lng, observation.lat])
-          .setHTML(buildPopupHtml(observation, voyageNames.get(observation.voyage_id ?? "") ?? null, parameters))
+          .setHTML(buildPopupHtml(observation, voyage, accent, popupContext.current.parameters))
           .addTo(map);
       });
       map.on("mouseenter", "observation-points", () => {
@@ -260,7 +337,7 @@ const MapPage = () => {
     } else {
       (map.getSource("observations") as maplibregl.GeoJSONSource).setData(geojson);
     }
-  }, [mapLoaded, geojson, parameters, voyageNames]);
+  }, [mapLoaded, geojson]);
 
   // Colour: identity (voyage) with no parameter selected, magnitude once one is.
   useEffect(() => {
@@ -304,145 +381,42 @@ const MapPage = () => {
   const isAll = !from && !to;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7rem)]">
-      <div className="px-6 py-4">
-        <h1 className="editorial-heading text-2xl text-foreground">Observation Map</h1>
-        <p className="text-sm font-sans text-muted-foreground">
-          {isLoading
-            ? "Loading observations…"
-            : `${filtered.length.toLocaleString()} of ${observations.length.toLocaleString()} sampling points · ${waterVoyages.length} voyages`}
-        </p>
-      </div>
-
-      <div className="px-6 pb-3 flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => {
-            setFrom("");
-            setTo("");
-          }}
-          className={`px-3 py-1.5 rounded-full text-xs font-sans font-medium transition-all ${
-            isAll ? "data-badge--active" : "data-badge text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          All years
-        </button>
-        {years.map((year) => (
-          <button
-            key={year}
-            onClick={() => applyYear(year)}
-            className={`px-3 py-1.5 rounded-full text-xs font-sans font-medium transition-all ${
-              activeYear === year ? "data-badge--active" : "data-badge text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {year}
-          </button>
-        ))}
-
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
-
-        <label className="text-xs font-sans text-muted-foreground">
-          From{" "}
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="ml-1 px-2 py-1.5 bg-transparent border border-border rounded-lg text-xs font-sans text-foreground focus:outline-none focus:ring-1 focus:ring-teal/30"
-          />
-        </label>
-        <label className="text-xs font-sans text-muted-foreground">
-          To{" "}
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="ml-1 px-2 py-1.5 bg-transparent border border-border rounded-lg text-xs font-sans text-foreground focus:outline-none focus:ring-1 focus:ring-teal/30"
-          />
-        </label>
-
-        <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
-
-        <label className="text-xs font-sans text-muted-foreground">
-          Data type{" "}
-          <select
-            value={parameterCode}
-            onChange={(e) => setParameterCode(e.target.value)}
-            className="ml-1 px-2 py-1.5 bg-transparent border border-border rounded-lg text-xs font-sans text-foreground focus:outline-none focus:ring-1 focus:ring-teal/30"
-          >
-            <option value="all">All data types</option>
-            {parameters.map((p) => (
-              <option key={p.code} value={p.code}>
-                {p.label_en} ({p.unit})
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="flex-1 relative mx-4 mb-4 rounded-2xl overflow-hidden border border-border">
-        {!mapLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-salt z-10">
-            <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading map…</p>
-          </div>
-        )}
-        {/* Sized explicitly, not with `absolute inset-0`: maplibre-gl.css stamps
-            `position: relative` on .maplibregl-map at equal specificity but later in the
-            bundle, which cancels the absolute positioning and collapses the map to 0px. */}
-        <div ref={containerRef} className="h-full w-full" />
-
-        <div className="absolute bottom-4 left-4 glass-panel rounded-xl p-3 z-10 max-w-[240px]">
-          {scale && selectedParameter ? (
-            <>
-              <p className="text-[10px] font-sans uppercase tracking-[0.15em] text-muted-foreground mb-2 font-medium">
-                {selectedParameter.label_en}
-              </p>
-              <div
-                className="h-2.5 w-full rounded-full"
-                style={{ background: `linear-gradient(to right, ${scale.stops.join(", ")})` }}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-[10px] font-sans text-muted-foreground">
-                  {formatValue(scale.min, selectedParameter)}
-                </span>
-                <span className="text-[10px] font-sans text-muted-foreground">
-                  {selectedParameter.unit}
-                </span>
-                <span className="text-[10px] font-sans text-muted-foreground">
-                  {formatValue(scale.max, selectedParameter)}
-                </span>
-              </div>
-              {selectedParameter.accuracy && (
-                <p className="text-[10px] font-sans text-muted-foreground/70 mt-2">
-                  Accuracy {selectedParameter.accuracy}
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="text-[10px] font-sans uppercase tracking-[0.15em] text-muted-foreground mb-2 font-medium">
-                Voyages
-              </p>
-              <div className="space-y-1.5">
-                {waterVoyages.map((v) => (
-                  <div key={v.id} className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full border border-white"
-                      style={{ backgroundColor: voyageColors.get(v.id) }}
-                    />
-                    <span className="text-[11px] font-sans text-muted-foreground truncate">
-                      {v.name_en || v.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {selectedParameter && (
-                <p className="text-[10px] font-sans text-muted-foreground/70 mt-2">
-                  {selectedParameter.label_en} is categorical — see the tooltip.
-                </p>
-              )}
-            </>
-          )}
+    // Full-bleed map with a floating control panel, matching the /logbook map: the data is
+    // the surface, the controls hover over it rather than stacking above it.
+    <div className="relative mx-3 mb-3 h-[calc(100dvh-7rem)] overflow-hidden rounded-[28px] border border-border md:mx-4 md:mb-4">
+      {!mapLoaded && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-salt">
+          <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading map…</p>
         </div>
-      </div>
+      )}
+      {/* Sized explicitly, not with `absolute inset-0`: maplibre-gl.css stamps
+          `position: relative` on .maplibregl-map at equal specificity but later in the
+          bundle, which cancels the absolute positioning and collapses the map to 0px. */}
+      <div ref={containerRef} className="h-full w-full" />
+
+      <MapControlPanel
+        isLoading={isLoading}
+        pointCount={filtered.length}
+        totalCount={observations.length}
+        parameters={parameters}
+        parameterCode={parameterCode}
+        onSelectParameter={setParameterCode}
+        scale={scale}
+        years={years}
+        activeYear={activeYear}
+        isAllYears={isAll}
+        onAllYears={() => {
+          setFrom("");
+          setTo("");
+        }}
+        onSelectYear={applyYear}
+        from={from}
+        to={to}
+        onFrom={setFrom}
+        onTo={setTo}
+        voyages={waterVoyages}
+        voyageColors={voyageColors}
+      />
     </div>
   );
 };

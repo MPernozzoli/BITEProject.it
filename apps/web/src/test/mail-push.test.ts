@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveMailAssignment } from "@/server/mail-push";
+import { resolveMailAssignment, resolveMailPushRevocationProfileIds } from "@/server/mail-push";
 
 type QueryCall = {
   table: string;
@@ -75,5 +75,33 @@ describe("resolveMailAssignment", () => {
     expect(calls).toContainEqual({ table: "user_roles", select: "user_id" });
     expect(calls.some((call) => call.table === "user_roles" && call.select?.includes("profiles"))).toBe(false);
     expect(calls).toContainEqual({ table: "profiles", select: "id,email,name" });
+  });
+});
+
+describe("resolveMailPushRevocationProfileIds", () => {
+  it("targets only the assigned admin for alias-matched mail", async () => {
+    const { db } = createMailDbMock();
+
+    const profileIds = await resolveMailPushRevocationProfileIds(db as unknown as SupabaseClient, {
+      id: "message-1",
+      assigned_to_profile_id: "admin-1",
+      assignment_reason: "alias_match",
+      push_notified_at: "2026-07-16T10:00:00.000Z",
+    });
+
+    expect(profileIds).toEqual(["admin-1"]);
+  });
+
+  it("targets every admin when the original mail notification was broadcast", async () => {
+    const { db } = createMailDbMock();
+
+    const profileIds = await resolveMailPushRevocationProfileIds(db as unknown as SupabaseClient, {
+      id: "message-2",
+      assigned_to_profile_id: null,
+      assignment_reason: "fallback_all_admins",
+      push_notified_at: "2026-07-16T10:00:00.000Z",
+    });
+
+    expect(profileIds).toEqual(["admin-1", "admin-2"]);
   });
 });

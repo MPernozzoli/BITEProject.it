@@ -2,12 +2,9 @@ import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 
 const navLinks = [
-  { to: "/", label: "Overview" },
-  { to: "/data", label: "Data Explorer" },
-  { to: "/map", label: "Map" },
-  { to: "/missions", label: "Missions" },
-  { to: "/sensors", label: "Sensors" },
+  { to: "/", label: "Map" },
   { to: "/methodology", label: "Methodology" },
+  { to: "/sensors", label: "Sensors" },
   { to: "/downloads", label: "Downloads" },
   { to: "/collaborate", label: "Collaborate" },
 ];

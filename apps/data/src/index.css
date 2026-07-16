@@ -26,6 +26,18 @@
 }
 
 @layer components {
+  /*
+   * The observation popup reuses the logbook's .voyage-popup card, but it lists every
+   * measured variable, so it grows to ~550px — taller than the map box on a laptop, which
+   * clips it. The logbook's popup never gets that tall, so the cap belongs here rather than
+   * on the shared class.
+   */
+  .observation-popup .voyage-popup__body {
+    max-height: min(42vh, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
   .data-badge {
     @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-sans font-medium tracking-wide;
     border: 1px solid rgba(255, 255, 255, 0.3);

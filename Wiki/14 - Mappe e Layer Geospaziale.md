@@ -46,6 +46,8 @@ Regole colore, codificate in `apps/data/src/lib/observation-scale.ts` e coperte 
 - la rampa sequenziale parte dallo step 250 e non dal più chiaro: sono marker su un basemap chiaro, non un riempimento heatmap;
 - direzione del vento = scala **ciclica** fissa 0–360 (0° e 360° sono la stessa direzione).
 
+Layout full-bleed con pannello di controllo galleggiante `MapControlPanel.tsx` (stile `ArticleSlidePanel`, collassabile) e carosello dei tipi di dato navigabile con frecce/tastiera → dettagli in [[22 - Citizen Science e Osservazioni]].
+
 > ⚠️ Il container della mappa va dimensionato esplicitamente (`h-full w-full`), **non** con `absolute inset-0`: `maplibre-gl.css` marca `.maplibregl-map` con `position: relative` a pari specificità ma più avanti nel bundle, annulla il posizionamento assoluto e la mappa collassa a 0px.
 
 ## Collegamenti

@@ -4,12 +4,9 @@ import { Menu, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { to: "/", label: "Overview" },
-  { to: "/data", label: "Data" },
-  { to: "/map", label: "Map" },
-  { to: "/missions", label: "Missions" },
-  { to: "/sensors", label: "Sensors" },
+  { to: "/", label: "Map" },
   { to: "/methodology", label: "Methodology" },
+  { to: "/sensors", label: "Sensors" },
   { to: "/downloads", label: "Downloads" },
   { to: "/collaborate", label: "Collaborate" },
 ];
@@ -23,8 +20,7 @@ const getBiteHomeHref = () => {
 };
 
 // Same chrome as the main site's Navbar: one light shell over any hero, never a
-// scroll-driven dark variant. The gap is tighter than biteproject.it's only because
-// this nav carries eight links instead of four.
+// scroll-driven dark variant.
 const NAV_SHELL = "nav-shell-light shadow-[0_28px_80px_rgba(15,23,42,0.12)]";
 const NAV_TEXT = "text-slate-900";
 
@@ -64,7 +60,7 @@ const DataNavbar = () => {
         </a>
 
         {/* Desktop */}
-        <div className="hidden lg:flex items-center gap-1.5">
+        <div className="hidden lg:flex items-center gap-7">
           {links.map((link) => (
             <Link
               key={link.to}

@@ -1952,6 +1952,7 @@ export type Database = {
       }
       sent_emails: {
         Row: {
+          attachments: Json
           bcc_addresses: string[]
           brand: string
           cc_addresses: string[]
@@ -1973,6 +1974,7 @@ export type Database = {
           to_addresses: string[]
         }
         Insert: {
+          attachments?: Json
           bcc_addresses?: string[]
           brand?: string
           cc_addresses?: string[]
@@ -1994,6 +1996,7 @@ export type Database = {
           to_addresses?: string[]
         }
         Update: {
+          attachments?: Json
           bcc_addresses?: string[]
           brand?: string
           cc_addresses?: string[]

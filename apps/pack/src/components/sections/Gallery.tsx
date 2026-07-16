@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { galleryItems, isItalian } from "@/data/site";
+import { isItalian } from "@/data/site";
+import { useGalleryItems } from "@/data/gallery";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 
@@ -24,16 +25,17 @@ const categoryLabel = (category: string) => {
 
 export const Gallery = () => {
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const { data: galleryItems = [] } = useGalleryItems();
 
   const goPrev = useCallback(() => {
     if (lightbox === null || galleryItems.length === 0) return;
     setLightbox((i) => (i === null ? null : (i - 1 + galleryItems.length) % galleryItems.length));
-  }, [lightbox]);
+  }, [lightbox, galleryItems.length]);
 
   const goNext = useCallback(() => {
     if (lightbox === null || galleryItems.length === 0) return;
     setLightbox((i) => (i === null ? null : (i + 1) % galleryItems.length));
-  }, [lightbox]);
+  }, [lightbox, galleryItems.length]);
 
   useEffect(() => {
     if (lightbox === null) return;
@@ -45,6 +47,9 @@ export const Gallery = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, goPrev, goNext]);
+
+  // Bucket-only: with nothing published there is no gallery to show.
+  if (galleryItems.length === 0) return null;
 
   return (
     <section id="gallery" className="page-section pt-6 md:pt-8">

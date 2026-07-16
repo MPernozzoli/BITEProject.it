@@ -39,6 +39,7 @@ import {
   totalWaypointDistance,
 } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import type { LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import {
   type BookableLegAvailability,
@@ -316,6 +317,21 @@ const Journal = () => {
   });
   const allWaypoints = publicContent?.voyageWaypoints ?? liveAllWaypoints;
   const isWaypointsLoading = !publicContent && (isPublicContentLoading || isLiveWaypointsLoading);
+
+  // Published photo points for the map layer. RLS returns only is_published rows to anon.
+  const { data: photoPoints = [] } = useQuery({
+    queryKey: ["logbook-photo-points"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("logbook_photo_points" as never)
+        .select(
+          "id,voyage_id,taken_at,lat,lng,title_it,title_en,description_it,description_en,storage_path"
+        )
+        .eq("is_published", true)
+        .order("taken_at", { ascending: false });
+      return (data ?? []) as unknown as LogbookPhotoPoint[];
+    },
+  });
 
   const waypointsMap = useMemo(() => {
     const map: Record<string, VoyageWaypoint[]> = {};
@@ -1021,6 +1037,7 @@ const Journal = () => {
             selectedBookingLegs={selectedBookingLegs}
             onParticipate={handleParticipate}
             presenceMarkers={mapPresenceMarkers}
+            photoPoints={photoPoints}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}
             disableInteractions={isMapInteractionLocked}

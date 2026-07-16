@@ -74,6 +74,22 @@ function patchArticleViewCountInCache(
   });
 }
 
+async function dismissArticlePublicationNotifications(articleId: string, userId?: string) {
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from("engagement_notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("recipient_profile_id", userId)
+    .eq("article_id", articleId)
+    .eq("notification_category", "publication")
+    .is("read_at", null);
+
+  if (error) {
+    console.error("Failed to dismiss article publication notifications", { articleId, error });
+  }
+}
+
 export function useArticleReads() {
   const { session } = useAuth();
   const userId = session?.user?.id;
@@ -124,6 +140,7 @@ export function useRegisterArticleRead(articleSlug?: string) {
     },
     onSuccess: (count, articleId) => {
       patchArticleViewCountInCache(queryClient, articleId, count, articleSlug);
+      void dismissArticlePublicationNotifications(articleId, userId);
 
       if (userId) {
         queryClient.invalidateQueries({ queryKey: ["article-reads", userId] });

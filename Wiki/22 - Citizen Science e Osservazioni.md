@@ -39,10 +39,33 @@ Ritorna `null` se ambiguo: un punto fuori da ogni finestra resta non attribuito 
 
 Entrambe le viste sono `security_invoker = on`, quindi rispettano la RLS delle tabelle base.
 
-## Mappa `/Data/map`
+## Struttura del portale
+La **mappa è la home** (`/`): la home di un portale dati è il dato. Restano solo quattro altre viste — `/methodology`, `/sensors`, `/downloads`, `/collaborate` — più il redirect `/contact`.
+
+Sono state eliminate `HomePage`, `AboutPage`, `DataExplorerPage` (dataset interamente inventati: su un portale scientifico è peggio di niente), `MissionsPage` (la mappa mostra già i viaggi, e il sito principale ha già `/voyages`) e il placeholder morto `Index`. Il testo di About è confluito in `/methodology` (inquadramento della piattaforma e "citizen science senza hype") e in `/downloads` ("perché pubblicare liberamente").
+
+Le rotte ritirate **redirigono**, non danno 404: `/map` `/data` `/missions` → `/`, `/about` → `/methodology`. Un URL salvato da un ricercatore deve continuare a risolvere.
+
+## Mappa (home)
 `MapPage.tsx` disegna **rotte** (da `cached_geometry`) + **nuvole di punti**. I WPT narrativi (e in generale `voyage_waypoints`) **non** sono mostrati: sulla mappa dati due tipi di pallino sarebbero ambigui.
 
-Filtri: chip per anno + `from`/`to` liberi, e select del tipo di dato popolata dal catalogo.
+Mostra solo i viaggi con `status` **`completed` o `active`**: una rotta `planned` non ha osservazioni, quindi su una mappa di dati è una promessa, non un record.
+
+### Layout (coerente con `/logbook`)
+La mappa è **full-bleed** e i controlli galleggiano sopra, come nella mappa del logbook — non più una barra di filtri impilata sopra la mappa. Il pannello è `MapControlPanel.tsx`, che riprende lo stile di `ArticleSlidePanel` del logbook (glass `rounded-[28px]`, `bg-background/72`, `backdrop-blur-2xl`, `animate-slide-in-right`) ed è **collassabile**: da chiuso resta un launcher «Filters & layers» in alto a destra (utile su mobile e per vedere la mappa piena).
+
+Contenuto del pannello:
+- **Titolo + conteggio** punti (prima erano un header separato sopra la mappa).
+- **Carosello del tipo di dato**: si scorre tra i parametri con le frecce ‹ › o con **←/→ da tastiera**, come si sfogliano gli articoli/media del logbook. La posizione 0 è «All data types»; i pallini sotto sono il "dove sono nel set" (come il pager articoli). Le frecce tastiera sono escluse quando il focus è su un input **o sulla canvas MapLibre** (lì le frecce fanno il pan della camera). La **scala colore** del parametro selezionato è inline sotto il carosello, non più un box separato.
+- **Viaggi** cliccabili (link al sito principale).
+- **Time**: chip anno come filtro principale; l'intervallo `from`/`to` esatto è dietro il toggle **Custom range**, chiuso di default.
+
+Il filtro temporale e per tipo di dato resta identico a prima; è cambiata solo la loro presentazione.
+
+### Tooltip → ponte narrativo
+Il popup riusa le classi `.voyage-popup*` del logbook (definite nel foglio di stile condiviso), con `--voyage-popup-accent` legato al colore del viaggio sulla mappa: un ricercatore incontra lo stesso oggetto che troverebbe su biteproject.it. Il **titolo è il nome del viaggio** e in fondo c'è l'azione *Read this voyage →* verso `biteproject.it/en/voyages/{id}--{slug}`; anche i nomi in legenda e in `/downloads` sono link. `lib/voyage-link.ts` replica `buildVoyagePath()` di `apps/web` (l'alias `@` impedisce l'import diretto): è sicuro, perché il sito rilegge solo l'id prima di `--` e lo slug è cosmetico.
+
+> ⚠️ Il popup elenca tutte le variabili e arriva a ~550px, più alto della mappa su un portatile, e il box mappa ha `overflow: hidden`. La classe `.observation-popup` (in `apps/data/src/index.css`) limita `.voyage-popup__body` con scroll interno. Il cap sta lì e non sulla classe condivisa, perché il popup del logbook non cresce mai così.
 
 **Regole colore** (una sola scala per volta → [[14 - Mappe e Layer Geospaziale]]):
 - Nessun parametro selezionato → i punti portano l'**identità** del viaggio (palette categorica, ordine fisso, assegnata dalla lista completa dei viaggi così che filtrare non ricolori i superstiti).
@@ -60,10 +83,15 @@ delete from public.observations
 where device_id = (select id from public.observation_devices where code = 'sim-demo-01');
 ```
 
+## Sensori e Download: niente più mock
+- **`/sensors`** legge `observation_parameters`: aggiungere un sensore è una riga nel catalogo, mai una modifica alla pagina. Prima era una lista scritta a mano di 7 sensori mentre il catalogo ne aveva 10 — **mentiva già**. Le colonne `limitations_en`/`limitations_it` ospitano il testo editoriale sui limiti di ogni variabile; dove è `null` la card dichiara «Limitations not yet documented» invece di tacere, perché il silenzio si leggerebbe come "nessun limite noto". Solo l'icona resta mappata nel frontend.
+- **`/downloads`** serve davvero `observations_export`, per intero o per singolo viaggio, in CSV e JSON, con conteggi reali. `lib/csv.ts` fa l'escaping RFC 4180 e antepone il **BOM UTF-8**: senza, Excel legge il file con la codepage locale e sfascia i simboli di grado nelle colonne di unità.
+
 ## Da fare
 - Endpoint di **ingest** per l'Arduino (device key + `observation_device_keys`) → [[09 - Edge Functions]] o [[10 - API Vercel]].
-- Collegare `/Data/downloads` e `/Data/data` a `observations_export` (oggi sono ancora mock).
 - Esporre le osservazioni nel layer machine-readable → [[15 - Semantic Layer (AI Agents)]].
+- **Nessuno dei sensori è ancora a bordo.** `/methodology` e `/sensors` descrivono strumenti e campionamento continuo al presente, ma l'Arduino non esiste e i 797 punti sono simulati: valutare un flag `is_operational` sul catalogo e un tempo verbale onesto prima di aprire il portale ai ricercatori.
+- **`biteproject.it` non linka `data.biteproject.it` da nessuna parte**: il ponte narrativo oggi funziona solo in uscita.
 
 ## Collegamenti
 - [[19 - Sub-App (pack e data)]] · [[14 - Mappe e Layer Geospaziale]] · [[08 - Supabase]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[15 - Semantic Layer (AI Agents)]]

@@ -37,6 +37,22 @@ export type MailAssignment = {
   reason: "alias_match" | "fallback_all_admins" | "ambiguous_alias";
 };
 
+type MailPushPayload = {
+  title?: string;
+  body?: string;
+  url?: string;
+  tag?: string;
+  closeTag?: string;
+  type?: "mail" | "mail-read";
+};
+
+type RevocableMailRow = {
+  id: string;
+  assigned_to_profile_id?: string | null;
+  assignment_reason?: string | null;
+  push_notified_at?: string | null;
+};
+
 function localPart(address: string): string {
   return normalizeAddress(address).split("@")[0] ?? "";
 }
@@ -103,10 +119,27 @@ export async function resolveMailAssignment(db: SupabaseClient, toAddresses: str
   return { assignedProfileId: null, notifyProfileIds: allAdminIds, reason: "fallback_all_admins" };
 }
 
+async function getAdminProfileIds(db: SupabaseClient): Promise<string[]> {
+  const { data, error } = await db.from("user_roles").select("user_id").eq("role", "admin");
+  if (error) throw error;
+  return Array.from(new Set(((data ?? []) as UserRoleRow[]).map((row) => row.user_id).filter(Boolean)));
+}
+
+export async function resolveMailPushRevocationProfileIds(
+  db: SupabaseClient,
+  message: RevocableMailRow,
+): Promise<string[]> {
+  if (message.assignment_reason === "alias_match" && message.assigned_to_profile_id) {
+    return [message.assigned_to_profile_id];
+  }
+
+  return getAdminProfileIds(db);
+}
+
 export async function sendMailPushNotification(
   db: SupabaseClient,
   profileIds: string[],
-  notification: { title: string; body: string; url: string },
+  notification: MailPushPayload,
 ): Promise<boolean> {
   const publicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY ?? process.env.VITE_WEB_PUSH_PUBLIC_KEY ?? "";
   const privateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY ?? "";
@@ -189,4 +222,14 @@ export async function sendMailPushNotification(
   }
 
   return results.some((result) => result.status === "fulfilled");
+}
+
+export async function revokeMailPushNotification(db: SupabaseClient, message: RevocableMailRow): Promise<boolean> {
+  if (!message.push_notified_at) return false;
+
+  const profileIds = await resolveMailPushRevocationProfileIds(db, message);
+  return sendMailPushNotification(db, profileIds, {
+    type: "mail-read",
+    closeTag: `mail:${message.id}`,
+  });
 }

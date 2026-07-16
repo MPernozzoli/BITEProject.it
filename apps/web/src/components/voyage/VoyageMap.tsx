@@ -27,6 +27,7 @@ import {
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
 import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
+import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
@@ -40,6 +41,7 @@ interface VoyageMapProps {
   hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
   presenceMarkers?: MapPresenceMarker[];
+  photoPoints?: LogbookPhotoPoint[];
   onArticleClick?: (article: GeoArticle) => void;
   onVoyageSelect?: (voyageId: string | null) => void;
   selectedRouteVoyageId?: string | null;
@@ -302,6 +304,7 @@ const VoyageMap = ({
   hoveredArticleId,
   highlightedVoyageId,
   presenceMarkers = [],
+  photoPoints = [],
   onArticleClick,
   onVoyageSelect,
   selectedRouteVoyageId: controlledRouteVoyageId,
@@ -358,6 +361,8 @@ const VoyageMap = ({
   onParticipateRef.current = onParticipate;
   const bookingSelectionAnchorRef = useRef(bookingSelectionAnchor);
   bookingSelectionAnchorRef.current = bookingSelectionAnchor;
+  const photoPointsRef = useRef(photoPoints);
+  photoPointsRef.current = photoPoints;
 
   const publishedVoyages = useMemo(() => voyages.filter((v) => v.is_published), [voyages]);
   const articlesForMap = useMemo(
@@ -466,6 +471,9 @@ const VoyageMap = ({
   const waypointClusterIndexRef = useRef<Supercluster | null>(null);
   const mapWaypointsByKeyRef = useRef<Map<string, (typeof mapWaypointClusterInputs)[0]>>(new Map());
   const waypointMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const photoMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const photoPopupRef = useRef<maplibregl.Popup | null>(null);
+  const runPhotoMarkersSyncRef = useRef<() => void>(() => {});
   const runWaypointMarkersSyncRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -1521,6 +1529,111 @@ const VoyageMap = ({
   useEffect(() => {
     runArticleMarkersSyncRef.current();
   }, [selectedArticleId, hoveredArticleId, highlightedVoyageId, hoveredRouteVoyageId, lang]);
+
+  // Photo points: a distinct layer from waypoints and articles. They carry the real GPS
+  // fix of a photo, so they get their own square thumbnail marker and a popup that shows
+  // the image full-width. No clustering: these stay sparse compared to article markers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const points = photoPointsRef.current;
+
+    const render = () => {
+      photoMarkersRef.current.forEach((m) => m.remove());
+      photoMarkersRef.current = [];
+      const L = langRef.current;
+
+      points.forEach((point) => {
+        const title = (L === "en" ? point.title_en : point.title_it) || point.title_en;
+        const description =
+          (L === "en" ? point.description_en : point.description_it) ?? "";
+        const imageUrl = buildPhotoPointUrl(point.storage_path);
+
+        const el = document.createElement("div");
+        el.style.cssText = `cursor:pointer;z-index:5;transition:transform 0.2s ${MAP_MARKER_EASE};`;
+
+        const frame = document.createElement("div");
+        frame.style.cssText = `
+          width:34px;height:34px;border-radius:7px;
+          border:2px solid hsl(0,0%,100%);
+          background:url(${imageUrl}) center/cover;
+          box-shadow:0 2px 8px rgba(15,23,42,0.28);
+        `;
+        el.appendChild(frame);
+
+        const dateLabel = new Date(point.taken_at).toLocaleDateString(
+          L === "en" ? "en-GB" : "it-IT",
+          { year: "numeric", month: "long", day: "numeric" }
+        );
+        const descriptionMarkup = description
+          ? `<p class="voyage-popup__text">${escapePopupHtml(description)}</p>`
+          : "";
+        const popupHtml = `
+          <div class="voyage-popup voyage-popup--photo">
+            <img class="voyage-popup__media" src="${escapePopupHtml(imageUrl)}" alt="${escapePopupHtml(title)}" loading="lazy" />
+            <div class="voyage-popup__body">
+              <h3 class="voyage-popup__title">${escapePopupHtml(title)}</h3>
+              <p class="voyage-popup__meta">${escapePopupHtml(dateLabel)}</p>
+              ${descriptionMarkup}
+            </div>
+          </div>
+        `;
+
+        const showPopup = () => {
+          if (!photoPopupRef.current) {
+            photoPopupRef.current = new maplibregl.Popup({
+              offset: 16,
+              closeButton: true,
+              closeOnClick: true,
+              closeOnMove: false,
+              maxWidth: "300px",
+              className: "voyage-waypoint-popup",
+            });
+          }
+          photoPopupRef.current.setLngLat([point.lng, point.lat]).setHTML(popupHtml).addTo(map);
+        };
+
+        el.addEventListener("mouseenter", () => {
+          el.style.transform = "scale(1.12)";
+        });
+        el.addEventListener("mouseleave", () => {
+          el.style.transform = "scale(1)";
+        });
+        el.addEventListener("click", (event) => {
+          event.stopPropagation();
+          showPopup();
+        });
+
+        photoMarkersRef.current.push(
+          new maplibregl.Marker({ element: el, anchor: "center" })
+            .setLngLat([point.lng, point.lat])
+            .addTo(map)
+        );
+      });
+    };
+
+    runPhotoMarkersSyncRef.current = render;
+
+    if (map.isStyleLoaded()) {
+      render();
+    } else {
+      map.once("load", render);
+    }
+
+    return () => {
+      map.off("load", render);
+      photoMarkersRef.current.forEach((m) => m.remove());
+      photoMarkersRef.current = [];
+      photoPopupRef.current?.remove();
+      photoPopupRef.current = null;
+      runPhotoMarkersSyncRef.current = () => {};
+    };
+  }, [photoPoints]);
+
+  useEffect(() => {
+    runPhotoMarkersSyncRef.current();
+  }, [lang]);
 
   // Fly to selected article with smart bounds
   useEffect(() => {

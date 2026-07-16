@@ -21,7 +21,7 @@ tags: [frontend, componenti, ui]
 - `AuthorSelector.tsx`
 
 ## Profilo / social
-- `ProfileCard.tsx`, `ProfileAvatar.tsx`, `ProfileNotificationsMenu.tsx`
+- `ProfileCard.tsx`, `ProfileAvatar.tsx`, `ProfileNotificationsMenu.tsx` — il menu notifiche mostra solo le notifiche engagement non lette; al click imposta `read_at` e rimuove subito la riga dalla lista → [[12 - Newsletter ed Email]]
 - `ShareButton.tsx`, `AppleShareIcon.tsx`, `SeaPeopleIcon.tsx`
 
 ## SEO

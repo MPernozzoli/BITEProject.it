@@ -91,6 +91,7 @@ const ProfileNotificationsMenu = ({
         "id, recipient_profile_id, actor_profile_id, article_id, comment_id, event_type, notification_category, created_at, read_at",
       )
       .eq("recipient_profile_id", sessionUserId)
+      .is("read_at", null)
       .order("created_at", { ascending: false })
       .limit(MAX_ITEMS);
 
@@ -170,7 +171,7 @@ const ProfileNotificationsMenu = ({
   }, [loadNotifications, sessionUserId]);
 
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => !notification.read_at).length,
+    () => notifications.length,
     [notifications],
   );
 
@@ -184,22 +185,19 @@ const ProfileNotificationsMenu = ({
   }, [loadNotifications, open]);
 
   const markAsRead = async (notificationId: string) => {
-    setNotifications((current) =>
-      current.map((notification) =>
-        notification.id === notificationId
-          ? { ...notification, read_at: notification.read_at || new Date().toISOString() }
-          : notification,
-      ),
-    );
+    const readAt = new Date().toISOString();
+
+    setNotifications((current) => current.filter((notification) => notification.id !== notificationId));
 
     const { error } = await supabase
       .from("engagement_notifications")
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: readAt })
       .eq("id", notificationId)
       .eq("recipient_profile_id", sessionUserId);
 
     if (error) {
       console.error("Notification read update error:", error);
+      void loadNotifications();
     }
   };
 

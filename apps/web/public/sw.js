@@ -80,11 +80,22 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   const payload = event.data?.json?.() ?? {};
+
+  if (payload.closeTag) {
+    event.waitUntil(
+      self.registration.getNotifications({ tag: payload.closeTag }).then((notifications) => {
+        notifications.forEach((notification) => notification.close());
+      }),
+    );
+    return;
+  }
+
   const title = payload.title || "BITE";
   const options = {
     body: payload.body || "New update available.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
+    tag: payload.tag,
     data: {
       url: payload.url || "/",
     },

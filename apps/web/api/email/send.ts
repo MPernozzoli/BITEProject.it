@@ -24,8 +24,16 @@ type SendBody = {
   subject?: string;
   html?: string;
   text?: string;
+  attachments?: Array<{
+    filename?: string;
+    content?: string;
+    contentType?: string;
+    size?: number;
+  }>;
   replyToMessageId?: string;
 };
+
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 function splitRecipients(value: string): string[] {
   return value
@@ -53,9 +61,25 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const html = (body.html ?? "").trim();
   const text = (body.text ?? "").trim();
   const replyToMessageId = (body.replyToMessageId ?? "").trim();
+  const attachments = Array.isArray(body.attachments)
+    ? body.attachments
+        .map((attachment) => ({
+          filename: (attachment.filename ?? "").trim(),
+          content: (attachment.content ?? "").trim(),
+          contentType: (attachment.contentType ?? "").trim(),
+          size: Number.isFinite(attachment.size) ? Number(attachment.size) : 0,
+        }))
+        .filter((attachment) => attachment.filename && attachment.content)
+    : [];
 
   if (to.length === 0 || !subject || (!html && !text)) {
     sendJson(res, 400, { error: "missing_fields" });
+    return;
+  }
+
+  const attachmentBytes = attachments.reduce((sum, attachment) => sum + Math.max(0, attachment.size), 0);
+  if (attachmentBytes > MAX_ATTACHMENT_BYTES) {
+    sendJson(res, 413, { error: "attachments_too_large" });
     return;
   }
 
@@ -121,6 +145,14 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         ...(bcc.length > 0 ? { bcc } : {}),
         subject,
         html: emailHtml,
+        ...(attachments.length > 0
+          ? {
+              attachments: attachments.map((attachment) => ({
+                filename: attachment.filename,
+                content: attachment.content,
+              })),
+            }
+          : {}),
         headers: {
           "Message-ID": `<${outboundMessageId}>`,
           ...(replyMessageId ? { "In-Reply-To": `<${replyMessageId}>` } : {}),
@@ -151,6 +183,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       subject,
       html_body: emailHtml,
       text_body: text || null,
+      attachments: attachments.map(({ content: _content, ...attachment }) => attachment),
       brand: fromOption.brand,
       sent_by_user_id: auth.user.id,
       sent_by_name: userDisplayName(auth.user),

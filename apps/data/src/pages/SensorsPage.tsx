@@ -1,75 +1,90 @@
+import { ReactNode } from "react";
+import {
+  Thermometer,
+  Wind,
+  Droplets,
+  Gauge,
+  Navigation,
+  BookOpen,
+  Waves,
+  FlaskConical,
+  Bug,
+  Compass,
+} from "lucide-react";
 import SensorCard from "@/components/data/SensorCard";
-import { Thermometer, Wind, Droplets, Gauge, Navigation, BookOpen } from "lucide-react";
+import { useObservationParameters } from "@/hooks/use-observations";
 
-const sensors = [
-  {
-    name: "Sea Surface Temperature",
-    description: "Water temperature measured at hull depth, typically 0.3–0.5 meters below the waterline. Provides a localized reading of surface conditions along the route, useful for tracking thermal gradients and seasonal changes.",
-    unit: "°C",
-    icon: <Thermometer size={22} />,
-    limitations: "Readings reflect hull-depth temperature, not true skin SST. Accuracy affected by boat speed and solar heating of the hull.",
-  },
-  {
-    name: "Air Temperature",
-    description: "Ambient air temperature measured from a shielded sensor on deck. Captures atmospheric conditions at sea level during navigation, complementing sea surface data for air-sea interaction studies.",
-    unit: "°C",
-    icon: <Thermometer size={22} />,
-    limitations: "Sensor may be influenced by engine heat or solar radiation on deck in calm conditions.",
-  },
-  {
-    name: "Relative Humidity",
-    description: "Percentage of moisture in the air at the measurement location. Relevant for understanding evaporation rates, fog formation potential, and maritime atmospheric conditions.",
-    unit: "% RH",
-    icon: <Droplets size={22} />,
-    limitations: "Salt spray can temporarily affect readings. Sensor requires periodic calibration in marine environments.",
-  },
-  {
-    name: "Barometric Pressure",
-    description: "Atmospheric pressure at sea level. Essential for weather pattern tracking, storm detection, and understanding pressure gradients across navigation routes.",
-    unit: "hPa",
-    icon: <Gauge size={22} />,
-    limitations: "Minor variations possible due to vessel movement. Altitude correction not required at sea level.",
-  },
-  {
-    name: "Wind Speed & Direction",
-    description: "Apparent wind measurements taken from a masthead anemometer. Converted to true wind using GPS speed and course over ground. Provides continuous wind profiles along the route.",
-    unit: "kt / degrees",
-    icon: <Wind size={22} />,
-    limitations: "Apparent-to-true wind conversion introduces small errors. Masthead turbulence from sails may affect readings.",
-  },
-  {
-    name: "GPS Position & Route",
-    description: "Continuous position logging at regular intervals using onboard GPS. Provides the geographic backbone for all other measurements — every data point is geolocated and timestamped.",
-    unit: "Lat/Lng, UTC",
-    icon: <Navigation size={22} />,
-    limitations: "Standard civilian GPS accuracy (3–5 m). Brief signal loss possible in heavy weather or near cliffs.",
-  },
-  {
-    name: "Field Notes & Observations",
-    description: "Manual observations recorded by crew during navigation: sea state, cloud cover, wildlife sightings, unusual conditions. Provides qualitative context for quantitative measurements.",
-    unit: "Text / Categorical",
-    icon: <BookOpen size={22} />,
-    limitations: "Subjective, irregular intervals, dependent on crew attention and conditions.",
-  },
-];
+/**
+ * The page renders whatever is published in `observation_parameters`, so adding a sensor is
+ * a row in the catalog and never an edit here — the old hard-coded list had already fallen
+ * out of step with the data. Only the icon is presentation and stays in the frontend; an
+ * unmapped code falls back to the generic one.
+ */
+const ICONS: Record<string, ReactNode> = {
+  sst: <Thermometer size={22} />,
+  air_temp: <Thermometer size={22} />,
+  humidity: <Droplets size={22} />,
+  pressure: <Gauge size={22} />,
+  wind_speed: <Wind size={22} />,
+  wind_direction: <Compass size={22} />,
+  dissolved_oxygen: <FlaskConical size={22} />,
+  salinity: <Waves size={22} />,
+  plankton_density: <Bug size={22} />,
+  sea_state: <BookOpen size={22} />,
+};
 
-const SensorsPage = () => (
-  <div>
-    <section className="page-section page-section-wide">
-      <div className="mb-10">
-        <h1 className="editorial-heading text-4xl text-foreground mb-3">Sensors & Data Types</h1>
-        <p className="font-sans text-muted-foreground max-w-2xl">
-          An overview of the environmental parameters collected aboard Spritz, how they are measured, and their practical limitations. All instruments are field-grade and selected for reliability in marine conditions.
-        </p>
-      </div>
+const SensorsPage = () => {
+  const { data: parameters = [], isLoading } = useObservationParameters();
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {sensors.map((s) => (
-          <SensorCard key={s.name} {...s} />
-        ))}
-      </div>
-    </section>
-  </div>
-);
+  return (
+    <div>
+      <section className="page-section page-section-wide">
+        <div className="mb-10 max-w-2xl">
+          <div className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.25em] text-muted-foreground mb-8">
+            Sensors & Data Types
+          </div>
+          <h1 className="editorial-heading text-4xl md:text-5xl text-foreground mb-4">
+            What we measure
+          </h1>
+          <p className="font-sans text-muted-foreground leading-relaxed">
+            Every variable published by this portal, with its unit, its declared instrument accuracy,
+            and what to distrust about it. This list is generated from the same catalog the map and the
+            downloads read, so it cannot fall out of step with the data.
+          </p>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm font-sans text-muted-foreground animate-pulse">Loading catalog…</p>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {parameters.map((p) => (
+              <SensorCard
+                key={p.code}
+                name={p.label_en}
+                unit={p.unit}
+                icon={ICONS[p.code] ?? <Navigation size={22} />}
+                description={p.description_en ?? ""}
+                accuracy={p.accuracy}
+                limitations={p.limitations_en}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="glass-panel rounded-2xl p-6 mt-10">
+          <h2 className="editorial-heading text-lg text-foreground mb-2">Position and time</h2>
+          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+            Every reading above hangs off a sampling point: a position from the onboard GPS (standard
+            civilian accuracy, roughly 3–5 m) and an instant recorded in UTC. Those two fields are the
+            geographic and temporal backbone of the dataset — the timestamp is also what attributes a
+            point to a voyage. Each reading carries its own quality flag on the{" "}
+            <span className="text-foreground">IODE scale</span> (0 no QC performed, 1 good, 2 probably
+            good, 3 probably bad, 4 bad, 9 missing); flagged data is annotated, never silently dropped.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+};
 
 export default SensorsPage;

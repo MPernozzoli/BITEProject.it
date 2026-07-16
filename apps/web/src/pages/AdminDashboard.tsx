@@ -21,6 +21,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
+  Camera,
+  Image as ImageIcon,
   MapPinned,
   UploadCloud,
   Wine,
@@ -28,6 +30,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { isAuthFailureError } from "@/lib/supabase-auth";
+import { isAdminDevBypassEnabled } from "@/lib/admin-dev-bypass";
 import { useAuth } from "@/hooks/useAuth";
 import { getPushPermission, subscribeToPushNotifications, supportsWebPush } from "@/lib/pwa";
 import {
@@ -262,7 +265,7 @@ const AdminDashboard = () => {
   }, [session?.user]);
 
   const fetchData = useCallback(async () => {
-    if (!session?.user) return;
+    if (!session?.user && !isAdminDevBypassEnabled()) return;
 
     setLoading(true);
     const [articlesRes, storiesRes, voyagesRes, candidatesRes] = await Promise.all([
@@ -296,7 +299,9 @@ const AdminDashboard = () => {
   }, [navigate, session?.user]);
 
   useEffect(() => {
-    if (authLoading || !session?.user) return;
+    // The dev bypass renders without a session; fetch anyway so the panels have
+    // the publicly readable rows to work with.
+    if (!isAdminDevBypassEnabled() && (authLoading || !session?.user)) return;
     void fetchData();
   }, [authLoading, fetchData, session?.user]);
 
@@ -512,6 +517,8 @@ const AdminDashboard = () => {
     { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
     { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
     { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
+    { to: "/admin/logbook-points", label: "Punti foto", description: "Foto sulla mappa", icon: Camera, badge: 0 },
+    { to: "/admin/pack-gallery", label: "Galleria pack", description: "Foto del sito cani", icon: ImageIcon, badge: 0 },
     { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa", icon: MapPinned, badge: 0 },
     { to: "/admin/spritz", label: "Spritz", description: "Easter egg trovato da", icon: Wine, badge: 0 },
   ];
@@ -527,7 +534,7 @@ const AdminDashboard = () => {
     { label: "Audience", items: sectionTabs.filter((tab) => tab.id === "newsletter") },
   ];
 
-  if (authLoading || !session) {
+  if (!isAdminDevBypassEnabled() && (authLoading || !session)) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-24">
         <p className="text-sm font-sans text-muted-foreground animate-pulse">Verifica accesso...</p>

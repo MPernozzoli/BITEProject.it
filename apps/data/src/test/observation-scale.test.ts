@@ -15,6 +15,7 @@ const parameter = (over: Partial<ObservationParameter> = {}): ObservationParamet
   label_it: null,
   unit: "°C",
   description_en: null,
+  limitations_en: null,
   accuracy: null,
   value_type: "numeric",
   scale_min: 10,

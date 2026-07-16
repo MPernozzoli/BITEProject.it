@@ -1,3 +1,5 @@
+import { ExternalLink } from "lucide-react";
+
 const MethodologyPage = () => (
   <div>
     <section className="page-section page-section-narrow">
@@ -5,13 +7,44 @@ const MethodologyPage = () => (
         Methodology & Limitations
       </div>
       <h1 className="editorial-heading text-4xl md:text-5xl text-foreground mb-6">
-        How we collect and process data
+        A sailing vessel as a mobile observation platform
       </h1>
       <p className="font-sans text-muted-foreground leading-relaxed mb-12 max-w-2xl">
-        Transparency about methods, instruments, and limitations is fundamental to this project. This page documents how data is gathered, what can go wrong, and how to interpret what we publish.
+        Transparency about methods, instruments, and limitations is fundamental to this project. This page documents what this platform is, how data is gathered, what can go wrong, and how to interpret what we publish.
       </p>
 
       <div className="space-y-12">
+        {/* The platform */}
+        <div className="glass-panel rounded-2xl p-6 md:p-8">
+          <h2 className="editorial-heading text-2xl text-foreground mb-4">The platform</h2>
+          <div className="space-y-4 font-sans text-muted-foreground leading-relaxed text-sm">
+            <p>
+              <strong className="text-foreground">data.biteproject.it</strong> is the scientific data branch of the{" "}
+              <a
+                href="https://biteproject.it"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal hover:text-teal-muted transition-colors inline-flex items-center gap-1"
+              >
+                BITE Project <ExternalLink size={12} />
+              </a>
+              , which documents life, travel, and long-range sailing aboard the vessel Spritz. While the main project tells the human story, this portal focuses on what the sea itself has to say — through data.
+            </p>
+            <p>
+              The idea is straightforward: a sailing boat crosses real stretches of open water, often far from coastal monitoring stations. Equipped with basic environmental sensors, it can collect measurements along routes that commercial shipping and research vessels rarely cover at this scale or frequency.
+            </p>
+            <p>
+              Institutional ocean monitoring relies heavily on fixed stations, satellite remote sensing, and dedicated research cruises. These methods are essential, but they have gaps. Coastal stations don't reach the open sea. Satellites measure surface conditions indirectly. Research cruises are expensive and infrequent. A sailing vessel — slow, low-energy, already crossing these waters — can fill some of those gaps with modest but continuous field measurements.
+            </p>
+            <p>
+              Spritz is not a laboratory ship. The instruments are field-grade, the conditions are real, and the data reflects the practical limits of collection underway. But that is also the point: this data is genuine, situated, and taken in conditions that matter.
+            </p>
+            <p>
+              This project does not claim to replace institutional monitoring or produce research-grade datasets on its own. It is a citizen science initiative in the original sense: individuals contributing field observations to a shared pool of knowledge, transparently and without pretension. The data is what it is — field-collected, documented, limited, and real.
+            </p>
+          </div>
+        </div>
+
         {/* Collection */}
         <div className="glass-panel rounded-2xl p-6 md:p-8">
           <h2 className="editorial-heading text-2xl text-foreground mb-4">Data Collection</h2>

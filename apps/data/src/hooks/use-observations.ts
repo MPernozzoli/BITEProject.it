@@ -8,6 +8,7 @@ export interface ObservationParameter {
   label_it: string | null;
   unit: string;
   description_en: string | null;
+  limitations_en: string | null;
   accuracy: string | null;
   value_type: "numeric" | "categorical";
   scale_min: number | null;
@@ -53,6 +54,48 @@ export const useObservationParameters = () =>
   });
 
 const PAGE_SIZE = 1000;
+
+/** Published point count per voyage. `head: true` returns the count without the rows. */
+export const useObservationCounts = (voyageIds: string[]) =>
+  useQuery({
+    queryKey: ["observation_counts", [...voyageIds].sort()],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        voyageIds.map(async (id) => {
+          const { count, error } = await supabase
+            .from("observations")
+            .select("*", { count: "exact", head: true })
+            .eq("voyage_id", id);
+          if (error) throw error;
+          return [id, count ?? 0] as const;
+        }),
+      );
+      return new Map(entries);
+    },
+    enabled: voyageIds.length > 0,
+  });
+
+/**
+ * The analysis-ready wide table: one row per point, one column per parameter. Fetched on
+ * demand rather than on page load — this is the download payload, not page content.
+ */
+export const fetchObservationExport = async (voyageId?: string) => {
+  const all: Record<string, unknown>[] = [];
+  for (let page = 0; ; page += 1) {
+    let query = supabase
+      .from("observations_export")
+      .select("*")
+      .order("recorded_at_utc")
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (voyageId) query = query.eq("voyage_id", voyageId);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data || []) as Record<string, unknown>[];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return all;
+};
 
 export const useObservations = () =>
   useQuery({

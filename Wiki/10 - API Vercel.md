@@ -23,8 +23,9 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 | Endpoint | Metodo | Scopo |
 |---|---|---|
 | `email/inbox.ts` | GET | lista inbox/sent e contatori per la pagina `/admin/mail`; accetta `view` e `q` per cercare su mittente, destinatari, oggetto, corpo, stato e data; idrata i messaggi inbound legacy senza corpo recuperandoli da Resend quando hanno `resend_email_id`; allega `thread_messages` con inbound+sent della stessa conversazione |
-| `email/send.ts` | POST | invio mail ordinarie da `@biteproject.it` e automatiche/newsletter da `@mail.biteproject.it` via Resend; accetta `replyToMessageId` e invia gli header `In-Reply-To`/`References` per mantenere il thread |
-| `email/message.ts` | POST | azioni admin sui messaggi inbound: letto/non letto, preferita, archivio, spam, delete |
+| `email/send.ts` | POST | invio mail ordinarie da `@biteproject.it` e automatiche/newsletter da `@mail.biteproject.it` via Resend; accetta `replyToMessageId` e invia gli header `In-Reply-To`/`References` per mantenere il thread; supporta allegati base64 dalla console admin con limite server-side |
+| `email/attachment.ts` | GET | genera o rinnova un `download_url` firmato Resend per gli allegati inbound di `/admin/mail`, autenticando l'admin prima di chiamare `GET /emails/receiving/:id/attachments/:attachment_id` |
+| `email/message.ts` | POST | azioni admin sui messaggi inbound: letto/non letto, preferita, archivio, spam, delete; le azioni che rendono la mail gestita revocano anche le notifiche push PWA con tag `mail:<id>` |
 | `webhooks/email/inbound.ts` | POST | webhook Resend per email ricevute e tracking delivery/open/click/bounce; per `email.received` recupera corpo, header e attachment metadata dalla Received Emails API prima di salvare in `inbound_emails`. Accetta payload finti solo con `Authorization: Bearer INTERNAL_MAIL_WEBHOOK_TEST_SECRET`, per test end-to-end di mail admin e Web Push senza disabilitare la firma Svix Resend |
 
 ## 🔎 SEO / crawler

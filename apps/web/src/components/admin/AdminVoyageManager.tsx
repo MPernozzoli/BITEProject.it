@@ -53,6 +53,7 @@ import {
   normalizeWaypointMedia,
 } from "@/lib/voyage-utils";
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
+import WaypointEditorPanel from "@/components/admin/WaypointEditorPanel";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 import {
@@ -154,27 +155,10 @@ const defaultVoyageListSort: VoyageListSort = {
   direction: "desc",
 };
 
-const popupLabelStyle = "display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:hsl(220,10%,45%);margin-bottom:6px;font-family:var(--font-sans);";
-const popupInputStyle = "width:100%;padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:12px;font-family:var(--font-sans);outline:none;";
-const popupTextareaStyle = `${popupInputStyle}min-height:68px;resize:vertical;`;
-const popupMetaStyle = "margin:0;font-size:12px;color:hsl(220,15%,30%);";
-const popupSectionStyle = "display:grid;gap:10px;padding:12px;border:1px solid hsl(var(--border));background:hsla(var(--background),0.94);";
-const popupSectionTitleStyle = "margin:0;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:hsl(220,10%,45%);font-family:var(--font-sans);";
-const popupLangTabRowStyle = "display:flex;gap:6px;margin-bottom:10px;";
-const popupHintStyle = "margin:6px 0 0;font-size:11px;color:hsl(220,10%,45%);line-height:1.45;";
-const popupLangTabBaseStyle =
-  "flex:1;padding:8px 10px;border:1px solid hsl(var(--border));font-size:11px;font-weight:600;font-family:var(--font-sans);cursor:pointer;transition:background 0.15s,border-color 0.15s,color 0.15s;";
-const popupLangTabInactiveStyle = `${popupLangTabBaseStyle}background:hsl(var(--muted));color:hsl(var(--foreground));`;
-const popupLangTabActiveStyle = `${popupLangTabBaseStyle}background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-color:transparent;`;
 const popupLanguageOptions = [
   { code: "it", label: "Italiano" },
   { code: "en", label: "English" },
 ] as const;
-
-type WaypointEditorPanelHandle = {
-  setDOMContent: (node: Node) => void;
-  remove: () => void;
-};
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
@@ -611,14 +595,6 @@ const getCachedGeometryCoordinates = (voyage: Voyage | undefined): [number, numb
   return Array.isArray(coordinates) ? coordinates : [];
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
 const getDistanceToSegmentSquared = (
   point: maplibregl.Point,
   segmentStart: maplibregl.Point,
@@ -811,7 +787,6 @@ const AdminVoyageManager = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const markersByWaypointRef = useRef<Record<string, maplibregl.Marker>>({});
-  const waypointPanelMountRef = useRef<HTMLDivElement | null>(null);
   const setWaypointEditorPanelIdRef = useRef<(value: SetStateAction<string | null>) => void>(() => {});
   const focusWaypointOnMapRef = useRef<(waypointId: string) => boolean>(() => false);
   const voyagesRef = useRef<Voyage[]>([]);
@@ -1641,7 +1616,10 @@ const AdminVoyageManager = ({
   }, [updateWaypoint]);
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
-  const selectedWaypoints = selectedVoyageId ? (waypoints[selectedVoyageId] || []) : [];
+  const selectedWaypoints = useMemo(
+    () => (selectedVoyageId ? waypoints[selectedVoyageId] || [] : []),
+    [selectedVoyageId, waypoints]
+  );
   const selectedVoyageDatesTbd = Boolean(selectedVoyage && hasVoyageDatesTbd(selectedVoyage));
   const selectedWaypointDateSuggestions = useMemo(
     () => deriveWaypointDateSuggestions(selectedVoyage, selectedWaypoints),
@@ -1651,6 +1629,14 @@ const AdminVoyageManager = ({
     () => deriveWaypointLegEstimates(selectedWaypoints),
     [selectedWaypoints]
   );
+
+  // Resolves the waypoint currently open in the editor panel, with its index/total.
+  const waypointEditorTarget = useMemo(() => {
+    if (!waypointEditorPanelId) return null;
+    const index = selectedWaypoints.findIndex((w) => w.id === waypointEditorPanelId);
+    if (index < 0) return null;
+    return { waypoint: selectedWaypoints[index], index, total: selectedWaypoints.length };
+  }, [selectedWaypoints, waypointEditorPanelId]);
 
   // Waypoint del voyage attualmente in modifica nel form (indipendenti dalla selezione sulla mappa).
   const voyageFormWaypoints = useMemo(
@@ -1686,583 +1672,6 @@ const AdminVoyageManager = ({
     );
   }, [showVoyageForm, estimatedVoyageArrival]);
 
-  const createWaypointPopupContent = useCallback(
-    (waypoint: VoyageWaypoint, index: number, total: number, panel: WaypointEditorPanelHandle) => {
-      const effectiveType = getWaypointEffectiveType(waypoint, index, total);
-      const defaultNames = buildWaypointDefaultLocalizedNames(index, waypoint.lat, waypoint.lng);
-      const dateSuggestions = selectedWaypointDateSuggestions[waypoint.id] || createEmptyWaypointDateSuggestion();
-      const legEstimate = selectedWaypointLegEstimates[waypoint.id];
-      const arrivalSuggestionNote = getWaypointDateSuggestionNote(
-        dateSuggestions.arrivalDate,
-        dateSuggestions.arrivalTime,
-        dateSuggestions.arrivalSource
-      );
-      const departureSuggestionNote = getWaypointDateSuggestionNote(
-        dateSuggestions.departureDate,
-        dateSuggestions.departureTime,
-        dateSuggestions.departureSource
-      );
-      const initialStopUiMode = getWaypointStopUiMode(waypoint);
-      const initialStopHours = getEffectiveStopHoursDefault(waypoint);
-      const initialStopNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
-      const initialStopDeparture = (waypoint.stop_departure_time ?? DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
-      const popupChipStyle =
-        "padding:4px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:999px;";
-      const selectedVisibilityValue = waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto";
-      const statusLabel = waypoint.visibility_mode === "manual"
-        ? effectiveType === "narrative" ? "Visible" : "Hidden"
-        : effectiveType === "narrative" ? (index === 0 ? "Auto start" : "Auto end") : "Auto hidden";
-      const resolveDetailsType = (value: string) => {
-        if (value === "narrative") return "narrative" as const;
-        if (value === "technical") return "technical" as const;
-        return index === 0 || index === total - 1 ? "narrative" as const : "technical" as const;
-      };
-      const wrapper = document.createElement("form");
-      wrapper.style.cssText = "width:min(360px,calc(100vw - 40px));max-height:min(72vh,620px);overflow-y:auto;overflow-x:hidden;padding:2px 2px 6px;box-sizing:border-box;font-family:var(--font-sans);display:grid;gap:12px;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;";
-      ["mousedown", "mouseup", "click", "dblclick", "pointerdown", "touchstart"].forEach((eventName) => {
-        wrapper.addEventListener(eventName, (event) => event.stopPropagation());
-      });
-      wrapper.addEventListener("wheel", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        wrapper.scrollTop += event.deltaY;
-      }, { passive: false });
-
-      const heading = getWaypointSequenceHeading(index, total, lang);
-      const coords = formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng);
-      const initialNameIt = waypoint.name_it || defaultNames.it;
-      const initialNameEn = waypoint.name_en || defaultNames.en;
-      const isWaterVoyage = selectedVoyage?.type === "water";
-      const mediaMarkup = waypoint.media.length
-        ? waypoint.media.map((mediaItem, mediaIndex) => {
-            const safeUrl = escapeHtml(mediaItem.url);
-            const safeName = escapeHtml(mediaItem.name || `Asset ${mediaIndex + 1}`);
-            const preview = mediaItem.kind === "image"
-              ? `<img src="${safeUrl}" alt="" style="width:100%;height:84px;object-fit:cover;border:1px solid hsl(var(--border));" />`
-              : mediaItem.kind === "video"
-                ? `<video src="${safeUrl}" muted playsinline style="width:100%;height:84px;object-fit:cover;border:1px solid hsl(var(--border));"></video>`
-                : `<div style="display:flex;align-items:center;justify-content:center;height:84px;border:1px solid hsl(var(--border));background:hsl(var(--muted));font-size:11px;color:hsl(220,10%,45%);">File</div>`;
-
-            return `
-              <div style="display:grid;gap:6px;">
-                ${preview}
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                  <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:hsl(var(--foreground));text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${safeName}</a>
-                  <button type="button" data-action="delete-media" data-media-index="${mediaIndex}" style="padding:4px 6px;border:1px solid hsl(var(--border));background:hsl(var(--background));font-size:10px;cursor:pointer;">Remove</button>
-                </div>
-              </div>
-            `;
-          }).join("")
-        : `<p style="margin:0;font-size:11px;color:hsl(220,10%,45%);">No media attached yet.</p>`;
-
-      wrapper.innerHTML = `
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-          <div>
-            <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:hsl(220,10%,45%);">${heading}</p>
-            <p style="${popupMetaStyle}">${coords}</p>
-          </div>
-          <span style="font-size:11px;padding:4px 7px;background:${effectiveType === "technical" ? "hsla(220,10%,60%,0.12)" : "hsla(180,40%,35%,0.12)"};color:${effectiveType === "technical" ? "hsl(220,10%,40%)" : "hsl(180,40%,28%)"};">
-            ${statusLabel}
-          </span>
-        </div>
-        <section style="${popupSectionStyle}">
-          <p style="${popupSectionTitleStyle}">Testi</p>
-          <button type="button" data-action="ai-translate" style="justify-self:start;padding:6px 10px;border:1px solid hsl(var(--border));background:hsl(var(--muted));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;border-radius:2px;">
-            Traduci campi vuoti (IT↔EN)
-          </button>
-          <div style="${popupLangTabRowStyle}" role="tablist" aria-label="Lingua contenuti waypoint">
-            <button type="button" data-popup-lang="it" aria-selected="true" style="${popupLangTabActiveStyle}">Italiano</button>
-            <button type="button" data-popup-lang="en" aria-selected="false" style="${popupLangTabInactiveStyle}">English</button>
-          </div>
-          <div data-popup-panel="it" style="display:grid;gap:10px;">
-            <div>
-              <label style="${popupLabelStyle}">Nome</label>
-              <input
-                name="name_it"
-                type="text"
-                value="${escapeHtml(initialNameIt)}"
-                style="${popupInputStyle}"
-              />
-            </div>
-            <div>
-              <label style="${popupLabelStyle}">Descrizione</label>
-              <textarea
-                name="description_it"
-                rows="4"
-                style="${popupTextareaStyle}"
-              >${escapeHtml(waypoint.description_it || "")}</textarea>
-            </div>
-          </div>
-          <div data-popup-panel="en" style="display:none;grid;gap:10px;">
-            <div>
-              <label style="${popupLabelStyle}">Name</label>
-              <input
-                name="name_en"
-                type="text"
-                value="${escapeHtml(initialNameEn)}"
-                style="${popupInputStyle}"
-              />
-            </div>
-            <div>
-              <label style="${popupLabelStyle}">Description</label>
-              <textarea
-                name="description_en"
-                rows="4"
-                style="${popupTextareaStyle}"
-              >${escapeHtml(waypoint.description_en || "")}</textarea>
-            </div>
-          </div>
-        </section>
-        <section style="${popupSectionStyle}">
-          <p style="${popupSectionTitleStyle}">Details</p>
-          <div>
-            <label style="${popupLabelStyle}">Visibility</label>
-            <select name="visibility_mode" style="${popupInputStyle}">
-              <option value="auto"${selectedVisibilityValue === "auto" ? " selected" : ""}>Auto (start and end are public)</option>
-              <option value="technical"${selectedVisibilityValue === "technical" ? " selected" : ""}>Technical / hidden</option>
-              <option value="narrative"${selectedVisibilityValue === "narrative" ? " selected" : ""}>Narrative / public</option>
-            </select>
-          </div>
-          ${isWaterVoyage ? `
-            <div style="display:grid;gap:8px;">
-              <label style="${popupLabelStyle}">Naming</label>
-              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
-                <select name="maritime_naming_mode" style="${popupInputStyle}">
-                  <option value="auto">Auto</option>
-                  <option value="city">Citta / porto</option>
-                  <option value="maritime">Baia, cala o toponimo</option>
-                </select>
-                <button type="button" data-action="apply-maritime-name" style="padding:8px 10px;border:1px solid hsl(var(--border));background:hsl(var(--muted));color:hsl(var(--foreground));font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
-                  Applica
-                </button>
-              </div>
-              <p style="${popupHintStyle}margin:0;">Citta usa il centro costiero vicino; Baia/cala forza il toponimo marittimo piu vicino.</p>
-            </div>
-          ` : ""}
-          ${selectedVoyageDatesTbd ? `
-            <div style="display:grid;gap:8px;">
-              <p style="${popupHintStyle}margin:0;">
-                Viaggio planned con date disattivate: nessuna data viene salvata sui waypoint.
-              </p>
-              <p style="${popupHintStyle}margin:0;">
-                ${escapeHtml(
-                  legEstimate
-                    ? `Tempo stimato dal WPT precedente: ${legEstimate.label} a 5 kn.`
-                    : "Primo waypoint: nessun tempo di percorrenza precedente da stimare."
-                )}
-              </p>
-            </div>
-          ` : `
-          <div data-details-kind="narrative" style="display:${effectiveType === "narrative" ? "grid" : "none"};gap:10px;">
-            <div>
-              <label style="${popupLabelStyle}">Arrival</label>
-              <input
-                name="date_end"
-                type="datetime-local"
-                value="${escapeHtml(getStoredDateTimeInputValue(waypoint.date_end))}"
-                placeholder="${escapeHtml(
-                  dateSuggestions.arrivalDate ? `${dateSuggestions.arrivalDate}T${dateSuggestions.arrivalTime || "00:00"}` : ""
-                )}"
-                style="${popupInputStyle}"
-              />
-              ${arrivalSuggestionNote ? `<p style="${popupHintStyle}">${escapeHtml(arrivalSuggestionNote)}</p>` : ""}
-            </div>
-            <div>
-              <label style="${popupLabelStyle}">Departure</label>
-              <input
-                name="date_start"
-                type="datetime-local"
-                value="${escapeHtml(getStoredDateTimeInputValue(waypoint.date_start))}"
-                placeholder="${escapeHtml(
-                  dateSuggestions.departureDate ? `${dateSuggestions.departureDate}T${dateSuggestions.departureTime || "00:00"}` : ""
-                )}"
-                style="${popupInputStyle}"
-              />
-              <p style="${popupHintStyle}">
-                ${escapeHtml(departureSuggestionNote || "Opzionale. Se valorizzata, verrà usata per stimare le tappe successive.")}
-              </p>
-            </div>
-            <div>
-              <label style="${popupLabelStyle}">Sosta e ripartenza</label>
-              <select name="stop_mode_ui" style="${popupInputStyle}">
-                <option value="none"${initialStopUiMode === "none" ? " selected" : ""}>Nessuna sosta</option>
-                <option value="hours"${initialStopUiMode === "hours" ? " selected" : ""}>Sosta breve (ore)</option>
-                <option value="nights"${initialStopUiMode === "nights" ? " selected" : ""}>Giorni + orario di ripartenza</option>
-              </select>
-              <div data-stop-panel="hours" style="display:${initialStopUiMode === "hours" ? "grid" : "none"};gap:6px;margin-top:8px;">
-                <input
-                  name="stop_hours"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value="${escapeHtml(String(initialStopHours))}"
-                  style="${popupInputStyle}"
-                />
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" data-stop-hours="8" style="${popupChipStyle}">8h</button>
-                  <button type="button" data-stop-hours="12" style="${popupChipStyle}">12h</button>
-                </div>
-              </div>
-              <div data-stop-panel="nights" style="display:${initialStopUiMode === "nights" ? "grid" : "none"};gap:6px;margin-top:8px;">
-                <label style="${popupLabelStyle}">Giorni di sosta</label>
-                <input
-                  name="stop_nights"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value="${escapeHtml(String(initialStopNights))}"
-                  style="${popupInputStyle}"
-                />
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" data-stop-nights="1" style="${popupChipStyle}">1</button>
-                  <button type="button" data-stop-nights="2" style="${popupChipStyle}">2</button>
-                  <button type="button" data-stop-nights="3" style="${popupChipStyle}">3</button>
-                </div>
-                <label style="${popupLabelStyle}">Orario di ripartenza</label>
-                <input
-                  name="stop_departure_time"
-                  type="time"
-                  value="${escapeHtml(initialStopDeparture)}"
-                  style="${popupInputStyle}"
-                />
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[0]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[0]}</button>
-                  <button type="button" data-stop-departure="${STOP_DEPARTURE_PRESETS[1]}" style="${popupChipStyle}">${STOP_DEPARTURE_PRESETS[1]}</button>
-                </div>
-              </div>
-              <p style="${popupHintStyle}">Es.: arrivo il 10 alle 15 con 2 giorni e ripartenza 19:00 → si riparte il 12 alle 19:00.</p>
-            </div>
-          </div>
-          <div data-details-kind="technical" style="display:${effectiveType === "technical" ? "grid" : "none"};gap:10px;">
-            <div style="display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;">
-              <div>
-              <label style="${popupLabelStyle}">Passage date</label>
-              <input
-                name="event_date"
-                type="date"
-                value="${escapeHtml(waypoint.event_date || "")}"
-                style="${popupInputStyle}"
-              />
-              </div>
-              <div>
-                <label style="${popupLabelStyle}">Time</label>
-                <input
-                  name="event_time"
-                  type="time"
-                  value="${escapeHtml(waypoint.event_time ? waypoint.event_time.slice(0, 5) : "")}"
-                  style="${popupInputStyle}"
-                />
-              </div>
-              <p style="${popupHintStyle}">Opzionale. Se inserita manualmente, verrà usata per stimare i waypoint successivi.</p>
-            </div>
-          </div>
-          `}
-        </section>
-        <section style="${popupSectionStyle}">
-          <p style="${popupSectionTitleStyle}">Media</p>
-          <div style="display:grid;gap:10px;">${mediaMarkup}</div>
-          <input name="media_upload" type="file" multiple style="${popupInputStyle}padding:6px 10px;" />
-        </section>
-        <div style="position:sticky;bottom:-6px;display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;background:linear-gradient(to top,hsl(var(--background)) 70%,transparent);">
-          <button type="button" data-action="relocate" style="flex:1 1 100%;padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Move on map</button>
-          <button type="submit" style="flex:1;padding:9px 10px;border:none;background:hsl(var(--primary));color:hsl(var(--primary-foreground));font-size:12px;font-weight:600;cursor:pointer;">Save</button>
-          <button type="button" data-action="delete" style="padding:9px 10px;border:1px solid hsl(var(--border));background:hsl(var(--background));color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">Delete</button>
-        </div>
-      `;
-
-      const nameItInput = wrapper.querySelector('input[name="name_it"]') as HTMLInputElement | null;
-      const nameEnInput = wrapper.querySelector('input[name="name_en"]') as HTMLInputElement | null;
-      const descriptionItInput = wrapper.querySelector('textarea[name="description_it"]') as HTMLTextAreaElement | null;
-      const descriptionEnInput = wrapper.querySelector('textarea[name="description_en"]') as HTMLTextAreaElement | null;
-      const arrivalDateInput = wrapper.querySelector('input[name="date_end"]') as HTMLInputElement | null;
-      const departureDateInput = wrapper.querySelector('input[name="date_start"]') as HTMLInputElement | null;
-      const eventDateInput = wrapper.querySelector('input[name="event_date"]') as HTMLInputElement | null;
-      const eventTimeInput = wrapper.querySelector('input[name="event_time"]') as HTMLInputElement | null;
-      const stopModeUiSelect = wrapper.querySelector('select[name="stop_mode_ui"]') as HTMLSelectElement | null;
-      const stopHoursInput = wrapper.querySelector('input[name="stop_hours"]') as HTMLInputElement | null;
-      const stopNightsInput = wrapper.querySelector('input[name="stop_nights"]') as HTMLInputElement | null;
-      const stopDepartureInput = wrapper.querySelector('input[name="stop_departure_time"]') as HTMLInputElement | null;
-      const stopPanels = wrapper.querySelectorAll<HTMLElement>("[data-stop-panel]");
-      const visibilitySelect = wrapper.querySelector('select[name="visibility_mode"]') as HTMLSelectElement | null;
-      const maritimeNamingModeSelect = wrapper.querySelector('select[name="maritime_naming_mode"]') as HTMLSelectElement | null;
-      const mediaUploadInput = wrapper.querySelector('input[name="media_upload"]') as HTMLInputElement | null;
-      const deleteButton = wrapper.querySelector('[data-action="delete"]') as HTMLButtonElement | null;
-      const relocateButton = wrapper.querySelector('[data-action="relocate"]') as HTMLButtonElement | null;
-      const aiTranslateButton = wrapper.querySelector('[data-action="ai-translate"]') as HTMLButtonElement | null;
-      const applyMaritimeNameButton = wrapper.querySelector('[data-action="apply-maritime-name"]') as HTMLButtonElement | null;
-      const mediaDeleteButtons = wrapper.querySelectorAll('[data-action="delete-media"]');
-      const langTabButtons = wrapper.querySelectorAll<HTMLButtonElement>("[data-popup-lang]");
-      const langPanels = wrapper.querySelectorAll<HTMLElement>("[data-popup-panel]");
-      const detailsPanels = wrapper.querySelectorAll<HTMLElement>("[data-details-kind]");
-
-      langTabButtons.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          const code = tab.getAttribute("data-popup-lang");
-          if (code !== "it" && code !== "en") return;
-          langTabButtons.forEach((btn) => {
-            const active = btn.getAttribute("data-popup-lang") === code;
-            btn.setAttribute("aria-selected", active ? "true" : "false");
-            btn.style.cssText = active ? popupLangTabActiveStyle : popupLangTabInactiveStyle;
-          });
-          langPanels.forEach((panel) => {
-            const show = panel.getAttribute("data-popup-panel") === code;
-            panel.style.display = show ? "grid" : "none";
-          });
-        });
-      });
-
-      const syncDetailsPanels = () => {
-        const nextType = resolveDetailsType(visibilitySelect?.value || selectedVisibilityValue);
-        detailsPanels.forEach((panelElement) => {
-          panelElement.style.display = panelElement.getAttribute("data-details-kind") === nextType ? "grid" : "none";
-        });
-      };
-
-      visibilitySelect?.addEventListener("change", syncDetailsPanels);
-      syncDetailsPanels();
-
-      const syncStopPanels = () => {
-        const mode = stopModeUiSelect?.value || "none";
-        stopPanels.forEach((panelElement) => {
-          panelElement.style.display = panelElement.getAttribute("data-stop-panel") === mode ? "grid" : "none";
-        });
-      };
-      stopModeUiSelect?.addEventListener("change", syncStopPanels);
-      syncStopPanels();
-
-      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-hours]").forEach((chip) => {
-        chip.addEventListener("click", () => {
-          if (stopHoursInput) stopHoursInput.value = chip.getAttribute("data-stop-hours") || "";
-        });
-      });
-      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-nights]").forEach((chip) => {
-        chip.addEventListener("click", () => {
-          if (stopNightsInput) stopNightsInput.value = chip.getAttribute("data-stop-nights") || "";
-        });
-      });
-      wrapper.querySelectorAll<HTMLButtonElement>("[data-stop-departure]").forEach((chip) => {
-        chip.addEventListener("click", () => {
-          if (stopDepartureInput) stopDepartureInput.value = chip.getAttribute("data-stop-departure") || "";
-        });
-      });
-
-      aiTranslateButton?.addEventListener("click", () => {
-        void (async () => {
-          if (!aiTranslateButton) return;
-          aiTranslateButton.disabled = true;
-          try {
-            const result = await invokeTranslateEditorContent({
-              kind: "waypoint",
-              name_it: nameItInput?.value ?? "",
-              name_en: nameEnInput?.value ?? "",
-              description_it: descriptionItInput?.value ?? "",
-              description_en: descriptionEnInput?.value ?? "",
-            });
-            if (!result.ok) {
-              toast.error("error" in result ? result.error : "Errore di traduzione");
-              return;
-            }
-            if (result.skipped) {
-              toast.message("Niente da tradurre: compila i campi in una lingua e lascia vuoti quelli nell’altra.");
-              return;
-            }
-            const f = result.fields;
-            if (typeof f.name_en === "string" && nameEnInput) nameEnInput.value = f.name_en;
-            if (typeof f.name_it === "string" && nameItInput) nameItInput.value = f.name_it;
-            if (typeof f.description_en === "string" && descriptionEnInput) descriptionEnInput.value = f.description_en;
-            if (typeof f.description_it === "string" && descriptionItInput) descriptionItInput.value = f.description_it;
-            toast.success("Traduzione applicata nei campi (salva per confermare).");
-          } finally {
-            aiTranslateButton.disabled = false;
-          }
-        })();
-      });
-
-      applyMaritimeNameButton?.addEventListener("click", () => {
-        void (async () => {
-          if (!applyMaritimeNameButton) return;
-          const mode =
-            maritimeNamingModeSelect?.value === "city" || maritimeNamingModeSelect?.value === "maritime"
-              ? maritimeNamingModeSelect.value
-              : "auto";
-          applyMaritimeNameButton.disabled = true;
-          applyMaritimeNameButton.textContent = "Cerco...";
-          try {
-            const suggestedPlace = await reverseGeocodePlaceLocalized(waypoint.lat, waypoint.lng, {
-              maritime: true,
-              maritimeLabelMode: mode,
-            });
-            if (!suggestedPlace.it && !suggestedPlace.en) {
-              toast.error("Nessun nome coerente trovato per questo punto.");
-              return;
-            }
-            if (nameItInput) nameItInput.value = suggestedPlace.it || suggestedPlace.en || nameItInput.value;
-            if (nameEnInput) nameEnInput.value = suggestedPlace.en || suggestedPlace.it || nameEnInput.value;
-            toast.success("Nome waypoint aggiornato nei campi (salva per confermare).");
-          } finally {
-            applyMaritimeNameButton.disabled = false;
-            applyMaritimeNameButton.textContent = "Applica";
-          }
-        })();
-      });
-
-      const refreshPopup = () => {
-        const nextWaypoint = (waypointsRef.current[waypoint.voyage_id] || []).find((item) => item.id === waypoint.id);
-        if (!nextWaypoint) return;
-        panel.setDOMContent(createWaypointPopupContent(nextWaypoint, index, total, panel));
-      };
-
-      wrapper.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const name_it = nameItInput?.value.trim() || defaultNames.it;
-        const name_en = nameEnInput?.value.trim() || defaultNames.en;
-        const hasCustomName = name_it !== initialNameIt || name_en !== initialNameEn;
-        const visibilityValue = visibilitySelect?.value === "narrative" || visibilitySelect?.value === "technical"
-          ? visibilitySelect.value
-          : "auto";
-        const stopUiMode = stopModeUiSelect?.value === "hours" || stopModeUiSelect?.value === "nights"
-          ? stopModeUiSelect.value
-          : "none";
-        const stopHours = parseNonNegativeInteger(stopHoursInput?.value || "0");
-        const stopNights = Math.max(1, parseNonNegativeInteger(stopNightsInput?.value || "1"));
-        const hasPlannedStop =
-          stopUiMode === "hours"
-            ? stopHours > 0
-            : stopUiMode === "nights"
-              ? stopNights > 0
-              : false;
-        const shouldAutoPromoteToNarrative =
-          visibilityValue === "auto" &&
-          (hasCustomName || hasPlannedStop);
-        const visibility_mode = visibilityValue === "auto" && !shouldAutoPromoteToNarrative ? "auto" : "manual";
-        const waypoint_type =
-          visibilityValue === "narrative" || shouldAutoPromoteToNarrative
-            ? "narrative"
-            : "technical";
-        const legacyName = (lang === "it" ? name_it : name_en) || name_it || name_en || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng);
-        const nextChanges: Partial<VoyageWaypoint> = {
-          name: legacyName,
-          name_it,
-          name_en,
-          description_it: descriptionItInput?.value.trim() || null,
-          description_en: descriptionEnInput?.value.trim() || null,
-          visibility_mode,
-          waypoint_type,
-        };
-
-        const applyNoStop = () => {
-          nextChanges.stop_mode = "hours";
-          nextChanges.stop_hours = 0;
-          nextChanges.stop_nights = null;
-          nextChanges.stop_departure_time = null;
-          nextChanges.planned_stop_duration_minutes = 0;
-        };
-
-        if (waypoint_type === "narrative") {
-          nextChanges.date_end = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(arrivalDateInput?.value || null);
-          nextChanges.date_start = selectedVoyageDatesTbd ? null : serializeDateTimeLocalInputValue(departureDateInput?.value || null);
-          nextChanges.event_date = null;
-          nextChanges.event_time = null;
-
-          if (stopUiMode === "hours") {
-            nextChanges.stop_mode = "hours";
-            nextChanges.stop_hours = stopHours;
-            nextChanges.stop_nights = null;
-            nextChanges.stop_departure_time = null;
-            nextChanges.planned_stop_duration_minutes = stopHours * 60;
-          } else if (stopUiMode === "nights") {
-            const time = (stopDepartureInput?.value || DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
-            nextChanges.stop_mode = "nights";
-            nextChanges.stop_nights = stopNights;
-            nextChanges.stop_departure_time = time;
-            nextChanges.stop_hours = null;
-            nextChanges.planned_stop_duration_minutes = 0;
-          } else {
-            applyNoStop();
-          }
-        } else {
-          applyNoStop();
-          nextChanges.event_date = selectedVoyageDatesTbd ? null : eventDateInput?.value || null;
-          nextChanges.event_time = selectedVoyageDatesTbd ? null : eventTimeInput?.value || null;
-          nextChanges.date_start = null;
-          nextChanges.date_end = null;
-        }
-
-        void (async () => {
-          const success = await updateWaypoint(
-            waypoint.voyage_id,
-            waypoint.id,
-            nextChanges,
-            { successMessage: "Waypoint updated" }
-          );
-          if (success) refreshPopup();
-        })();
-      });
-
-      deleteButton?.addEventListener("click", () => {
-        panel.remove();
-        void deleteWaypoint(waypoint.voyage_id, waypoint.id);
-      });
-
-      relocateButton?.addEventListener("click", () => {
-        startWaypointRelocation(waypoint.voyage_id, waypoint.id);
-      });
-
-      mediaDeleteButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          const mediaIndex = Number((button as HTMLButtonElement).dataset.mediaIndex);
-          if (!Number.isInteger(mediaIndex) || !waypoint.media[mediaIndex]) return;
-
-          void (async () => {
-            await deleteWaypointMediaAsset(waypoint.media[mediaIndex]);
-            const nextMedia = waypoint.media.filter((_, indexValue) => indexValue !== mediaIndex);
-            const success = await updateWaypoint(
-              waypoint.voyage_id,
-              waypoint.id,
-              { media: nextMedia },
-              { successMessage: "Media removed" }
-            );
-            if (success) refreshPopup();
-          })();
-        });
-      });
-
-      mediaUploadInput?.addEventListener("change", () => {
-        const files = Array.from(mediaUploadInput.files || []);
-        if (!files.length) return;
-
-        void (async () => {
-          const uploaded = (await Promise.all(files.map((file) => uploadWaypointMediaAsset(waypoint.id, file))))
-            .filter(Boolean) as VoyageWaypointMediaItem[];
-          mediaUploadInput.value = "";
-          if (!uploaded.length) return;
-
-          const success = await updateWaypoint(
-            waypoint.voyage_id,
-            waypoint.id,
-            { media: [...waypoint.media, ...uploaded] },
-            { successMessage: uploaded.length === 1 ? "Media added" : `${uploaded.length} media added` }
-          );
-          if (success) refreshPopup();
-        })();
-      });
-
-      return wrapper;
-    },
-    [
-      deleteWaypoint,
-      deleteWaypointMediaAsset,
-      lang,
-      selectedWaypointDateSuggestions,
-      selectedWaypointLegEstimates,
-      selectedVoyage?.type,
-      selectedVoyageDatesTbd,
-      startWaypointRelocation,
-      updateWaypoint,
-      uploadWaypointMediaAsset,
-    ]
-  );
-
   useEffect(() => {
     setWaypointEditorPanelId(null);
   }, [selectedVoyageId]);
@@ -2277,34 +1686,14 @@ const AdminVoyageManager = ({
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, [resizeMapAfterWorkspaceChange]);
 
+  // If the open waypoint disappears (deleted, or draft discarded), close the panel.
   useEffect(() => {
-    const mount = waypointPanelMountRef.current;
-    if (!mount) return;
-
-    if (!waypointEditorPanelId || !selectedVoyageId) {
-      mount.replaceChildren();
-      return;
-    }
-
+    if (!waypointEditorPanelId || !selectedVoyageId) return;
     const wps = waypoints[selectedVoyageId] || [];
-    const index = wps.findIndex((w) => w.id === waypointEditorPanelId);
-    if (index < 0) {
+    if (!wps.some((w) => w.id === waypointEditorPanelId)) {
       setWaypointEditorPanelId(null);
-      return;
     }
-
-    const waypoint = wps[index];
-    const total = wps.length;
-    const handle: WaypointEditorPanelHandle = {
-      setDOMContent: (node) => {
-        mount.replaceChildren(node);
-      },
-      remove: () => {
-        setWaypointEditorPanelId(null);
-      },
-    };
-    mount.replaceChildren(createWaypointPopupContent(waypoint, index, total, handle));
-  }, [waypointEditorPanelId, selectedVoyageId, waypoints, createWaypointPopupContent]);
+  }, [waypointEditorPanelId, selectedVoyageId, waypoints]);
 
   useEffect(() => {
     if (!isMapWorkspaceFullscreen) return;
@@ -4197,7 +3586,56 @@ const AdminVoyageManager = ({
                   </button>
                 </div>
               </div>
-              <div ref={waypointPanelMountRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2" />
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2">
+                {waypointEditorTarget ? (() => {
+                  const { waypoint, index, total } = waypointEditorTarget;
+                  const suggestion =
+                    selectedWaypointDateSuggestions[waypoint.id] || createEmptyWaypointDateSuggestion();
+                  const legEstimate = selectedWaypointLegEstimates[waypoint.id];
+                  const placeholder = (date: string | null, time: string | null) =>
+                    date ? `${date}T${time || "00:00"}` : "";
+                  return (
+                    <WaypointEditorPanel
+                      key={waypoint.id}
+                      waypoint={waypoint}
+                      index={index}
+                      total={total}
+                      lang={lang}
+                      voyageType={selectedVoyage?.type === "land" ? "land" : "water"}
+                      datesTbd={selectedVoyageDatesTbd}
+                      arrivalNote={getWaypointDateSuggestionNote(
+                        suggestion.arrivalDate,
+                        suggestion.arrivalTime,
+                        suggestion.arrivalSource
+                      )}
+                      departureNote={getWaypointDateSuggestionNote(
+                        suggestion.departureDate,
+                        suggestion.departureTime,
+                        suggestion.departureSource
+                      )}
+                      arrivalPlaceholder={placeholder(suggestion.arrivalDate, suggestion.arrivalTime)}
+                      departurePlaceholder={placeholder(suggestion.departureDate, suggestion.departureTime)}
+                      legEstimateLabel={
+                        legEstimate ? `Tempo stimato dal WPT precedente: ${legEstimate.label} a 5 kn.` : null
+                      }
+                      onUpdate={(changes, options) =>
+                        updateWaypoint(waypoint.voyage_id, waypoint.id, changes, options)
+                      }
+                      onDelete={() => {
+                        setWaypointEditorPanelId(null);
+                        void deleteWaypoint(waypoint.voyage_id, waypoint.id);
+                      }}
+                      onRelocate={() => startWaypointRelocation(waypoint.voyage_id, waypoint.id)}
+                      onUploadMedia={async (files) =>
+                        (await Promise.all(files.map((file) => uploadWaypointMediaAsset(waypoint.id, file)))).filter(
+                          Boolean
+                        ) as VoyageWaypointMediaItem[]
+                      }
+                      onDeleteMedia={(item) => deleteWaypointMediaAsset(item)}
+                    />
+                  );
+                })() : null}
+              </div>
             </aside>
           </div>
 

@@ -25,6 +25,8 @@ export type Database = {
           is_published: boolean
           label_en: string
           label_it: string | null
+          limitations_en: string | null
+          limitations_it: string | null
           method_en: string | null
           method_it: string | null
           scale_max: number | null
@@ -74,6 +76,54 @@ export type Database = {
           unit_code?: string
           updated_at?: string
           value_type?: string
+        }
+        Relationships: []
+      }
+      observations: {
+        Row: {
+          created_at: string
+          depth_m: number | null
+          device_id: string | null
+          gps_accuracy_m: number | null
+          id: string
+          is_published: boolean
+          lat: number
+          lng: number
+          notes: string | null
+          qc_flag: number
+          recorded_at: string
+          source: string
+          voyage_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          depth_m?: number | null
+          device_id?: string | null
+          gps_accuracy_m?: number | null
+          id?: string
+          is_published?: boolean
+          lat: number
+          lng: number
+          notes?: string | null
+          qc_flag?: number
+          recorded_at: string
+          source?: string
+          voyage_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          depth_m?: number | null
+          device_id?: string | null
+          gps_accuracy_m?: number | null
+          id?: string
+          is_published?: boolean
+          lat?: number
+          lng?: number
+          notes?: string | null
+          qc_flag?: number
+          recorded_at?: string
+          source?: string
+          voyage_id?: string | null
         }
         Relationships: []
       }
@@ -273,6 +323,26 @@ export type Database = {
       }
     }
     Views: {
+      observations_export: {
+        Row: {
+          observation_id: string
+          voyage_id: string | null
+          voyage_name: string | null
+          recorded_at_utc: string | null
+          latitude_deg: number
+          longitude_deg: number
+          depth_m: number | null
+          gps_accuracy_m: number | null
+          device_code: string | null
+          source: string
+          position_qc: number
+          notes: string | null
+          // One value column plus one QC column per published parameter, generated from
+          // observation_parameters by rebuild_observations_export_view().
+          [key: string]: unknown
+        }
+        Relationships: []
+      }
       observations_map: {
         Row: {
           device_code: string | null

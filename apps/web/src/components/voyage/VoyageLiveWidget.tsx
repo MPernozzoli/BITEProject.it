@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, Clock, Anchor, Navigation, AlertTriangle } from "lucide-react";
+import { ChevronDown, Clock, Anchor, Navigation, AlertTriangle, X } from "lucide-react";
+import { formatBookingWindow } from "@/lib/booking-utils";
 import {
   getCurrentLegIndex,
   getLegDelayHours,
@@ -40,6 +41,8 @@ interface WidgetLeg extends ScheduledLeg {
   to_waypoint_id: string;
   sort_order: number;
   starts_at_window_start: string | null;
+  starts_at_window_end: string | null;
+  ends_at_window_start: string | null;
   ends_at_window_end: string | null;
 }
 
@@ -71,6 +74,7 @@ const copy = {
     stopOngoing: "In sosta da",
     allDone: "Tutte le tratte sono concluse.",
     saving: "Salvo...",
+    close: "Chiudi",
   },
   en: {
     eyebrow: "Voyage in progress",
@@ -91,8 +95,16 @@ const copy = {
     stopOngoing: "Stopped since",
     allDone: "Every leg is complete.",
     saving: "Saving...",
+    close: "Dismiss",
   },
 } as const;
+
+/**
+ * Dismissals are stored per leg, not per voyage: closing the card hides the leg
+ * you have already read about, but the widget comes back when the voyage moves on
+ * to the next one. One click should not cost the traveller the feature for good.
+ */
+const DISMISSED_LEG_STORAGE_KEY = "bite_voyage_live_widget_dismissed_leg";
 
 function formatDelay(hours: number, lang: "it" | "en") {
   if (hours >= 48) {
@@ -104,17 +116,14 @@ function formatDelay(hours: number, lang: "it" | "en") {
   return lang === "it" ? `${rounded} ore` : `${rounded} hours`;
 }
 
-function formatMoment(value: string | null | undefined, lang: "it" | "en") {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat(lang === "it" ? "it-IT" : "en-GB", {
-    timeZone: "Europe/Rome",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+/**
+ * Renders a leg bound the way the booking matrix does: the whole window as a
+ * range ("10–13 set h 07:30"), collapsing to a single date once the bounds meet —
+ * which is exactly what recording an actual does to them. Reusing
+ * formatBookingWindow keeps the widget and the matrix reading the same.
+ */
+function formatWindow(start: string | null | undefined, end: string | null | undefined, lang: "it" | "en") {
+  return formatBookingWindow(start, end, lang === "it" ? "it-IT" : "en-GB") ?? "—";
 }
 
 /** `datetime-local` speaks wall-clock time; the widget's wall clock is Rome. */
@@ -169,6 +178,13 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   const [saving, setSaving] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState("");
+  const [dismissedLegId, setDismissedLegId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(DISMISSED_LEG_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
 
   const load = useCallback(async () => {
     const [voyagesRes, legsRes, waypointsRes] = await Promise.all([
@@ -179,7 +195,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
       supabase
         .from("voyage_bookable_legs")
         .select(
-          "id,voyage_id,from_waypoint_id,to_waypoint_id,sort_order,starts_at_window_start,ends_at_window_end,baseline_starts_at_window_start,baseline_starts_at_window_end,actual_departure_at,actual_arrival_at"
+          "id,voyage_id,from_waypoint_id,to_waypoint_id,sort_order,starts_at_window_start,starts_at_window_end,ends_at_window_start,ends_at_window_end,baseline_starts_at_window_start,baseline_starts_at_window_end,actual_departure_at,actual_arrival_at"
         )
         .order("sort_order", { ascending: true }),
       supabase
@@ -247,6 +263,16 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   };
 
   if (loading || !active || !currentLeg || !pending) return null;
+  if (readOnly && dismissedLegId === currentLeg.id) return null;
+
+  const dismiss = () => {
+    try {
+      window.localStorage.setItem(DISMISSED_LEG_STORAGE_KEY, currentLeg.id);
+    } catch {
+      // Private browsing: the card still closes for this session.
+    }
+    setDismissedLegId(currentLeg.id);
+  };
 
   const phase = getVoyagePhase(active.voyage, active.voyageLegs);
   const fromWaypoint = waypoints[currentLeg.from_waypoint_id];
@@ -276,6 +302,17 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
             {t.delayed(getLegDelayHours(currentLeg))}
           </span>
         )}
+        {readOnly && (
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label={t.close}
+            title={t.close}
+            className="glass-chip ml-auto inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       <h2 className="editorial-heading mt-4 text-2xl md:text-3xl">
@@ -288,7 +325,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
             {fromWaypoint?.actual_departure_at ? t.actualDeparture : t.plannedDeparture}
           </dt>
           <dd className="mt-1.5 font-sans text-lg text-foreground tabular-nums">
-            {formatMoment(fromWaypoint?.actual_departure_at ?? currentLeg.starts_at_window_start, locale)}
+            {formatWindow(currentLeg.starts_at_window_start, currentLeg.starts_at_window_end, locale)}
           </dd>
         </div>
         <div className="rounded-[20px] border border-white/55 bg-white/45 p-4">
@@ -296,7 +333,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
             {toWaypoint?.actual_arrival_at ? t.actualArrival : t.plannedArrival}
           </dt>
           <dd className="mt-1.5 font-sans text-lg text-foreground tabular-nums">
-            {formatMoment(toWaypoint?.actual_arrival_at ?? currentLeg.ends_at_window_end, locale)}
+            {formatWindow(currentLeg.ends_at_window_start, currentLeg.ends_at_window_end, locale)}
           </dd>
         </div>
       </dl>

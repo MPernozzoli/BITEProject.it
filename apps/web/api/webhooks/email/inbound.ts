@@ -191,9 +191,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       if (error) throw error;
 
       const pushSent = await sendMailPushNotification(db, assignment.notifyProfileIds, {
+        type: "mail",
         title: assignment.assignedProfileId ? "Nuova mail assegnata" : "Nuova mail BITE",
         body: `${parsedFrom.name || parsedFrom.address}: ${typeof content?.subject === "string" ? content.subject : typeof data.subject === "string" ? data.subject : "(nessun oggetto)"}`,
         url: insertedEmail?.id ? `/admin/mail?message=${encodeURIComponent(insertedEmail.id)}` : "/admin/mail",
+        tag: insertedEmail?.id ? `mail:${insertedEmail.id}` : undefined,
       }).catch((pushError) => {
         console.error("[webhooks/email/inbound] push failed", pushError);
         return false;
