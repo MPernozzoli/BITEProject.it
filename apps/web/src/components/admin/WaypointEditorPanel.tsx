@@ -73,6 +73,10 @@ const WaypointEditorPanel = ({
   onDeleteMedia,
 }: WaypointEditorPanelProps) => {
   const [form, setForm] = useState<WaypointFormState>(() => buildWaypointFormState(waypoint));
+  // Latest form snapshot, so commit() never has to read state inside a setState updater
+  // (which would fire the parent's onUpdate during render).
+  const formRef = useRef(form);
+  formRef.current = form;
   const [activeLang, setActiveLang] = useState<Language>(lang);
   const [maritimeMode, setMaritimeMode] = useState<MaritimeMode>("auto");
   const [aiBusy, setAiBusy] = useState(false);
@@ -144,11 +148,9 @@ const WaypointEditorPanel = ({
 
   const patchAndCommit = useCallback(
     (changes: Partial<WaypointFormState>) => {
-      setForm((prev) => {
-        const next = { ...prev, ...changes };
-        commit(next);
-        return next;
-      });
+      const next = { ...formRef.current, ...changes };
+      setForm(next);
+      commit(next);
     },
     [commit]
   );
@@ -163,7 +165,7 @@ const WaypointEditorPanel = ({
         description_it: form.descriptionIt,
         description_en: form.descriptionEn,
       });
-      if (!result.ok) {
+      if (result.ok === false) {
         toast.error(result.error);
         return;
       }
