@@ -1,0 +1,72 @@
+-- Let editorial cron jobs authenticate with dedicated Edge Function secrets.
+-- This avoids storing the service-role key in Vault while keeping the cron
+-- calls independently revocable per publisher.
+
+create or replace function public.invoke_editorial_edge_function(_function_name text)
+returns bigint
+language plpgsql
+security definer
+set search_path = public, extensions, vault
+as $$
+declare
+  project_url text := coalesce(
+    (select decrypted_secret from vault.decrypted_secrets where name = 'project_url' limit 1),
+    'https://ekwloweuicrqjjgabfdp.supabase.co'
+  );
+  cron_secret_name text;
+  cron_secret text;
+  service_role_key text := (
+    select decrypted_secret
+    from vault.decrypted_secrets
+    where name = 'supabase_service_role_key'
+    limit 1
+  );
+  request_headers jsonb;
+  request_id bigint;
+begin
+  if _function_name = 'publish-scheduled-articles' then
+    cron_secret_name := 'scheduled_articles_cron_secret';
+  elsif _function_name = 'publish-social-queue' then
+    cron_secret_name := 'social_publish_cron_secret';
+  else
+    raise exception 'Unsupported editorial edge function: %', _function_name;
+  end if;
+
+  select decrypted_secret
+  into cron_secret
+  from vault.decrypted_secrets
+  where name = cron_secret_name
+  limit 1;
+
+  if cron_secret is not null and length(cron_secret) > 0 then
+    request_headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', cron_secret
+    );
+  elsif service_role_key is not null and length(service_role_key) > 0 then
+    request_headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_role_key,
+      'apikey', service_role_key
+    );
+  else
+    raise exception 'Missing Vault secret % or supabase_service_role_key for editorial autopublishing cron', cron_secret_name;
+  end if;
+
+  select net.http_post(
+    url := project_url || '/functions/v1/' || _function_name,
+    headers := request_headers,
+    body := jsonb_build_object(
+      'source', 'pg_cron',
+      'function', _function_name,
+      'invoked_at', timezone('utc', now())
+    )
+  )
+  into request_id;
+
+  return request_id;
+end;
+$$;
+
+comment on function public.invoke_editorial_edge_function(text) is
+  'Invokes editorial Edge Functions from pg_cron using per-function Vault cron secrets, falling back to service-role key when configured.';

@@ -42,6 +42,11 @@ function authorizeCron(req: Request): boolean {
   return false
 }
 
+function isDryRun(req: Request): boolean {
+  const url = new URL(req.url)
+  return url.searchParams.get('dry_run') === '1' || url.searchParams.get('dryRun') === 'true'
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -64,6 +69,7 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const nowIso = new Date().toISOString()
+  const dryRun = isDryRun(req)
 
   const { data: due, error: selErr } = await supabase
     .from('logbook_articles')
@@ -81,6 +87,16 @@ Deno.serve(async (req) => {
 
   const publishedIds: string[] = []
   const errors: Array<{ id: string; message: string }> = []
+
+  if (dryRun) {
+    return jsonResponse({
+      success: true,
+      dryRun,
+      dueCount: due?.length ?? 0,
+      dueIds: (due ?? []).map((row) => row.id),
+      errors,
+    })
+  }
 
   for (const row of due ?? []) {
     const scheduledAt = row.scheduled_at as string | null
@@ -150,6 +166,7 @@ Deno.serve(async (req) => {
 
   return jsonResponse({
     success: true,
+    dryRun,
     publishedCount: publishedIds.length,
     publishedIds,
     errors,

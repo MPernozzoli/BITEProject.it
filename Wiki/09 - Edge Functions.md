@@ -20,7 +20,7 @@ tags: [backend, edge-functions, serverless, supabase]
 - `newsletter-dispatch`, `send-newsletter-digest`
 - `newsletter-track-open`, `newsletter-track-click`
 - `notify-article-publication`, `notify-story-subscribers`
-- `publish-scheduled-articles` — pubblicazione articoli programmati
+- `publish-scheduled-articles` — pubblicazione articoli programmati. Espone `dry_run=1` per verificare la coda senza cambiare stato; in produzione viene invocata da `pg_cron` ogni minuto tramite `public.invoke_editorial_edge_function()`, `pg_net` e secret dedicato `SCHEDULED_ARTICLES_CRON_SECRET` / `scheduled_articles_cron_secret`.
 
 ## 🔔 Notifiche & engagement
 - `dispatch-engagement-notifications` — like/commenti/letture
@@ -39,7 +39,7 @@ tags: [backend, edge-functions, serverless, supabase]
 ## 📱 Social & contenuti
 - `social-oauth-start`, `social-oauth-callback` — OAuth social publishing. Instagram usa il flusso **Instagram API with Instagram Login**: redirect su `https://www.instagram.com/oauth/authorize`, scope `instagram_business_basic` + `instagram_business_content_publish`, exchange su `api.instagram.com/oauth/access_token` e long-lived token su `graph.instagram.com/access_token`. La function richiede `SOCIAL_OAUTH_STATE_SECRET`, `SOCIAL_OAUTH_CALLBACK_URL`, `SOCIAL_OAUTH_FRONTEND_URL` e, per Instagram, `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` come secret Supabase.
 - `instagram-metrics` — endpoint pubblico per `apps/pack`: legge server-side solo la connessione OAuth del canale `instagram_dogs`, aggiorna `pack.external_metrics_cache` e restituisce metriche compatte per il sito cani. Se il profilo non è ancora collegato o Instagram fallisce, Pack mantiene lo snapshot statico.
-- `publish-social-queue` — coda pubblicazione social
+- `publish-social-queue` — coda pubblicazione social. Pubblica i target social scaduti usando slot locale o `publish_at`, salva `platform_post_id`, permalink e `published_at`, quindi sincronizza snapshot in `editorial_post_insights`. Oggi il publish automatico copre Instagram image/reel/story e YouTube video/short con token OAuth collegato; TikTok viene marcato con errore strutturato finché non è completato il flusso Direct Post/provider review. La function supporta `dry_run=1`, usa il secret dedicato `SOCIAL_PUBLISH_CRON_SECRET` / `social_publish_cron_secret` ed è schedulata via `pg_cron` ogni 5 minuti.
 - `translate-editor-content` — traduzione contenuti editor (IT/EN)
 - `contact-form-submit` — invio form contatti
 

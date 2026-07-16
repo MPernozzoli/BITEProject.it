@@ -62,6 +62,8 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._observation_parameter_limitations.sql` — aggiunge `limitations_en`/`limitations_it` a `observation_parameters`, portando nel catalogo il testo sui limiti che era hardcoded in `/Data/sensors` → [[22 - Citizen Science e Osservazioni]].
 - `..._citizen_science_observations.sql` — introduce il dominio **citizen science** (`observation_parameters`, `observation_devices`, `observation_device_keys`, `observations`, `observation_measurements`), l'attribuzione automatica del viaggio dal timestamp e le viste `observations_map` / `observations_export` → [[22 - Citizen Science e Osservazioni]].
 - `..._editorial_post_insights.sql` — aggiunge `editorial_post_insights`, snapshot metrici e note qualitative per ogni `editorial_publish_targets` social; RLS admin-only, utile al cockpit social del piano editoriale → [[16 - Admin]].
+- `..._editorial_social_publish_metadata.sql` — aggiunge metadati provider a `editorial_publish_targets` (`platform_post_id`, permalink, `published_at`, `metrics_synced_at`) e versiona gli autopublisher editoriali con `pg_cron` + `pg_net` tramite `public.invoke_editorial_edge_function()`.
+- `..._editorial_cron_secret_auth.sql` — aggiorna `public.invoke_editorial_edge_function()` per usare secret dedicati (`scheduled_articles_cron_secret`, `social_publish_cron_secret`) salvati in Supabase Vault e corrispondenti Edge secrets; fallback opzionale a `supabase_service_role_key`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -80,12 +82,13 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound; `inbound_emails.attachments` conserva metadata e URL firmati temporanei Resend, `sent_emails.attachments` conserva solo metadata degli allegati inviati → [[12 - Newsletter ed Email]]
-- `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, più snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
+- `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
 ## Hardening remoto applicato
 - `expire_pending_voyage_booking_payments` è schedulata ogni ora su Supabase Cron.
+- Gli autopublisher editoriali `publish-scheduled-articles` e `publish-social-queue` sono schedulati via Supabase Cron; entrambi passano da `public.invoke_editorial_edge_function()` e si autenticano con secret cron dedicati sincronizzati tra Edge Function secrets e Supabase Vault.
 - Le RPC booking/partecipanti/admin che richiedono login non sono più eseguibili dal ruolo `anon`.
 - `_migration_exec` non è più eseguibile da `anon`/`authenticated`; `_migration_chunks` ha RLS e nessun accesso diretto client.
 - `logbook-media` non consente più listing pubblico degli oggetti; resta servibile tramite public object URL.

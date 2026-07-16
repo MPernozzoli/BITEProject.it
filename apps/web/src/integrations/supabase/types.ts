@@ -693,7 +693,11 @@ export type Database = {
           editorial_plan_slot_id: string | null
           id: string
           last_error: string | null
+          metrics_synced_at: string | null
+          platform_permalink: string | null
+          platform_post_id: string | null
           publish_at: string | null
+          published_at: string | null
           status: string
           syndication_batch_id: string | null
           title_override: string | null
@@ -708,7 +712,11 @@ export type Database = {
           editorial_plan_slot_id?: string | null
           id?: string
           last_error?: string | null
+          metrics_synced_at?: string | null
+          platform_permalink?: string | null
+          platform_post_id?: string | null
           publish_at?: string | null
+          published_at?: string | null
           status?: string
           syndication_batch_id?: string | null
           title_override?: string | null
@@ -723,7 +731,11 @@ export type Database = {
           editorial_plan_slot_id?: string | null
           id?: string
           last_error?: string | null
+          metrics_synced_at?: string | null
+          platform_permalink?: string | null
+          platform_post_id?: string | null
           publish_at?: string | null
+          published_at?: string | null
           status?: string
           syndication_batch_id?: string | null
           title_override?: string | null

@@ -40,6 +40,10 @@ type TargetDb = {
   caption: string | null;
   status: string;
   syndication_batch_id: string | null;
+  platform_post_id: string | null;
+  platform_permalink: string | null;
+  published_at: string | null;
+  metrics_synced_at: string | null;
   editorial_media_assets: { id: string; title: string } | null;
 };
 
@@ -158,7 +162,7 @@ export default function AdminEditorialPlanSlotDialog({
     if (!slot || isSite) return;
     const { data, error } = await supabase
       .from("editorial_publish_targets")
-      .select("id, content_format, caption, status, syndication_batch_id, editorial_media_assets(id, title)")
+      .select("id, content_format, caption, status, syndication_batch_id, platform_post_id, platform_permalink, published_at, metrics_synced_at, editorial_media_assets(id, title)")
       .eq("editorial_plan_slot_id", slot.id);
     if (error) {
       console.error(error);
@@ -814,6 +818,24 @@ export default function AdminEditorialPlanSlotDialog({
                             <p className="mt-1 text-xs text-muted-foreground">
                               {t.content_format} · {insightCount} insight · batch {t.syndication_batch_id ?? "non assegnato"}
                             </p>
+                            {(t.platform_post_id || t.metrics_synced_at) && (
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {t.platform_post_id ? `Post ID ${t.platform_post_id}` : "Post ID non registrato"}
+                                {t.metrics_synced_at
+                                  ? ` · metriche ${new Date(t.metrics_synced_at).toLocaleString("it-IT")}`
+                                  : " · metriche non sincronizzate"}
+                              </p>
+                            )}
+                            {t.platform_permalink && (
+                              <a
+                                href={t.platform_permalink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-flex text-[11px] text-accent hover:underline"
+                              >
+                                Apri post pubblicato
+                              </a>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <select

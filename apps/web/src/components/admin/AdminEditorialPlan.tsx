@@ -43,11 +43,16 @@ type TargetRow = {
   status: string;
   content_format: string;
   caption: string | null;
+  platform_post_id: string | null;
+  platform_permalink: string | null;
+  published_at: string | null;
+  metrics_synced_at: string | null;
   editorial_media_assets: { title: string; editorial_type: EditorialArticleType | null } | null;
 };
 
 type InsightLite = {
   target_id: string;
+  source: string;
   reach: number;
   views: number;
   likes: number;
@@ -55,6 +60,15 @@ type InsightLite = {
   shares: number;
   saves: number;
   captured_at: string;
+};
+
+type OAuthStatus = {
+  channel_id: string;
+  provider: string;
+  account_label: string | null;
+  access_token_expires_at: string | null;
+  updated_at: string;
+  has_token: boolean;
 };
 
 function EditorialChannelLogo({ code, className }: { code: EditorialChannelCode; className?: string }) {
@@ -91,6 +105,7 @@ export default function AdminEditorialPlan() {
   const [articles, setArticles] = useState<ArticleLite[]>([]);
   const [targetsBySlotId, setTargetsBySlotId] = useState<Record<string, TargetRow[]>>({});
   const [insightsBySlotId, setInsightsBySlotId] = useState<Record<string, InsightLite[]>>({});
+  const [oauthByChannelId, setOauthByChannelId] = useState<Record<string, OAuthStatus>>({});
 
   const channelIdToCode = useMemo(() => {
     const m = new Map<string, EditorialChannelCode>();
@@ -136,11 +151,12 @@ export default function AdminEditorialPlan() {
       setArticles([]);
       setTargetsBySlotId({});
       setInsightsBySlotId({});
+      setOauthByChannelId({});
       setLoading(false);
       return;
     }
 
-    const [weeklyAllRes, slotsAllRes, articlesRes] = await Promise.all([
+    const [weeklyAllRes, slotsAllRes, articlesRes, oauthRes] = await Promise.all([
       supabase
         .from("editorial_plan_weekly_slots")
         .select("*")
@@ -155,9 +171,13 @@ export default function AdminEditorialPlan() {
         .order("slot_date", { ascending: true })
         .order("slot_time", { ascending: true }),
       supabase.from("logbook_articles").select("id, title_en, title_it, status, editorial_type"),
+      supabase
+        .from("social_oauth_connections")
+        .select("channel_id, provider, account_label, access_token_expires_at, updated_at, refresh_token_encrypted")
+        .in("channel_id", channelIds),
     ]);
 
-    const err = weeklyAllRes.error || slotsAllRes.error || articlesRes.error;
+    const err = weeklyAllRes.error || slotsAllRes.error || articlesRes.error || oauthRes.error;
     if (err && isAuthFailureError(err)) {
       await supabase.auth.signOut();
       navigate("/login", { state: { from: "/admin" } });
@@ -183,6 +203,25 @@ export default function AdminEditorialPlan() {
 
     let allSlots = (slotsAllRes.data ?? []) as SlotForPlan[];
     const arts = (articlesRes.data ?? []) as unknown as ArticleLite[];
+    const oauthMap: Record<string, OAuthStatus> = {};
+    for (const row of (oauthRes.data ?? []) as Array<{
+      channel_id: string;
+      provider: string;
+      account_label: string | null;
+      access_token_expires_at: string | null;
+      updated_at: string;
+      refresh_token_encrypted?: string | null;
+    }>) {
+      oauthMap[row.channel_id] = {
+        channel_id: row.channel_id,
+        provider: row.provider,
+        account_label: row.account_label,
+        access_token_expires_at: row.access_token_expires_at,
+        updated_at: row.updated_at,
+        has_token: Boolean(row.refresh_token_encrypted),
+      };
+    }
+    setOauthByChannelId(oauthMap);
 
     const inserts: NewSlotRow[] = [];
     for (const ch of chRows) {
@@ -257,7 +296,7 @@ export default function AdminEditorialPlan() {
       const { data: tdata, error: terr } = await supabase
         .from("editorial_publish_targets")
         .select(
-          "id, channel_id, editorial_plan_slot_id, status, content_format, caption, editorial_media_assets(title, editorial_type)"
+          "id, channel_id, editorial_plan_slot_id, status, content_format, caption, platform_post_id, platform_permalink, published_at, metrics_synced_at, editorial_media_assets(title, editorial_type)"
         )
         .in("editorial_plan_slot_id", slotIds);
       if (!terr && tdata) {
@@ -277,7 +316,7 @@ export default function AdminEditorialPlan() {
         if (targetIds.length > 0) {
           const { data: insightData, error: insightErr } = await supabase
             .from("editorial_post_insights")
-            .select("target_id, reach, views, likes, comments, shares, saves, captured_at")
+            .select("target_id, source, reach, views, likes, comments, shares, saves, captured_at")
             .in("target_id", targetIds)
             .order("captured_at", { ascending: false });
           if (!insightErr && insightData) {
@@ -398,16 +437,27 @@ export default function AdminEditorialPlan() {
 
   const distTotal = distribution.pillar + distribution.support + distribution.utility_reflection || 1;
 
+  const connectedSocialChannelIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of channels) {
+      if (c.code === "site") continue;
+      const oauth = oauthByChannelId[c.id];
+      if (oauth?.has_token) ids.add(c.id);
+    }
+    return ids;
+  }, [channels, oauthByChannelId]);
+
   const socialSummary = useMemo(() => {
-    const socialSlots = slotsInMonth.filter((s) => slotChannelCode(s) !== "site");
-    const socialTargets = socialSlots.flatMap((slot) => targetsBySlotId[slot.id] ?? []);
+    const connectedSocialSlots = slotsInMonth.filter((s) => connectedSocialChannelIds.has(s.channel_id));
+    const socialTargets = connectedSocialSlots.flatMap((slot) => targetsBySlotId[slot.id] ?? []);
     const published = socialTargets.filter((target) => target.status === "published").length;
     const pending = socialTargets.filter((target) => target.status === "pending" || target.status === "publishing").length;
     const failed = socialTargets.filter((target) => target.status === "failed").length;
+    const measuredPosts = socialTargets.filter((target) => target.platform_post_id).length;
     const insights = Object.entries(insightsBySlotId)
       .filter(([slotId]) => {
         const slot = slotsById.get(slotId);
-        return slot ? slotChannelCode(slot) !== "site" : false;
+        return slot ? connectedSocialChannelIds.has(slot.channel_id) : false;
       })
       .flatMap(([, list]) => list);
     const latestByTarget = new Map<string, InsightLite>();
@@ -423,17 +473,22 @@ export default function AdminEditorialPlan() {
       0
     );
     return {
-      slots: socialSlots.length,
+      connectedAccounts: connectedSocialChannelIds.size,
+      slots: connectedSocialSlots.length,
       targets: socialTargets.length,
       published,
       pending,
       failed,
+      measuredPosts,
       insightSnapshots: insights.length,
       reach,
       views,
       engagement,
     };
-  }, [insightsBySlotId, slotsById, slotChannelCode, slotsInMonth, targetsBySlotId]);
+  }, [connectedSocialChannelIds, insightsBySlotId, slotsById, slotsInMonth, targetsBySlotId]);
+
+  const selectedKpiAccount = oauthByChannelId[kpiChannelId] ?? null;
+  const selectedKpiChannelLabel = EDITORIAL_CHANNEL_LABELS[kpiChannelCode];
 
   const openSlot = (s: SlotForPlan) => {
     setSelectedSlot(s);
@@ -452,7 +507,7 @@ export default function AdminEditorialPlan() {
           <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Piano editoriale</p>
           <h2 className="editorial-heading text-3xl md:text-4xl">Calendario</h2>
           <p className="text-xs text-muted-foreground font-sans mt-1 max-w-xl">
-            Un solo calendario: tutti i canali insieme. Ogni slot mostra il canale; i KPI sotto sono per il canale selezionato nel menu.
+            Un solo calendario: tutti i canali insieme. I KPI social usano solo account OAuth collegati e post misurabili.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -474,7 +529,7 @@ export default function AdminEditorialPlan() {
         <div className="glass-panel-soft rounded-[26px] p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground shrink-0">
-              Distribuzione vs target
+              KPI canale / account
             </p>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:min-w-[220px]">
               <span className="text-[10px] font-sans uppercase tracking-wider text-muted-foreground whitespace-nowrap">
@@ -490,12 +545,31 @@ export default function AdminEditorialPlan() {
                       <span className="flex items-center gap-2">
                         <EditorialChannelLogo code={code} />
                         {EDITORIAL_CHANNEL_LABELS[code]}
+                        {code !== "site" && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {oauthByChannelId[EDITORIAL_CHANNEL_IDS[code]]?.has_token ? "collegato" : "non collegato"}
+                          </span>
+                        )}
                       </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="rounded-[16px] border border-border/70 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
+            {kpiChannelCode === "site" ? (
+              <span>Fonte KPI: articoli del sito e slot editoriali assegnati.</span>
+            ) : selectedKpiAccount?.has_token ? (
+              <span>
+                Fonte KPI: {selectedKpiChannelLabel} · {selectedKpiAccount.account_label || selectedKpiAccount.provider} · ultimo sync{" "}
+                {selectedKpiAccount.updated_at ? new Date(selectedKpiAccount.updated_at).toLocaleDateString("it-IT") : "n/d"}.
+              </span>
+            ) : (
+              <span>
+                {selectedKpiChannelLabel} non ha un token OAuth attivo: il mix mostra il piano, ma le metriche account non sono disponibili.
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {(
@@ -528,13 +602,13 @@ export default function AdminEditorialPlan() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Social cockpit</p>
-              <p className="mt-1 text-xs text-muted-foreground">Target e insight del mese visibile.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Solo account collegati e target con metriche sincronizzabili.</p>
             </div>
             <BarChart3 className="size-5 text-accent" aria-hidden />
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Slot social", value: socialSummary.slots, icon: CalendarDays },
+              { label: "Account", value: socialSummary.connectedAccounts, icon: CalendarDays },
               { label: "Target", value: socialSummary.targets, icon: TrendingUp },
               { label: "Reach", value: socialSummary.reach, icon: Eye },
               { label: "Engagement", value: socialSummary.engagement, icon: BarChart3 },
@@ -549,6 +623,7 @@ export default function AdminEditorialPlan() {
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
             <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.pending} in coda</span>
             <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.published} pubblicati</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.measuredPosts} con ID piattaforma</span>
             <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.insightSnapshots} snapshot</span>
             {socialSummary.failed > 0 && (
               <span className="rounded-full bg-destructive/10 px-3 py-1 text-destructive">{socialSummary.failed} errori</span>
