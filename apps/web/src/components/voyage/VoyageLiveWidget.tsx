@@ -14,21 +14,6 @@ import {
 } from "@/lib/voyage-schedule";
 import type { Language } from "@/lib/language";
 
-// The generated Database types predate the voyage booking tables and the actual
-// columns, so the typed client rejects these queries. Same escape hatch the rest
-// of the booking code uses (see UserBookings.tsx); drop it once types.ts is
-// regenerated.
-type UntypedResponse = { data: unknown; error: { message: string } | null };
-type UntypedQuery = PromiseLike<UntypedResponse> & {
-  select: (columns?: string) => UntypedQuery;
-  eq: (column: string, value: unknown) => UntypedQuery;
-  order: (column: string, options?: { ascending?: boolean }) => UntypedQuery;
-};
-const db = supabase as unknown as {
-  from: (table: string) => UntypedQuery;
-  rpc: (fn: string, args?: Record<string, unknown>) => Promise<UntypedResponse>;
-};
-
 interface WidgetVoyage {
   id: string;
   name: string;
@@ -187,17 +172,17 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
 
   const load = useCallback(async () => {
     const [voyagesRes, legsRes, waypointsRes] = await Promise.all([
-      db
+      supabase
         .from("voyages")
         .select("id,name,name_it,name_en,status_override,start_date,end_date")
         .eq("is_published", true),
-      db
+      supabase
         .from("voyage_bookable_legs")
         .select(
           "id,voyage_id,from_waypoint_id,to_waypoint_id,sort_order,starts_at_window_start,ends_at_window_end,baseline_starts_at_window_start,baseline_starts_at_window_end,actual_departure_at,actual_arrival_at"
         )
         .order("sort_order", { ascending: true }),
-      db
+      supabase
         .from("voyage_waypoints")
         .select("id,name,name_it,name_en,actual_arrival_at,actual_departure_at"),
     ]);
@@ -247,7 +232,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   const recordActual = async (at: string) => {
     if (!pending) return;
     setSaving(true);
-    const { error } = await db.rpc("set_voyage_waypoint_actual", {
+    const { error } = await supabase.rpc("set_voyage_waypoint_actual", {
       _waypoint_id: pending.waypointId,
       _kind: pending.kind,
       _at: at,

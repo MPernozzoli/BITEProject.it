@@ -80,7 +80,10 @@ interface VoyageFormState {
   type: "water" | "land";
   /** BRouter river profile; only applies when type is water; stored separately from voyage_type. */
   waterway_autoroute: boolean;
+  /** Effective status, derived by the database. Read-only here; the form never writes it. */
   status: "planned" | "active" | "completed";
+  /** Forces the status. Empty string means automatic, i.e. status_override = null. */
+  status_override: "" | "planned" | "active" | "completed";
   is_published: boolean;
   booking_enabled: boolean;
   booking_max_guests: string;
@@ -109,6 +112,12 @@ interface VoyageListSort {
   direction: "asc" | "desc";
 }
 
+const voyageStatusLabels: Record<Voyage["status"], string> = {
+  planned: "Planned",
+  active: "Active",
+  completed: "Completed",
+};
+
 const emptyVoyageForm: VoyageFormState = {
   name_it: "",
   name_en: "",
@@ -117,6 +126,7 @@ const emptyVoyageForm: VoyageFormState = {
   type: "water",
   waterway_autoroute: false,
   status: "planned",
+  status_override: "",
   is_published: true,
   booking_enabled: false,
   booking_max_guests: "2",
@@ -577,6 +587,7 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   booking_contribution_per_nm_eur: Math.max(0, Number(voyage?.booking_contribution_per_nm_eur ?? 0.9)),
   departure_window_start: (voyage?.departure_window_start ?? null) as string | null,
   departure_window_end: (voyage?.departure_window_end ?? null) as string | null,
+  status_override: (voyage?.status_override ?? null) as Voyage["status_override"],
   start_date: (voyage?.start_date ?? null) as string | null,
   start_time: (voyage?.start_time ?? null) as string | null,
   start_date_flex_days: (voyage?.start_date_flex_days ?? 0) as number | null,
@@ -754,7 +765,7 @@ const loadStoredVoyageFormDraft = () => {
       ...parsed.voyageForm,
       dates_tbd:
         parsed.voyageForm.dates_tbd ??
-        ((parsed.voyageForm.status ?? "planned") === "planned" &&
+        ((parsed.voyageForm.status_override || parsed.voyageForm.status || "planned") === "planned" &&
           !parsed.voyageForm.start_date &&
           !parsed.voyageForm.end_date),
     };
@@ -792,6 +803,8 @@ const AdminVoyageManager = ({
   const [routeListFiltersAdvanced, setRouteListFiltersAdvanced] = useState(false);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
   const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
+  /** What the voyage's status actually is: the override when forced, the derived cache otherwise. */
+  const voyageFormStatus = voyageForm.status_override || voyageForm.status;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapWorkspaceRef = useRef<HTMLDivElement>(null);
@@ -1152,6 +1165,25 @@ const AdminVoyageManager = ({
     } catch (error) {
       console.warn("[AdminVoyageManager] sync_voyage_bookable_legs unavailable", error);
       return false;
+    }
+  }, []);
+
+  /**
+   * voyages.status is a derived cache, so after saving we ask the database for the
+   * fresh value rather than guessing it client-side. Returns null when unavailable,
+   * in which case the cron picks it up within the quarter hour.
+   */
+  const refreshVoyageStatus = useCallback(async (voyageId: string) => {
+    try {
+      const { data, error } = await supabase.rpc("refresh_voyage_status" as never, { _voyage_id: voyageId } as never);
+      if (error) {
+        console.warn("[AdminVoyageManager] refresh_voyage_status skipped", error);
+        return null;
+      }
+      return (data ?? null) as Voyage["status"] | null;
+    } catch (error) {
+      console.warn("[AdminVoyageManager] refresh_voyage_status unavailable", error);
+      return null;
     }
   }, []);
 
@@ -2600,6 +2632,7 @@ const AdminVoyageManager = ({
         type: voyage.type,
         waterway_autoroute: voyage.type === "water" ? Boolean(voyage.waterway_autoroute) : false,
         status: voyage.status,
+        status_override: voyage.status_override ?? "",
         is_published: voyage.is_published,
         booking_enabled: Boolean(voyage.booking_enabled),
         booking_max_guests: String(Math.max(1, Number(voyage.booking_max_guests ?? 4))),
@@ -2638,9 +2671,10 @@ const AdminVoyageManager = ({
     const nameEn = voyageForm.name_en.trim();
     const descriptionIt = voyageForm.description_it.trim();
     const descriptionEn = voyageForm.description_en.trim();
-    const datesTbd = voyageForm.status === "planned" && voyageForm.dates_tbd;
-    const startFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.start_date_flex_days);
-    const endFlexDays = datesTbd || voyageForm.status !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
+    const effectiveStatus = voyageForm.status_override || voyageForm.status;
+    const datesTbd = effectiveStatus === "planned" && voyageForm.dates_tbd;
+    const startFlexDays = datesTbd || effectiveStatus !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.start_date_flex_days);
+    const endFlexDays = datesTbd || effectiveStatus !== "planned" ? 0 : parseNonNegativeInteger(voyageForm.end_date_flex_days);
     const bookingMaxGuests = Math.max(1, parseNonNegativeInteger(voyageForm.booking_max_guests) || 2);
     const bookingPlanningSpeedKn = Math.max(0.1, Number.parseFloat(voyageForm.booking_planning_speed_kn) || 5);
     const parsedContributionPerNm = Number.parseFloat(voyageForm.booking_contribution_per_nm_eur);
@@ -2657,7 +2691,8 @@ const AdminVoyageManager = ({
       description_it: descriptionIt || null,
       description_en: descriptionEn || null,
       type: voyageForm.type,
-      status: voyageForm.status,
+      // status is a derived cache the database maintains; only the override is ours to set.
+      status_override: voyageForm.status_override || null,
       is_published: voyageForm.is_published,
       booking_enabled: voyageForm.booking_enabled,
       booking_max_guests: bookingMaxGuests,
@@ -2672,11 +2707,13 @@ const AdminVoyageManager = ({
       sort_order: editingVoyage ? editingVoyage.sort_order : voyagesRef.current.length,
       waterway_autoroute: voyageForm.type === "water" ? voyageForm.waterway_autoroute : false,
     };
+    // Fallback for a database predating the date columns, where status was still
+    // written by hand and status_override did not exist.
     const legacyData: Pick<TablesInsert<"voyages">, "name" | "description" | "type" | "status" | "sort_order"> = {
       name: data.name,
       description: data.description,
       type: data.type,
-      status: data.status,
+      status: voyageForm.status_override || voyageForm.status,
       sort_order: data.sort_order,
     };
 
@@ -2710,6 +2747,14 @@ const AdminVoyageManager = ({
       if (voyageForm.booking_enabled && (waypointsRef.current[editingVoyage.id] || []).length >= 2) {
         await syncBookableLegs(editingVoyage.id);
       }
+      const refreshedStatus = await refreshVoyageStatus(editingVoyage.id);
+      if (refreshedStatus) {
+        commitVoyages(
+          voyagesRef.current.map((voyage) =>
+            voyage.id === editingVoyage.id ? { ...voyage, status: refreshedStatus } : voyage
+          )
+        );
+      }
       toast.success("Voyage updated");
     } else {
       let { data: newVoyage, error } = await supabase.from("voyages").insert(data).select().single();
@@ -2722,7 +2767,11 @@ const AdminVoyageManager = ({
       }
 
       const normalizedVoyage = normalizeVoyage(newVoyage);
-      commitVoyages([...voyagesRef.current, normalizedVoyage]);
+      const refreshedStatus = await refreshVoyageStatus(normalizedVoyage.id);
+      commitVoyages([
+        ...voyagesRef.current,
+        refreshedStatus ? { ...normalizedVoyage, status: refreshedStatus } : normalizedVoyage,
+      ]);
       setCurrentSelectedVoyageId(normalizedVoyage.id);
       toast.success("Voyage created");
     }
@@ -2730,7 +2779,7 @@ const AdminVoyageManager = ({
     initialVoyageFormSnapshotRef.current = serializeVoyageForm(voyageForm);
     setShowVoyageForm(false);
     return true;
-  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, setCurrentSelectedVoyageId, syncBookableLegs, syncVoyageGeometry, voyageForm]);
+  }, [clearVoyageWaypointDates, commitVoyages, editingVoyage, refreshVoyageStatus, setCurrentSelectedVoyageId, syncBookableLegs, syncVoyageGeometry, voyageForm]);
 
   const closeVoyageForm = useCallback(() => {
     if (isVoyageFormDirty && !confirm("Ci sono modifiche non salvate. Vuoi davvero chiudere senza salvare?")) {
@@ -3423,23 +3472,30 @@ const AdminVoyageManager = ({
               <div>
                 <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Status</label>
                 <select
-                  value={voyageForm.status}
+                  value={voyageForm.status_override}
                   onChange={(event) =>
                     setVoyageForm((form) => {
-                      const nextStatus = event.target.value as Voyage["status"];
+                      const nextOverride = event.target.value as VoyageFormState["status_override"];
+                      const effective = nextOverride || form.status;
                       return {
                         ...form,
-                        status: nextStatus,
-                        dates_tbd: nextStatus === "planned" ? form.dates_tbd : false,
+                        status_override: nextOverride,
+                        dates_tbd: effective === "planned" ? form.dates_tbd : false,
                       };
                     })
                   }
                   className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
                 >
-                  <option value="planned">Planned</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
+                  <option value="">Automatico — {voyageStatusLabels[voyageForm.status]}</option>
+                  <option value="planned">Forza Planned</option>
+                  <option value="active">Forza Active</option>
+                  <option value="completed">Forza Completed</option>
                 </select>
+                <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
+                  {voyageForm.status_override
+                    ? "Stato forzato a mano: resta questo finche non torni su Automatico."
+                    : "Derivato da date effettive e previste: passato = concluso, in corso = attivo, futuro = programmato."}
+                </p>
               </div>
             </div>
 
@@ -3591,7 +3647,7 @@ const AdminVoyageManager = ({
             <input
               type="checkbox"
               checked={voyageForm.dates_tbd}
-              disabled={voyageForm.status !== "planned"}
+              disabled={voyageFormStatus !== "planned"}
               onChange={(event) =>
                 setVoyageForm((form) => ({
                   ...form,
@@ -3615,7 +3671,7 @@ const AdminVoyageManager = ({
                 Date da definirsi
               </span>
               <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
-                {voyageForm.status === "planned"
+                {voyageFormStatus === "planned"
                   ? "Usalo per viaggi desiderati ma non ancora calendarizzati. Salva il viaggio senza date fissate."
                   : "Disponibile solo per viaggi con stato Planned."}
               </span>
@@ -3653,7 +3709,7 @@ const AdminVoyageManager = ({
                   className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
-              {voyageForm.status === "planned" && !voyageForm.dates_tbd && (
+              {voyageFormStatus === "planned" && !voyageForm.dates_tbd && (
                 <div className="grid grid-cols-[1fr_120px] gap-3">
                   <div className="text-[11px] font-sans text-muted-foreground flex items-center">
                     Finestra partenza
@@ -3679,7 +3735,7 @@ const AdminVoyageManager = ({
               <p className="text-[11px] text-muted-foreground font-sans">
                 {voyageForm.dates_tbd
                   ? "Date e orario verranno definiti più avanti."
-                  : voyageForm.status === "planned"
+                  : voyageFormStatus === "planned"
                     ? "Per i viaggi planned puoi indicare anche una flessibilità di ± giorni."
                     : "Time is optional."}
               </p>
@@ -3717,7 +3773,7 @@ const AdminVoyageManager = ({
                   className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
                 />
               </div>
-              {voyageForm.status === "planned" && !voyageForm.dates_tbd && (
+              {voyageFormStatus === "planned" && !voyageForm.dates_tbd && (
                 <div className="grid grid-cols-[1fr_120px] gap-3">
                   <div className="text-[11px] font-sans text-muted-foreground flex items-center">
                     Finestra arrivo
@@ -3773,7 +3829,7 @@ const AdminVoyageManager = ({
                   ? "Anche la finestra di arrivo resta aperta finché non viene pianificata."
                   : estimatedVoyageArrival
                     ? "Precompilata dai waypoint (distanza / velocità + soste). Puoi comunque modificarla a mano."
-                    : voyageForm.status === "planned"
+                    : voyageFormStatus === "planned"
                       ? "Usa ± giorni per rappresentare una finestra flessibile."
                       : "Leave blank if the arrival is still open."}
               </p>

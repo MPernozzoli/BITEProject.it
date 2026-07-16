@@ -6,6 +6,11 @@ export type BookingRefundTrigger =
   | "user_cancelled"
   | "admin_plan_change_declined";
 
+/**
+ * Narrow with `result.ok === false`, not `!result.ok`: the project compiles with
+ * strictNullChecks off, and TypeScript only discriminates a boolean tag on an
+ * explicit comparison.
+ */
 export type BookingRefundResult =
   | { ok: true; status: "cancelled" | "rejected"; refundPercent: number; refundAmountEur: number; refunded: boolean }
   | { ok: false; error: string };

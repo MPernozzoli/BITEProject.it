@@ -79,7 +79,7 @@ Il tasto chiede sempre il dato mancante, deciso da `getPendingActual()` sull'act
 
 ## Note e debiti
 - `voyage_waypoints.date_start`/`date_end` sono `text` e hanno nomi ingannevoli: `date_start` è la **ripartenza**, `date_end` è l'**arrivo**. Le colonne actual sono `timestamptz` con nomi espliciti.
-- `route_legs` (con `status`/`started_at`/`completed_at`) e `AdminRouteManager.tsx` sono un prototipo morto di questa stessa idea: la tabella è orfana e il componente non è montato da nessuna parte. Da rimuovere.
+- `route_legs` (con `status`/`started_at`/`completed_at`) è un abbozzo precedente di questa stessa idea, ma **non è orfana**: la legge e ci scrive la edge function `sync-bite-data` di [[19 - Sub-App (pack e data)]], e `useRouteLegs` in `apps/data/src/hooks/use-voyages.ts` la espone (senza chiamanti). Non va droppata senza prima sciogliere quel nodo. Il componente admin che la gestiva (`AdminRouteManager.tsx`) non era montato da nessuna rotta ed è stato rimosso.
 - `voyage-schedule.ts` e le funzioni SQL implementano la stessa regola: vanno cambiate insieme. `src/test/voyage-schedule.test.ts` la fissa.
 
 ## Collegamenti

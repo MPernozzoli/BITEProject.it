@@ -515,7 +515,7 @@ const UserBookings = () => {
       trigger: request.plan_change_status === "pending_user_approval" ? "admin_plan_change_declined" : "user_cancelled",
     });
     setSaving(false);
-    if (!result.ok) toast.error(result.error);
+    if (result.ok === false) toast.error(result.error);
     else {
       const refundMessage =
         result.refundAmountEur > 0
@@ -575,7 +575,7 @@ const UserBookings = () => {
         trigger: "admin_plan_change_declined",
       });
       setSaving(false);
-      if (!result.ok) {
+      if (result.ok === false) {
         toast.error(result.error);
         return;
       }

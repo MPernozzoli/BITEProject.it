@@ -9,7 +9,7 @@ Supabase è il **backend unico** del progetto.
 
 - **Project ID:** `ekwloweuicrqjjgabfdp` (in `apps/web/supabase/config.toml`)
 - **Client:** `apps/web/src/integrations/supabase/client.ts` (URL/key da env — vedi [[18 - Deploy e Configurazione]])
-- **Tipi:** `apps/web/src/integrations/supabase/types.ts` (generati dallo schema)
+- **Tipi:** `apps/web/src/integrations/supabase/types.ts` (generati dallo schema). **Rigenerali quando cambi lo schema:** erano rimasti indietro al punto di non conoscere le tabelle `voyage_booking_*`, e il codice li aggirava con cast a client non tipizzato (`typedSupabase`, `rpc(... as never)`). Il build Vite non fa typecheck, quindi la deriva non si nota: il controllo vero è `npx tsc --noEmit -p tsconfig.app.json` da `apps/web` (il `tsconfig.json` radice ha `files: []` e non controlla nulla).
 
 ## Componenti usati
 | Componente | Uso |

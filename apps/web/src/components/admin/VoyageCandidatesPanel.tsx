@@ -187,7 +187,9 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             _admin_notes: adminMessage,
           });
     setSavingId(null);
-    if ("ok" in result && !result.ok) {
+    // "ok" tells the refund fetch apart from the rpc response; the explicit
+    // === false is what narrows the union with strictNullChecks off.
+    if ("ok" in result && result.ok === false) {
       toast.error(result.error);
       return;
     }

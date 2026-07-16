@@ -674,7 +674,7 @@ const AdminVoyageBookings = () => {
         trigger: status === "rejected" ? "admin_rejected" : "admin_cancelled",
       });
       setSaving(false);
-      if (!result.ok) {
+      if (result.ok === false) {
         toast.error(result.error);
         return;
       }

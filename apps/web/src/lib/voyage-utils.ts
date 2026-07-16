@@ -1376,7 +1376,10 @@ export interface Voyage {
   booking_contribution_per_nm_eur?: number;
   departure_window_start?: string | null;
   departure_window_end?: string | null;
+  /** Derived cache maintained by the database; see lib/voyage-schedule.ts. */
   status: VoyageStatus;
+  /** Forces {@link status}. Null means the derived value wins. */
+  status_override?: VoyageStatus | null;
   is_published: boolean;
   sort_order: number;
   cached_geometry: VoyageGeometry;

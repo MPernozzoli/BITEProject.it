@@ -22,16 +22,15 @@ const getBiteHomeHref = () => {
   return LOCAL_HOSTNAMES.has(window.location.hostname) ? "/" : BITE_HOME_URL;
 };
 
+// Same chrome as the main site's Navbar: one light shell over any hero, never a
+// scroll-driven dark variant. The gap is tighter than biteproject.it's only because
+// this nav carries eight links instead of four.
+const NAV_SHELL = "nav-shell-light shadow-[0_28px_80px_rgba(15,23,42,0.12)]";
+const NAV_TEXT = "text-slate-900";
+
 const DataNavbar = () => {
-  const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -44,60 +43,48 @@ const DataNavbar = () => {
     to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 px-4 pt-3 md:px-6 md:pt-4">
+    <nav className="fixed top-0 left-0 right-0 z-50 px-4 pt-3 transition-[padding] duration-500 ease-out-expo md:px-6 md:pt-4">
       <div
         className={cn(
-          "mx-auto flex h-14 max-w-7xl items-center justify-between rounded-2xl px-4 md:h-16 md:px-6 transition-all duration-500",
-          mobileOpen
-            ? "glass-panel-dark border-white/16"
-            : scrolled
-              ? "glass-panel border-white/50"
-              : "glass-panel-dark border-white/14"
+          "mx-auto flex h-16 max-w-7xl items-center justify-between rounded-[30px] px-5 md:h-[4.75rem] md:px-7",
+          NAV_SHELL,
         )}
       >
-        {/* Logo */}
-        <a href={getBiteHomeHref()} className={cn(
-          "flex items-baseline gap-2 font-serif text-lg font-bold tracking-wider transition-colors",
-          mobileOpen || !scrolled ? "text-primary-foreground" : "text-foreground"
-        )}>
+        <a
+          href={getBiteHomeHref()}
+          className={cn(
+            "flex items-baseline gap-2 font-serif text-xl font-bold tracking-widest transition-colors duration-500 md:text-2xl",
+            NAV_TEXT,
+          )}
+        >
           <span>BITE</span>
-          <span className={cn(
-            "text-[10px] font-sans font-medium uppercase tracking-[0.2em]",
-            mobileOpen || !scrolled ? "text-primary-foreground/60" : "text-muted-foreground"
-          )}>Data</span>
+          <span className="text-[10px] font-sans font-medium uppercase tracking-[0.2em] text-slate-700/80">
+            Data
+          </span>
         </a>
 
         {/* Desktop */}
-        <div className="hidden lg:flex items-center gap-1">
+        <div className="hidden lg:flex items-center gap-1.5">
           {links.map((link) => (
             <Link
               key={link.to}
               to={link.to}
               className={cn(
-                "rounded-full px-3 py-1.5 text-[12.5px] font-sans tracking-wide transition-all duration-300",
-                scrolled
-                  ? isActive(link.to)
-                    ? "glass-chip text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground"
-                  : isActive(link.to)
-                    ? "glass-chip-dark text-primary-foreground font-medium"
-                    : "text-primary-foreground/70 hover:text-primary-foreground"
+                "rounded-full px-3 py-2 text-[13px] font-sans tracking-wide transition-[color,background-color,box-shadow,transform] duration-300 ease-out-expo active:scale-[0.98]",
+                isActive(link.to)
+                  ? cn("nav-chip-light font-medium", NAV_TEXT)
+                  : "text-slate-700/80 hover:text-slate-900",
               )}
             >
               {link.label}
             </Link>
           ))}
-          <div className={cn("w-px h-4 mx-2", scrolled ? "bg-border" : "bg-primary-foreground/20")} />
+          <div className="w-px h-4 mx-2 bg-slate-900/12" />
           <a
             href="https://biteproject.it"
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-sans tracking-wide transition-colors",
-              scrolled
-                ? "text-muted-foreground hover:text-foreground"
-                : "text-primary-foreground/60 hover:text-primary-foreground"
-            )}
+            className="inline-flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-sans tracking-wide text-slate-700/80 transition-colors hover:text-slate-900"
           >
             BITE Project
             <ExternalLink size={11} />
@@ -107,13 +94,12 @@ const DataNavbar = () => {
         {/* Mobile toggle */}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
           className={cn(
-            "lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border transition-all",
-            mobileOpen
-              ? "glass-chip-dark border-white/16 text-primary-foreground"
-              : scrolled
-                ? "glass-chip border-white/50 text-foreground"
-                : "glass-chip-dark border-white/16 text-primary-foreground"
+            "lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-full transition-all",
+            "nav-chip-light shadow-[0_10px_28px_rgba(15,23,42,0.08)]",
+            NAV_TEXT,
           )}
         >
           {mobileOpen ? <X size={18} /> : <Menu size={18} />}
@@ -124,10 +110,11 @@ const DataNavbar = () => {
       {mobileOpen && (
         <div className="absolute inset-x-0 top-full z-40 lg:hidden">
           <button
-            className="fixed inset-0 bg-foreground/40 backdrop-blur-sm"
+            className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
           />
-          <div className="relative mx-4 mt-2 glass-panel-dark rounded-2xl p-4 flex flex-col gap-1">
+          <div className="nav-menu-light relative mx-4 mt-2 flex flex-col gap-1 rounded-[1.5rem] p-1.5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.16)]">
             {links.map((link) => (
               <Link
                 key={link.to}
@@ -135,19 +122,19 @@ const DataNavbar = () => {
                 className={cn(
                   "rounded-xl px-4 py-3 text-sm font-sans transition-all",
                   isActive(link.to)
-                    ? "glass-chip-dark text-primary-foreground font-medium"
-                    : "text-primary-foreground/70 hover:text-primary-foreground"
+                    ? "nav-chip-light font-medium text-slate-950"
+                    : "text-slate-700/80 hover:text-slate-900",
                 )}
               >
                 {link.label}
               </Link>
             ))}
-            <div className="border-t glass-divider my-2" />
+            <div className="my-2 border-t border-slate-900/10" />
             <a
               href="https://biteproject.it"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-sans text-primary-foreground/60 hover:text-primary-foreground"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-sans text-slate-700/80 transition-colors hover:text-slate-900"
             >
               BITE Project
               <ExternalLink size={13} />
