@@ -183,7 +183,6 @@ const statusClassMap: Record<VoyageBookingStatus, string> = {
 };
 
 export const capacityBlockingStatuses = new Set<VoyageBookingStatus>([
-  "requested",
   "admin_approved",
   "user_confirmed",
 ]);

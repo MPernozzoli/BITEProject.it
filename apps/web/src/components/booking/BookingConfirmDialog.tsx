@@ -135,6 +135,7 @@ interface BookingConfirmDialogProps {
   depositTotalEur?: number;
   /** Configurable EUR per planned nautical mile for this voyage. */
   contributionPerNmEur?: number | null;
+  mode?: "confirmation" | "application";
   submitting?: boolean;
   onConfirm: () => void;
 }
@@ -154,6 +155,7 @@ const BookingConfirmDialog = ({
   depositPerPersonEur,
   depositTotalEur,
   contributionPerNmEur,
+  mode = "confirmation",
   submitting = false,
   onConfirm,
 }: BookingConfirmDialogProps) => {
@@ -199,12 +201,18 @@ const BookingConfirmDialog = ({
       <DialogContent className="max-h-[90vh] gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="space-y-1 px-6 pt-6">
           <DialogTitle className="text-lg">
-            {lang === "it" ? "Conferma la partecipazione" : "Confirm your participation"}
+            {mode === "application"
+              ? lang === "it" ? "Invia la candidatura" : "Send your application"
+              : lang === "it" ? "Conferma la partecipazione" : "Confirm your participation"}
           </DialogTitle>
           <DialogDescription>
-            {lang === "it"
-              ? "Prima di procedere, leggi e accetta le condizioni di partecipazione."
-              : "Before continuing, please read and accept the participation terms."}
+            {mode === "application"
+              ? lang === "it"
+                ? "La candidatura verra registrata e poi esaminata dall'organizzatore."
+                : "Your application will be registered and then reviewed by the organiser."
+              : lang === "it"
+                ? "Prima di procedere, leggi e accetta le condizioni di partecipazione."
+                : "Before continuing, please read and accept the participation terms."}
           </DialogDescription>
         </DialogHeader>
 
@@ -379,6 +387,10 @@ const BookingConfirmDialog = ({
               ? lang === "it"
                 ? "Conferma e versa il contributo"
                 : "Confirm & pay contribution"
+              : mode === "application"
+                ? lang === "it"
+                  ? "Registra candidatura"
+                  : "Register application"
               : lang === "it"
                 ? "Conferma partecipazione"
                 : "Confirm participation"}

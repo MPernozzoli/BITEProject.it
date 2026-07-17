@@ -113,6 +113,12 @@ interface VoyageListSort {
   direction: "asc" | "desc";
 }
 
+interface PendingWaypointDelete {
+  voyageId: string;
+  waypointId: string;
+  label: string;
+}
+
 const voyageStatusLabels: Record<Voyage["status"], string> = {
   planned: "Planned",
   active: "Active",
@@ -834,6 +840,7 @@ const AdminVoyageManager = ({
   /** Bumps when async route geometry (OSRM / BRouter) finishes so the map redraws even if waypoints state is unchanged. */
   const [routeGeometryTick, setRouteGeometryTick] = useState(0);
   const [waypointEditorPanelId, setWaypointEditorPanelId] = useState<string | null>(null);
+  const [pendingWaypointDelete, setPendingWaypointDelete] = useState<PendingWaypointDelete | null>(null);
   const [isMapWorkspaceFullscreen, setIsMapWorkspaceFullscreen] = useState(false);
   const [isWaypointSidebarCollapsed, setIsWaypointSidebarCollapsed] = useState(false);
   const isWaypointSidebarCollapsedRef = useRef(false);
@@ -1422,18 +1429,40 @@ const AdminVoyageManager = ({
     [commitWaypoints, lang, primeGeometryOverrideAfterWaypointEdit, setWaypointEditorPanelId, updateWaypoint]
   );
 
-  const deleteWaypoint = useCallback(
-    async (voyageId: string, waypointId: string) => {
-      if (!confirm("Delete this waypoint?")) return;
+  const deleteWaypoint = useCallback((voyageId: string, waypointId: string) => {
+    const currentWaypoints = waypointsRef.current[voyageId] || [];
+    const waypointIndex = currentWaypoints.findIndex((waypoint) => waypoint.id === waypointId);
+    const waypoint = waypointIndex >= 0 ? currentWaypoints[waypointIndex] : null;
+    setPendingWaypointDelete({
+      voyageId,
+      waypointId,
+      label: waypoint
+        ? getLocalizedWaypointName(waypoint, lang, waypointIndex)
+        : "questo waypoint",
+    });
+  }, [lang]);
 
-      const nextWaypoints = commitWaypoints(
-        voyageId,
-        (waypointsRef.current[voyageId] || []).filter((waypoint) => waypoint.id !== waypointId)
-      );
-      primeGeometryOverrideAfterWaypointEdit(voyageId, nextWaypoints);
-    },
-    [commitWaypoints, primeGeometryOverrideAfterWaypointEdit]
-  );
+  const confirmWaypointDelete = useCallback(() => {
+    const pending = pendingWaypointDelete;
+    if (!pending) return;
+
+    setPendingWaypointDelete(null);
+    setWaypointEditorPanelId((current) => (current === pending.waypointId ? null : current));
+    setEditingWaypointNameId((current) => (current === pending.waypointId ? null : current));
+    setSavingWaypointNameId((current) => (current === pending.waypointId ? null : current));
+    setDraggedWaypointId((current) => (current === pending.waypointId ? null : current));
+    setDragOverWaypointId((current) => (current === pending.waypointId ? null : current));
+
+    if (waypointRelocationRef.current?.waypointId === pending.waypointId) {
+      cancelWaypointRelocation();
+    }
+
+    const nextWaypoints = commitWaypoints(
+      pending.voyageId,
+      (waypointsRef.current[pending.voyageId] || []).filter((waypoint) => waypoint.id !== pending.waypointId)
+    );
+    primeGeometryOverrideAfterWaypointEdit(pending.voyageId, nextWaypoints);
+  }, [cancelWaypointRelocation, commitWaypoints, pendingWaypointDelete, primeGeometryOverrideAfterWaypointEdit]);
 
   const runLandSearch = useCallback(async () => {
     const query = landSearchQuery.trim();
@@ -1694,6 +1723,14 @@ const AdminVoyageManager = ({
       setWaypointEditorPanelId(null);
     }
   }, [waypointEditorPanelId, selectedVoyageId, waypoints]);
+
+  useEffect(() => {
+    if (!pendingWaypointDelete) return;
+    const wps = waypoints[pendingWaypointDelete.voyageId] || [];
+    if (!wps.some((w) => w.id === pendingWaypointDelete.waypointId)) {
+      setPendingWaypointDelete(null);
+    }
+  }, [pendingWaypointDelete, waypoints]);
 
   useEffect(() => {
     if (!isMapWorkspaceFullscreen) return;
@@ -3501,12 +3538,46 @@ const AdminVoyageManager = ({
 
       <div
         ref={mapWorkspaceRef}
-        className={`border border-border overflow-hidden bg-background ${
+        className={`relative border border-border overflow-hidden bg-background ${
           isMapWorkspaceFullscreen
             ? "fixed inset-0 z-50 flex flex-col border-0"
             : ""
         }`}
       >
+          {pendingWaypointDelete ? (
+            <div className="absolute left-3 right-3 top-16 z-20 flex justify-center pointer-events-none">
+              <div
+                className="pointer-events-auto w-full max-w-md rounded-[18px] border border-destructive/25 bg-background/96 px-4 py-3 shadow-2xl backdrop-blur-xl"
+                role="alertdialog"
+                aria-modal="false"
+                aria-labelledby="delete-waypoint-title"
+                aria-describedby="delete-waypoint-description"
+              >
+                <p id="delete-waypoint-title" className="text-sm font-sans font-semibold text-foreground">
+                  Eliminare waypoint?
+                </p>
+                <p id="delete-waypoint-description" className="mt-1 text-xs font-sans text-muted-foreground">
+                  {pendingWaypointDelete.label} verrà rimosso dalla bozza della rotta. Salva la rotta per applicare la modifica al database.
+                </p>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingWaypointDelete(null)}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-sans text-muted-foreground hover:text-foreground"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmWaypointDelete}
+                    className="rounded-full bg-destructive px-3 py-1.5 text-xs font-sans font-medium text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Elimina
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div
             className={`flex flex-col lg:flex-row lg:items-stretch ${
               isMapWorkspaceFullscreen
@@ -3621,10 +3692,7 @@ const AdminVoyageManager = ({
                       onUpdate={(changes, options) =>
                         updateWaypoint(waypoint.voyage_id, waypoint.id, changes, options)
                       }
-                      onDelete={() => {
-                        setWaypointEditorPanelId(null);
-                        void deleteWaypoint(waypoint.voyage_id, waypoint.id);
-                      }}
+                      onDelete={() => deleteWaypoint(waypoint.voyage_id, waypoint.id)}
                       onRelocate={() => startWaypointRelocation(waypoint.voyage_id, waypoint.id)}
                       onUploadMedia={async (files) =>
                         (await Promise.all(files.map((file) => uploadWaypointMediaAsset(waypoint.id, file)))).filter(

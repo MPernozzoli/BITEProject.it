@@ -64,11 +64,12 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._editorial_post_insights.sql` — aggiunge `editorial_post_insights`, snapshot metrici e note qualitative per ogni `editorial_publish_targets` social; RLS admin-only, utile al cockpit social del piano editoriale → [[16 - Admin]].
 - `..._editorial_social_publish_metadata.sql` — aggiunge metadati provider a `editorial_publish_targets` (`platform_post_id`, permalink, `published_at`, `metrics_synced_at`) e versiona gli autopublisher editoriali con `pg_cron` + `pg_net` tramite `public.invoke_editorial_edge_function()`.
 - `..._editorial_cron_secret_auth.sql` — aggiorna `public.invoke_editorial_edge_function()` per usare secret dedicati (`scheduled_articles_cron_secret`, `social_publish_cron_secret`) salvati in Supabase Vault e corrispondenti Edge secrets; fallback opzionale a `supabase_service_role_key`.
+- `..._voyage_candidates_do_not_hold_seats.sql` — aggiorna disponibilità e RPC booking: le candidature `requested`/`waitlisted` non occupano capacità, mentre i posti vengono scalati solo da richieste `admin_approved` o `user_confirmed`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)
-- `request_voyage_booking` (RPC) — crea richiesta di prenotazione → [[13 - Booking Voyage]]
+- `request_voyage_booking` (RPC) — registra una candidatura viaggio (`requested`) senza bloccare posti → [[13 - Booking Voyage]]
 - `admin_propose_voyage_booking_legs` (RPC admin) — registra una proposta di tratte alternative in `voyage_booking_plan_changes`, con messaggio admin opzionale in metadata, senza modificare direttamente la matrice Gantt → [[13 - Booking Voyage]]
 - `respond_voyage_booking_plan_change` (RPC utente) — risponde a una proposta pending: accetta e applica le tratte proposte, contropropone con messaggio, rifiuta o annulla la richiesta con notifica admin.
 - `admin_create_voyage_booking_invite_by_email` (RPC admin) — crea una prenotazione da email esterna e una partecipazione pending invitabile via mail → [[13 - Booking Voyage]]

@@ -181,8 +181,8 @@ const BookingSidebarPanel = ({
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   {lang === "it"
-                    ? "Ci serve per capire incastri, sicurezza e vita a bordo prima di confermare la partecipazione."
-                    : "This helps us understand fit, safety and life aboard before confirming participation."}
+                    ? "Questa e una candidatura: la partecipazione sara confermata solo dopo la revisione dell'organizzatore."
+                    : "This is an application: participation is confirmed only after the organiser reviews it."}
                 </p>
               </div>
               <CandidateInfoForm value={candidateInfo} onChange={onCandidateInfoChange} lang={lang} compact />
@@ -334,7 +334,7 @@ const BookingSidebarPanel = ({
               ? (lang === "it" ? "Accedi" : "Sign in")
               : step === "legs"
                 ? (lang === "it" ? "Riepilogo e dati" : "Summary and info")
-                : (lang === "it" ? "Continua al contributo" : "Continue to contribution")}
+                : (lang === "it" ? "Invia candidatura" : "Send application")}
           </button>
           {step === "about" && (
             <button

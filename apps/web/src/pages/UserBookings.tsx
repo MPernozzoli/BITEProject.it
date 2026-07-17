@@ -449,41 +449,19 @@ const UserBookings = () => {
     }
     const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
     toast.success(
-      result?.booking_status === "waitlisted"
-        ? lang === "it" ? "Posti pieni: sei in lista d'attesa." : "Fully booked: you are on the waiting list."
-        : lang === "it" ? "Richiesta inviata." : "Request sent."
+      lang === "it"
+        ? "Candidatura registrata: verra esaminata al piu presto."
+        : "Application registered: it will be reviewed as soon as possible."
     );
 
     const bookingRequestId = result?.booking_request_id;
 
-    // Multi-person bookings go to the participants page (add guests, choose who pays).
+    // Multi-person applications still need participant details, but they do not hold seats yet.
     if (bookingRequestId && parsedPartySize > 1) {
+      setSaving(false);
+      setConfirmOpen(false);
       navigate(`/bookings/${bookingRequestId}/participants`);
       return;
-    }
-
-    // Solo booking: kick off the Bunq voyage-contribution payment right away.
-    if (bookingRequestId) {
-      const payment = await startDepositPayment(bookingRequestId);
-      if (payment.ok && "shareUrl" in payment) {
-        // Leave the app to complete the payment on Bunq; state reset is unnecessary.
-        window.location.href = payment.shareUrl;
-        return;
-      }
-      if (!payment.ok && "notConfigured" in payment) {
-        toast.info(
-          lang === "it"
-            ? "Adesione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
-            : "You're in! Contribution payment is not active yet: we'll send you the link shortly."
-        );
-      } else if (!payment.ok) {
-        toast.info(
-          lang === "it"
-            ? "Adesione registrata. Puoi completare il pagamento con bonifico."
-            : "You're in! You can complete the payment by bank transfer."
-        );
-        setBankTransfer({ bookingRequestId });
-      }
     }
 
     setSaving(false);
@@ -922,7 +900,8 @@ const UserBookings = () => {
               legs={selectedLegIds.map((id) => legsById[id]).filter(Boolean)}
               partySize={Math.max(1, Number.parseInt(partySize, 10) || 1)}
               message={message}
-              requiresPayment
+              requiresPayment={false}
+              mode="application"
               depositPerPersonEur={perPersonDepositEur(
                 selectedLegIds.map((id) => legsById[id]).filter(Boolean),
                 selectedContributionOptions

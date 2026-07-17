@@ -37,7 +37,7 @@ type UntypedSupabase = {
 const typedSupabase = supabase as unknown as UntypedSupabase;
 
 const reviewStatuses = new Set<VoyageBookingStatus>(["requested", "waitlisted"]);
-const blockingStatuses = new Set<VoyageBookingStatus>(["requested", "admin_approved", "user_confirmed"]);
+const blockingStatuses = new Set<VoyageBookingStatus>(["admin_approved", "user_confirmed"]);
 
 const isCandidateInfo = (value: unknown): value is CandidateInfo =>
   typeof value === "object" && value !== null && "sailingExperienceLevel" in value;
