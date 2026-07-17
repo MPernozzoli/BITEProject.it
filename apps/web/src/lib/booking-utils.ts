@@ -792,3 +792,32 @@ export function formatWaypointStopDates(
     departure ? `${labels.departure} ${departure}` : "",
   ].filter(Boolean).join(" · ");
 }
+
+export function formatWaypointStopScheduleSummary(
+  schedule: {
+    arrivalWindowStart?: string | null;
+    arrivalWindowEnd?: string | null;
+    departureWindowStart?: string | null;
+    departureWindowEnd?: string | null;
+    fallbackArrivalDate?: string | null;
+    fallbackDepartureDate?: string | null;
+  },
+  lang: Language | "it" | "en" = "it"
+): string | null {
+  const locale = getBookingLocale(lang);
+  const arrival =
+    formatBookingWindow(schedule.arrivalWindowStart, schedule.arrivalWindowEnd, locale) ||
+    formatBookingDate(schedule.fallbackArrivalDate, locale);
+  const departure =
+    formatBookingWindow(schedule.departureWindowStart, schedule.departureWindowEnd, locale) ||
+    formatBookingDate(schedule.fallbackDepartureDate, locale);
+  if (!arrival && !departure) return null;
+
+  const labels = lang === "it"
+    ? { arrival: "Arrivo", departure: "Ripartenza" }
+    : { arrival: "Arrival", departure: "Departure" };
+  return [
+    arrival ? `${labels.arrival} ${arrival}` : "",
+    departure ? `${labels.departure} ${departure}` : "",
+  ].filter(Boolean).join(" · ");
+}

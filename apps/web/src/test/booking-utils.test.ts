@@ -6,6 +6,7 @@ import {
   formatLegScheduleSummary,
   formatStopSummary,
   formatWaypointStopDates,
+  formatWaypointStopScheduleSummary,
   getLegComplexity,
   legHasNightNavigation,
 } from "@/lib/booking-utils";
@@ -137,5 +138,20 @@ describe("booking schedule formatting", () => {
         "it"
       )
     ).toContain("Ripartenza");
+  });
+
+  it("formats waypoint stop dates from inbound and outbound leg windows", () => {
+    const summary = formatWaypointStopScheduleSummary(
+      {
+        arrivalWindowStart: "2026-09-10T14:00:00Z",
+        arrivalWindowEnd: "2026-09-13T14:00:00Z",
+        departureWindowStart: "2026-09-11T06:00:00Z",
+        departureWindowEnd: "2026-09-14T06:00:00Z",
+      },
+      "it"
+    );
+
+    expect(summary).toContain("Arrivo");
+    expect(summary).toContain("Ripartenza");
   });
 });

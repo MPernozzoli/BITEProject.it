@@ -19,7 +19,7 @@ import {
   getComplexityLabel,
   getComplexityTitle,
   getDangerLabel,
-  formatWaypointStopDates,
+  formatWaypointStopScheduleSummary,
   getLegComplexity,
   getLegDangerLevel,
   isLegCurrentOrFuture,
@@ -395,6 +395,8 @@ const VoyageMap = ({
       hasAnyBookingLeg: boolean;
       /** Whether any leg touching this waypoint (outbound or inbound) is still current/future, i.e. not past/completed. */
       hasCurrentLegFromHere: boolean;
+      /** The leg arriving at this waypoint, if any (only set when that leg is still current/future). */
+      inboundLeg: BookableLeg | null;
       /** The leg departing from this waypoint, if any (only set when that leg is still current/future). */
       outboundLeg: BookableLeg | null;
     };
@@ -446,6 +448,9 @@ const VoyageMap = ({
         const outboundLeg = voyageBookingLegs.find(
           (leg) => leg.from_waypoint_id === w.id && isLegCurrentOrFuture(leg)
         );
+        const inboundLeg = voyageBookingLegs.find(
+          (leg) => leg.to_waypoint_id === w.id && isLegCurrentOrFuture(leg)
+        );
         items.push({
           key: `${voyage.id}:${w.id}`,
           lng: w.lng,
@@ -462,6 +467,7 @@ const VoyageMap = ({
           hasInboundAvailability,
           hasAnyBookingLeg: voyageBookingLegs.length > 0,
           hasCurrentLegFromHere,
+          inboundLeg: inboundLeg ?? null,
           outboundLeg: outboundLeg ?? null,
         });
       }
@@ -1116,7 +1122,19 @@ const VoyageMap = ({
         : "";
       const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
       const complexityChip = meta.outboundLeg ? buildComplexityChipMarkup(meta.outboundLeg, L) : "";
-      const stopDates = meta.isBookableVoyage ? formatWaypointStopDates(meta.waypoint, L) : null;
+      const stopDates = meta.isBookableVoyage
+        ? formatWaypointStopScheduleSummary(
+            {
+              arrivalWindowStart: meta.inboundLeg?.ends_at_window_start,
+              arrivalWindowEnd: meta.inboundLeg?.ends_at_window_end,
+              departureWindowStart: meta.outboundLeg?.starts_at_window_start,
+              departureWindowEnd: meta.outboundLeg?.starts_at_window_end,
+              fallbackArrivalDate: meta.waypoint.date_end,
+              fallbackDepartureDate: meta.waypoint.date_start,
+            },
+            L
+          )
+        : null;
       const stopDatesMarkup = stopDates
         ? `<p class="voyage-popup__schedule">${escapePopupHtml(stopDates)}</p>`
         : "";
