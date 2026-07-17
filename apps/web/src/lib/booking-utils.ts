@@ -248,6 +248,10 @@ export function formatBookingDate(value?: string | null, locale = "it-IT") {
   }).format(date);
 }
 
+function getBookingLocale(lang: Language | "it" | "en" = "it") {
+  return lang === "it" ? "it-IT" : "en-GB";
+}
+
 /**
  * Formats a planning window (an earliest→latest pair sharing the same time-of-day)
  * as a compact range, e.g. "10–13 set h 20:10". Because the departure flexibility
@@ -402,6 +406,24 @@ export function getLegLabel(
   const from = getLocalizedBookingWaypointName(waypointsById[leg.from_waypoint_id], lang);
   const to = getLocalizedBookingWaypointName(waypointsById[leg.to_waypoint_id], lang);
   return `${from} → ${to}`;
+}
+
+export function formatLegScheduleSummary(
+  leg: Pick<BookableLeg, "starts_at_window_start" | "starts_at_window_end" | "ends_at_window_start" | "ends_at_window_end">,
+  lang: Language | "it" | "en" = "it"
+): string | null {
+  const locale = getBookingLocale(lang);
+  const departure = formatBookingWindow(leg.starts_at_window_start, leg.starts_at_window_end, locale);
+  const arrival = formatBookingWindow(leg.ends_at_window_start, leg.ends_at_window_end, locale);
+  if (!departure && !arrival) return null;
+
+  const labels = lang === "it"
+    ? { departure: "Partenza", arrival: "Arrivo" }
+    : { departure: "Departure", arrival: "Arrival" };
+  return [
+    departure ? `${labels.departure} ${departure}` : "",
+    arrival ? `${labels.arrival} ${arrival}` : "",
+  ].filter(Boolean).join(" · ");
 }
 
 // --- Leg complexity & danger -----------------------------------------------------------
@@ -751,4 +773,22 @@ export function formatStopSummary(
   const mins = minutes % 60;
   const parts = [days ? `${days}g` : "", hours ? `${hours}h` : "", mins ? `${mins}m` : ""].filter(Boolean);
   return italian ? `Sosta ${parts.join(" ")}` : `${parts.join(" ")} stop`;
+}
+
+export function formatWaypointStopDates(
+  waypoint: Pick<BookingWaypoint, "date_start" | "date_end">,
+  lang: Language | "it" | "en" = "it"
+): string | null {
+  const locale = getBookingLocale(lang);
+  const arrival = formatBookingDate(waypoint.date_end, locale);
+  const departure = formatBookingDate(waypoint.date_start, locale);
+  if (!arrival && !departure) return null;
+
+  const labels = lang === "it"
+    ? { arrival: "Arrivo", departure: "Ripartenza" }
+    : { arrival: "Arrival", departure: "Departure" };
+  return [
+    arrival ? `${labels.arrival} ${arrival}` : "",
+    departure ? `${labels.departure} ${departure}` : "",
+  ].filter(Boolean).join(" · ");
 }

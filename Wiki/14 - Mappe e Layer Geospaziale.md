@@ -13,6 +13,7 @@ tags: [mappe, geo, maplibre, funzionalita]
 ## Componenti
 - `LazyVoyageMap.tsx` — mappa rotta viaggio (lazy) → usata da `VoyagePage.tsx`
 - `VoyageMap.tsx` — mappa MapLibre del logbook; durante il booking riceve le tratte selezionate e disegna un overlay verde sopra i segmenti interessati.
+  - Nei tooltip waypoint dei voyage prenotabili mostra anche le date della sosta (`Arrivo`/`Ripartenza`); i voyage senza booking attivo non espongono queste date nel tooltip.
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale in articolo
 - `MapLoadingPlaceholder.tsx` — placeholder di caricamento
 - `AdminMapPresenceManager.tsx`, `ArticleMiniMapEditor.tsx`, `AdminVoyageManager.tsx` — editing lato admin → [[16 - Admin]]

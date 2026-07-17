@@ -4,6 +4,7 @@ import type { Language } from "@/lib/i18n";
 import {
   type BookableLegAvailability,
   type BookingWaypoint,
+  formatLegScheduleSummary,
   getComplexityLabel,
   getLegComplexity,
   getLegDangerLevel,
@@ -200,6 +201,7 @@ const BookingSidebarPanel = ({
               const selected = selectedLegIds.includes(leg.id);
               const rejected = rejectedLegIds.includes(leg.id);
               const unavailable = !leg.available || leg.remaining < partySize;
+              const scheduleSummary = formatLegScheduleSummary(leg, lang);
               return (
                 <button
                   key={leg.id}
@@ -227,6 +229,11 @@ const BookingSidebarPanel = ({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{getLegLabel(leg, waypointsById, lang)}</span>
+                    {scheduleSummary && (
+                      <span className="mt-1 block text-[10.5px] leading-snug text-muted-foreground">
+                        {scheduleSummary}
+                      </span>
+                    )}
                     <span className="mt-1 flex flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
                         <Users size={11} />

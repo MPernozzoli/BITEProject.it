@@ -19,6 +19,7 @@ import {
   getComplexityLabel,
   getComplexityTitle,
   getDangerLabel,
+  formatWaypointStopDates,
   getLegComplexity,
   getLegDangerLevel,
   isLegCurrentOrFuture,
@@ -1115,6 +1116,10 @@ const VoyageMap = ({
         : "";
       const mediaBlock = buildPopupMediaModule(meta.waypoint, L === "it" ? "Media tappa" : "Stop media");
       const complexityChip = meta.outboundLeg ? buildComplexityChipMarkup(meta.outboundLeg, L) : "";
+      const stopDates = meta.isBookableVoyage ? formatWaypointStopDates(meta.waypoint, L) : null;
+      const stopDatesMarkup = stopDates
+        ? `<p class="voyage-popup__schedule">${escapePopupHtml(stopDates)}</p>`
+        : "";
       const canParticipate = meta.isBookableVoyage && (meta.hasOutboundAvailability || meta.hasInboundAvailability);
       // A leg is "completed" once every leg touching this stop is in the past — at that point
       // the complexity estimate and booking module are no longer relevant and must not show.
@@ -1128,7 +1133,8 @@ const VoyageMap = ({
         ? buildPopupModule(
             "booking",
             L === "it" ? "Viaggio aperto alle adesioni" : "Open to join",
-            `${complexityChip}`
+            `${stopDatesMarkup}`
+            + `${complexityChip}`
             + `${canParticipate ? `<div class="voyage-popup__actions">
               <button type="button" class="voyage-popup__action" data-participate="1">${L === "it" ? "Partecipa" : "Join"}</button>
             </div>` : ""}`

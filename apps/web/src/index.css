@@ -1513,6 +1513,14 @@ html {
   margin-bottom: 9px;
 }
 
+.voyage-popup__schedule {
+  margin: 0 0 9px;
+  color: hsl(220 14% 40%);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .voyage-popup__complexity-dot {
   display: inline-flex;
   flex: 0 0 auto;

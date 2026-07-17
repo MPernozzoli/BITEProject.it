@@ -3,7 +3,9 @@ import {
   type BookableLeg,
   type BookingWaypoint,
   computeAutoLegComplexity,
+  formatLegScheduleSummary,
   formatStopSummary,
+  formatWaypointStopDates,
   getLegComplexity,
   legHasNightNavigation,
 } from "@/lib/booking-utils";
@@ -107,5 +109,33 @@ describe("formatStopSummary", () => {
 
   it("returns null when there is no stop", () => {
     expect(formatStopSummary(waypoint({ stop_mode: "hours", stop_hours: 0 }), "it")).toBeNull();
+  });
+});
+
+describe("booking schedule formatting", () => {
+  it("formats a leg departure and arrival range", () => {
+    expect(
+      formatLegScheduleSummary(
+        makeLeg({
+          starts_at_window_start: "2026-09-10T06:00:00Z",
+          starts_at_window_end: "2026-09-10T06:00:00Z",
+          ends_at_window_start: "2026-09-10T14:00:00Z",
+          ends_at_window_end: "2026-09-10T14:00:00Z",
+        }),
+        "it"
+      )
+    ).toContain("Partenza");
+  });
+
+  it("formats waypoint stop arrival and departure dates", () => {
+    expect(
+      formatWaypointStopDates(
+        {
+          date_end: "2026-09-10T14:00:00Z",
+          date_start: "2026-09-11T06:00:00Z",
+        },
+        "it"
+      )
+    ).toContain("Ripartenza");
   });
 });
