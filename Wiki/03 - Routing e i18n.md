@@ -35,7 +35,7 @@ Definite in `LocalizedRoutes` (App.tsx):
 - `/bookings`, `/bookings/:id/participants` — area prenotazioni utente ([[13 - Booking Voyage]])
 - `/unsubscribe`, `/newsletter/confirm` — [[12 - Newsletter ed Email]]
 - `/privacy-policy`, `/cookie-policy` — legali
-- `/login`, `/signup`, `/complete-profile` — auth utente
+- `/login`, `/signup`, `/complete-profile` — auth utente; se aperte da `admin.biteproject.it` vengono spostate su `biteproject.it` preservando `redirect`, perché passkey/WebAuthn deve partire da un origin ammesso dalla configurazione Supabase.
 - `/profile` — profilo (AdminProfile riusato)
 
 ## Rotte admin (sottodominio `admin.`)
@@ -45,7 +45,7 @@ Protette da `AdminRoute`. Vedi [[16 - Admin]].
 - `/admin/bookings`, `/admin/candidates`, `/admin/media`, `/admin/trackers`
 - `/admin/article/:id` (editor)
 
-`RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.
+`RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RequireMainHostForAuth` forza login/signup/completamento profilo/profilo sul dominio principale per evitare errori WebAuthn da origin admin; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.
 
 ## SEO & prerender
 - `SeoManager` + `StructuredData` (JSON-LD) sulle pagine pubbliche.

@@ -28,6 +28,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - **Credenziali (password) solo in `AGENTS.md`** (file gitignored): mai committarle né duplicarle in note tracciate.
 - Creato via SQL admin: riga `auth.users` (email confermata), `auth.identities` provider `email`, `public.profiles` (`preferred_language = it`).
 - La UI di login è **passwordless** (OTP email / magic link, OAuth, passkey): la password serve solo per il **login programmatico** in test, es. `supabase.auth.signInWithPassword(...)` da console del browser. Il provider email/password è attivo a livello API anche se non esposto nella UI → dettagli e snippet in `AGENTS.md`.
+- Le passkey usano `@supabase/supabase-js` con `auth.experimental.passkey: true`. Il login, la registrazione e il completamento profilo vengono eseguiti da `biteproject.it` anche quando partono dal sottodominio admin, così la cerimonia WebAuthn resta coerente con Relying Party ID e Relying Party Origins configurati in Supabase.
 
 ## Migrazioni (`apps/web/supabase/migrations/`)
 **37+ file**, naming `AAAAMMGGhhmmss_descrizione.sql`. Le più recenti riguardano booking/pagamenti e la mail app admin:
@@ -65,11 +66,13 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._editorial_social_publish_metadata.sql` — aggiunge metadati provider a `editorial_publish_targets` (`platform_post_id`, permalink, `published_at`, `metrics_synced_at`) e versiona gli autopublisher editoriali con `pg_cron` + `pg_net` tramite `public.invoke_editorial_edge_function()`.
 - `..._editorial_cron_secret_auth.sql` — aggiorna `public.invoke_editorial_edge_function()` per usare secret dedicati (`scheduled_articles_cron_secret`, `social_publish_cron_secret`) salvati in Supabase Vault e corrispondenti Edge secrets; fallback opzionale a `supabase_service_role_key`.
 - `..._voyage_candidates_do_not_hold_seats.sql` — aggiorna disponibilità e RPC booking: le candidature `requested`/`waitlisted` non occupano capacità, mentre i posti vengono scalati solo da richieste `admin_approved` o `user_confirmed`.
+- `..._voyage_booking_drafts.sql` — introduce `voyage_booking_drafts`, una bozza candidatura per utente/viaggio con `leg_ids`, `party_size`, `message` e `candidate_info`; RLS limita lettura/scrittura al proprietario, con lettura admin per audit/supporto.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)
 - `request_voyage_booking` (RPC) — registra una candidatura viaggio (`requested`) senza bloccare posti → [[13 - Booking Voyage]]
+- `voyage_booking_drafts` — persistenza cloud delle bozze candidatura per utenti autenticati; gli anonimi usano `localStorage` e la bozza viene migrata/sincronizzata dopo login → [[13 - Booking Voyage]]
 - `admin_propose_voyage_booking_legs` (RPC admin) — registra una proposta di tratte alternative in `voyage_booking_plan_changes`, con messaggio admin opzionale in metadata, senza modificare direttamente la matrice Gantt → [[13 - Booking Voyage]]
 - `respond_voyage_booking_plan_change` (RPC utente) — risponde a una proposta pending: accetta e applica le tratte proposte, contropropone con messaggio, rifiuta o annulla la richiesta con notifica admin.
 - `admin_create_voyage_booking_invite_by_email` (RPC admin) — crea una prenotazione da email esterna e una partecipazione pending invitabile via mail → [[13 - Booking Voyage]]

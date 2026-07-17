@@ -137,6 +137,9 @@ const AUTH_COPY = {
       oauth: "Errore durante l'accesso con Google",
       passkey: "Errore durante l'accesso con passkey",
       passkeyUnsupported: "Questo browser o dispositivo non supporta ancora le passkey.",
+      passkeyInsecure: "Le passkey richiedono HTTPS, tranne su localhost.",
+      passkeyConfig:
+        "Configurazione WebAuthn non valida per questo dominio. Controlla Relying Party ID e Relying Party Origins in Supabase.",
       loginMissingAccount: "Non troviamo un account associato a questa email. Prova con Registrati.",
     },
   },
@@ -241,6 +244,9 @@ const AUTH_COPY = {
       oauth: "Error while signing in with Google",
       passkey: "Error while signing in with passkey",
       passkeyUnsupported: "This browser or device does not support passkeys yet.",
+      passkeyInsecure: "Passkeys require HTTPS, except on localhost.",
+      passkeyConfig:
+        "Invalid WebAuthn configuration for this domain. Check Relying Party ID and Relying Party Origins in Supabase.",
       loginMissingAccount: "We couldn't find an account for this email. Try Sign up instead.",
     },
   },
@@ -261,6 +267,36 @@ const mapAuthError = (
     return errors.loginMissingAccount;
   }
   return message;
+};
+
+const mapPasskeyError = (
+  message: string,
+  errors: {
+    passkey: string;
+    passkeyConfig: string;
+    passkeyUnsupported: string;
+  },
+) => {
+  const lowered = message.toLowerCase();
+
+  if (
+    lowered.includes("credential verification failed") ||
+    lowered.includes("load failed") ||
+    lowered.includes("failed to fetch") ||
+    lowered.includes("origin") ||
+    lowered.includes("relying party") ||
+    lowered.includes("rp id") ||
+    lowered.includes("rp_id") ||
+    lowered.includes("not allowed by the relying party")
+  ) {
+    return `${errors.passkeyConfig} Origin: ${window.location.origin}`;
+  }
+
+  if (lowered.includes("browser does not support webauthn")) {
+    return errors.passkeyUnsupported;
+  }
+
+  return message || errors.passkey;
 };
 
 const UserLogin = () => {
@@ -509,6 +545,11 @@ const UserLogin = () => {
       return;
     }
 
+    if (!window.isSecureContext) {
+      setError(ui.errors.passkeyInsecure);
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -516,7 +557,8 @@ const UserLogin = () => {
       const { data, error: passkeyError } = await supabase.auth.signInWithPasskey();
 
       if (passkeyError) {
-        setError(passkeyError.message || ui.errors.passkey);
+        console.error("Passkey sign-in error:", passkeyError);
+        setError(mapPasskeyError(passkeyError.message, ui.errors));
         return;
       }
 
@@ -536,7 +578,8 @@ const UserLogin = () => {
       await completeAuthNavigation(data.session.user.id);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : ui.errors.passkey;
-      setError(message);
+      console.error("Passkey sign-in error:", caughtError);
+      setError(mapPasskeyError(message, ui.errors));
     } finally {
       setLoading(false);
     }
@@ -677,27 +720,6 @@ const UserLogin = () => {
                   )}
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {[
-                    { key: "google" as const, label: "Google", icon: Compass },
-                    { key: "email" as const, label: "Email OTP", icon: MessageCircle },
-                    { key: "passkey" as const, label: "Passkey", icon: Fingerprint },
-                  ].map(({ key, label, icon: Icon }) => (
-                    <div
-                      key={key}
-                      className={cn(
-                        "flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs",
-                        lastUsedMethod === key
-                          ? "border-[hsl(var(--accent)/0.32)] bg-[hsl(var(--accent)/0.08)] text-foreground"
-                          : "border-white/70 bg-white/55 text-muted-foreground",
-                      )}
-                    >
-                      <Icon className="h-4 w-4 text-accent" aria-hidden />
-                      <span className="font-medium">{label}</span>
-                      {lastUsedMethod === key && <span className="ml-auto text-[10px] uppercase tracking-[0.14em]">{ui.form.lastUsed}</span>}
-                    </div>
-                  ))}
-                </div>
               </div>
 
               {step === "email" && (

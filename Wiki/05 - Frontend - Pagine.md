@@ -32,9 +32,9 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `UserBookings.tsx` | `/bookings` |
 | `ManageBookingParticipants.tsx` | `/bookings/:id/participants` |
 
-`UserLogin.tsx` usa un layout passwordless con metodi espliciti (Google, email OTP, passkey), autocomplete `username` sull'email e stato "ultimo usato"; `/admin/login` continua a rimandare allo stesso flusso unificato.
+`UserLogin.tsx` usa un layout passwordless con azioni Google, passkey ed email OTP, autocomplete `username` sull'email e stato "ultimo usato" mostrato sulle azioni effettive; il riepilogo visuale dei metodi non viene più renderizzato. `/admin/login` continua a rimandare allo stesso flusso unificato, ma il router lo forza sul dominio principale per evitare errori WebAuthn sull'origin admin.
 
-`UserBookings.tsx` mostra, per booking confermati, la sezione **Mail briefing** divisa in primo briefing e secondo briefing operativo; la seconda scheda include anche la visualizzazione delle prese tipo L/F presenti a bordo.
+`UserBookings.tsx` è compilabile anche senza sessione quando l'utente arriva da un viaggio (`/bookings?voyage=...`): salva una bozza candidatura in `localStorage`, manda al login solo al momento dell'invio e poi riprende lo stesso URL. Da loggato sincronizza la bozza anche su Supabase (`voyage_booking_drafts`). Mostra inoltre, per booking confermati, la sezione **Mail briefing** divisa in primo briefing e secondo briefing operativo; la seconda scheda include anche la visualizzazione delle prese tipo L/F presenti a bordo.
 
 ## Newsletter / legali → [[12 - Newsletter ed Email]]
 | Pagina | Rotta | Note |

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,15 @@ import {
 } from "@/components/ui/dialog";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
+import {
+  buildBookingApplicationDraft,
+  clearCloudBookingApplicationDraft,
+  clearLocalBookingApplicationDraft,
+  isBookingApplicationDraftEmpty,
+  loadBookingApplicationDraft,
+  saveCloudBookingApplicationDraft,
+  saveLocalBookingApplicationDraft,
+} from "@/lib/booking-application-draft";
 import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
@@ -86,6 +95,7 @@ const UserBookings = () => {
   const { lang } = useI18n();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const locale = lang === "it" ? "it-IT" : "en-US";
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,12 +125,14 @@ const UserBookings = () => {
     null
   );
   const candidateInfoTouchedRef = useRef(false);
+  const draftHydratedRef = useRef(false);
+  const selectedVoyageIdRef = useRef("");
+
+  useEffect(() => {
+    selectedVoyageIdRef.current = selectedVoyageId;
+  }, [selectedVoyageId]);
 
   const loadData = useCallback(async () => {
-    if (!session?.user.id) {
-      setBusy(false);
-      return;
-    }
     setBusy(true);
     const [voyagesRes, requestsRes, profileRes] = await Promise.all([
       typedSupabase
@@ -129,15 +141,19 @@ const UserBookings = () => {
         .eq("booking_enabled", true)
         .eq("is_published", true)
         .order("start_date", { ascending: true, nullsFirst: false }),
-      typedSupabase
-        .from("voyage_booking_requests")
-        .select("*")
-        .eq("profile_id", session.user.id)
-        .order("requested_at", { ascending: false }),
-      typedSupabase
-        .from("profiles")
-        .select("preferred_language,secondary_language")
-        .eq("id", session.user.id),
+      session?.user.id
+        ? typedSupabase
+            .from("voyage_booking_requests")
+            .select("*")
+            .eq("profile_id", session.user.id)
+            .order("requested_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      session?.user.id
+        ? typedSupabase
+            .from("profiles")
+            .select("preferred_language,secondary_language")
+            .eq("id", session.user.id)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (voyagesRes.error || requestsRes.error || profileRes.error) {
@@ -156,7 +172,7 @@ const UserBookings = () => {
       secondaryLanguage: profile?.secondary_language,
     });
     setCandidateInfoPrefill(prefill);
-    if (!candidateInfoTouchedRef.current) setCandidateInfo(prefill);
+    if (!candidateInfoTouchedRef.current && !draftHydratedRef.current) setCandidateInfo(prefill);
     const requestedVoyageIds = [...new Set(loadedRequests.map((request) => request.voyage_id))];
     const missingVoyageIds = requestedVoyageIds.filter((id) => !loadedVoyages.some((voyage) => voyage.id === id));
     if (missingVoyageIds.length) {
@@ -196,17 +212,21 @@ const UserBookings = () => {
             .in("booking_request_id", requestIds)
         : Promise.resolve({ data: [], error: null }),
       voyageIds.length
-        ? typedSupabase
-            .from("voyage_booking_settings")
-            .select("*")
-            .in("voyage_id", voyageIds)
+        ? session?.user.id
+          ? typedSupabase
+              .from("voyage_booking_settings")
+              .select("*")
+              .in("voyage_id", voyageIds)
+          : Promise.resolve({ data: [], error: null })
         : Promise.resolve({ data: [], error: null }),
       voyageIds.length
-        ? typedSupabase
-            .from("voyage_booking_tasks")
-            .select("*")
-            .in("voyage_id", voyageIds)
-            .order("sort_order", { ascending: true })
+        ? session?.user.id
+          ? typedSupabase
+              .from("voyage_booking_tasks")
+              .select("*")
+              .in("voyage_id", voyageIds)
+              .order("sort_order", { ascending: true })
+          : Promise.resolve({ data: [], error: null })
         : Promise.resolve({ data: [], error: null }),
       requestIds.length
         ? typedSupabase
@@ -250,8 +270,45 @@ const UserBookings = () => {
   }, [searchParams, session?.user.id]);
 
   useEffect(() => {
-    if (!loading && session?.user.id) void loadData();
+    if (!loading) void loadData();
   }, [loadData, loading, session?.user.id]);
+
+  useEffect(() => {
+    draftHydratedRef.current = false;
+    candidateInfoTouchedRef.current = false;
+  }, [selectedVoyageId, session?.user.id]);
+
+  useEffect(() => {
+    if (loading || busy || !selectedVoyageId) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const draft = await loadBookingApplicationDraft(selectedVoyageId, session?.user.id);
+        if (cancelled || selectedVoyageIdRef.current !== selectedVoyageId) return;
+        if (draft) {
+          setSelectedLegIds(draft.selectedLegIds.filter((legId) => legs.some((leg) => leg.id === legId && leg.voyage_id === selectedVoyageId)));
+          setPartySize(draft.partySize);
+          setMessage(draft.message);
+          setCandidateInfo(draft.candidateInfo);
+          candidateInfoTouchedRef.current = true;
+        } else if (!candidateInfoTouchedRef.current) {
+          setSelectedLegIds([]);
+          setPartySize("1");
+          setMessage("");
+          setCandidateInfo(candidateInfoPrefill);
+        }
+      } catch (error) {
+        console.error("Failed to load booking draft", error);
+      } finally {
+        if (!cancelled) draftHydratedRef.current = true;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [busy, candidateInfoPrefill, legs, loading, selectedVoyageId, session?.user.id]);
 
   const loadParticipations = useCallback(async () => {
     if (!session?.user.id) return;
@@ -333,6 +390,37 @@ const UserBookings = () => {
     [requestLegs, ownRequestForSelectedVoyage]
   );
   const companionRows = useMemo(() => occupancy.filter((row) => !row.is_own), [occupancy]);
+
+  useEffect(() => {
+    if (loading || busy || !draftHydratedRef.current || !selectedVoyageId || ownRequestForSelectedVoyage) return;
+    if (
+      selectedLegIds.length === 0 &&
+      (partySize.trim() === "" || partySize.trim() === "1") &&
+      message.trim() === "" &&
+      !candidateInfoTouchedRef.current
+    ) {
+      return;
+    }
+    const draft = buildBookingApplicationDraft({
+      voyageId: selectedVoyageId,
+      selectedLegIds,
+      partySize,
+      message,
+      candidateInfo,
+    });
+    if (isBookingApplicationDraftEmpty(draft)) return;
+
+    const timer = window.setTimeout(() => {
+      saveLocalBookingApplicationDraft(draft);
+      if (session?.user.id) {
+        void saveCloudBookingApplicationDraft(session.user.id, draft).catch((error) => {
+          console.error("Failed to save booking draft", error);
+        });
+      }
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [busy, candidateInfo, loading, message, ownRequestForSelectedVoyage, partySize, selectedLegIds, selectedVoyageId, session?.user.id]);
 
   // Details modal: opened by clicking a booking's bar on the matrix. Keeps the matrix itself
   // clean and moves all the status/briefing/checklist/plan-change detail behind one click.
@@ -420,11 +508,35 @@ const UserBookings = () => {
 
   const openBookingConfirm = () => {
     if (!validateBookingRequest()) return;
+    if (!session?.user.id) {
+      const draft = buildBookingApplicationDraft({
+        voyageId: selectedVoyageId,
+        selectedLegIds,
+        partySize,
+        message,
+        candidateInfo,
+      });
+      saveLocalBookingApplicationDraft(draft);
+      navigate("/login", { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
     setConfirmOpen(true);
   };
 
   const submitRequest = async () => {
     if (!validateBookingRequest()) return;
+    if (!session?.user.id) {
+      const draft = buildBookingApplicationDraft({
+        voyageId: selectedVoyageId,
+        selectedLegIds,
+        partySize,
+        message,
+        candidateInfo,
+      });
+      saveLocalBookingApplicationDraft(draft);
+      navigate("/login", { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
     setSaving(true);
     const { data, error } = await typedSupabase.rpc("request_voyage_booking", {
@@ -469,6 +581,10 @@ const UserBookings = () => {
     setSelectedLegIds([]);
     setMessage("");
     candidateInfoTouchedRef.current = false;
+    clearLocalBookingApplicationDraft(selectedVoyageId);
+    await clearCloudBookingApplicationDraft(session.user.id, selectedVoyageId).catch((error) => {
+      console.error("Failed to clear booking draft", error);
+    });
     setCandidateInfo(candidateInfoPrefill);
     await loadData();
   };
@@ -661,10 +777,6 @@ const UserBookings = () => {
     return <div className="min-h-screen pt-28 text-center text-sm text-muted-foreground">Loading...</div>;
   }
 
-  if (!session) {
-    return <Navigate to="/login" state={{ from: "/bookings" }} replace />;
-  }
-
   return (
     <div className="min-h-screen px-5 pb-16 pt-24 md:px-10">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -682,6 +794,13 @@ const UserBookings = () => {
             </div>
             <CalendarCheck className="text-accent" size={26} />
           </div>
+          {!session && (
+            <div className="mt-5 rounded-2xl border border-accent/35 bg-accent/10 px-4 py-3 text-sm leading-relaxed text-foreground">
+              {lang === "it"
+                ? "Puoi preparare la candidatura qui: la bozza resta salvata su questo dispositivo. Per inviarla ti chiederemo l'accesso e poi tornerai automaticamente a questo viaggio."
+                : "You can prepare the application here: the draft stays saved on this device. To submit it, we'll ask you to log in and then bring you back to this voyage."}
+            </div>
+          )}
         </section>
 
         {bookedVoyageIds.length > 0 && (

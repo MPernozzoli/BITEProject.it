@@ -2810,6 +2810,71 @@ export type Database = {
           },
         ]
       }
+      voyage_booking_drafts: {
+        Row: {
+          candidate_info: Json
+          created_at: string
+          id: string
+          leg_ids: string[]
+          message: string | null
+          party_size: number
+          profile_id: string
+          updated_at: string
+          voyage_id: string
+        }
+        Insert: {
+          candidate_info?: Json
+          created_at?: string
+          id?: string
+          leg_ids?: string[]
+          message?: string | null
+          party_size?: number
+          profile_id: string
+          updated_at?: string
+          voyage_id: string
+        }
+        Update: {
+          candidate_info?: Json
+          created_at?: string
+          id?: string
+          leg_ids?: string[]
+          message?: string | null
+          party_size?: number
+          profile_id?: string
+          updated_at?: string
+          voyage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voyage_booking_drafts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_booking_drafts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_booking_drafts_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_booking_drafts_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "observations_export"
+            referencedColumns: ["voyage_id"]
+          },
+        ]
+      }
       voyage_booking_request_legs: {
         Row: {
           bookable_leg_id: string

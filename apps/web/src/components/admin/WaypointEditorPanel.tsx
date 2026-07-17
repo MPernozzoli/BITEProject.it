@@ -53,6 +53,28 @@ const sectionClass = "grid gap-2.5 p-3 border border-border bg-background/60";
 const sectionTitleClass = "m-0 text-[10px] font-sans font-bold uppercase tracking-[0.14em] text-muted-foreground";
 const chipClass =
   "px-2.5 py-1 border border-border bg-background text-foreground text-[11px] font-sans font-semibold rounded-full cursor-pointer hover:bg-muted transition-colors";
+const segmentGroupClass = "grid gap-1.5";
+const segmentButtonClass =
+  "w-full px-2.5 py-2 border border-border bg-background text-left text-[11px] font-sans font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors";
+const activeSegmentButtonClass = "border-primary bg-primary text-primary-foreground hover:bg-primary/90";
+
+const visibilityChoices: Array<{ value: VisibilityChoice; label: string }> = [
+  { value: "auto", label: "Auto (start/end pubblici)" },
+  { value: "technical", label: "Tecnico / nascosto" },
+  { value: "narrative", label: "Narrativo / pubblico" },
+];
+
+const maritimeChoices: Array<{ value: MaritimeMode; label: string }> = [
+  { value: "auto", label: "Auto" },
+  { value: "city", label: "Citta / porto" },
+  { value: "maritime", label: "Baia / cala" },
+];
+
+const stopModeChoices: Array<{ value: StopUiMode; label: string }> = [
+  { value: "none", label: "Nessuna sosta" },
+  { value: "hours", label: "Sosta breve" },
+  { value: "nights", label: "Giorni + orario" },
+];
 
 const WaypointEditorPanel = ({
   waypoint,
@@ -348,30 +370,44 @@ const WaypointEditorPanel = ({
         <p className={sectionTitleClass}>Details</p>
         <div>
           <label className={labelClass}>Visibility</label>
-          <select
-            value={form.visibility}
-            onChange={(event) => patchAndCommit({ visibility: event.target.value as VisibilityChoice })}
-            className={inputClass}
-          >
-            <option value="auto">Auto (start and end are public)</option>
-            <option value="technical">Technical / hidden</option>
-            <option value="narrative">Narrative / public</option>
-          </select>
+          <div className={`${segmentGroupClass} grid-cols-1 sm:grid-cols-3`} role="group" aria-label="Visibility waypoint">
+            {visibilityChoices.map((choice) => {
+              const active = form.visibility === choice.value;
+              return (
+                <button
+                  key={choice.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => patchAndCommit({ visibility: choice.value })}
+                  className={`${segmentButtonClass} ${active ? activeSegmentButtonClass : ""}`}
+                >
+                  {choice.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {isWaterVoyage ? (
           <div className="grid gap-2">
             <label className={labelClass}>Naming</label>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <select
-                value={maritimeMode}
-                onChange={(event) => setMaritimeMode(event.target.value as MaritimeMode)}
-                className={inputClass}
-              >
-                <option value="auto">Auto</option>
-                <option value="city">Città / porto</option>
-                <option value="maritime">Baia, cala o toponimo</option>
-              </select>
+            <div className="grid grid-cols-1 gap-2">
+              <div className={`${segmentGroupClass} grid-cols-3`} role="group" aria-label="Naming waypoint">
+                {maritimeChoices.map((choice) => {
+                  const active = maritimeMode === choice.value;
+                  return (
+                    <button
+                      key={choice.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setMaritimeMode(choice.value)}
+                      className={`${segmentButtonClass} text-center ${active ? activeSegmentButtonClass : ""}`}
+                    >
+                      {choice.label}
+                    </button>
+                  );
+                })}
+              </div>
               <button
                 type="button"
                 onClick={() => void handleApplyMaritimeName()}
@@ -427,15 +463,22 @@ const WaypointEditorPanel = ({
             </div>
             <div>
               <label className={labelClass}>Sosta e ripartenza</label>
-              <select
-                value={form.stopMode}
-                onChange={(event) => patchAndCommit({ stopMode: event.target.value as StopUiMode })}
-                className={inputClass}
-              >
-                <option value="none">Nessuna sosta</option>
-                <option value="hours">Sosta breve (ore)</option>
-                <option value="nights">Giorni + orario di ripartenza</option>
-              </select>
+              <div className={`${segmentGroupClass} grid-cols-1 sm:grid-cols-3`} role="group" aria-label="Sosta waypoint">
+                {stopModeChoices.map((choice) => {
+                  const active = form.stopMode === choice.value;
+                  return (
+                    <button
+                      key={choice.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => patchAndCommit({ stopMode: choice.value })}
+                      className={`${segmentButtonClass} ${active ? activeSegmentButtonClass : ""}`}
+                    >
+                      {choice.label}
+                    </button>
+                  );
+                })}
+              </div>
 
               {form.stopMode === "hours" ? (
                 <div className="grid gap-1.5 mt-2">

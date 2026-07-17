@@ -33,6 +33,7 @@ tags: [frontend, lib, hooks, logica]
 ### Booking & pagamenti → [[13 - Booking Voyage]] / [[11 - Pagamenti Bunq]]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
 - `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`)
+- `booking-application-draft.ts` — serializzazione bozza candidatura: `localStorage` per utenti anonimi e sincronizzazione Supabase su `voyage_booking_drafts` per utenti loggati.
 - `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
 - `danger-reasons.ts` — modificatori navigazione pericolosa

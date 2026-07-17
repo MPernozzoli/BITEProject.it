@@ -102,16 +102,26 @@ const RequireMainHost = () => {
 };
 
 /**
- * Sends /profile to the main site even when reached from the admin subdomain — passkey/WebAuthn
- * registration and sign-in fail there because Supabase's Relying Party ID/origins are scoped to
- * the apex domain, not admin.biteproject.it. Uses a hard redirect since it crosses hostnames.
+ * Sends auth/WebAuthn-sensitive routes to the main site when reached from the admin subdomain.
+ * Passkey registration/sign-in must happen from an origin allowed by Supabase's RP configuration.
+ * Uses a hard redirect since it crosses hostnames.
  */
-const RequireMainHostForProfile = ({ children }: { children: JSX.Element }) => {
+const RequireMainHostForAuth = ({ children }: { children: JSX.Element }) => {
   const location = useLocation();
 
   if (isCurrentAdminHostname()) {
     if (typeof window !== "undefined") {
-      window.location.replace(getMainSiteUrl(`${location.pathname}${location.search}${location.hash}`));
+      const params = new URLSearchParams(location.search);
+      const stateRedirect = (location.state as { from?: string } | null)?.from;
+
+      if (!params.has("redirect") && stateRedirect?.startsWith("/") && !stateRedirect.startsWith("//")) {
+        params.set("redirect", stateRedirect);
+      }
+
+      const search = params.toString();
+      window.location.replace(
+        getMainSiteUrl(`${location.pathname}${search ? `?${search}` : ""}${location.hash}`),
+      );
     }
     return null;
   }
@@ -188,11 +198,31 @@ const App = () => {
                       <Route path="*" element={<NotFound />} />
                     </Route>
 
-                    {/* Auth and admin routes — shared across the main site and admin subdomain. /profile is
-                        the exception: it's forced onto the main site below (see RequireMainHostForProfile). */}
-                    <Route path="/login" element={<UserLogin />} />
-                    <Route path="/signup" element={<UserLogin />} />
-                    <Route path="/complete-profile" element={<CompleteProfile />} />
+                    {/* Auth and admin routes — login/profile flows are forced onto the main site for WebAuthn. */}
+                    <Route
+                      path="/login"
+                      element={
+                        <RequireMainHostForAuth>
+                          <UserLogin />
+                        </RequireMainHostForAuth>
+                      }
+                    />
+                    <Route
+                      path="/signup"
+                      element={
+                        <RequireMainHostForAuth>
+                          <UserLogin />
+                        </RequireMainHostForAuth>
+                      }
+                    />
+                    <Route
+                      path="/complete-profile"
+                      element={
+                        <RequireMainHostForAuth>
+                          <CompleteProfile />
+                        </RequireMainHostForAuth>
+                      }
+                    />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
                     <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />
@@ -208,9 +238,9 @@ const App = () => {
                     <Route
                       path="/profile"
                       element={
-                        <RequireMainHostForProfile>
+                        <RequireMainHostForAuth>
                           <AdminProfile />
-                        </RequireMainHostForProfile>
+                        </RequireMainHostForAuth>
                       }
                     />
                   </Routes>
