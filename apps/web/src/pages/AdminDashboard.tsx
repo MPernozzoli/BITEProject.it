@@ -214,9 +214,10 @@ const AdminDashboard = () => {
   const [storyFiltersAdvanced, setStoryFiltersAdvanced] = useState(false);
   const navigate = useNavigate();
   const socialOAuthReturnHandled = useRef(false);
+  const userId = session?.user?.id ?? null;
 
   useEffect(() => {
-    if (!session?.user || !supportsWebPush() || getPushPermission() !== "granted") return;
+    if (!userId || !supportsWebPush() || getPushPermission() !== "granted") return;
 
     let cancelled = false;
     void (async () => {
@@ -239,7 +240,7 @@ const AdminDashboard = () => {
 
         const { error } = await supabase.from("push_subscriptions").upsert(
           {
-            profile_id: session.user.id,
+            profile_id: userId,
             endpoint,
             p256dh,
             auth,
@@ -264,10 +265,10 @@ const AdminDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [session?.user]);
+  }, [userId]);
 
   const fetchData = useCallback(async () => {
-    if (!session?.user && !isAdminDevBypassEnabled()) return;
+    if (!userId && !isAdminDevBypassEnabled()) return;
 
     setLoading(true);
     const [articlesRes, storiesRes, voyagesRes, candidatesRes] = await Promise.all([
@@ -298,14 +299,14 @@ const AdminDashboard = () => {
       ).length
     );
     setLoading(false);
-  }, [navigate, session?.user]);
+  }, [navigate, userId]);
 
   useEffect(() => {
     // The dev bypass renders without a session; fetch anyway so the panels have
     // the publicly readable rows to work with.
-    if (!isAdminDevBypassEnabled() && (authLoading || !session?.user)) return;
+    if (!isAdminDevBypassEnabled() && (authLoading || !userId)) return;
     void fetchData();
-  }, [authLoading, fetchData, session?.user]);
+  }, [authLoading, fetchData, userId]);
 
   useEffect(() => {
     setSidebarCollapsed(activeSection === "newsletter");

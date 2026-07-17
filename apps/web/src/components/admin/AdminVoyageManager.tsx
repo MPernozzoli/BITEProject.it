@@ -696,6 +696,10 @@ interface AdminVoyageManagerProps {
 const serializeVoyageForm = (form: VoyageFormState) => JSON.stringify(form);
 const ADMIN_ROUTE_DRAFT_STORAGE_KEY = "bite_admin_route_draft";
 const ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY = "bite_admin_route_form_draft";
+const getAdminDraftStorage = () => {
+  if (typeof window === "undefined") return null;
+  return window.localStorage;
+};
 const createLocalWaypointId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isLocalWaypointId = (waypointId: string) => waypointId.startsWith("local-");
 const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
@@ -722,7 +726,15 @@ const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
 const loadStoredRouteDraft = () => {
   if (typeof window === "undefined") return null as null | { selectedVoyageId: string; waypoints: VoyageWaypoint[] };
   try {
-    const raw = window.sessionStorage.getItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+    const storage = getAdminDraftStorage();
+    let raw = storage?.getItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+    if (!raw) {
+      raw = window.sessionStorage.getItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+      if (raw) {
+        storage?.setItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY, raw);
+        window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+      }
+    }
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { selectedVoyageId?: string; waypoints?: WaypointRecord[] };
     if (!parsed.selectedVoyageId || !Array.isArray(parsed.waypoints)) return null;
@@ -738,7 +750,15 @@ const loadStoredRouteDraft = () => {
 const loadStoredVoyageFormDraft = () => {
   if (typeof window === "undefined") return null as null | { editingVoyageId: string | null; voyageForm: VoyageFormState };
   try {
-    const raw = window.sessionStorage.getItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+    const storage = getAdminDraftStorage();
+    let raw = storage?.getItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+    if (!raw) {
+      raw = window.sessionStorage.getItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+      if (raw) {
+        storage?.setItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY, raw);
+        window.sessionStorage.removeItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+      }
+    }
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { editingVoyageId?: string | null; voyageForm?: Partial<VoyageFormState> };
     if (!parsed.voyageForm) return null;
@@ -845,7 +865,6 @@ const AdminVoyageManager = ({
   const [isWaypointSidebarCollapsed, setIsWaypointSidebarCollapsed] = useState(false);
   const isWaypointSidebarCollapsedRef = useRef(false);
   const [autoOpenWaypointPanel, setAutoOpenWaypointPanel] = useState(true);
-  const waypointEditorPanelIdRef = useRef<string | null>(null);
 
   const resizeMapAfterWorkspaceChange = useCallback(() => {
     const map = mapRef.current;
@@ -1539,10 +1558,6 @@ const AdminVoyageManager = ({
     return true;
   }, []);
 
-  useEffect(() => {
-    waypointEditorPanelIdRef.current = waypointEditorPanelId;
-  }, [waypointEditorPanelId]);
-
   // Read from the marker click handler, which must not depend on this state: doing so
   // would rebuild every marker on each collapse toggle.
   useEffect(() => {
@@ -1991,11 +2006,6 @@ const AdminVoyageManager = ({
         return;
       }
 
-      if (waypointEditorPanelIdRef.current) {
-        setWaypointEditorPanelId(null);
-        return;
-      }
-
       void insertWaypointAtIndex(
         voyageId,
         event.lngLat.lat,
@@ -2384,7 +2394,7 @@ const AdminVoyageManager = ({
         selectedVoyageId,
         waypoints: selectedWaypoints,
       };
-      window.sessionStorage.setItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      getAdminDraftStorage()?.setItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY, JSON.stringify(payload));
       storedRouteDraftRef.current = {
         selectedVoyageId,
         waypoints: selectedWaypoints,
@@ -2392,7 +2402,7 @@ const AdminVoyageManager = ({
       return;
     }
 
-    window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+    getAdminDraftStorage()?.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
     storedRouteDraftRef.current = null;
   }, [isRouteDraftDirty, selectedVoyageId, selectedWaypoints]);
 
@@ -2404,12 +2414,12 @@ const AdminVoyageManager = ({
         editingVoyageId: editingVoyage?.id ?? null,
         voyageForm,
       };
-      window.sessionStorage.setItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      getAdminDraftStorage()?.setItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY, JSON.stringify(payload));
       storedVoyageFormDraftRef.current = payload;
       return;
     }
 
-    window.sessionStorage.removeItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
+    getAdminDraftStorage()?.removeItem(ADMIN_ROUTE_FORM_DRAFT_STORAGE_KEY);
     storedVoyageFormDraftRef.current = null;
   }, [editingVoyage?.id, showVoyageForm, voyageForm]);
 
@@ -2440,6 +2450,8 @@ const AdminVoyageManager = ({
     cancelWaypointRelocation();
     setDraggedWaypointId(null);
     setDragOverWaypointId(null);
+    storedRouteDraftRef.current = null;
+    getAdminDraftStorage()?.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
   }, [cancelWaypointRelocation, commitWaypoints, selectedVoyageId]);
 
   const applyRouteWaypointTranslations = useCallback(async (): Promise<boolean> => {
@@ -2635,7 +2647,7 @@ const AdminVoyageManager = ({
 
       storedRouteDraftRef.current = null;
       if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
+        getAdminDraftStorage()?.removeItem(ADMIN_ROUTE_DRAFT_STORAGE_KEY);
       }
 
       await reportProgress("Sincronizzazione elenco dal database…");
@@ -2766,7 +2778,7 @@ const AdminVoyageManager = ({
   }, [discardSelectedRouteChanges, isRouteDraftDirty, saveSelectedRouteDraft, selectVoyage]);
 
   const handleSaveBeforeLeave = useCallback(async () => {
-    if (!isVoyageFormDirty && !isRouteDraftDirty) return true;
+    if (!isVoyageFormDirty) return true;
 
     if (isVoyageFormDirty) {
       const shouldSaveVoyage = window.confirm(
@@ -2777,27 +2789,19 @@ const AdminVoyageManager = ({
       if (!savedVoyage) return false;
     }
 
-    if (isRouteDraftDirty) {
-      const shouldSaveRoute = window.confirm(
-        "Hai modifiche locali non salvate ai waypoint. Premi OK per salvarle prima di uscire, oppure Annulla per restare qui."
-      );
-      if (!shouldSaveRoute) return false;
-      return saveSelectedRouteDraft({ bypassTranslationPrompt: true });
-    }
-
     return true;
-  }, [isRouteDraftDirty, isVoyageFormDirty, saveSelectedRouteDraft, saveVoyage]);
+  }, [isVoyageFormDirty, saveVoyage]);
 
   useEffect(() => {
     onRegisterLeaveGuard?.(handleSaveBeforeLeave);
     return () => onRegisterLeaveGuard?.(null);
   }, [handleSaveBeforeLeave, onRegisterLeaveGuard]);
 
-  useBeforeUnloadPrompt(isVoyageFormDirty || isRouteDraftDirty);
+  useBeforeUnloadPrompt(isVoyageFormDirty);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
-      if (!isVoyageFormDirty && !isRouteDraftDirty) return;
+      if (!isVoyageFormDirty) return;
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
@@ -2823,7 +2827,188 @@ const AdminVoyageManager = ({
 
     document.addEventListener("click", handleDocumentClick, true);
     return () => document.removeEventListener("click", handleDocumentClick, true);
-  }, [handleSaveBeforeLeave, isRouteDraftDirty, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
+  }, [handleSaveBeforeLeave, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
+
+  const renderWaypointList = (maxHeightClass: string) => (
+    <>
+      <div className={`space-y-0 overflow-y-auto ${maxHeightClass}`}>
+        {selectedWaypoints.map((waypoint, index) => {
+          const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
+          const displayName = getLocalizedWaypointName(waypoint, lang, index);
+          const visibilityLabel = waypoint.visibility_mode === "manual"
+            ? effectiveType === "narrative"
+              ? "Manual narrative waypoint"
+              : "Manual technical waypoint"
+            : effectiveType === "narrative"
+              ? "Auto public end waypoint"
+              : "Auto technical waypoint";
+          const eventLabel = selectedVoyageDatesTbd
+            ? selectedWaypointLegEstimates[waypoint.id]?.label
+              ? `Dal WPT prec.: ${selectedWaypointLegEstimates[waypoint.id]?.label}`
+              : null
+            : buildWaypointAdminDateLabel(
+                waypoint,
+                selectedWaypointDateSuggestions[waypoint.id],
+                effectiveType
+              );
+
+          return (
+            <div
+              key={waypoint.id}
+              onDragOver={(event) => {
+                if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                event.preventDefault();
+                if (dragOverWaypointId !== waypoint.id) {
+                  setDragOverWaypointId(waypoint.id);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
+                const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
+                const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
+                setDraggedWaypointId(null);
+                setDragOverWaypointId(null);
+                void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
+              }}
+              onDragLeave={(event) => {
+                if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
+                  setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
+                }
+              }}
+              className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
+                dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
+              } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
+            >
+              <button
+                type="button"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", waypoint.id);
+                  setDraggedWaypointId(waypoint.id);
+                  setDragOverWaypointId(waypoint.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedWaypointId(null);
+                  setDragOverWaypointId(null);
+                }}
+                className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
+                title="Drag to reorder waypoint"
+              >
+                <GripVertical size={12} />
+              </button>
+              <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <button
+                type="button"
+                onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
+                className="p-0.5 text-muted-foreground hover:text-foreground"
+                title={`${visibilityLabel}. Click to toggle quickly.`}
+              >
+                {effectiveType === "technical" ? (
+                  <EyeOff size={10} className="text-muted-foreground shrink-0" />
+                ) : (
+                  <Eye size={10} className="text-accent shrink-0" />
+                )}
+              </button>
+              <div className="flex-1 min-w-0">
+                {editingWaypointNameId === waypoint.id ? (
+                  <input
+                    type="text"
+                    value={editingWaypointNameValue}
+                    onChange={(event) => setEditingWaypointNameValue(event.target.value)}
+                    onBlur={() => void submitWaypointNameEdit(waypoint, index)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void submitWaypointNameEdit(waypoint, index);
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelWaypointNameEdit();
+                      }
+                    }}
+                    autoFocus
+                    disabled={savingWaypointNameId === waypoint.id}
+                    className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
+                    className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
+                    title="Double click to rename"
+                  >
+                    {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openWaypointPopup(waypoint.id)}
+                  className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
+                >
+                  {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                  {eventLabel ? ` · ${eventLabel}` : ""}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
+                className="p-1 text-muted-foreground hover:text-destructive"
+                title="Delete waypoint"
+              >
+                <Trash2 size={12} />
+              </button>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={() => openWaypointPopup(waypoint.id)}
+                  className="p-1 text-muted-foreground hover:text-foreground"
+                  title="Edit waypoint"
+                >
+                  <Edit size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveWaypoint(waypoint, "up")}
+                  disabled={index === 0}
+                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                >
+                  <ChevronUp size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveWaypoint(waypoint, "down")}
+                  disabled={index === selectedWaypoints.length - 1}
+                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                >
+                  <ChevronDown size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    focusWaypointOnMap(waypoint.id);
+                  }}
+                  className="p-1 text-muted-foreground hover:text-foreground"
+                  title="Center waypoint on map"
+                >
+                  <LocateFixed size={12} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedWaypoints.length === 0 && (
+        <p className="text-center text-xs text-muted-foreground py-6">
+          The next click on the map will create the first waypoint.
+        </p>
+      )}
+    </>
+  );
 
   return (
     <>
@@ -3627,7 +3812,7 @@ const AdminVoyageManager = ({
             <aside
               data-waypoint-editor-panel
               className={`flex flex-col shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-background/86 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.12)] transition-[max-height,width,opacity] duration-300 overflow-hidden ${
-                waypointEditorPanelId && !isWaypointSidebarCollapsed
+                selectedVoyageId && !isWaypointSidebarCollapsed
                   ? isMapWorkspaceFullscreen
                     ? "max-h-[45vh] lg:max-h-none lg:w-[390px] xl:w-[430px] opacity-100"
                     : "max-h-[min(72vh,620px)] lg:max-h-none lg:w-[340px] xl:w-[390px] opacity-100"
@@ -3638,24 +3823,14 @@ const AdminVoyageManager = ({
                 <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Waypoint
                 </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setIsWaypointSidebarCollapsed(true)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                    aria-label="Collassa pannello waypoint"
-                  >
-                    <PanelRightClose size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWaypointEditorPanelId(null)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                    aria-label="Chiudi pannello waypoint"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWaypointSidebarCollapsed(true)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                  aria-label="Collassa pannello waypoint"
+                >
+                  <PanelRightClose size={16} />
+                </button>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-2">
                 {waypointEditorTarget ? (() => {
@@ -3702,7 +3877,17 @@ const AdminVoyageManager = ({
                       onDeleteMedia={(item) => deleteWaypointMediaAsset(item)}
                     />
                   );
-                })() : null}
+                })() : (
+                  <div className="grid gap-3 p-0.5 font-sans">
+                    <div className="rounded-[18px] border border-border/60 bg-muted/20 px-3 py-3">
+                      <p className="text-sm font-sans font-medium text-foreground">Seleziona un WPT</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Clicca un marker sulla mappa o una riga della lista per aprire l'inspector del waypoint.
+                      </p>
+                    </div>
+                    {renderWaypointList(isMapWorkspaceFullscreen ? "max-h-[calc(45vh-132px)] lg:max-h-[calc(100vh-132px)]" : "max-h-[360px]")}
+                  </div>
+                )}
               </div>
             </aside>
           </div>
@@ -3922,177 +4107,7 @@ const AdminVoyageManager = ({
                 ) : null}
               </div>
 
-              <div className="space-y-0 max-h-[260px] overflow-y-auto">
-                {selectedWaypoints.map((waypoint, index) => {
-                  const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
-                  const displayName = getLocalizedWaypointName(waypoint, lang, index);
-                  const visibilityLabel = waypoint.visibility_mode === "manual"
-                    ? effectiveType === "narrative"
-                      ? "Manual narrative waypoint"
-                      : "Manual technical waypoint"
-                    : effectiveType === "narrative"
-                      ? "Auto public end waypoint"
-                      : "Auto technical waypoint";
-                  const eventLabel = selectedVoyageDatesTbd
-                    ? selectedWaypointLegEstimates[waypoint.id]?.label
-                      ? `Dal WPT prec.: ${selectedWaypointLegEstimates[waypoint.id]?.label}`
-                      : null
-                    : buildWaypointAdminDateLabel(
-                        waypoint,
-                        selectedWaypointDateSuggestions[waypoint.id],
-                        effectiveType
-                      );
-
-                  return (
-                    <div
-                      key={waypoint.id}
-                      onDragOver={(event) => {
-                        if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                        event.preventDefault();
-                        if (dragOverWaypointId !== waypoint.id) {
-                          setDragOverWaypointId(waypoint.id);
-                        }
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                        const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
-                        const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
-                        setDraggedWaypointId(null);
-                        setDragOverWaypointId(null);
-                        void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
-                      }}
-                      onDragLeave={(event) => {
-                        if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
-                          setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
-                        }
-                      }}
-                      className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
-                        dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
-                      } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        draggable
-                        onDragStart={(event) => {
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData("text/plain", waypoint.id);
-                          setDraggedWaypointId(waypoint.id);
-                          setDragOverWaypointId(waypoint.id);
-                        }}
-                        onDragEnd={() => {
-                          setDraggedWaypointId(null);
-                          setDragOverWaypointId(null);
-                        }}
-                        className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
-                        title="Drag to reorder waypoint"
-                      >
-                        <GripVertical size={12} />
-                      </button>
-                      <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
-                        className="p-0.5 text-muted-foreground hover:text-foreground"
-                        title={`${visibilityLabel}. Click to toggle quickly.`}
-                      >
-                        {effectiveType === "technical" ? (
-                          <EyeOff size={10} className="text-muted-foreground shrink-0" />
-                        ) : (
-                          <Eye size={10} className="text-accent shrink-0" />
-                        )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        {editingWaypointNameId === waypoint.id ? (
-                          <input
-                            type="text"
-                            value={editingWaypointNameValue}
-                            onChange={(event) => setEditingWaypointNameValue(event.target.value)}
-                            onBlur={() => void submitWaypointNameEdit(waypoint, index)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                void submitWaypointNameEdit(waypoint, index);
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                cancelWaypointNameEdit();
-                              }
-                            }}
-                            autoFocus
-                            disabled={savingWaypointNameId === waypoint.id}
-                            className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
-                            className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
-                            title="Double click to rename"
-                          >
-                            {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => openWaypointPopup(waypoint.id)}
-                          className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
-                        >
-                          {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
-                          {eventLabel ? ` · ${eventLabel}` : ""}
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
-                        className="p-1 text-muted-foreground hover:text-destructive"
-                        title="Delete waypoint"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => openWaypointPopup(waypoint.id)}
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                          title="Edit waypoint"
-                        >
-                          <Edit size={12} />
-                        </button>
-                        <button
-                          onClick={() => moveWaypoint(waypoint, "up")}
-                          disabled={index === 0}
-                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                        >
-                          <ChevronUp size={12} />
-                        </button>
-                        <button
-                          onClick={() => moveWaypoint(waypoint, "down")}
-                          disabled={index === selectedWaypoints.length - 1}
-                          className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                        >
-                          <ChevronDown size={12} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            focusWaypointOnMap(waypoint.id);
-                          }}
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                          title="Center waypoint on map"
-                        >
-                          <LocateFixed size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {selectedWaypoints.length === 0 && (
-                <p className="text-center text-xs text-muted-foreground py-6">
-                  The next click on the map will create the first waypoint.
-                </p>
-              )}
+              {renderWaypointList("max-h-[260px]")}
             </div>
           )}
       </div>
