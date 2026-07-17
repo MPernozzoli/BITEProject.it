@@ -15,8 +15,9 @@ const Layout = ({ children }: { children: ReactNode }) => {
   const isMobile = useIsMobile();
   const strippedPath = stripLangPrefix(pathname);
   const hideNavbar = strippedPath === "/links";
+  const isAdminPath = strippedPath === "/admin" || strippedPath.startsWith("/admin/");
   const isLogbookIndex = strippedPath === "/logbook";
-  const hideFooter = isLogbookIndex;
+  const hideFooter = isLogbookIndex || isAdminPath;
   const hideFooterMobileLogbook = isLogbookIndex && isMobile;
   const showAdminMobileNavigation =
     isAdmin && (pathname === "/profile" || pathname === "/admin" || pathname.startsWith("/admin/"));

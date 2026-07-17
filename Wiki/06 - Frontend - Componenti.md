@@ -6,7 +6,7 @@ tags: [frontend, componenti, ui]
 ⬅️ [[Home]] · sorgente: `apps/web/src/components/`
 
 ## Componenti di layout & navigazione
-- `Layout.tsx` — shell dell'app (header + footer + main)
+- `Layout.tsx` — shell dell'app (header + footer + main); non monta il footer sulle rotte `/admin` e `/admin/*`
 - `Navbar.tsx`, `NavLink.tsx`, `Footer.tsx`
 - `admin/AdminMobileNavigation.tsx` — dock mobile della PWA admin, visibile agli admin su `/admin/*` e `/profile`, con shortcut persistenti a Home admin, booking, candidati, media, mail, tracker e profilo → [[16 - Admin]]
 - `AppErrorBoundary.tsx` — error boundary globale

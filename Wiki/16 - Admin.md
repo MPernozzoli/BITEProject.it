@@ -9,6 +9,7 @@ tags: [admin, cms, backoffice]
 - Servito sul **sottodominio** `admin.biteproject.it`; rilevamento host in `apps/web/src/lib/admin-host.ts` (`isCurrentAdminHostname()`).
 - Rotte protette da `AdminRoute.tsx` → [[03 - Routing e i18n]].
 - Login: `/admin/login` (`AdminLogin.tsx`).
+- Le rotte `/admin` e `/admin/*` usano il layout globale senza footer, così tutte le superfici backoffice restano focalizzate sull'area operativa.
 
 ## Pagine admin → [[05 - Frontend - Pagine]]
 | Rotta | Pagina | Funzione |
