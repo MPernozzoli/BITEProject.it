@@ -49,6 +49,22 @@ describe("computeWaypointFormChanges", () => {
     expect(changes.planned_stop_duration_minutes).toBe(0);
   });
 
+  it("treats legacy coordinate names as provisional, not as custom names", () => {
+    const changes = computeWaypointFormChanges(
+      baseState(),
+      baseCtx({
+        defaultNames: { it: "WPT 03", en: "WPT 03" },
+        currentNameIt: "40.12°N · 18.57°E",
+        currentNameEn: "40.12°N · 18.57°E",
+      })
+    );
+
+    expect(changes.visibility_mode).toBe("auto");
+    expect(changes.waypoint_type).toBe("technical");
+    expect(changes.name_it).toBe("WPT 03");
+    expect(changes.name_en).toBe("WPT 03");
+  });
+
   it("auto-promotes to narrative when a custom name is given", () => {
     const state = { ...baseState(), nameIt: "Cala Luna" };
     const changes = computeWaypointFormChanges(state, baseCtx());

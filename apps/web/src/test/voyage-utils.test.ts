@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildPublicVoyageGeometry, buildVoyageGeometry, buildVoyageSegmentGeometry, totalCoordinateDistanceKm, type VoyageWaypoint } from "@/lib/voyage-utils";
+import {
+  buildPublicVoyageGeometry,
+  buildVoyageGeometry,
+  buildVoyageSegmentGeometry,
+  buildWaypointDefaultLocalizedNames,
+  isWaypointCoordinateLabel,
+  reverseGeocodePlaceLocalized,
+  totalCoordinateDistanceKm,
+  type VoyageWaypoint,
+} from "@/lib/voyage-utils";
 
 const createJsonResponse = (payload: unknown) =>
   Promise.resolve({
@@ -254,5 +263,51 @@ describe("totalCoordinateDistanceKm", () => {
     ]);
 
     expect(polylineDistance).toBeGreaterThan(directDistance);
+  });
+});
+
+describe("waypoint naming", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("uses a WPT fallback instead of storing coordinates as the default name", () => {
+    expect(buildWaypointDefaultLocalizedNames(2, 40.1234, 18.5678)).toEqual({
+      it: "WPT 03",
+      en: "WPT 03",
+    });
+  });
+
+  it("recognizes legacy coordinate labels so they can be treated as provisional names", () => {
+    expect(isWaypointCoordinateLabel("40.12°N · 18.57°E")).toBe(true);
+    expect(isWaypointCoordinateLabel("Bari")).toBe(false);
+  });
+
+  it("falls back to nearby settlements when reverse geocoding returns only generic geography", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        createJsonResponse({ address: { country: "Italia" }, display_name: "Italia" })
+      )
+      .mockImplementationOnce(() =>
+        createJsonResponse({ address: { country: "Italy" }, display_name: "Italy" })
+      )
+      .mockImplementationOnce(() =>
+        createJsonResponse({
+          elements: [
+            {
+              type: "node",
+              lat: 41.1256,
+              lon: 16.8667,
+              tags: { place: "city", name: "Bari" },
+            },
+          ],
+        })
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(reverseGeocodePlaceLocalized(41.05, 16.8, { maritime: true, maritimeLabelMode: "city" }))
+      .resolves.toEqual({ it: "Bari", en: "Bari" });
   });
 });

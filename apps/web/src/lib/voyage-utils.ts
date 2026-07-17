@@ -3,6 +3,11 @@ import type { Language } from "@/lib/i18n";
 const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
 const OSRM_BASE_URL = "https://router.project-osrm.org";
 const BROUTER_BASE_URL = "https://brouter.de";
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+];
 
 // Haversine distance in nautical miles
 export function haversineNM(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -298,57 +303,156 @@ async function fetchNearbyNamedPlaces(
   lng: number,
   maritime: boolean
 ): Promise<NearbyNamedPlace[]> {
-  const radiusMeters = maritime ? 70000 : 35000;
+  const maritimeRadiusMeters = 70000;
+  const settlementRadiusMeters = maritime ? 150000 : 50000;
   const maritimeSelectors = maritime
     ? `
-      node(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
-      way(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
-      relation(around:${radiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
-      node(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
-      way(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
-      relation(around:${radiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
-      node(around:${radiusMeters},${lat},${lng})["harbour"]["name"];
-      way(around:${radiusMeters},${lat},${lng})["harbour"]["name"];
-      node(around:${radiusMeters},${lat},${lng})["leisure"="marina"]["name"];
-      way(around:${radiusMeters},${lat},${lng})["leisure"="marina"]["name"];
+      node(around:${maritimeRadiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      way(around:${maritimeRadiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      relation(around:${maritimeRadiusMeters},${lat},${lng})["natural"~"^(bay|strait|cape|beach)$"]["name"];
+      node(around:${maritimeRadiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      way(around:${maritimeRadiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      relation(around:${maritimeRadiusMeters},${lat},${lng})["place"~"^(locality|islet|island)$"]["name"];
+      node(around:${maritimeRadiusMeters},${lat},${lng})["harbour"]["name"];
+      way(around:${maritimeRadiusMeters},${lat},${lng})["harbour"]["name"];
+      node(around:${maritimeRadiusMeters},${lat},${lng})["leisure"="marina"]["name"];
+      way(around:${maritimeRadiusMeters},${lat},${lng})["leisure"="marina"]["name"];
     `
     : "";
   const query = `
-    [out:json][timeout:8];
+    [out:json][timeout:12];
     (
       ${maritimeSelectors}
-      node(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
-      way(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
-      relation(around:${radiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+      node(around:${settlementRadiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+      way(around:${settlementRadiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
+      relation(around:${settlementRadiusMeters},${lat},${lng})["place"~"^(city|town|village)$"]["name"];
     );
     out center tags 30;
   `;
 
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeout = controller ? globalThis.setTimeout(() => controller.abort(), 14000) : null;
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: controller?.signal,
+      });
+      if (!res.ok) continue;
+      const data = await res.json() as { elements?: unknown[] };
+      const seen = new Set<string>();
+      const places = (data.elements || [])
+        .map((item) => normalizeOverpassPlace(item))
+        .filter((item): item is NearbyNamedPlace => {
+          if (!item) return false;
+          const key = `${item.kind}:${item.name.toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .sort((a, b) => getNearbyPlaceRank(a, { lat, lng }, maritime) - getNearbyPlaceRank(b, { lat, lng }, maritime))
+        .slice(0, 20);
+      if (places.length) return places;
+    } catch {
+      // Try the next public Overpass endpoint.
+    } finally {
+      if (timeout) globalThis.clearTimeout(timeout);
+    }
+  }
+
+  return [];
+}
+
+async function fetchNearbySettlementsFromNominatim(lat: number, lng: number): Promise<NearbyNamedPlace[]> {
+  const degrees = 1.35;
+  const viewbox = [
+    lng - degrees,
+    lat + degrees,
+    lng + degrees,
+    lat - degrees,
+  ].join(",");
+  const queries = ["city", "town", "village"];
+
   try {
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body: new URLSearchParams({ data: query }).toString(),
-    });
-    if (!res.ok) return [];
-    const data = await res.json() as { elements?: unknown[] };
+    const results = await Promise.all(queries.map(async (query) => {
+      const params = new URLSearchParams({
+        format: "jsonv2",
+        q: query,
+        limit: "10",
+        addressdetails: "1",
+        bounded: "1",
+        viewbox,
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+        headers: { "User-Agent": BITE_MAPS_USER_AGENT },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }));
     const seen = new Set<string>();
-    return (data.elements || [])
-      .map((item) => normalizeOverpassPlace(item))
-      .filter((item): item is NearbyNamedPlace => {
-        if (!item) return false;
-        const key = `${item.kind}:${item.name.toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) => getNearbyPlaceRank(a, { lat, lng }, maritime) - getNearbyPlaceRank(b, { lat, lng }, maritime))
-      .slice(0, 20);
+    return results.flat().flatMap((item): NearbyNamedPlace[] => {
+      if (!item || typeof item !== "object") return [];
+      const candidate = item as {
+        lat?: string | number | null;
+        lon?: string | number | null;
+        name?: string | null;
+        display_name?: string | null;
+        type?: string | null;
+        address?: Record<string, string | undefined>;
+      };
+      const itemLat = Number(candidate.lat);
+      const itemLng = Number(candidate.lon);
+      const address = candidate.address || {};
+      const name = cleanPlaceLabel(candidate.name) ||
+        cleanPlaceLabel(address.city) ||
+        cleanPlaceLabel(address.town) ||
+        cleanPlaceLabel(address.village) ||
+        cleanPlaceLabel(candidate.display_name?.split(",")?.[0]);
+      if (!Number.isFinite(itemLat) || !Number.isFinite(itemLng) || !name) return [];
+      const kind = candidate.type === "city" || address.city
+        ? "city"
+        : candidate.type === "town" || address.town
+          ? "town"
+          : "village";
+      const key = `${kind}:${name.toLowerCase()}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        lat: itemLat,
+        lng: itemLng,
+        kind,
+        name,
+        nameIt: null,
+        nameEn: null,
+      }];
+    }).sort((a, b) => getNearbyPlaceRank(a, { lat, lng }, false) - getNearbyPlaceRank(b, { lat, lng }, false));
   } catch {
     return [];
   }
+}
+
+async function fetchNearbyLabelPlaces(
+  lat: number,
+  lng: number,
+  maritime: boolean
+): Promise<NearbyNamedPlace[]> {
+  const overpassPlaces = await fetchNearbyNamedPlaces(lat, lng, maritime);
+  if (overpassPlaces.length) return overpassPlaces;
+  return fetchNearbySettlementsFromNominatim(lat, lng);
+}
+
+function getWaypointFallbackName(index: number): string {
+  return `WPT ${String(index + 1).padStart(2, "0")}`;
+}
+
+export function isWaypointCoordinateLabel(value: string | null | undefined): boolean {
+  const trimmed = value?.trim();
+  return Boolean(trimmed && /^\d+(?:\.\d+)?°[NS]\s*·\s*\d+(?:\.\d+)?°[EW]$/i.test(trimmed));
 }
 
 const normalizeGeocodedPlace = (item: unknown): GeocodedPlace | null => {
@@ -478,7 +582,7 @@ export async function reverseGeocodePlaceLocalized(
     en.generic;
 
   if (needsNearbyPlace) {
-    const nearbyPlaces = await fetchNearbyNamedPlaces(lat, lng, Boolean(options?.maritime));
+    const nearbyPlaces = await fetchNearbyLabelPlaces(lat, lng, Boolean(options?.maritime));
     const nearbyPlace = selectMaritimeWaypointLabelPlace(
       nearbyPlaces,
       { lat, lng },
@@ -656,7 +760,7 @@ export function buildWaypointDefaultLocalizedNames(
   placeName?: string | null,
   placeByLang?: { it: string | null; en: string | null } | null
 ): Record<Language, string> {
-  const fallback = formatWaypointCoordinateLabel(lat, lng);
+  const fallback = getWaypointFallbackName(_index);
   if (placeByLang) {
     return {
       it: placeByLang.it?.trim() || placeByLang.en?.trim() || placeName?.trim() || fallback,

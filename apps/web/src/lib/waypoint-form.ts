@@ -1,4 +1,4 @@
-import { buildWaypointDefaultName, type VoyageWaypoint } from "@/lib/voyage-utils";
+import { buildWaypointDefaultName, isWaypointCoordinateLabel, type VoyageWaypoint } from "@/lib/voyage-utils";
 import {
   DEFAULT_STOP_DEPARTURE_TIME,
   getEffectiveStopHoursDefault,
@@ -61,8 +61,8 @@ export const parseNonNegativeInteger = (value: string): number => {
 };
 
 export const buildWaypointFormState = (waypoint: VoyageWaypoint): WaypointFormState => ({
-  nameIt: waypoint.name_it ?? "",
-  nameEn: waypoint.name_en ?? "",
+  nameIt: isWaypointCoordinateLabel(waypoint.name_it) ? "" : waypoint.name_it ?? "",
+  nameEn: isWaypointCoordinateLabel(waypoint.name_en) ? "" : waypoint.name_en ?? "",
   descriptionIt: waypoint.description_it ?? "",
   descriptionEn: waypoint.description_en ?? "",
   visibility: waypoint.visibility_mode === "manual" ? waypoint.waypoint_type : "auto",
@@ -85,8 +85,10 @@ export function computeWaypointFormChanges(
 ): Partial<VoyageWaypoint> {
   const nameIt = state.nameIt.trim() || ctx.defaultNames.it;
   const nameEn = state.nameEn.trim() || ctx.defaultNames.en;
+  const currentNameIt = isWaypointCoordinateLabel(ctx.currentNameIt) ? null : ctx.currentNameIt;
+  const currentNameEn = isWaypointCoordinateLabel(ctx.currentNameEn) ? null : ctx.currentNameEn;
   const hasCustomName =
-    nameIt !== (ctx.currentNameIt || ctx.defaultNames.it) || nameEn !== (ctx.currentNameEn || ctx.defaultNames.en);
+    nameIt !== (currentNameIt || ctx.defaultNames.it) || nameEn !== (currentNameEn || ctx.defaultNames.en);
   const stopHours = parseNonNegativeInteger(state.stopHours);
   const stopNights = Math.max(1, parseNonNegativeInteger(state.stopNights));
   const hasPlannedStop =

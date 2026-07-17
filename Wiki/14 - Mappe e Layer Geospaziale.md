@@ -21,7 +21,7 @@ tags: [mappe, geo, maplibre, funzionalita]
 ## Dati geo
 - Coordinate degli articoli: `apps/web/src/lib/article-map.ts`, `article-map-anchor.ts`
 - Presenza sulla mappa (tracker): `apps/web/src/lib/map-presence.ts`, pagina `AdminMapPresence.tsx` (`/admin/trackers`)
-- Naming waypoint admin: `apps/web/src/lib/voyage-utils.ts` usa Nominatim per il reverse geocoding e, se il risultato è troppo generico per coordinate in mare, cerca con Overpass toponimi vicini. Se il marker sembra una fermata costiera/portuale usa il nome città secco; se è più al largo preferisce il nome reale di baia/cala/località/capo/isola. Nell'inspector WPT delle rotte acqua c'è anche il controllo manuale `Auto / Città / Baia o toponimo`.
+- Naming waypoint admin: `apps/web/src/lib/voyage-utils.ts` usa Nominatim per il reverse geocoding e, se il risultato è troppo generico per coordinate in mare, cerca con Overpass toponimi vicini usando endpoint fallback e un raggio più ampio per città/paesi. Se il marker sembra una fermata costiera/portuale usa il nome città secco; se è più al largo preferisce il nome reale di baia/cala/località/capo/isola. Le coordinate non vengono più salvate come nome default: il fallback è `WPT NN`, e i vecchi nomi in formato coordinate sono considerati provvisori. Nell'inspector WPT delle rotte acqua c'è anche il controllo manuale `Auto / Città / Baia o toponimo`.
 
 ## Principi (da doc architettura)
 - Una rotta **non deve mai** esistere solo come immagine renderizzata.

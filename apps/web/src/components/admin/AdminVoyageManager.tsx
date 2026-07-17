@@ -41,6 +41,7 @@ import {
   buildWaypointDefaultName,
   buildWaypointDefaultLocalizedNames,
   formatWaypointCoordinateLabel,
+  isWaypointCoordinateLabel,
   buildVoyageGeometry,
   geocodePlaces,
   haversineNM,
@@ -1432,7 +1433,11 @@ const AdminVoyageManager = ({
       const currentWaypoint = (waypointsRef.current[voyageId] || []).find((item) => item.id === createdWaypoint.id);
       if (!currentWaypoint) return true;
 
-      const hasCustomLocalizedName = currentWaypoint.name_it !== provisionalNames.it || currentWaypoint.name_en !== provisionalNames.en;
+      const currentNameIt = currentWaypoint.name_it?.trim() || null;
+      const currentNameEn = currentWaypoint.name_en?.trim() || null;
+      const hasCustomLocalizedName =
+        (currentNameIt !== provisionalNames.it && !isWaypointCoordinateLabel(currentNameIt)) ||
+        (currentNameEn !== provisionalNames.en && !isWaypointCoordinateLabel(currentNameEn));
       if (hasCustomLocalizedName) return true;
 
       const suggestedNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng, null, suggestedPlace);
