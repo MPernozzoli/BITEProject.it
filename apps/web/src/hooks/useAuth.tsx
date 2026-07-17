@@ -36,6 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const authBootstrapDoneRef = useRef(false);
   const authStateVersionRef = useRef(0);
   const newsletterSyncInFlightRef = useRef(false);
+  const adminCheckedUserIdRef = useRef<string | null>(null);
 
   const checkAdmin = useCallback(async (userId: string, version: number) => {
     try {
@@ -43,15 +44,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (version !== authStateVersionRef.current) return;
       if (error) {
         console.error("Failed to resolve admin role", error);
+        adminCheckedUserIdRef.current = null;
         setIsAdmin(false);
         setAdminLoading(false);
         return;
       }
+      adminCheckedUserIdRef.current = userId;
       setIsAdmin(!!data);
       setAdminLoading(false);
     } catch (error) {
       if (version !== authStateVersionRef.current) return;
       console.error("Failed to resolve admin role", error);
+      adminCheckedUserIdRef.current = null;
       setIsAdmin(false);
       setAdminLoading(false);
     }
@@ -62,9 +66,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const version = ++authStateVersionRef.current;
       setSession(next);
       if (next?.user) {
+        if (adminCheckedUserIdRef.current === next.user.id) {
+          setAdminLoading(false);
+          return;
+        }
         setAdminLoading(true);
         void checkAdmin(next.user.id, version);
       } else {
+        adminCheckedUserIdRef.current = null;
         setIsAdmin(false);
         setAdminLoading(false);
       }
