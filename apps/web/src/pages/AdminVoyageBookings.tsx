@@ -163,6 +163,25 @@ const formatPlanningWindow = (start?: string | null, end?: string | null) => {
   return formatPlanningDate(start || end);
 };
 
+const formatWaypointStopTiming = (
+  waypoint: BookingWaypoint,
+  incomingLeg?: BookableLeg,
+  outboundLeg?: BookableLeg
+) => {
+  const arrival = waypoint.date_end
+    ? formatPlanningDate(waypoint.date_end)
+    : formatPlanningWindow(incomingLeg?.ends_at_window_start, incomingLeg?.ends_at_window_end);
+  const departure = waypoint.date_start
+    ? formatPlanningDate(waypoint.date_start)
+    : formatPlanningWindow(outboundLeg?.starts_at_window_start, outboundLeg?.starts_at_window_end);
+  return `Arrivo ${arrival} · Ripartenza ${departure}`;
+};
+
+const formatLegDistance = (distanceNm: number | null | undefined) => {
+  if (!Number.isFinite(Number(distanceNm))) return "NM non disponibili";
+  return `${Number(distanceNm).toFixed(1)} NM`;
+};
+
 /**
  * Snapshot of the "Salva planning" batch: voyage booking settings + waypoint stop config +
  * leg windows/bookable flag. Deliberately excludes danger_level/open_sea/complexity_override,
@@ -1461,6 +1480,19 @@ const AdminVoyageBookings = () => {
                 {publicPlanningWaypoints.map((waypoint, index) => {
                   const stopUiMode = getWaypointStopUiMode(waypoint);
                   const outboundLeg = legs.find((leg) => leg.from_waypoint_id === waypoint.id);
+                  const previousWaypoint = index > 0 ? publicPlanningWaypoints[index - 1] : undefined;
+                  const incomingLeg = previousWaypoint
+                    ? legs.find((leg) => leg.from_waypoint_id === previousWaypoint.id && leg.to_waypoint_id === waypoint.id) ||
+                      legs.find((leg) => leg.to_waypoint_id === waypoint.id)
+                    : undefined;
+                  const incomingDistanceNm =
+                    typeof incomingLeg?.planned_nautical_miles === "number"
+                      ? incomingLeg.planned_nautical_miles
+                      : haversineNm(previousWaypoint, waypoint);
+                  const incomingDurationMinutes =
+                    incomingDistanceNm !== null && planningSpeedKn > 0 ? (incomingDistanceNm / planningSpeedKn) * 60 : null;
+                  const previousWaypointName = previousWaypoint?.name_it || previousWaypoint?.name_en || previousWaypoint?.name || "Waypoint";
+                  const waypointName = waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint";
                   const effectiveHours = getEffectiveStopHoursDefault(waypoint);
                   const effectiveNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
                   const defaultDeparture = getDefaultStopDepartureTime(Boolean(outboundLeg?.open_sea));
@@ -1496,12 +1528,23 @@ const AdminVoyageBookings = () => {
 
                   return (
                     <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3">
+                      {previousWaypoint && (
+                        <div className="flex flex-col gap-1 rounded-[14px] bg-muted/35 px-3 py-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                          <span className="truncate">
+                            Tratta da {previousWaypointName} a {waypointName}
+                          </span>
+                          <span className="shrink-0 font-medium text-foreground">
+                            {formatLegDistance(incomingDistanceNm)} ·{" "}
+                            {incomingDurationMinutes === null ? "durata non disponibile" : formatDuration(incomingDurationMinutes)}
+                          </span>
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">
-                          {index + 1}. {waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint"}
+                          {index + 1}. {waypointName}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          narrative · {formatPlanningDate(waypoint.date_start)} → {formatPlanningDate(waypoint.date_end)}
+                          {formatWaypointStopTiming(waypoint, incomingLeg, outboundLeg)}
                         </p>
                       </div>
 
