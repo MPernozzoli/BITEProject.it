@@ -35,8 +35,9 @@ tags: [frontend, lib, hooks, logica]
 - `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`)
 - `booking-application-draft.ts` — serializzazione bozza candidatura: `localStorage` per utenti anonimi e sincronizzazione Supabase su `voyage_booking_drafts` per utenti loggati.
 - `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
-- `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts`
+- `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts` — helper booking e soste waypoint condivisi tra `/admin/bookings` e gestione rotte.
 - `danger-reasons.ts` — modificatori navigazione pericolosa
+- `waypoint-form.ts` — trasformazione pura dello stato inspector WPT in patch persistibili; preserva anche l'orario di ripartenza delle soste brevi per non disallineare `/routes` da `/bookings`.
 - `voyage-schedule.ts` — regole di fase viaggio/tratta (`getLegPhase`, `getVoyagePhase`, `isLegBookableNow`, `getPendingActual`, `isLegDelayed`, `shouldShowLiveWidget`). Mirror TS delle funzioni SQL omonime: vanno cambiati insieme → [[21 - Tracking Real-Time Viaggi]]
 - `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). Il fallback visuale è `WPT NN`, non coordinate salvate come nome; vecchi nomi in formato coordinate vengono trattati come provvisori e possono essere sovrascritti dal naming automatico. L'admin può forzare il naming città o baia/cala dall'inspector WPT.
 

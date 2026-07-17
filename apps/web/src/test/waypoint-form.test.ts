@@ -83,6 +83,15 @@ describe("computeWaypointFormChanges", () => {
     expect(changes.stop_nights).toBeNull();
   });
 
+  it("preserves a short-stop departure time when present", () => {
+    const state = { ...baseState(), visibility: "narrative" as const, stopMode: "hours" as const, stopHours: "8", stopDeparture: "19:00" };
+    const changes = computeWaypointFormChanges(state, baseCtx());
+    expect(changes.stop_mode).toBe("hours");
+    expect(changes.stop_hours).toBe(8);
+    expect(changes.stop_departure_time).toBe("19:00");
+    expect(changes.planned_stop_duration_minutes).toBe(480);
+  });
+
   it("records a nights stop with departure time on a narrative waypoint", () => {
     const state = {
       ...baseState(),

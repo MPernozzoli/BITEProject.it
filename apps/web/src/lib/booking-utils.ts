@@ -728,6 +728,10 @@ export function formatStopSummary(
   if (mode === "hours") {
     const hours = Math.max(0, Number(waypoint.stop_hours ?? 0));
     if (!hours) return null;
+    const departureTime = waypoint.stop_departure_time?.slice(0, 5);
+    if (departureTime) {
+      return italian ? `Sosta ${hours}h, ripartenza h ${departureTime}` : `${hours}h stop, departs ${departureTime}`;
+    }
     return italian ? `Sosta ${hours}h` : `${hours}h stop`;
   }
 

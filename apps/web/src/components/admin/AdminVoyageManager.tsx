@@ -264,12 +264,55 @@ const formatEstimatedLegDuration = (hours: number) => {
   return `${normalizedHours} h ${String(minutes).padStart(2, "0")} min`;
 };
 
-const deriveWaypointLegEstimates = (waypoints: VoyageWaypoint[]) =>
+const getPlanningSpeedKn = (value?: number | string | null) => {
+  const parsed = typeof value === "string" ? Number.parseFloat(value) : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+};
+
+const getStopDepartureDate = (arrival: Date, waypoint: VoyageWaypoint) => {
+  const parseStopDepartureTime = (value: string | null | undefined) => {
+    const [hoursPart, minutesPart] = (value || DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5).split(":");
+    const hours = Number(hoursPart);
+    const minutes = Number(minutesPart);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? { hours, minutes } : null;
+  };
+
+  if (waypoint.stop_mode === "hours" && waypoint.stop_departure_time) {
+    const time = parseStopDepartureTime(waypoint.stop_departure_time);
+    if (time) {
+      const departure = new Date(arrival);
+      departure.setHours(time.hours, time.minutes, 0, 0);
+      if (departure.getTime() <= arrival.getTime()) {
+        departure.setDate(departure.getDate() + 1);
+      }
+      return departure;
+    }
+  }
+
+  if (waypoint.stop_mode === "nights") {
+    const time = parseStopDepartureTime(waypoint.stop_departure_time);
+    const nights = Math.max(0, Number(waypoint.stop_nights ?? 1));
+    if (time) {
+      const departure = new Date(arrival);
+      departure.setDate(departure.getDate() + nights);
+      departure.setHours(time.hours, time.minutes, 0, 0);
+      if (departure.getTime() < arrival.getTime()) {
+        departure.setDate(departure.getDate() + 1);
+      }
+      return departure;
+    }
+  }
+
+  const minutes = estimateStopMinutes(waypoint);
+  return new Date(arrival.getTime() + minutes * 60 * 1000);
+};
+
+const deriveWaypointLegEstimates = (waypoints: VoyageWaypoint[], speedKn: number) =>
   Object.fromEntries(
     waypoints.map((waypoint, index) => {
       if (index === 0) return [waypoint.id, null];
       const previousWaypoint = waypoints[index - 1];
-      const hours = haversineNM(previousWaypoint.lat, previousWaypoint.lng, waypoint.lat, waypoint.lng) / 5;
+      const hours = haversineNM(previousWaypoint.lat, previousWaypoint.lng, waypoint.lat, waypoint.lng) / getPlanningSpeedKn(speedKn);
       return [
         waypoint.id,
         {
@@ -300,7 +343,9 @@ const computeEstimatedArrivalDateTime = (
     const current = waypoints[index];
     totalMinutes += (haversineNM(previous.lat, previous.lng, current.lat, current.lng) / speed) * 60;
     if (index < waypoints.length - 1) {
-      totalMinutes += estimateStopMinutes(current);
+      const arrival = new Date(start.getTime() + totalMinutes * 60 * 1000);
+      const departure = getStopDepartureDate(arrival, current);
+      totalMinutes += Math.max(0, (departure.getTime() - arrival.getTime()) / 60_000);
     }
   }
   const arrival = new Date(start.getTime() + totalMinutes * 60 * 1000);
@@ -367,7 +412,7 @@ const buildWaypointAdminDateLabel = (
 };
 
 const deriveWaypointDateSuggestions = (
-  voyage: Pick<Voyage, "status" | "start_date" | "start_time" | "end_date" | "end_time"> | undefined,
+  voyage: Pick<Voyage, "status" | "start_date" | "start_time" | "end_date" | "end_time" | "booking_planning_speed_kn"> | undefined,
   waypoints: VoyageWaypoint[]
 ) => {
   const suggestions = Object.fromEntries(
@@ -378,6 +423,7 @@ const deriveWaypointDateSuggestions = (
 
   const voyageStart = parseDateTimeInput(voyage.start_date, voyage.start_time);
   const voyageEnd = parseDateTimeInput(voyage.end_date, voyage.end_time, { endOfDay: !voyage.end_time });
+  const speed = getPlanningSpeedKn(voyage.booking_planning_speed_kn);
   const narrativeIndexes = waypoints.flatMap((waypoint, index) =>
     getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative" ? [index] : []
   );
@@ -403,7 +449,7 @@ const deriveWaypointDateSuggestions = (
 
     if (isNarrative) {
       if (index !== firstNarrativeIndex && anchor) {
-        const hours = haversineNM(anchor.waypoint.lat, anchor.waypoint.lng, waypoint.lat, waypoint.lng) / 5;
+        const hours = haversineNM(anchor.waypoint.lat, anchor.waypoint.lng, waypoint.lat, waypoint.lng) / speed;
         const estimatedDate = clampDateWithinRange(
           new Date(anchor.date.getTime() + hours * 60 * 60 * 1000),
           voyageStart,
@@ -438,7 +484,9 @@ const deriveWaypointDateSuggestions = (
               current.arrivalTime || (index === lastNarrativeIndex ? voyage.end_time : null)
             )
           : null;
-      const nextAnchor = explicitDeparture || explicitArrival || suggestedDeparture || suggestedArrival;
+      const arrivalForStop = explicitArrival || suggestedArrival;
+      const estimatedStopDeparture = arrivalForStop ? getStopDepartureDate(arrivalForStop, waypoint) : null;
+      const nextAnchor = explicitDeparture || estimatedStopDeparture || arrivalForStop || suggestedDeparture;
       if (nextAnchor) {
         anchor = {
           date: clampDateWithinRange(nextAnchor, voyageStart, voyageEnd),
@@ -513,7 +561,7 @@ const isMissingWaypointMetadataColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["waypoint_type", "date_start", "date_end", "visibility_mode", "name_it", "name_en", "description_it", "description_en", "event_date", "event_time", "media"].some((column) => text.includes(column)) &&
+  return ["waypoint_type", "date_start", "date_end", "visibility_mode", "name_it", "name_en", "description_it", "description_en", "event_date", "event_time", "media", "planned_stop_duration_minutes", "stop_mode", "stop_hours", "stop_nights", "stop_departure_time"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -718,6 +766,11 @@ const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
     event_time: waypoint.event_time,
     date_start: waypoint.date_start,
     date_end: waypoint.date_end,
+    planned_stop_duration_minutes: waypoint.planned_stop_duration_minutes,
+    stop_mode: waypoint.stop_mode,
+    stop_hours: waypoint.stop_hours,
+    stop_nights: waypoint.stop_nights,
+    stop_departure_time: waypoint.stop_departure_time,
     waypoint_type: waypoint.waypoint_type,
     visibility_mode: waypoint.visibility_mode,
     media: waypoint.media,
@@ -1330,6 +1383,11 @@ const AdminVoyageManager = ({
       date_start: waypoint.date_start,
       date_end: waypoint.date_end,
       planned_stop_duration_minutes: Math.max(0, Number(waypoint.planned_stop_duration_minutes ?? 0)),
+      stop_mode: waypoint.stop_mode,
+      stop_hours: waypoint.stop_mode === "hours" ? Math.max(0, Number(waypoint.stop_hours ?? 0)) : null,
+      stop_nights: waypoint.stop_mode === "nights" ? Math.max(1, Number(waypoint.stop_nights ?? 1)) : null,
+      stop_departure_time:
+        waypoint.stop_mode === "hours" || waypoint.stop_mode === "nights" ? waypoint.stop_departure_time || null : null,
       media: waypoint.media as unknown as import("@/integrations/supabase/types").Json,
     };
     const legacyBaseData: TablesInsert<"voyage_waypoints"> = {
@@ -1675,8 +1733,8 @@ const AdminVoyageManager = ({
     [selectedVoyage, selectedWaypoints]
   );
   const selectedWaypointLegEstimates = useMemo(
-    () => deriveWaypointLegEstimates(selectedWaypoints),
-    [selectedWaypoints]
+    () => deriveWaypointLegEstimates(selectedWaypoints, selectedVoyage?.booking_planning_speed_kn ?? 5),
+    [selectedVoyage?.booking_planning_speed_kn, selectedWaypoints]
   );
 
   // Resolves the waypoint currently open in the editor panel, with its index/total.
@@ -3867,7 +3925,9 @@ const AdminVoyageManager = ({
                       arrivalPlaceholder={placeholder(suggestion.arrivalDate, suggestion.arrivalTime)}
                       departurePlaceholder={placeholder(suggestion.departureDate, suggestion.departureTime)}
                       legEstimateLabel={
-                        legEstimate ? `Tempo stimato dal WPT precedente: ${legEstimate.label} a 5 kn.` : null
+                        legEstimate
+                          ? `Tempo stimato dal WPT precedente: ${legEstimate.label} a ${getPlanningSpeedKn(selectedVoyage?.booking_planning_speed_kn)} kn.`
+                          : null
                       }
                       onUpdate={(changes, options) =>
                         updateWaypoint(waypoint.voyage_id, waypoint.id, changes, options)

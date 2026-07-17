@@ -182,6 +182,46 @@ const formatLegDistance = (distanceNm: number | null | undefined) => {
   return `${Number(distanceNm).toFixed(1)} NM`;
 };
 
+const getWaypointArrivalDate = (waypoint: BookingWaypoint, incomingLeg?: BookableLeg) => {
+  const value = waypoint.date_end || incomingLeg?.ends_at_window_start || incomingLeg?.ends_at_window_end;
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatLocalTime = (date: Date) =>
+  `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+const isDepartureTimeAfterArrival = (arrival: Date | null, departureTime: string) => {
+  if (!arrival || !departureTime) return true;
+  const [hoursPart, minutesPart] = departureTime.split(":");
+  const hours = Number(hoursPart);
+  const minutes = Number(minutesPart);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return true;
+  const departure = new Date(arrival);
+  departure.setHours(hours, minutes, 0, 0);
+  return departure.getTime() > arrival.getTime();
+};
+
+const getDepartureTimeFromArrivalAndHours = (arrival: Date | null, hours: number) => {
+  if (!arrival) return null;
+  const departure = new Date(arrival.getTime() + Math.max(0, Number(hours) || 0) * 3_600_000);
+  return departure.toDateString() === arrival.toDateString() ? formatLocalTime(departure) : null;
+};
+
+const getStopHoursFromArrivalAndDepartureTime = (arrival: Date | null, departureTime: string) => {
+  if (!arrival || !departureTime) return null;
+  const [hoursPart, minutesPart] = departureTime.split(":");
+  const hours = Number(hoursPart);
+  const minutes = Number(minutesPart);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  const departure = new Date(arrival);
+  departure.setHours(hours, minutes, 0, 0);
+  if (departure.getTime() <= arrival.getTime()) return null;
+  const diffHours = (departure.getTime() - arrival.getTime()) / 3_600_000;
+  return Math.max(0, Math.round(diffHours));
+};
+
 /**
  * Snapshot of the "Salva planning" batch: voyage booking settings + waypoint stop config +
  * leg windows/bookable flag. Deliberately excludes danger_level/open_sea/complexity_override,
@@ -586,6 +626,20 @@ const AdminVoyageBookings = () => {
       departure_window_start: selectedVoyage.departure_window_start || null,
       departure_window_end: selectedVoyage.departure_window_end || null,
     };
+    const invalidHoursStop = waypoints.find((waypoint) => {
+      if (waypoint.stop_mode !== "hours" || !waypoint.stop_departure_time) return false;
+      const incomingLeg = legs.find((leg) => leg.to_waypoint_id === waypoint.id);
+      const arrivalDate = getWaypointArrivalDate(waypoint, incomingLeg);
+      return arrivalDate !== null && !isDepartureTimeAfterArrival(arrivalDate, waypoint.stop_departure_time);
+    });
+    if (invalidHoursStop) {
+      setSaving(false);
+      toast.error(
+        `Ripartenza non valida per ${invalidHoursStop.name_it || invalidHoursStop.name_en || invalidHoursStop.name || "waypoint"}: deve essere dopo l'arrivo.`
+      );
+      return false;
+    }
+
     const voyageRes = await typedSupabase.from("voyages").update(voyagePatch).eq("id", selectedVoyageId);
     if (voyageRes.error) {
       setSaving(false);
@@ -609,7 +663,7 @@ const AdminVoyageBookings = () => {
           patch.stop_nights =
             waypoint.stop_mode === "nights" ? Math.max(1, Number(waypoint.stop_nights ?? 1)) : null;
           patch.stop_departure_time =
-            waypoint.stop_mode === "nights" ? waypoint.stop_departure_time || null : null;
+            waypoint.stop_mode === "hours" || waypoint.stop_mode === "nights" ? waypoint.stop_departure_time || null : null;
         }
         return typedSupabase.from("voyage_waypoints").update(patch).eq("id", waypoint.id);
       })
@@ -1496,6 +1550,9 @@ const AdminVoyageBookings = () => {
                   const effectiveHours = getEffectiveStopHoursDefault(waypoint);
                   const effectiveNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
                   const defaultDeparture = getDefaultStopDepartureTime(Boolean(outboundLeg?.open_sea));
+                  const arrivalDate = getWaypointArrivalDate(waypoint, incomingLeg);
+                  const effectiveShortDeparture =
+                    (waypoint.stop_departure_time || getDepartureTimeFromArrivalAndHours(arrivalDate, effectiveHours) || defaultDeparture).slice(0, 5);
                   const effectiveDeparture = (waypoint.stop_departure_time ?? defaultDeparture).slice(0, 5);
 
                   const applyStopMode = (mode: "none" | "hours" | "nights") => {
@@ -1512,7 +1569,7 @@ const AdminVoyageBookings = () => {
                         stop_mode: "hours",
                         stop_hours: effectiveHours,
                         stop_nights: null,
-                        stop_departure_time: null,
+                        stop_departure_time: effectiveShortDeparture,
                         planned_stop_duration_minutes: effectiveHours * 60,
                       });
                     } else {
@@ -1524,6 +1581,30 @@ const AdminVoyageBookings = () => {
                         planned_stop_duration_minutes: 0,
                       });
                     }
+                  };
+
+                  const applyHoursDepartureTime = (time: string) => {
+                    if (!isDepartureTimeAfterArrival(arrivalDate, time)) {
+                      toast.error("L'orario di ripartenza deve essere successivo all'arrivo.");
+                      return;
+                    }
+                    const computedHours = getStopHoursFromArrivalAndDepartureTime(arrivalDate, time);
+                    const hours = computedHours ?? effectiveHours;
+                    updateWaypointPlanning(waypoint.id, {
+                      stop_mode: "hours",
+                      stop_departure_time: time,
+                      stop_hours: hours,
+                      planned_stop_duration_minutes: hours * 60,
+                    });
+                  };
+
+                  const applyHoursPreset = (hours: number) => {
+                    updateWaypointPlanning(waypoint.id, {
+                      stop_mode: "hours",
+                      stop_hours: hours,
+                      stop_departure_time: getDepartureTimeFromArrivalAndHours(arrivalDate, hours) || waypoint.stop_departure_time || null,
+                      planned_stop_duration_minutes: hours * 60,
+                    });
                   };
 
                   return (
@@ -1563,40 +1644,70 @@ const AdminVoyageBookings = () => {
                         </label>
 
                         {stopUiMode === "hours" && (
-                          <div>
-                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ore</span>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={effectiveHours}
-                                onChange={(event) => {
-                                  const hours = Math.max(0, Number(event.target.value) || 0);
-                                  updateWaypointPlanning(waypoint.id, {
-                                    stop_hours: hours,
-                                    planned_stop_duration_minutes: hours * 60,
-                                  });
-                                }}
-                                className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                              />
-                              {STOP_HOURS_PRESETS.map((preset) => (
-                                <button
-                                  key={preset}
-                                  type="button"
-                                  onClick={() =>
-                                    updateWaypointPlanning(waypoint.id, {
-                                      stop_hours: preset,
-                                      planned_stop_duration_minutes: preset * 60,
-                                    })
-                                  }
-                                  className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
-                                >
-                                  {preset}h
-                                </button>
-                              ))}
+                          <>
+                            <div>
+                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ripartenza</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="time"
+                                  min={arrivalDate ? formatLocalTime(arrivalDate) : undefined}
+                                  value={effectiveShortDeparture}
+                                  onChange={(event) => applyHoursDepartureTime(event.target.value)}
+                                  className="w-28 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                                />
+                                {STOP_DEPARTURE_PRESETS.map((preset) => {
+                                  const disabled = !isDepartureTimeAfterArrival(arrivalDate, preset);
+                                  return (
+                                    <button
+                                      key={preset}
+                                      type="button"
+                                      disabled={disabled}
+                                      onClick={() => applyHoursDepartureTime(preset)}
+                                      className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      {preset}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {arrivalDate
+                                  ? `Durata calcolata dall'arrivo: ${formatDuration(effectiveHours * 60)}. Per ripartenze il giorno dopo usa la modalità giorni.`
+                                  : "Arrivo non impostato: usa le ore come fallback manuale."}
+                              </p>
                             </div>
-                          </div>
+                            <div>
+                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ore</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={effectiveHours}
+                                  onChange={(event) => {
+                                    const hours = Math.max(0, Number(event.target.value) || 0);
+                                    updateWaypointPlanning(waypoint.id, {
+                                      stop_hours: hours,
+                                      stop_departure_time:
+                                        getDepartureTimeFromArrivalAndHours(arrivalDate, hours) || waypoint.stop_departure_time || null,
+                                      planned_stop_duration_minutes: hours * 60,
+                                    });
+                                  }}
+                                  className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                                />
+                                {STOP_HOURS_PRESETS.map((preset) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => applyHoursPreset(preset)}
+                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
+                                  >
+                                    {preset}h
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
                         )}
 
                         {stopUiMode === "nights" && (

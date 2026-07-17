@@ -71,7 +71,7 @@ export const buildWaypointFormState = (waypoint: VoyageWaypoint): WaypointFormSt
   stopMode: getWaypointStopUiMode(waypoint),
   stopHours: String(getEffectiveStopHoursDefault(waypoint)),
   stopNights: String(Math.max(1, Number(waypoint.stop_nights ?? 1))),
-  stopDeparture: (waypoint.stop_departure_time ?? DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5),
+  stopDeparture: waypoint.stop_departure_time ? waypoint.stop_departure_time.slice(0, 5) : "",
   eventDate: waypoint.event_date ?? "",
   eventTime: waypoint.event_time ? waypoint.event_time.slice(0, 5) : "",
 });
@@ -131,7 +131,7 @@ export function computeWaypointFormChanges(
       changes.stop_mode = "hours";
       changes.stop_hours = stopHours;
       changes.stop_nights = null;
-      changes.stop_departure_time = null;
+      changes.stop_departure_time = state.stopDeparture ? state.stopDeparture.slice(0, 5) : null;
       changes.planned_stop_duration_minutes = stopHours * 60;
     } else if (state.stopMode === "nights") {
       const time = (state.stopDeparture || DEFAULT_STOP_DEPARTURE_TIME).slice(0, 5);
