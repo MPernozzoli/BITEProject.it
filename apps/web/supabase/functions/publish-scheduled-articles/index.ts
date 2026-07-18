@@ -47,6 +47,22 @@ function isDryRun(req: Request): boolean {
   return url.searchParams.get('dry_run') === '1' || url.searchParams.get('dryRun') === 'true'
 }
 
+function runInBackground(task: Promise<unknown>, label: string): void {
+  const guardedTask = task.catch((error) => {
+    console.error(label, error)
+  })
+  const runtime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void }
+  }).EdgeRuntime
+
+  if (runtime?.waitUntil) {
+    runtime.waitUntil(guardedTask)
+    return
+  }
+
+  void guardedTask
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -124,6 +140,20 @@ Deno.serve(async (req) => {
     }
 
     publishedIds.push(row.id)
+
+    runInBackground((async () => {
+      const seoResponse = await fetch(`${supabaseUrl}/functions/v1/optimize-article-seo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ articleId: row.id }),
+      })
+      if (!seoResponse.ok) {
+        console.error('optimize-article-seo failed', row.id, await seoResponse.text())
+      }
+    })(), `optimize-article-seo ${row.id}`)
 
     try {
       const r1 = await fetch(`${supabaseUrl}/functions/v1/notify-article-publication`, {

@@ -69,6 +69,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._editorial_cron_secret_auth.sql` — aggiorna `public.invoke_editorial_edge_function()` per usare secret dedicati (`scheduled_articles_cron_secret`, `social_publish_cron_secret`) salvati in Supabase Vault e corrispondenti Edge secrets; fallback opzionale a `supabase_service_role_key`.
 - `..._voyage_candidates_do_not_hold_seats.sql` — aggiorna disponibilità e RPC booking: le candidature `requested`/`waitlisted` non occupano capacità, mentre i posti vengono scalati solo da richieste `admin_approved` o `user_confirmed`.
 - `..._voyage_booking_drafts.sql` — introduce `voyage_booking_drafts`, una bozza candidatura per utente/viaggio con `leg_ids`, `party_size`, `message` e `candidate_info`; RLS limita lettura/scrittura al proprietario, con lettura admin per audit/supporto.
+- `..._article_seo_optimizations.sql` — introduce `article_seo_optimizations`, tabella one-to-one con `logbook_articles` per SEO generata da IA (title/description social e meta, keyword, alt cover, frammenti JSON-LD, raccomandazioni, stato e audit modello). Lettura pubblica solo per articoli pubblicati, gestione admin/service-role.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -89,6 +90,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound; `inbound_emails.attachments` conserva metadata e URL firmati temporanei Resend, `sent_emails.attachments` conserva solo metadata degli allegati inviati → [[12 - Newsletter ed Email]]
 - `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
+- `article_seo_optimizations` — output SEO generato da `optimize-article-seo`; la pagina articolo lo usa per meta title/description, keyword e arricchimento JSON-LD quando `status = ready`, mentre la dashboard admin segnala i record `failed` → [[17 - Content Model]]
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 

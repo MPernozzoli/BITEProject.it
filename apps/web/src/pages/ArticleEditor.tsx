@@ -3,8 +3,8 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import AuthorSelector from "@/components/AuthorSelector";
-import type { Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop, Languages, Loader2 } from "lucide-react";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop, Languages, Loader2, Sparkles, Eye } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, resolveArticleRouteRange } from "@/lib/voyage-utils";
@@ -30,11 +30,39 @@ import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 import { getArticleTranslationGaps } from "@/lib/article-translation-gaps";
 import { EDITORIAL_TYPE_LABELS, type EditorialArticleType } from "@/lib/editorial-plan";
 import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
+import ArticleReader from "@/components/ArticleReader";
+import type { Language } from "@/lib/i18n";
 
 type ArticleLanguage = "en" | "it";
+type ArticleSeoOptimization = Database["public"]["Tables"]["article_seo_optimizations"]["Row"];
+type SeoRecommendations = {
+  contentGaps: string[];
+  onPage: string[];
+};
 
 const ARTICLE_DRAFT_STORAGE_PREFIX = "bite_article_editor_draft";
 const ADMIN_DASH_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
+
+const getStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+};
+
+const getSeoRecommendations = (value: Json | null | undefined): SeoRecommendations => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { contentGaps: [], onPage: [] };
+  }
+
+  return {
+    contentGaps: getStringList(value.content_gaps),
+    onPage: getStringList(value.on_page),
+  };
+};
+
+const formatSeoDate = (value: string | null): string | null => {
+  if (!value) return null;
+  return new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+};
 
 type ArticleEditorDraft = {
   titleEn: string;
@@ -119,6 +147,11 @@ const ArticleEditor = () => {
   const [pendingTranslationAction, setPendingTranslationAction] = useState<"draft" | "publish" | null>(null);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [aiTranslating, setAiTranslating] = useState(false);
+  const [seoOptimizing, setSeoOptimizing] = useState(false);
+  const [seoOptimization, setSeoOptimization] = useState<ArticleSeoOptimization | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLang, setPreviewLang] = useState<Language>("it");
+  const [previewAuthors, setPreviewAuthors] = useState<{ id: string; name: string | null; avatar_url: string | null }[]>([]);
   const [activeTab, setActiveTab] = useState<"en" | "it">("en");
   const [titleEn, setTitleEn] = useState("");
   const [titleIt, setTitleIt] = useState("");
@@ -186,6 +219,10 @@ const ArticleEditor = () => {
   const reopenLeaveAfterTranslationCancelRef = useRef(false);
   const ignoreNextPopRef = useRef(false);
   const draftStorageKey = `${ARTICLE_DRAFT_STORAGE_PREFIX}:${id ?? "new"}`;
+
+  useEffect(() => {
+    setPreviewLang(activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     setPersistedArticleStatus(null);
@@ -308,11 +345,33 @@ const ArticleEditor = () => {
       setAuthorIds([session.user.id]);
       setInitialPublishedAt(null);
       setServerScheduledAt(null);
+      setSeoOptimization(null);
       restoreDraftFromStorage();
     } else {
       loadArticle(session.user.id);
     }
   };
+
+  const loadSeoOptimization = useCallback(async (articleId?: string | null) => {
+    if (!articleId || articleId === "new") {
+      setSeoOptimization(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("article_seo_optimizations")
+      .select("*")
+      .eq("article_id", articleId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("SEO optimization load failed:", error);
+      setSeoOptimization(null);
+      return;
+    }
+
+    setSeoOptimization((data as ArticleSeoOptimization | null) ?? null);
+  }, []);
 
   const loadArticle = async (userId: string) => {
     const { data, error } = await supabase.from("logbook_articles").select("*").eq("id", id).single();
@@ -403,6 +462,7 @@ const ArticleEditor = () => {
     else setAuthorIds([userId]);
     if (tagsRes.data?.length) setSelectedTagIds(tagsRes.data.map((t) => t.tag_id));
 
+    await loadSeoOptimization(id);
     restoreDraftFromStorage();
   };
 
@@ -738,6 +798,74 @@ const ArticleEditor = () => {
     void runArticleAiTranslation();
   }, [runArticleAiTranslation]);
 
+  const runSeoOptimization = useCallback(async (
+    articleId?: string | null,
+    options?: { accessToken?: string; background?: boolean; force?: boolean; quiet?: boolean }
+  ): Promise<boolean> => {
+    const targetId = articleId && articleId !== "new" ? articleId : id;
+    if (!targetId || targetId === "new") {
+      if (!options?.quiet) toast.error("Salva l'articolo prima di generare la SEO.");
+      return false;
+    }
+
+    const showBusyState = !options?.background;
+    if (showBusyState) setSeoOptimizing(true);
+    try {
+      let data: unknown = null;
+      if (options?.background) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+        const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+        const accessToken = options.accessToken || (await supabase.auth.getSession()).data.session?.access_token;
+        if (!supabaseUrl || !publishableKey || !accessToken) throw new Error("Supabase session missing");
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/optimize-article-seo`, {
+          method: "POST",
+          keepalive: true,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: publishableKey,
+          },
+          body: JSON.stringify({ articleId: targetId, force: options.force === true }),
+        });
+        data = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message = data && typeof data === "object" && "error" in data ? String((data as { error?: unknown }).error) : "SEO optimization failed";
+          throw new Error(message);
+        }
+      } else {
+        const { data: invokeData, error } = await supabase.functions.invoke("optimize-article-seo", {
+          body: { articleId: targetId, force: options?.force === true },
+        });
+
+        if (error) throw error;
+        data = invokeData;
+      }
+
+      const payload = data as { error?: string; skipped?: string } | null;
+      if (payload?.error) throw new Error(payload.error);
+      if (payload?.skipped === "not_published") {
+        if (!options?.quiet) toast.info("La SEO automatica si genera solo sugli articoli pubblicati.");
+        return false;
+      }
+      if (payload?.skipped === "unchanged") {
+        await loadSeoOptimization(targetId);
+        if (!options?.quiet) toast.info("SEO già aggiornata: nessuna modifica da rigenerare.");
+        return true;
+      }
+
+      await loadSeoOptimization(targetId);
+      if (!options?.quiet) toast.success("Ottimizzazione SEO generata.");
+      return true;
+    } catch (error) {
+      console.error("SEO optimization failed:", error);
+      if (!options?.quiet) toast.error("Ottimizzazione SEO non riuscita.");
+      return false;
+    } finally {
+      if (showBusyState) setSeoOptimizing(false);
+    }
+  }, [id, loadSeoOptimization]);
+
   const saveArticle = useCallback(async (
     action: "draft" | "publish",
     options?: {
@@ -1015,6 +1143,8 @@ const ArticleEditor = () => {
       }
 
       if (finalStatus === "published" && articleId) {
+        void runSeoOptimization(articleId, { accessToken: live.access_token, background: true, quiet: true });
+
         try {
           await supabase.functions.invoke("notify-article-publication", {
             body: {
@@ -1082,6 +1212,7 @@ const ArticleEditor = () => {
     draftStorageKey,
     persistedArticleStatus,
     initialPublishedAt,
+    runSeoOptimization,
   ]);
 
   const translationOfferLabels = useMemo(() => {
@@ -1363,6 +1494,43 @@ const ArticleEditor = () => {
   }, [selectedVoyageId]);
 
   const selectedVoyage = allVoyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+  useEffect(() => {
+    if (!previewOpen || authorIds.length === 0) {
+      setPreviewAuthors([]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("public_profiles")
+        .select("id, name, avatar_url")
+        .in("id", authorIds);
+      if (cancelled) return;
+      if (error) {
+        console.error("Failed to load preview authors:", error);
+        setPreviewAuthors(authorIds.map((authorId) => ({ id: authorId, name: "Author", avatar_url: null })));
+        return;
+      }
+
+      const profileMap = new Map((data || []).map((profile) => [profile.id, profile]));
+      setPreviewAuthors(
+        authorIds.map((authorId) => {
+          const profile = profileMap.get(authorId);
+          return {
+            id: authorId,
+            name: profile?.name ?? "Author",
+            avatar_url: profile?.avatar_url ?? null,
+          };
+        })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authorIds, previewOpen]);
+
   const selectedVoyageCachedGeometry = useMemo(() => {
     const geometrySource = selectedVoyage?.cached_geometry as { coordinates?: [number, number][] } | null;
     return Array.isArray(geometrySource?.coordinates) ? geometrySource.coordinates : undefined;
@@ -1751,6 +1919,131 @@ const ArticleEditor = () => {
     associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null
       ? `${voyageWaypointOptions[voyageSegStart]?.label || `WP ${voyageSegStart + 1}`} → ${voyageWaypointOptions[voyageSegEnd]?.label || `WP ${voyageSegEnd + 1}`}`
       : null;
+  const previewTags = useMemo(
+    () => selectedTagIds
+      .map((tagId) => allTags.find((tag) => tag.id === tagId))
+      .filter((tag): tag is { id: string; name: string } => Boolean(tag)),
+    [allTags, selectedTagIds]
+  );
+  const previewStory = useMemo(
+    () => allStories.find((story) => story.id === selectedStoryId) || null,
+    [allStories, selectedStoryId]
+  );
+  const previewArticle = useMemo(() => {
+    const safeStart = voyageSegStart ?? voyageSegEnd;
+    const safeEnd = voyageSegEnd ?? voyageSegStart;
+    const normalizedStart =
+      selectedVoyageId && associationMode !== "full" && safeStart != null
+        ? Math.max(0, Math.min(safeStart, voyageWaypoints.length - 1))
+        : null;
+    const normalizedEnd =
+      selectedVoyageId && associationMode === "segment" && safeEnd != null
+        ? Math.max(0, Math.min(safeEnd, voyageWaypoints.length - 1))
+        : associationMode === "point"
+          ? normalizedStart
+          : null;
+    const startWaypointId = normalizedStart != null ? voyageWaypoints[normalizedStart]?.id ?? null : null;
+    const endWaypointId = normalizedEnd != null ? voyageWaypoints[normalizedEnd]?.id ?? startWaypointId : startWaypointId;
+
+    return {
+      id: id && id !== "new" ? id : "article-preview",
+      title_en: titleEn || titleIt || "Untitled article",
+      title_it: titleIt || titleEn || "Articolo senza titolo",
+      slug: slug || "preview",
+      slug_en: slugEn || slug || "preview",
+      slug_it: slugIt || slug || "anteprima",
+      excerpt_en: excerptEn,
+      excerpt_it: excerptIt,
+      content_en: contentEn,
+      content_it: contentIt,
+      article_map_scenes: articleMapScenes,
+      cover_image: coverImage || null,
+      instagram_story_image_en: instagramStoryImageEn || null,
+      instagram_story_image_it: instagramStoryImageIt || null,
+      instagram_story_use_cover_en: instagramStoryUseCoverEn,
+      instagram_story_use_cover_it: instagramStoryUseCoverIt,
+      category,
+      published_at: initialPublishedAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      view_count: 0,
+      story_id: selectedStoryId,
+      latitude,
+      longitude,
+      location_name: locationName || null,
+      voyage_id: selectedVoyageId,
+      voyage_segment_start: normalizedStart,
+      voyage_segment_end: normalizedEnd,
+      voyage_waypoint_start_id: startWaypointId,
+      voyage_waypoint_end_id: endWaypointId,
+      cover_focal_x: coverFocal.focalX,
+      cover_focal_y: coverFocal.focalY,
+      cover_zoom: coverFocal.zoom,
+    };
+  }, [
+    articleMapScenes,
+    associationMode,
+    category,
+    contentEn,
+    contentIt,
+    coverFocal,
+    coverImage,
+    excerptEn,
+    excerptIt,
+    id,
+    initialPublishedAt,
+    instagramStoryImageEn,
+    instagramStoryImageIt,
+    instagramStoryUseCoverEn,
+    instagramStoryUseCoverIt,
+    latitude,
+    locationName,
+    longitude,
+    selectedStoryId,
+    selectedVoyageId,
+    slug,
+    slugEn,
+    slugIt,
+    titleEn,
+    titleIt,
+    voyageSegEnd,
+    voyageSegStart,
+    voyageWaypoints,
+  ]);
+  const seoRecommendations = useMemo(
+    () => getSeoRecommendations(seoOptimization?.recommendations),
+    [seoOptimization?.recommendations]
+  );
+  const seoGeneratedAt = formatSeoDate(seoOptimization?.generated_at ?? null);
+  const seoUpdatedAt = formatSeoDate(seoOptimization?.updated_at ?? null);
+  const seoStatusMeta = useMemo(() => {
+    switch (seoOptimization?.status) {
+      case "ready":
+        return {
+          className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
+          label: "Pronta",
+        };
+      case "processing":
+        return {
+          className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-100",
+          label: "In generazione",
+        };
+      case "failed":
+        return {
+          className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-100",
+          label: "Da rivedere",
+        };
+      case "pending":
+        return {
+          className: "border-border bg-muted/40 text-muted-foreground",
+          label: "In coda",
+        };
+      default:
+        return {
+          className: "border-border bg-muted/40 text-muted-foreground",
+          label: persistedArticleStatus === "published" ? "Non generata" : "Non disponibile",
+        };
+    }
+  }, [persistedArticleStatus, seoOptimization?.status]);
 
   const renderInstagramStorySection = ({
     language,
@@ -1863,6 +2156,13 @@ const ArticleEditor = () => {
             <ArrowLeft size={16} /> Back
           </button>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans hover:bg-muted transition-colors"
+            >
+              <Eye size={14} /> Anteprima
+            </button>
             <button onClick={() => saveArticle("draft")} disabled={saving} className="inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans hover:bg-muted transition-colors disabled:opacity-50">
               <Save size={14} /> Save Draft
             </button>
@@ -1894,13 +2194,25 @@ const ArticleEditor = () => {
               <button
                 type="button"
                 onClick={() => void handleAiTranslateMissing()}
-                disabled={aiTranslating}
+                disabled={aiTranslating || seoOptimizing}
                 className="mb-1 inline-flex items-center gap-2 border border-border px-3 py-1.5 text-xs font-sans tracking-wide text-muted-foreground hover:text-foreground hover:border-accent transition-colors disabled:opacity-50"
                 title="Traduce solo i campi vuoti; il corpo mantiene struttura TipTap, titoli, media e didascalie al loro posto."
               >
                 {aiTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
                 Traduci campi vuoti (IT↔EN)
               </button>
+              {persistedArticleStatus === "published" && !isNew && (
+                <button
+                  type="button"
+                  onClick={() => void runSeoOptimization(id, { force: true })}
+                  disabled={saving || aiTranslating || seoOptimizing}
+                  className="mb-1 inline-flex items-center gap-2 border border-border px-3 py-1.5 text-xs font-sans tracking-wide text-muted-foreground hover:text-foreground hover:border-accent transition-colors disabled:opacity-50"
+                  title="Rigenera meta title, description, keyword e dati strutturati per l'articolo pubblicato."
+                >
+                  {seoOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  Ottimizza SEO
+                </button>
+              )}
             </div>
 
             {activeTab === "en" ? (
@@ -1995,6 +2307,132 @@ const ArticleEditor = () => {
               onCancel={() => setCoverCropOpen(false)}
               onConfirm={handleCoverCropConfirm}
             />
+
+            <div className="rounded-[18px] border border-border/80 bg-muted/20 p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">SEO IA</label>
+                  <p className="mt-1 text-[11px] font-sans text-muted-foreground">
+                    {seoGeneratedAt ? `Generata ${seoGeneratedAt}` : seoUpdatedAt ? `Aggiornata ${seoUpdatedAt}` : "Meta generati dopo la pubblicazione"}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-sans font-medium ${seoStatusMeta.className}`}>
+                  {seoStatusMeta.label}
+                </span>
+              </div>
+
+              {persistedArticleStatus !== "published" ? (
+                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
+                  La SEO automatica viene generata quando l'articolo viene pubblicato.
+                </p>
+              ) : !seoOptimization ? (
+                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
+                  Nessuna ottimizzazione SEO salvata. Usa il pulsante Ottimizza SEO per generarla manualmente.
+                </p>
+              ) : seoOptimization.status === "failed" ? (
+                <div className="space-y-3">
+                  <p className="text-xs font-sans leading-relaxed text-amber-800 dark:text-amber-100">
+                    {seoOptimization.error_message || "La generazione SEO non è riuscita."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void runSeoOptimization(id, { force: true })}
+                    disabled={saving || aiTranslating || seoOptimizing}
+                    className="inline-flex items-center gap-2 border border-amber-500/40 px-3 py-1.5 text-xs font-sans text-amber-800 transition-colors hover:border-amber-600 hover:text-foreground disabled:opacity-50 dark:text-amber-100"
+                  >
+                    {seoOptimizing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                    Riprova
+                  </button>
+                </div>
+              ) : seoOptimization.status === "processing" || seoOptimization.status === "pending" ? (
+                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
+                  Generazione in corso. La card si aggiorna dopo il prossimo caricamento o dopo una rigenerazione manuale.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">Italiano</p>
+                    <div>
+                      <p className="text-[10px] font-sans text-muted-foreground">Meta title</p>
+                      <p className="text-xs font-sans leading-snug text-foreground">{seoOptimization.title_it || "Non generato"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-sans text-muted-foreground">Meta description</p>
+                      <p className="text-xs font-sans leading-relaxed text-foreground/80">{seoOptimization.description_it || "Non generata"}</p>
+                    </div>
+                    {seoOptimization.keywords_it.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {seoOptimization.keywords_it.map((keyword) => (
+                          <span key={`it-${keyword}`} className="rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 border-t border-border/70 pt-3">
+                    <p className="text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">English</p>
+                    <div>
+                      <p className="text-[10px] font-sans text-muted-foreground">Meta title</p>
+                      <p className="text-xs font-sans leading-snug text-foreground">{seoOptimization.title_en || "Not generated"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-sans text-muted-foreground">Meta description</p>
+                      <p className="text-xs font-sans leading-relaxed text-foreground/80">{seoOptimization.description_en || "Not generated"}</p>
+                    </div>
+                    {seoOptimization.keywords_en.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {seoOptimization.keywords_en.map((keyword) => (
+                          <span key={`en-${keyword}`} className="rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <details className="border-t border-border/70 pt-3">
+                    <summary className="cursor-pointer text-xs font-sans text-muted-foreground hover:text-foreground">Social, alt e suggerimenti</summary>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <p className="text-[10px] font-sans text-muted-foreground">Social title IT / EN</p>
+                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.social_title_it || "Non generato"}</p>
+                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.social_title_en || "Not generated"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-sans text-muted-foreground">Alt cover IT / EN</p>
+                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.image_alt_it || "Non generato"}</p>
+                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.image_alt_en || "Not generated"}</p>
+                      </div>
+                      {(seoRecommendations.onPage.length > 0 || seoRecommendations.contentGaps.length > 0) && (
+                        <div className="space-y-2">
+                          {seoRecommendations.onPage.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-sans text-muted-foreground">On page</p>
+                              <ul className="list-disc space-y-1 pl-4 text-xs font-sans text-foreground/80">
+                                {seoRecommendations.onPage.map((item) => <li key={`on-${item}`}>{item}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {seoRecommendations.contentGaps.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-sans text-muted-foreground">Content gap</p>
+                              <ul className="list-disc space-y-1 pl-4 text-xs font-sans text-foreground/80">
+                                {seoRecommendations.contentGaps.map((item) => <li key={`gap-${item}`}>{item}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {seoOptimization.model && (
+                        <p className="text-[10px] font-sans text-muted-foreground">Modello: {seoOptimization.model}</p>
+                      )}
+                    </div>
+                  </details>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-3">
               <div>
@@ -2329,6 +2767,60 @@ const ArticleEditor = () => {
           </div>
         </div>
       </div>
+
+      {previewOpen && (
+        <div className="fixed inset-0 z-[80] bg-background">
+          <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:px-6">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Anteprima articolo</p>
+                <p className="text-sm font-sans text-foreground">
+                  {previewLang === "it" ? previewArticle.title_it : previewArticle.title_en}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex overflow-hidden border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewLang("it")}
+                    className={`px-3 py-2 text-xs font-sans transition-colors ${previewLang === "it" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    IT
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewLang("en")}
+                    className={`px-3 py-2 text-xs font-sans transition-colors ${previewLang === "en" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    EN
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(false)}
+                  className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  <X size={14} /> Chiudi
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="h-[calc(100vh-65px)] overflow-y-auto">
+            <ArticleReader
+              article={previewArticle as any}
+              authors={previewAuthors}
+              tags={previewTags}
+              story={previewStory as any}
+              linkedVoyage={selectedVoyage}
+              linkedVoyageWaypoints={voyageWaypoints}
+              lang={previewLang}
+              previewMode
+              previewLabel="Anteprima admin: i contenuti arrivano dalla bozza corrente e like/commenti non sono attivi."
+              shareUrl={`${window.location.origin}/logbook/${encodeURIComponent(slug || "preview")}`}
+            />
+          </div>
+        </div>
+      )}
 
       <AlertDialog open={publishChoiceOpen} onOpenChange={setPublishChoiceOpen}>
         <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">

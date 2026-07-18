@@ -18,6 +18,7 @@ tags: [frontend, componenti, ui]
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale articolo → [[14 - Mappe e Layer Geospaziale]]
 - `ArticleVoyageMediaWidget.tsx`
 - `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement
+- `ArticleReader.tsx` — renderer condiviso della pagina articolo: cover, metadati/autori, contenuto TipTap sanificato, scene mappa, media di viaggio, tag, engagement e sidebar. `ArticlePage.tsx` lo usa con side effect pubblici attivi; `ArticleEditor.tsx` lo usa per anteprima admin senza like/commenti/analytics.
 - `AuthorSelector.tsx`
 
 ## Profilo / social

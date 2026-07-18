@@ -12,6 +12,8 @@ Modello dati editoriale e geospaziale del progetto. Ogni entità ha ID semantico
 ### 📄 Articoli / logbook
 Campi chiave: `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{published_at, updated_at}`, `coordinates`, `route_association.*` (voyage_id, segment_start/end, waypoint_start/end_id/label, location_name, distance {NM, km}, temporal_span), `tags`, `entities_involved`, `linked_media`, `related_articles`, `machine_description`, `canonical_url`.
 
+SEO generata da IA: `article_seo_optimizations` è una tabella one-to-one per articoli pubblicati. Contiene `title_*`, `description_*`, social title/description, `keywords_*`, alt cover, `structured_data`, `recommendations`, `model`, `source_hash`, stato (`pending/processing/ready/failed`) e timestamp. La pagina pubblica usa il record `ready` per i meta tag e arricchisce il JSON-LD, senza modificare il contenuto editoriale; l'admin usa i record `failed` come warning non bloccante e `source_hash` evita rigenerazioni automatiche su contenuto invariato.
+
 ### ⛵ Voyage / segmenti di rotta
 `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{start,end}`, `coordinates.{departure,arrival}`, `route_association.{waypoint_count, geometry_points, route_type, status, distance, geojson_url, semantic_url}`, `entities_involved`, `linked_media`, `related_articles`, `related_waypoints`, `canonical_url`.
 

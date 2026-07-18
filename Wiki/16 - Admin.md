@@ -20,7 +20,7 @@ tags: [admin, cms, backoffice]
 | `/admin/media` | `AdminMedia.tsx` | libreria media/storage |
 | `/admin/mail` | `AdminMail.tsx` | casella di posta ordinaria `@biteproject.it` e automatiche `@mail.biteproject.it` → [[12 - Newsletter ed Email]] |
 | `/admin/trackers` | `AdminMapPresence.tsx` | presenza su mappa → [[14 - Mappe e Layer Geospaziale]] |
-| `/admin/article/:id` | `ArticleEditor.tsx` | editor articolo (TipTap) |
+| `/admin/article/:id` | `ArticleEditor.tsx` | editor articolo (TipTap) con anteprima full-screen |
 | `/profile` | `AdminProfile.tsx` | profilo |
 
 Sotto l'header, `/admin` monta `VoyageLiveWidget` (→ [[21 - Tracking Real-Time Viaggi]]): il widget del viaggio in corso, con i tasti "Parti ora"/"Arriva ora" per registrare le date effettive. Compare solo da 7 giorni prima della partenza prevista e fino a fine viaggio, quindi per la maggior parte dell'anno la dashboard resta invariata.
@@ -42,8 +42,11 @@ La PWA admin monta anche `AdminMobileNavigation` dal layout globale per utenti a
 
 ## Editor articoli
 - Basato su **TipTap 3** ([[02 - Stack Tecnologico]]): heading, image, link, youtube, text-align, color, underline, placeholder.
+- Il pulsante **Anteprima** apre una vista full-screen non persistente che costruisce l'articolo dallo stato corrente dell'editor e riusa `ArticleReader.tsx`: cover/focal point, corpo TipTap, ancore e scene mini-mappa, rotta/waypoint, media di viaggio, autori, storia e tag seguono la stessa struttura della pagina pubblica. In anteprima like/commenti e analytics restano disattivati.
 - Sanitizzazione: `apps/web/src/lib/sanitize-rich-html.ts` (dompurify).
-- Traduzione IT/EN: `translate-editor-content` ([[09 - Edge Functions]]) + `apps/web/src/lib/translate-editor-content.ts`; gap traduzioni evidenziati da `article-translation-gaps.ts`.
+- Traduzione IT/EN: `translate-editor-content` ([[09 - Edge Functions]]) + `apps/web/src/lib/translate-editor-content.ts`; la function chiama OpenAI Responses API server-side con `OPENAI_API_KEY` nei secret Supabase. Gap traduzioni evidenziati da `article-translation-gaps.ts`.
+- Ottimizzazione SEO IA: `optimize-article-seo` ([[09 - Edge Functions]]) genera i metadati SEO in background quando un articolo viene pubblicato o quando si applicano modifiche a un articolo già pubblicato. Se il contenuto non è cambiato rispetto all'ultimo tentativo registrato, la function salta la chiamata OpenAI; il pulsante manuale **Ottimizza SEO** per articoli pubblicati esistenti forza invece la rigenerazione. La sidebar dell'editor mostra il record SEO salvato: stato, data, meta title/description bilingue, keyword, social/alt e raccomandazioni.
+- La dashboard mostra un warning **SEO IA da rivedere** per gli ultimi record `article_seo_optimizations.status = failed`, così errori non bloccanti come credito API esaurito restano visibili all'admin.
 - Export Instagram story: `apps/web/src/lib/article-instagram-story.ts`.
 - L'editor articoli, il profilo admin, booking admin e `AdminVoyageManager` usano `useBeforeUnloadPrompt`: mantengono il warning di uscita su desktop, ma non registrano `beforeunload` su mobile/PWA per ridurre i reload al ritorno dal background. Le navigazioni interne restano protette dai rispettivi guard e draft locali.
 

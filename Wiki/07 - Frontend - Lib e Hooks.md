@@ -52,7 +52,7 @@ tags: [frontend, lib, hooks, logica]
 - `profile-avatar.ts`, `profile-completeness.ts`
 
 ### SEO / i18n / infra
-- `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]
+- `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]. `ArticlePage.tsx` preferisce `article_seo_optimizations` quando il record è `ready`, poi ricade sugli excerpt editoriali; `ArticleEditor.tsx` mostra lo stesso record in sidebar per controllo editoriale e retry manuale.
 - `pwa.ts` — service worker/PWA; viene registrato dopo il mount React per non bloccare il primo render.
 - `boot-splash-3d.ts` — splash 3D con three.js mantenuta nel codice ma non più collegata al bootstrap/route iniziale.
 - `hero-ready-event.ts` — evento legacy per readiness hero, non più usato per trattenere il caricamento della home.

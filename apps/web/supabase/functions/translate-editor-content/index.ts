@@ -7,7 +7,8 @@ const corsHeaders = {
 }
 
 const MAX_INPUT_CHARS = 100_000
-const DEFAULT_AI_MODEL = 'gpt-4o-mini'
+const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
+const DEFAULT_OPENAI_MODEL = 'gpt-5.6-luna'
 
 type Claims = Record<string, unknown> | null
 
@@ -75,41 +76,83 @@ function readString(value: unknown, max: number): string {
   return value.slice(0, max)
 }
 
-async function callAiJson(prompt: string, apiKey: string): Promise<Record<string, unknown>> {
-  const aiGatewayUrl = Deno.env.get('TRANSLATION_AI_GATEWAY_URL')?.trim()
-  const aiModel = Deno.env.get('TRANSLATION_AI_MODEL')?.trim() || DEFAULT_AI_MODEL
+function readOpenAiApiKey(): string {
+  return (
+    Deno.env.get('OPENAI_API_KEY')?.trim() ||
+    Deno.env.get('TRANSLATION_OPENAI_API_KEY')?.trim() ||
+    Deno.env.get('TRANSLATION_AI_API_KEY')?.trim() ||
+    ''
+  )
+}
 
-  if (!aiGatewayUrl) {
-    throw new Error('Translation AI gateway not configured')
+function readOpenAiModel(): string {
+  return (
+    Deno.env.get('TRANSLATION_OPENAI_MODEL')?.trim() ||
+    Deno.env.get('OPENAI_MODEL')?.trim() ||
+    Deno.env.get('TRANSLATION_AI_MODEL')?.trim() ||
+    DEFAULT_OPENAI_MODEL
+  )
+}
+
+function extractOpenAiOutputText(json: unknown): string | null {
+  if (isRecord(json) && typeof json.output_text === 'string') {
+    return json.output_text
   }
 
-  const res = await fetch(aiGatewayUrl, {
+  if (!isRecord(json) || !Array.isArray(json.output)) {
+    return null
+  }
+
+  const chunks: string[] = []
+  for (const outputItem of json.output) {
+    if (!isRecord(outputItem) || !Array.isArray(outputItem.content)) continue
+    for (const contentItem of outputItem.content) {
+      if (!isRecord(contentItem)) continue
+      if (typeof contentItem.text === 'string') {
+        chunks.push(contentItem.text)
+      }
+    }
+  }
+
+  return chunks.length > 0 ? chunks.join('') : null
+}
+
+async function callAiJson(prompt: string, apiKey: string): Promise<Record<string, unknown>> {
+  const model = readOpenAiModel()
+
+  const res = await fetch(OPENAI_RESPONSES_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: aiModel,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+      model,
+      input: [
+        {
+          role: 'system',
+          content:
+            'You are a precise bilingual editorial translator for BITE. Return only valid JSON that matches the requested shape.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      text: { format: { type: 'json_object' } },
     }),
   })
 
   if (!res.ok) {
     const t = await res.text()
-    console.error('AI Gateway error', res.status, t.slice(0, 800))
+    console.error('OpenAI Responses API error', res.status, t.slice(0, 800))
     if (res.status === 429) throw new Error('Rate limit exceeded')
     if (res.status === 402) throw new Error('AI credits exhausted')
-    throw new Error(`AI error (${res.status})`)
+    if (res.status === 401 || res.status === 403) throw new Error('OpenAI authorization failed')
+    throw new Error(`OpenAI error (${res.status})`)
   }
 
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  const text = json?.choices?.[0]?.message?.content
+  const json = await res.json()
+  const text = extractOpenAiOutputText(json)
   if (typeof text !== 'string') {
-    throw new Error('Invalid AI response')
+    throw new Error('Invalid OpenAI response')
   }
 
   try {
@@ -118,7 +161,7 @@ async function callAiJson(prompt: string, apiKey: string): Promise<Record<string
       ? (parsed as Record<string, unknown>)
       : {}
   } catch {
-    throw new Error('AI returned non-JSON')
+    throw new Error('OpenAI returned non-JSON')
   }
 }
 
@@ -371,14 +414,14 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const apiKey = Deno.env.get('TRANSLATION_AI_API_KEY')?.trim()
+  const apiKey = readOpenAiApiKey()
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
   if (!apiKey) {
-    return jsonResponse({ error: 'TRANSLATION_AI_API_KEY non configurata.' }, 503)
+    return jsonResponse({ error: 'OPENAI_API_KEY non configurata.' }, 503)
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)

@@ -33,6 +33,8 @@ project_id = "ekwloweuicrqjjgabfdp"
     verify_jwt = true
   [functions.translate-editor-content]
     verify_jwt = true
+  [functions.optimize-article-seo]
+    verify_jwt = true
   [functions.public-sitemap]
     verify_jwt = false
   [functions.public-llms]

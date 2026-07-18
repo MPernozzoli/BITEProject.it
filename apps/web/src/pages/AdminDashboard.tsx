@@ -27,6 +27,7 @@ import {
   UploadCloud,
   Wine,
   ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -75,6 +76,17 @@ interface Story {
   cover_image: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface SeoIssue {
+  article_id: string;
+  error_message: string | null;
+  updated_at: string;
+  logbook_articles?: {
+    title_en: string | null;
+    title_it: string | null;
+    slug: string | null;
+  } | null;
 }
 
 type ArticleListFilters = {
@@ -182,6 +194,7 @@ const AdminDashboard = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [voyages, setVoyages] = useState<VoyageSummary[]>([]);
+  const [seoIssues, setSeoIssues] = useState<SeoIssue[]>([]);
   const [pendingCandidates, setPendingCandidates] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
@@ -271,13 +284,19 @@ const AdminDashboard = () => {
     if (!userId && !isAdminDevBypassEnabled()) return;
 
     setLoading(true);
-    const [articlesRes, storiesRes, voyagesRes, candidatesRes] = await Promise.all([
+    const [articlesRes, storiesRes, voyagesRes, candidatesRes, seoIssuesRes] = await Promise.all([
       supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
       supabase.from("stories").select("*").order("created_at", { ascending: false }),
       supabase.from("voyages").select("id,name,name_en,name_it,type,status,is_published,sort_order").order("sort_order", { ascending: true }),
       (supabase as unknown as { from: (table: string) => { select: (columns?: string) => Promise<{ data: unknown; error: unknown }> } })
         .from("voyage_booking_requests")
         .select("status,is_crew,plan_change_status"),
+      supabase
+        .from("article_seo_optimizations")
+        .select("article_id,error_message,updated_at,logbook_articles(title_en,title_it,slug)")
+        .eq("status", "failed")
+        .order("updated_at", { ascending: false })
+        .limit(5),
     ]);
     const err = articlesRes.error || storiesRes.error || voyagesRes.error;
     if (err && isAuthFailureError(err)) {
@@ -289,6 +308,11 @@ const AdminDashboard = () => {
     if (articlesRes.data) setArticles(articlesRes.data as unknown as Article[]);
     if (storiesRes.data) setStories(storiesRes.data as Story[]);
     if (voyagesRes.data) setVoyages(voyagesRes.data as VoyageSummary[]);
+    if (seoIssuesRes.error) {
+      console.error("SEO dashboard warning fetch failed:", seoIssuesRes.error);
+    } else {
+      setSeoIssues((seoIssuesRes.data ?? []) as unknown as SeoIssue[]);
+    }
     // Booking chip badge: candidature still awaiting an admin decision across all voyages.
     const candidateRows = (candidatesRes.data as { status?: string; is_crew?: boolean; plan_change_status?: string }[] | null) || [];
     setPendingCandidates(
@@ -729,6 +753,45 @@ const AdminDashboard = () => {
             })}
           </div>
         </section>
+
+        {seoIssues.length > 0 && (
+          <section className="rounded-[28px] border border-amber-300/70 bg-amber-50/80 px-5 py-4 shadow-[0_14px_40px_rgba(180,83,9,0.08)]">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <AlertTriangle size={18} />
+                </span>
+                <div>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-amber-700">SEO IA da rivedere</p>
+                  <p className="mt-1 text-sm font-sans text-amber-950/80">
+                    Alcune ottimizzazioni SEO non sono state generate. Pubblicazione e salvataggio sono completati; puoi rilanciare dal pulsante nell'articolo.
+                  </p>
+                </div>
+              </div>
+              <div className="w-full space-y-2 md:max-w-xl">
+                {seoIssues.map((issue) => {
+                  const article = issue.logbook_articles;
+                  const title = article?.title_it || article?.title_en || "Articolo senza titolo";
+                  return (
+                    <Link
+                      key={issue.article_id}
+                      to={`/admin/article/${issue.article_id}`}
+                      className="flex items-center justify-between gap-4 rounded-[18px] border border-amber-200/80 bg-white/65 px-3 py-2 text-left transition-colors hover:bg-white"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-sans font-medium text-amber-950">{title}</span>
+                        <span className="block truncate text-xs font-sans text-amber-900/70">
+                          {issue.error_message || "Errore SEO IA non specificato"}
+                        </span>
+                      </span>
+                      <ArrowUpRight size={15} className="shrink-0 text-amber-700" />
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
 
         <Suspense fallback={null}>
           <VoyageLiveWidget />

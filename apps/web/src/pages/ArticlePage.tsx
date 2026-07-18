@@ -29,6 +29,7 @@ import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
+import ArticleReader from "@/components/ArticleReader";
 import {
   getArticleSceneCameraCenter,
   getArticleSceneAnchorId,
@@ -63,6 +64,21 @@ type StoryChapter = {
   title_en: string;
   title_it: string;
   published_at: string | null;
+};
+
+type ArticleSeoOptimization = {
+  status: string;
+  title_it: string | null;
+  title_en: string | null;
+  description_it: string | null;
+  description_en: string | null;
+  social_title_it: string | null;
+  social_title_en: string | null;
+  social_description_it: string | null;
+  social_description_en: string | null;
+  keywords_it: string[] | null;
+  keywords_en: string[] | null;
+  structured_data: Record<string, unknown> | null;
 };
 
 const ArticlePage = () => {
@@ -153,6 +169,21 @@ const ArticlePage = () => {
         .select("tag_id, tags(id, name)")
         .eq("article_id", article!.id);
       return (data || []).map((d: any) => d.tags).filter(Boolean);
+    },
+  });
+
+  const { data: seoOptimization = null } = useQuery({
+    queryKey: ["article-seo-optimization", article?.id],
+    enabled: Boolean(article?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("article_seo_optimizations")
+        .select("status, title_it, title_en, description_it, description_en, social_title_it, social_title_en, social_description_it, social_description_en, keywords_it, keywords_en, structured_data")
+        .eq("article_id", article!.id)
+        .eq("status", "ready")
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as ArticleSeoOptimization | null;
     },
   });
 
@@ -461,9 +492,22 @@ const ArticlePage = () => {
   useEffect(() => {
     if (!article) return;
 
+    const seoTitle =
+      (lang === "en" ? seoOptimization?.title_en : seoOptimization?.title_it) ||
+      title;
     const seoDescription =
+      (lang === "en" ? seoOptimization?.description_en : seoOptimization?.description_it) ||
       (lang === "en" ? article.excerpt_en : article.excerpt_it || article.excerpt_en) ||
       DEFAULT_DESCRIPTION;
+    const socialTitle =
+      (lang === "en" ? seoOptimization?.social_title_en : seoOptimization?.social_title_it) ||
+      seoTitle;
+    const socialDescription =
+      (lang === "en" ? seoOptimization?.social_description_en : seoOptimization?.social_description_it) ||
+      seoDescription;
+    const seoKeywords =
+      (lang === "en" ? seoOptimization?.keywords_en : seoOptimization?.keywords_it) ||
+      [];
     const authorNames = authors
       .map((author: any) => author?.name)
       .filter((name): name is string => typeof name === "string" && name.length > 0);
@@ -476,7 +520,7 @@ const ArticlePage = () => {
     );
 
     applySeo({
-      title: `${title} | BITE`,
+      title: `${seoTitle} | BITE`,
       description: seoDescription,
       pathname: articlePathForLang(article as any, lang),
       localizedPaths: articleLocalizedPaths(article as any),
@@ -486,15 +530,18 @@ const ArticlePage = () => {
         {
           "@context": "https://schema.org",
           "@type": "BlogPosting",
-          headline: title,
-          description: seoDescription,
+          ...(seoOptimization?.structured_data && typeof seoOptimization.structured_data === "object"
+            ? seoOptimization.structured_data
+            : {}),
+          headline: socialTitle,
+          description: socialDescription,
           url: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
           mainEntityOfPage: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
           image: imageUrls.length ? imageUrls : undefined,
           datePublished: article.published_at || undefined,
           dateModified: article.updated_at || article.published_at || undefined,
           articleSection: article.category || "Logbook",
-          keywords: tags.map((tag: any) => tag.name).filter(Boolean),
+          keywords: seoKeywords.length ? seoKeywords : tags.map((tag: any) => tag.name).filter(Boolean),
           author: authorNames.length
             ? authorNames.map((name) => ({
                 "@type": "Person",
@@ -516,7 +563,7 @@ const ArticlePage = () => {
         },
       ],
     });
-  }, [article, authors, lang, tags, title]);
+  }, [article, authors, lang, seoOptimization, tags, title]);
 
   useEffect(() => {
     if (!article) return;
@@ -632,244 +679,19 @@ const ArticlePage = () => {
   }
 
   return (
-    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
-      {article.cover_image && (
-        <section className="relative h-[42vh] md:h-[52vh] overflow-hidden mt-24 mx-4 md:mx-6 glass-frame rounded-[36px] p-2">
-          <div className="relative h-full overflow-hidden rounded-[30px]">
-            <img
-              src={article.cover_image}
-              alt=""
-              className="absolute inset-0 w-full max-w-none pointer-events-none"
-              style={coverStyle}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[rgba(12,20,31,0.72)] via-[rgba(12,20,31,0.18)] to-transparent pointer-events-none" />
-            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
-              <div className="max-w-4xl">
-                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl text-white [text-shadow:0_10px_34px_rgba(0,0,0,0.34)]">
-                  {title}
-                </h1>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <div className="page-section !pt-4 md:!pt-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-10 lg:gap-12">
-            <article className="min-w-0 glass-panel rounded-[34px] p-6 md:p-8 lg:p-10">
-              <Link
-                to="/logbook"
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
-              >
-                <ArrowLeft size={14} /> {lang === "it" ? "Torna al diario" : "Back to Logbook"}
-              </Link>
-
-              {!article.cover_image && (
-                <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-8">{title}</h1>
-              )}
-
-              {story && (
-                <Link
-                  to={storyPathForLang(story as any, lang)}
-                  className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group"
-                >
-                  <BookOpen size={16} className="text-accent flex-shrink-0" />
-                  <div>
-                    <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
-                      {lang === "it" ? "Parte della storia" : "Part of story"}
-                    </span>
-                    <p className="editorial-heading text-sm group-hover:text-accent transition-colors">
-                      {lang === "en" ? story.title_en : (story.title_it || story.title_en)}
-                    </p>
-                  </div>
-                </Link>
-              )}
-
-              {story && (chapterPrevNext.prev || chapterPrevNext.next) && (
-                <nav
-                  className="flex flex-col sm:flex-row sm:items-stretch gap-3 mb-8"
-                  aria-label={lang === "it" ? "Navigazione capitoli" : "Chapter navigation"}
-                >
-                  {chapterPrevNext.prev ? (
-                    <Link
-                      to={articlePathForLang(chapterPrevNext.prev as any, lang)}
-                      title={prevTitle}
-                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors"
-                    >
-                      <ChevronLeft size={18} className="shrink-0 text-accent" />
-                      <span className="min-w-0">
-                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
-                          {lang === "it" ? "Precedente" : "Previous"}
-                        </span>
-                        <span className="block line-clamp-2 leading-snug">{prevTitle}</span>
-                      </span>
-                    </Link>
-                  ) : (
-                    <div className="flex-1 hidden sm:block" aria-hidden />
-                  )}
-                  {chapterPrevNext.next ? (
-                    <Link
-                      to={articlePathForLang(chapterPrevNext.next as any, lang)}
-                      title={nextTitle}
-                      className="glass-panel-soft rounded-[24px] flex-1 inline-flex items-center justify-end gap-2 px-4 py-3 text-sm font-sans text-foreground hover:border-accent transition-colors sm:text-right"
-                    >
-                      <span className="min-w-0 order-2 sm:order-1">
-                        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5 sm:text-right">
-                          {lang === "it" ? "Successivo" : "Next"}
-                        </span>
-                        <span className="block line-clamp-2 leading-snug sm:text-right">{nextTitle}</span>
-                      </span>
-                      <ChevronRight size={18} className="shrink-0 text-accent order-1 sm:order-2" />
-                    </Link>
-                  ) : null}
-                </nav>
-              )}
-
-              <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-3 p-4 md:p-5 mb-8">
-                  {authors.map((author: any) => (
-                    <Link
-                      key={author.id}
-                      to={`/profile/${author.id}`}
-                      className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors"
-                    >
-                      <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
-                        <ProfileAvatar
-                          name={author.name || "Anonymous"}
-                          avatarUrl={author.avatar_url || undefined}
-                          imgClassName="h-full w-full object-cover"
-                          fallback={<User size={12} className="text-muted-foreground" />}
-                        />
-                      </span>
-                      <span>{author.name}</span>
-                    </Link>
-                  ))}
-                  {dateLabel && (
-                    <span className="glass-chip inline-flex items-center px-3 py-2 text-xs font-sans text-muted-foreground">
-                      {lang === "it" ? "Pubblicato il " : "Published "}
-                      <time className="ml-1" dateTime={article.published_at || undefined}>{dateLabel}</time>
-                    </span>
-                  )}
-                <LiveReadCounter count={views} lang={lang} />
-              </div>
-
-              {contentNodes.length > 0 && (
-                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
-                    {contentNodes.map((node, index) => {
-                      const blockHtml = sanitizeRichHtml(
-                        generateHTML(
-                          { type: "doc", content: [node] } as Parameters<typeof generateHTML>[0],
-                          articleContentExtensions
-                        )
-                      );
-
-                      return (
-                        <div
-                          key={`article-block-${index}`}
-                          ref={(element) => {
-                            articleBlockRefs.current[index] = element;
-                          }}
-                          data-article-block-index={index}
-                          dangerouslySetInnerHTML={{ __html: blockHtml }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {contentNodes.length === 0 && htmlContent && (
-                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div
-                    className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic"
-                    dangerouslySetInnerHTML={{ __html: htmlContent }}
-                  />
-                </div>
-              )}
-              {contentRenderFailed && (
-                <p className="text-sm font-sans text-muted-foreground">
-                  {lang === "it"
-                    ? "Il contenuto di questo articolo non puo essere mostrato al momento."
-                    : "This article content cannot be displayed right now."}
-                </p>
-              )}
-
-              <div
-                id="article-engagement-panel"
-                className="glass-panel-soft rounded-[24px] flex items-center gap-6 mt-12 p-4 md:p-5 scroll-mt-28"
-              >
-                <LikeButton articleId={article.id} />
-                <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
-              </div>
-
-              <CommentSection
-                articleId={article.id}
-                focusCommentId={focusedCommentId}
-                onFocusHandled={handleCommentFocusHandled}
-              />
-
-              {tags.length > 0 && (
-                <footer className="mt-14">
-                  <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
-                    {lang === "it" ? "Hashtag" : "Tags"}
-                  </p>
-                  <div className="glass-panel-soft rounded-[24px] flex flex-wrap gap-2 p-4">
-                    {tags.map((tag: any) => (
-                      <span
-                        key={tag.id}
-                        className="glass-chip text-xs font-sans px-2.5 py-1 text-muted-foreground"
-                      >
-                        #{tag.name}
-                      </span>
-                    ))}
-                  </div>
-                </footer>
-              )}
-            </article>
-
-            <aside className="min-w-0 space-y-8">
-              {shouldShowMapWidget && (
-                <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1 space-y-8">
-                  <LazyArticleMapAside
-                    latitude={fallbackSceneCoordinates?.latitude ?? article.latitude ?? 0}
-                    longitude={fallbackSceneCoordinates?.longitude ?? article.longitude ?? 0}
-                    title={title}
-                    scenes={effectiveScenes}
-                    activeSceneId={activeSceneId ?? effectiveScenes[0]?.id ?? null}
-                    camera={mapCamera ?? (fallbackSceneCoordinates ? {
-                      latitude: fallbackSceneCoordinates.latitude,
-                      longitude: fallbackSceneCoordinates.longitude,
-                      zoom: hasGeo ? 7 : 6,
-                    } : null)}
-                    primaryRouteCoordinates={primaryRouteCoordinates}
-                    distanceValue={articleRouteDistance?.value ?? null}
-                    distanceUnit={articleRouteDistance?.unit ?? null}
-                  />
-                  {articleVoyageMediaItems.length > 0 && (
-                    <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
-                  )}
-                  <div>
-                    <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
-                  </div>
-                </div>
-              )}
-              {!shouldShowMapWidget && (
-                <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
-                  {articleVoyageMediaItems.length > 0 && (
-                    <div className="mb-8">
-                      <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />
-                    </div>
-                  )}
-                  <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />
-                </div>
-              )}
-            </aside>
-          </div>
-
-          <ArticleRelatedSection articleId={article.id} tagIds={tags.map((t: any) => t.id)} lang={lang} />
-        </div>
-      </div>
-    </div>
+    <ArticleReader
+      article={article as any}
+      authors={authors as any}
+      tags={tags as any}
+      story={story as any}
+      storyChapters={storyChapters}
+      linkedVoyage={linkedVoyage}
+      linkedVoyageWaypoints={linkedVoyageWaypoints}
+      lang={lang}
+      focusCommentId={focusedCommentId}
+      onCommentFocusHandled={handleCommentFocusHandled}
+      shareUrl={shareUrl}
+    />
   );
 };
 

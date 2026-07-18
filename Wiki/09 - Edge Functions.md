@@ -5,7 +5,7 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ⬅️ [[Home]] · sorgente: `apps/web/supabase/functions/` · config JWT in `apps/web/supabase/config.toml`
 
-29 funzioni serverless Supabase (Deno). Raggruppate per dominio:
+30 funzioni serverless Supabase (Deno). Raggruppate per dominio:
 
 ## 📧 Email transazionale & sistema → [[12 - Newsletter ed Email]]
 - `send-transactional-email` (verify_jwt) — invio email transazionali
@@ -40,7 +40,8 @@ tags: [backend, edge-functions, serverless, supabase]
 - `social-oauth-start`, `social-oauth-callback` — OAuth social publishing. Instagram usa il flusso **Instagram API with Instagram Login**: redirect su `https://www.instagram.com/oauth/authorize`, scope `instagram_business_basic` + `instagram_business_content_publish`, exchange su `api.instagram.com/oauth/access_token` e long-lived token su `graph.instagram.com/access_token`. La function richiede `SOCIAL_OAUTH_STATE_SECRET`, `SOCIAL_OAUTH_CALLBACK_URL`, `SOCIAL_OAUTH_FRONTEND_URL` e, per Instagram, `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` come secret Supabase.
 - `instagram-metrics` — endpoint pubblico per `apps/pack`: legge server-side solo la connessione OAuth del canale `instagram_dogs`, aggiorna `pack.external_metrics_cache` e restituisce metriche compatte per il sito cani. Se il profilo non è ancora collegato o Instagram fallisce, Pack mantiene lo snapshot statico.
 - `publish-social-queue` — coda pubblicazione social. Pubblica i target social scaduti usando slot locale o `publish_at`, salva `platform_post_id`, permalink e `published_at`, quindi sincronizza snapshot in `editorial_post_insights`. Oggi il publish automatico copre Instagram image/reel/story e YouTube video/short con token OAuth collegato; TikTok viene marcato con errore strutturato finché non è completato il flusso Direct Post/provider review. La function supporta `dry_run=1`, usa il secret dedicato `SOCIAL_PUBLISH_CRON_SECRET` / `social_publish_cron_secret` ed è schedulata via `pg_cron` ogni 5 minuti.
-- `translate-editor-content` — traduzione contenuti editor (IT/EN)
+- `translate-editor-content` — traduzione contenuti editor (IT/EN) via OpenAI Responses API; legge `OPENAI_API_KEY` dai secret Supabase Functions e usa `TRANSLATION_OPENAI_MODEL` opzionale (default `gpt-5.6-luna`).
+- `optimize-article-seo` — genera ottimizzazione SEO bilingue per articoli pubblicati via OpenAI Responses API: meta title/description, social copy, keyword, alt cover, suggerimenti e frammenti JSON-LD. Viene invocata in background dall'editor su pubblicazione/edit e dal publish programmato `publish-scheduled-articles`; salta gli articoli già processati se `source_hash` non cambia, mentre il pulsante manuale "Ottimizza SEO" forza la rigenerazione.
 - `contact-form-submit` — invio form contatti
 
 ## 👤 Profilo & storage

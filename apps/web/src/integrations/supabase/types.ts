@@ -449,6 +449,92 @@ export type Database = {
           },
         ]
       }
+      article_seo_optimizations: {
+        Row: {
+          article_id: string
+          created_at: string
+          description_en: string | null
+          description_it: string | null
+          error_message: string | null
+          generated_at: string | null
+          image_alt_en: string | null
+          image_alt_it: string | null
+          keywords_en: string[]
+          keywords_it: string[]
+          model: string | null
+          raw_response: Json
+          recommendations: Json
+          social_description_en: string | null
+          social_description_it: string | null
+          social_title_en: string | null
+          social_title_it: string | null
+          source_hash: string | null
+          status: string
+          structured_data: Json
+          title_en: string | null
+          title_it: string | null
+          updated_at: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          error_message?: string | null
+          generated_at?: string | null
+          image_alt_en?: string | null
+          image_alt_it?: string | null
+          keywords_en?: string[]
+          keywords_it?: string[]
+          model?: string | null
+          raw_response?: Json
+          recommendations?: Json
+          social_description_en?: string | null
+          social_description_it?: string | null
+          social_title_en?: string | null
+          social_title_it?: string | null
+          source_hash?: string | null
+          status?: string
+          structured_data?: Json
+          title_en?: string | null
+          title_it?: string | null
+          updated_at?: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          description_en?: string | null
+          description_it?: string | null
+          error_message?: string | null
+          generated_at?: string | null
+          image_alt_en?: string | null
+          image_alt_it?: string | null
+          keywords_en?: string[]
+          keywords_it?: string[]
+          model?: string | null
+          raw_response?: Json
+          recommendations?: Json
+          social_description_en?: string | null
+          social_description_it?: string | null
+          social_title_en?: string | null
+          social_title_it?: string | null
+          source_hash?: string | null
+          status?: string
+          structured_data?: Json
+          title_en?: string | null
+          title_it?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_seo_optimizations_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: true
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       editorial_media_assets: {
         Row: {
           created_at: string
