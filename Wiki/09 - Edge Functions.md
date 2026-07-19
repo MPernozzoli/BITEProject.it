@@ -9,8 +9,10 @@ tags: [backend, edge-functions, serverless, supabase]
 
 ## 📧 Email transazionale & sistema → [[12 - Newsletter ed Email]]
 - `send-transactional-email` (verify_jwt) — invio email transazionali
+- `dispatch-voyage-availability-updates` (verify_jwt) — invia gli aggiornamenti informativi su nuovi viaggi/tratte tornate disponibili, leggendo `voyage_availability_notifications`
 - `preview-transactional-email` (verify_jwt) — anteprima template
 - `process-email-queue` (verify_jwt) — worker coda email con invio Resend
+- Il cron DB `process-email-queue` lo invoca ogni 5 minuti via `invoke_email_queue_worker()` con `EMAIL_QUEUE_CRON_SECRET` / `email_queue_cron_secret`; il worker richiama prima `dispatch-voyage-booking-notifications` e `dispatch-voyage-availability-updates`, poi spedisce le email accodate.
 - `auth-email-hook` (no jwt, bearer `AUTH_EMAIL_HOOK_SECRET`) — hook email di autenticazione Supabase (signup, recovery, magic-link…)
 - `handle-email-suppression` (no jwt, bearer interno o service-role), `handle-email-unsubscribe` — bounce/unsubscribe
 - Template in `_shared/email-templates/` (signup, recovery, invite, magic-link, email-change, reauthentication) e `_shared/transactional-email-templates/`; i transazionali condividono `theme.tsx` per shell editoriale, card, pill, detail row, route box, callout e highlight importi. `voyage-briefing` gestisce le due mail briefing viaggio, incluso il visual delle prese tipo L/F nel secondo briefing.
@@ -25,6 +27,7 @@ tags: [backend, edge-functions, serverless, supabase]
 ## 🔔 Notifiche & engagement
 - `dispatch-engagement-notifications` — like/commenti/letture
 - `dispatch-voyage-booking-notifications` — notifiche prenotazioni, pagamenti, cambi planning e briefing viaggio; per gli eventi admin invia anche Web Push agli admin iscritti → [[13 - Booking Voyage]]
+- `dispatch-voyage-availability-updates` — email non commerciali per utenti che hanno chiesto aggiornamenti su nuovi voyage partecipabili o disponibilità riaperta → [[13 - Booking Voyage]]
 - `vapid-public-key` — chiave push Web Push
 
 ## 🌐 Layer semantico pubblico → [[15 - Semantic Layer (AI Agents)]]

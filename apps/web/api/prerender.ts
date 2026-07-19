@@ -84,10 +84,10 @@ const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: 
     },
   },
   "/collaborations": {
-    title: { en: "Sailing Partnerships and Collaborations | BITE", it: "Partnership nautiche e collaborazioni | BITE" },
+    title: { en: "Collaborations, Field Research and Creator Projects | BITE", it: "Collaborazioni, ricerca sul campo e creator project | BITE" },
     description: {
-      en: "Sailing partnerships, marine gear collaborations and editorial projects with BITE aboard S/Y Spritz: field-tested products, reviews, stories and content from real use at sea.",
-      it: "Partnership nautiche, collaborazioni marine e progetti editoriali con BITE a bordo di S/Y Spritz: prodotti testati in mare, recensioni, storie e contenuti da uso reale.",
+      en: "Collaborate with BITE aboard S/Y Spritz on field research at sea, citizen science, creator projects, editorial stories, brand partnerships and real-use documentation.",
+      it: "Collabora con BITE a bordo di S/Y Spritz su ricerca sul campo in mare, citizen science, creator project, storie editoriali, brand partnership e documentazione da uso reale.",
     },
   },
   "/contact": {
@@ -222,30 +222,30 @@ const STATIC_ROUTE_SECTIONS: Partial<Record<string, Record<Lang, HtmlSection[]>>
   "/collaborations": {
     en: [
       {
-        heading: "Sailing partnerships",
-        body: "BITE collaborates on marine gear, sailing hardware, marine electronics, connectivity, expedition clothing, pet gear for life aboard, sustainability, repair and self-sufficiency.",
+        heading: "Field research at sea",
+        body: "BITE is open to collaborations with researchers, universities and citizen-science teams for observations, sampling protocols, route-based data stories and public research connected to the sea.",
       },
       {
-        heading: "Editorial collaborations",
-        body: "Collaborations can include long-form articles, photo essays, technical reviews, video content and social storytelling based on real daily use aboard S/Y Spritz.",
+        heading: "Creator and editorial projects",
+        body: "Collaborations can include other creators, photographers, writers, filmmakers and communities, including projects that are not strictly nautical but make sense aboard or along the route.",
       },
       {
-        heading: "Useful search intents",
-        body: "This page is relevant for sailing partnerships, nautical collaborations, marine gear collaborations, partnership nautica, collaborazioni nautiche and editorial projects connected to life at sea.",
+        heading: "Brands and real-use documentation",
+        body: "Brand partnerships are welcome when products or services have a real reason to be aboard and can be documented honestly through field notes, stories, reviews or social formats.",
       },
     ],
     it: [
       {
-        heading: "Partnership nautiche",
-        body: "BITE collabora su attrezzatura nautica, ferramenta di bordo, elettronica marina, connettività, abbigliamento tecnico, accessori per animali a bordo, sostenibilità, riparazione e autosufficienza.",
+        heading: "Ricerca sul campo in mare",
+        body: "BITE è aperto a collaborazioni con ricercatori, università e team di citizen science per osservazioni, protocolli di campionamento, racconti basati su dati di rotta e ricerca pubblica legata al mare.",
       },
       {
-        heading: "Collaborazioni editoriali",
-        body: "Le collaborazioni possono includere articoli di lunga forma, reportage fotografici, recensioni tecniche, contenuti video e storytelling social basati sull'uso quotidiano reale a bordo di S/Y Spritz.",
+        heading: "Creator e progetti editoriali",
+        body: "Le collaborazioni possono includere altri creator, fotografi, autori, filmmaker e community, anche quando il progetto non è strettamente nautico ma ha senso a bordo o lungo la rotta.",
       },
       {
-        heading: "Intenti di ricerca",
-        body: "Questa pagina è rilevante per partnership nautica, collaborazioni nautiche, collaborazioni marine, sailing partnerships, marine gear collaborations e progetti editoriali legati alla vita in mare.",
+        heading: "Brand e documentazione da uso reale",
+        body: "Le partnership con brand sono benvenute quando prodotti o servizi hanno un motivo reale per essere a bordo e possono essere documentati con onestà tramite note dal campo, storie, review o formati social.",
       },
     ],
   },
@@ -292,12 +292,13 @@ const buildStaticJsonLd = (lang: Lang, path: string): Record<string, unknown> | 
       isPartOf: { "@id": `${SITE_URL}/#website` },
       publisher: { "@id": `${SITE_URL}/#organization` },
       about: [
-        "partnership nautica",
-        "collaborazioni nautiche",
+        "ricerca sul campo in mare",
+        "citizen science",
+        "collaborazioni creator",
+        "field research at sea",
+        "creator collaborations",
         "sailing partnerships",
-        "marine gear collaborations",
-        "attrezzatura nautica",
-        "elettronica marina",
+        "brand partnerships",
       ],
     };
   }

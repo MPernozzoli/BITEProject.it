@@ -40,6 +40,7 @@ Mail admin e invio Resend:
 - `RESEND_API_KEY` in Vercel per `/api/email/send` e webhook enrichment.
 - `RESEND_WEBHOOK_SECRET` in Vercel per verificare `apps/web/api/webhooks/email/inbound`.
 - `RESEND_API_KEY` anche tra i secret Supabase Functions: `process-email-queue` lo usa per spedire auth email, newsletter e transazionali.
+- `EMAIL_QUEUE_CRON_SECRET` tra i secret Supabase Functions, con lo stesso valore in Supabase Vault come `email_queue_cron_secret`: autorizza il cron DB `process-email-queue` senza usare la service-role key.
 - `AUTH_EMAIL_HOOK_SECRET` tra i secret Supabase Functions se `auth-email-hook` viene chiamata come hook HTTP con bearer condiviso.
 - `EMAIL_SUPPRESSION_WEBHOOK_SECRET` tra i secret Supabase Functions solo se `handle-email-suppression` viene esposto a un caller interno non service-role.
 - `OPENAI_API_KEY` tra i secret Supabase Functions per i flussi IA editoriali (`translate-editor-content`, `optimize-article-seo`). `TRANSLATION_OPENAI_MODEL` e `SEO_OPENAI_MODEL` sono opzionali; se assenti le function usano `gpt-5.6-luna`. Le vecchie variabili `TRANSLATION_AI_API_KEY` / `TRANSLATION_AI_MODEL` restano accettate solo come fallback di transizione per la traduzione.

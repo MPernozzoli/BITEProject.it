@@ -89,8 +89,8 @@ const translations: Translations = {
 
   // Collaborations
   "collab.label": { en: "Work With Us", it: "Lavora con noi" },
-  "collab.title": { en: "Partnerships built\non shared values.", it: "Partnership costruite\nsu valori condivisi." },
-  "collab.text": { en: "We work with brands that align with our principles — durability, honesty, function, and respect. If your product belongs on a boat that actually sails, we should talk.", it: "Lavoriamo con brand che condividono i nostri principi — durabilità, onestà, funzionalità e rispetto. Se il tuo prodotto ha un posto su una barca che davvero naviga, dovremmo parlarne." },
+  "collab.title": { en: "Bring us an idea\nworth taking to sea.", it: "Portaci un'idea\nda portare in mare." },
+  "collab.text": { en: "We collaborate with brands, researchers, creators and organizations when there is a real project to build: useful, honest, well credited and possible aboard a boat that actually moves.", it: "Collaboriamo con brand, ricercatori, creator e organizzazioni quando c'è un progetto reale da costruire: utile, onesto, ben riconosciuto e possibile a bordo di una barca che naviga davvero." },
   "collab.cta": { en: "Start a Conversation", it: "Inizia una conversazione" },
 
   // Newsletter
@@ -146,14 +146,16 @@ const translations: Translations = {
 
   // Collaborations Page
   "collab.page.title": { en: "Collaborations", it: "Collaborazioni" },
-  "collab.page.subtitle": { en: "We work with brands and organizations whose values match ours.", it: "Lavoriamo con brand e organizzazioni i cui valori corrispondono ai nostri." },
+  "collab.page.subtitle": { en: "BITE is a boat, a logbook and a field platform. We are open to collaborations with researchers, creators, brands and organizations when the idea has a real reason to exist at sea.", it: "BITE è una barca, un diario di bordo e una piattaforma sul campo. Siamo aperti a collaborazioni con ricercatori, creator, brand e organizzazioni quando l'idea ha un motivo reale per esistere in mare." },
   "collab.who.title": { en: "Who we are.", it: "Chi siamo." },
-  "collab.who.text": { en: "We are the crew behind BITE — a real sailing and storytelling project with a growing audience of people interested in intentional living, self-sufficiency, technical skills, and honest documentation of life at sea.", it: "Siamo l'equipaggio dietro BITE — un progetto reale di navigazione e narrazione con un pubblico in crescita di persone interessate a una vita intenzionale, all'autosufficienza, alle competenze tecniche e alla documentazione onesta della vita in mare." },
+  "collab.who.text": { en: "We are the crew behind BITE: a small sailing project aboard S/Y Spritz, built around routes, daily documentation, practical problem solving and the reality of living and working on the water.", it: "Siamo l'equipaggio dietro BITE: un piccolo progetto di navigazione a bordo di S/Y Spritz, costruito intorno a rotte, documentazione quotidiana, problemi pratici e vita reale sull'acqua." },
   "collab.content.title": { en: "What we create.", it: "Cosa creiamo." },
-  "collab.content.text": { en: "Long-form articles, photo essays, technical reviews, video content, and social media storytelling — all rooted in genuine daily use aboard a working sailboat.", it: "Articoli di lunga forma, reportage fotografici, recensioni tecniche, contenuti video e storytelling sui social — tutto radicato nell'uso quotidiano genuino a bordo di una barca a vela che naviga davvero." },
-  "collab.values.title": { en: "What we look for.", it: "Cosa cerchiamo." },
-  "collab.values.text": { en: "We only partner with brands whose products we would genuinely use aboard. No generic sponsorships. No forced endorsements. Every collaboration must feel natural to our audience and honest to our experience.", it: "Collaboriamo solo con brand i cui prodotti useremmo davvero a bordo. Nessuna sponsorizzazione generica. Nessuna promozione forzata. Ogni collaborazione deve risultare naturale per il nostro pubblico e onesta rispetto alla nostra esperienza." },
-  "collab.areas.title": { en: "Areas of interest", it: "Aree di interesse" },
+  "collab.content.text": { en: "We can turn a collaboration into field notes, route-based stories, photo essays, technical diaries, social formats, data explainers, interviews or documentation from real use aboard. The format depends on the idea, not on a fixed sponsorship package.", it: "Possiamo trasformare una collaborazione in note dal campo, racconti legati alle rotte, reportage fotografici, diari tecnici, formati social, spiegazioni basate su dati, interviste o documentazione da uso reale a bordo. Il formato dipende dall'idea, non da un pacchetto sponsorship fisso." },
+  "collab.forms.title": { en: "Ways we can work together.", it: "Modi in cui possiamo lavorare insieme." },
+  "collab.values.title": { en: "How we choose projects.", it: "Come scegliamo i progetti." },
+  "collab.values.text": { en: "We are deliberately open, but not indiscriminate. A good collaboration should respect the audience, the sea, the limits of the boat and the work of everyone involved.", it: "Siamo volutamente aperti, ma non indistinti. Una buona collaborazione deve rispettare il pubblico, il mare, i limiti della barca e il lavoro di tutte le persone coinvolte." },
+  "collab.areas.title": { en: "Open areas", it: "Aree aperte" },
+  "collab.areas.text": { en: "These are not requirements or a closed shopping list. They are starting points for ideas that could make sense aboard or along the route.", it: "Non sono requisiti o una lista chiusa della spesa. Sono punti di partenza per idee che potrebbero avere senso a bordo o lungo la rotta." },
 
   // Contact Page
   "contact.title": { en: "Get in touch.", it: "Scrivici." },

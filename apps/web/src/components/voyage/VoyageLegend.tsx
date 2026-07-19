@@ -424,8 +424,8 @@ const VoyageLegend = ({
                     : "Joining isn't open yet for individual legs.")
                   : hasAvailableLegs
                     ? (lang === "it"
-                      ? "Premi «Partecipa» per scegliere le tue tappe e i dettagli."
-                      : "Tap “Join” to choose your stops and details.")
+                      ? "Premi «Partecipa» per scegliere le tue tratte e i dettagli."
+                      : "Tap “Join” to choose your legs and details.")
                     : (lang === "it"
                       ? "Le tratte esistono, ma al momento non risultano posti disponibili."
                       : "Legs exist, but no seats are currently available.")}

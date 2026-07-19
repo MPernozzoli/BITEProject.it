@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
+import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
@@ -57,6 +57,18 @@ import {
 } from "@/lib/booking-utils";
 
 type RequestBookingResult = { booking_request_id: string; booking_status: BookingRequest["status"] };
+type VoyageAvailabilityWatch = {
+  id: string;
+  profile_id: string;
+  voyage_id: string | null;
+  leg_ids: string[];
+  scope: "all_bookable_voyages" | "voyage_availability";
+  active: boolean;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  last_notified_at: string | null;
+};
 type PlanChangeAction =
   | "accept_proposed_change"
   | "request_different_route"
@@ -107,6 +119,7 @@ const UserBookings = () => {
   const [bookingSettings, setBookingSettings] = useState<BookingSettings[]>([]);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
   const [taskCompletions, setTaskCompletions] = useState<BookingTaskCompletion[]>([]);
+  const [availabilityWatches, setAvailabilityWatches] = useState<VoyageAvailabilityWatch[]>([]);
   const [selectedVoyageId, setSelectedVoyageId] = useState<string>("");
   const [selectedLegIds, setSelectedLegIds] = useState<string[]>([]);
   const [partySize, setPartySize] = useState("1");
@@ -134,7 +147,7 @@ const UserBookings = () => {
 
   const loadData = useCallback(async () => {
     setBusy(true);
-    const [voyagesRes, requestsRes, profileRes] = await Promise.all([
+    const [voyagesRes, requestsRes, profileRes, watchesRes] = await Promise.all([
       typedSupabase
         .from("voyages")
         .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
@@ -154,10 +167,13 @@ const UserBookings = () => {
             .select("preferred_language,secondary_language")
             .eq("id", session.user.id)
         : Promise.resolve({ data: [], error: null }),
+      session?.user.id
+        ? typedSupabase.rpc("list_my_voyage_availability_watches")
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (voyagesRes.error || requestsRes.error || profileRes.error) {
-      toast.error(voyagesRes.error?.message || requestsRes.error?.message || profileRes.error?.message || "Unable to load bookings");
+    if (voyagesRes.error || requestsRes.error || profileRes.error || watchesRes.error) {
+      toast.error(voyagesRes.error?.message || requestsRes.error?.message || profileRes.error?.message || watchesRes.error?.message || "Unable to load bookings");
       setBusy(false);
       return;
     }
@@ -258,6 +274,7 @@ const UserBookings = () => {
     setBookingSettings(((settingsRes.data as BookingSettings[] | null) || []));
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
     setTaskCompletions(((completionsRes.data as BookingTaskCompletion[] | null) || []));
+    setAvailabilityWatches(((watchesRes.data as VoyageAvailabilityWatch[] | null) || []));
     setSelectedVoyageId((current) => {
       const requestedVoyageId = searchParams.get("voyage");
       if (requestedVoyageId && loadedVoyages.some((voyage) => voyage.id === requestedVoyageId && isVoyageBookableNow(voyage))) {
@@ -390,6 +407,41 @@ const UserBookings = () => {
     [requestLegs, ownRequestForSelectedVoyage]
   );
   const companionRows = useMemo(() => occupancy.filter((row) => !row.is_own), [occupancy]);
+  const generalAvailabilityWatch = useMemo(
+    () => availabilityWatches.find((watch) => watch.scope === "all_bookable_voyages") || null,
+    [availabilityWatches]
+  );
+  const selectedVoyageWatch = useMemo(
+    () =>
+      availabilityWatches.find(
+        (watch) => watch.scope === "voyage_availability" && watch.voyage_id === selectedVoyageId
+      ) || null,
+    [availabilityWatches, selectedVoyageId]
+  );
+  const selectedFullLegIds = useMemo(() => {
+    const capacity = selectedVoyage?.booking_max_guests || 1;
+    return selectedVoyageLegs
+      .filter((leg) => {
+        const occupied = occupancy
+          .filter(
+            (row) =>
+              row.leg_ids.includes(leg.id) &&
+              ["admin_approved", "user_confirmed"].includes(row.status)
+          )
+          .reduce((sum, row) => sum + row.party_size, 0);
+        return occupied >= capacity;
+      })
+      .map((leg) => leg.id);
+  }, [occupancy, selectedVoyage?.booking_max_guests, selectedVoyageLegs]);
+  const selectedFullLegLabels = useMemo(
+    () => selectedFullLegIds.map((id) => legsById[id]).filter(Boolean).map((leg) => getLegLabel(leg, waypointsById, lang)),
+    [lang, legsById, selectedFullLegIds, waypointsById]
+  );
+  const selectedWatchTracksCurrentFullLegs = Boolean(
+    selectedVoyageWatch?.active &&
+      (selectedVoyageWatch.leg_ids.length === 0 ||
+        selectedFullLegIds.some((legId) => selectedVoyageWatch.leg_ids.includes(legId)))
+  );
 
   useEffect(() => {
     if (loading || busy || !draftHydratedRef.current || !selectedVoyageId || ownRequestForSelectedVoyage) return;
@@ -521,6 +573,41 @@ const UserBookings = () => {
       return;
     }
     setConfirmOpen(true);
+  };
+
+  const setAvailabilityWatch = async (params: {
+    scope: "all_bookable_voyages" | "voyage_availability";
+    active: boolean;
+    voyageId?: string | null;
+    legIds?: string[];
+  }) => {
+    if (!session?.user.id) {
+      navigate("/login", { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    setSaving(true);
+    const { error } = await typedSupabase.rpc("set_voyage_availability_watch", {
+      _scope: params.scope,
+      _active: params.active,
+      _voyage_id: params.voyageId || null,
+      _leg_ids: params.legIds || [],
+      _source: "booking",
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      params.active
+        ? lang === "it"
+          ? "Ti avviseremo quando ci sono aggiornamenti utili."
+          : "We will notify you when there are relevant updates."
+        : lang === "it"
+          ? "Aggiornamenti disattivati."
+          : "Updates disabled."
+    );
+    await loadData();
   };
 
   const submitRequest = async () => {
@@ -794,6 +881,38 @@ const UserBookings = () => {
             </div>
             <CalendarCheck className="text-accent" size={26} />
           </div>
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/35 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-foreground">
+                {lang === "it" ? "Resta aggiornato sui prossimi viaggi" : "Stay updated about upcoming voyages"}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {lang === "it"
+                  ? "Una mail sobria quando viene pubblicato un nuovo viaggio a cui si puo chiedere di partecipare."
+                  : "A quiet email when a new voyage becomes available for joining requests."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                void setAvailabilityWatch({
+                  scope: "all_bookable_voyages",
+                  active: !(generalAvailabilityWatch?.active ?? false),
+                })
+              }
+              disabled={saving}
+              className="glass-chip inline-flex shrink-0 items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+            >
+              {generalAvailabilityWatch?.active ? <BellOff size={14} /> : <Bell size={14} />}
+              {generalAvailabilityWatch?.active
+                ? lang === "it"
+                  ? "Non avvisarmi"
+                  : "Stop updates"
+                : lang === "it"
+                  ? "Resta aggiornato"
+                  : "Keep me updated"}
+            </button>
+          </div>
           {!session && (
             <div className="mt-5 rounded-2xl border border-accent/35 bg-accent/10 px-4 py-3 text-sm leading-relaxed text-foreground">
               {lang === "it"
@@ -949,6 +1068,51 @@ const UserBookings = () => {
                         onProposeChange={(requestId, proposedLegIds) => void proposeLegChange(requestId, proposedLegIds)}
                         onOpenOwnRequest={(request) => setDetailsRequestId(request.id)}
                       />
+                    )}
+                    {selectedFullLegIds.length > 0 && !ownRequestForSelectedVoyage && (
+                      <div className="rounded-[22px] border border-amber-300/50 bg-amber-50/60 p-4 text-sm text-amber-950 dark:bg-amber-400/10 dark:text-amber-100/90">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="font-medium">
+                              {lang === "it" ? "Alcune tratte risultano piene" : "Some legs are currently full"}
+                            </p>
+                            <p className="mt-1 text-xs leading-relaxed opacity-85">
+                              {lang === "it"
+                                ? "Puoi chiedere un avviso se si libera spazio su queste tratte, senza entrare automaticamente in candidatura."
+                                : "You can ask for a note if space opens on these legs, without automatically submitting an application."}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {selectedFullLegLabels.map((label) => (
+                                <span key={label} className="rounded-full border border-amber-300/70 bg-white/60 px-2.5 py-1 text-[11px] text-amber-950">
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void setAvailabilityWatch({
+                                scope: "voyage_availability",
+                                active: !selectedWatchTracksCurrentFullLegs,
+                                voyageId: selectedVoyageId,
+                                legIds: selectedFullLegIds,
+                              })
+                            }
+                            disabled={saving}
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-amber-400/70 bg-white/70 px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-white disabled:opacity-50"
+                          >
+                            {selectedWatchTracksCurrentFullLegs ? <BellOff size={14} /> : <Bell size={14} />}
+                            {selectedWatchTracksCurrentFullLegs
+                              ? lang === "it"
+                                ? "Non avvisarmi"
+                                : "Stop updates"
+                              : lang === "it"
+                                ? "Avvisami se si libera"
+                                : "Notify me if space opens"}
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
 

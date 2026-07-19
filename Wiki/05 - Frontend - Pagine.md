@@ -18,12 +18,14 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `StoryPage.tsx` | `logbook/story/:slug` | Racconto/story |
 | `Voyages.tsx` | `voyages` | Elenco viaggi |
 | `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta |
-| `Collaborations.tsx` | `collaborations` | Collaborazioni |
+| `Collaborations.tsx` | `collaborations` | Collaborazioni aperte: ricerca in mare, creator/editoriale e brand |
 | `Contact.tsx` | `contact` | Form contatti → [[09 - Edge Functions\|contact-form-submit]] |
 | `Links.tsx` | `links` | Pagina linktree |
 | `NotFound.tsx` | `*` | 404 |
 
-SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orientati a ciurma, Spritz e **Deerberg Beryll 32**; `/collaborations` usa title/description e JSON-LD mirati a partnership nautiche, collaborazioni marine, attrezzatura nautica, elettronica marina e progetti editoriali.
+SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orientati a ciurma, Spritz e **Deerberg Beryll 32**; `/collaborations` usa title/description e JSON-LD mirati a collaborazioni con ricercatori, citizen science, creator project, progetti editoriali, brand partnership e documentazione da uso reale in mare.
+
+`Collaborations.tsx` posiziona la pagina come invito ampio: BITE è una barca/logbook/piattaforma sul campo. La sezione non è più una lista stringente di categorie prodotto, ma distingue ricerca sul campo in mare, progetti editoriali/creator e brand/servizi, con aree aperte che includono biologia marina, open data, cultura/outdoor, vita a bordo, connettività, animali e sostenibilità.
 
 `About.tsx` usa `crew-hero-godot.webp` come immagine hero locale della pagina crew, con overlay scuro per mantenere leggibili titolo e intro.
 

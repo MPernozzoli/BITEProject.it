@@ -177,6 +177,7 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get('RESEND_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const cronSecret = Deno.env.get('EMAIL_QUEUE_CRON_SECRET')
 
   if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
@@ -187,23 +188,25 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
+  const headerCronSecret = req.headers.get('x-cron-secret')
+  const cronSecretAuthorized = Boolean(cronSecret && headerCronSecret && headerCronSecret === cronSecret)
+  if (cronSecretAuthorized) {
+    // Authorized by the dedicated pg_cron secret below.
+  } else if (!authHeader?.startsWith('Bearer ')) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     )
-  }
-
-  // Defense in depth: verify_jwt=true already requires a valid JWT at the
-  // gateway layer. This adds an explicit role check so only service-role
-  // callers can trigger queue processing.
-  const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
-  if (claims?.role !== 'service_role') {
-    return new Response(
-      JSON.stringify({ error: 'Forbidden' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
-    )
+  } else {
+    // Defense in depth: service-role callers still use Authorization.
+    const token = authHeader.slice('Bearer '.length).trim()
+    const claims = parseJwtClaims(token)
+    if (claims?.role !== 'service_role') {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
   }
 
   const supabase = createClient<any>(supabaseUrl, supabaseServiceKey)
@@ -223,6 +226,23 @@ Deno.serve(async (req) => {
     }
   } catch (error) {
     console.error('dispatch-voyage-booking-notifications error', error)
+  }
+
+  try {
+    const availabilityDispatchResponse = await fetch(`${supabaseUrl}/functions/v1/dispatch-voyage-availability-updates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseServiceKey}`,
+      },
+      body: JSON.stringify({ limit: 100 }),
+    })
+
+    if (!availabilityDispatchResponse.ok) {
+      console.error('dispatch-voyage-availability-updates failed', await availabilityDispatchResponse.text())
+    }
+  } catch (error) {
+    console.error('dispatch-voyage-availability-updates error', error)
   }
 
   // 1. Check rate-limit cooldown and read queue config

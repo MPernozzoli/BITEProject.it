@@ -70,6 +70,9 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._voyage_candidates_do_not_hold_seats.sql` — aggiorna disponibilità e RPC booking: le candidature `requested`/`waitlisted` non occupano capacità, mentre i posti vengono scalati solo da richieste `admin_approved` o `user_confirmed`.
 - `..._voyage_booking_drafts.sql` — introduce `voyage_booking_drafts`, una bozza candidatura per utente/viaggio con `leg_ids`, `party_size`, `message` e `candidate_info`; RLS limita lettura/scrittura al proprietario, con lettura admin per audit/supporto.
 - `..._article_seo_optimizations.sql` — introduce `article_seo_optimizations`, tabella one-to-one con `logbook_articles` per SEO generata da IA (title/description social e meta, keyword, alt cover, frammenti JSON-LD, raccomandazioni, stato e audit modello). Lettura pubblica solo per articoli pubblicati, gestione admin/service-role.
+- `..._voyage_availability_updates.sql` — introduce `voyage_availability_watches` e `voyage_availability_notifications`, RPC `list_my_voyage_availability_watches`/`set_voyage_availability_watch` e trigger che accodano email quando un voyage diventa partecipabile o una tratta piena torna disponibile → [[13 - Booking Voyage]].
+- `..._email_queue_cron_for_availability_updates.sql` — aggiunge `invoke_email_queue_worker()` e cron `process-email-queue` ogni 5 minuti; il worker svuota anche `voyage_availability_notifications`.
+- `..._email_queue_cron_secret_auth.sql` — aggiorna `invoke_email_queue_worker()` per usare `email_queue_cron_secret` da Vault, con fallback opzionale a `supabase_service_role_key`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -86,6 +89,8 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `refresh_all_voyage_statuses` (RPC + `pg_cron` `refresh-voyage-statuses`, ogni 15 min) — aggiorna la cache `voyages.status`; la UI ricalcola comunque dal vivo
 - `voyage_booking_plan_changes` — audit/predisposizione approvazione utente per cambi planning booking → [[13 - Booking Voyage]]
 - `voyage_booking_notifications` — coda email booking per utenti/admin, inclusi pagamenti, modifiche planning e briefing viaggio; gli eventi utente e `admin_*` registrano anche `push_sent_at` per Web Push filtrate dalle preferenze → [[12 - Newsletter ed Email]]
+- `voyage_availability_watches` / `voyage_availability_notifications` — preferenze utente e coda email per aggiornamenti informativi su nuovi viaggi partecipabili o disponibilità riaperta su tratte osservate; dispatch via `dispatch-voyage-availability-updates` → [[12 - Newsletter ed Email]]
+- `invoke_email_queue_worker` (RPC service-role/postgres) — invoca `process-email-queue` da `pg_cron` usando `email_queue_cron_secret` in Vault; il worker richiama anche i dispatcher booking/disponibilità prima dell'invio.
 - `expire_pending_voyage_booking_payments` (RPC + `pg_cron`) — cancella prenotazioni attive con pagamento pendente scaduto, senza scadenza per l'attesa admin
 - `voyage_booking_deposits` — depositi/contributi e audit rimborsi automatici → [[11 - Pagamenti Bunq]]
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound; `inbound_emails.attachments` conserva metadata e URL firmati temporanei Resend, `sent_emails.attachments` conserva solo metadata degli allegati inviati → [[12 - Newsletter ed Email]]
@@ -97,6 +102,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 ## Hardening remoto applicato
 - `expire_pending_voyage_booking_payments` è schedulata ogni ora su Supabase Cron.
 - Gli autopublisher editoriali `publish-scheduled-articles` e `publish-social-queue` sono schedulati via Supabase Cron; entrambi passano da `public.invoke_editorial_edge_function()` e si autenticano con secret cron dedicati sincronizzati tra Edge Function secrets e Supabase Vault.
+- `process-email-queue` è schedulato ogni 5 minuti via `public.invoke_email_queue_worker()`; richiede `email_queue_cron_secret` in Vault e `EMAIL_QUEUE_CRON_SECRET` tra i secret Supabase Functions.
 - Le RPC booking/partecipanti/admin che richiedono login non sono più eseguibili dal ruolo `anon`.
 - `_migration_exec` non è più eseguibile da `anon`/`authenticated`; `_migration_chunks` ha RLS e nessun accesso diretto client.
 - `logbook-media` non consente più listing pubblico degli oggetti; resta servibile tramite public object URL.

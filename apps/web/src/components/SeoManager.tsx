@@ -98,30 +98,31 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
   },
   "/collaborations": {
-    title: { en: "Sailing Partnerships and Collaborations | BITE", it: "Partnership nautiche e collaborazioni | BITE" },
+    title: { en: "Collaborations, Field Research and Creator Projects | BITE", it: "Collaborazioni, ricerca sul campo e creator project | BITE" },
     description: {
-      en: "Sailing partnerships, marine gear collaborations and editorial projects with BITE aboard S/Y Spritz: field-tested products, reviews, stories and content from real use at sea.",
-      it: "Partnership nautiche, collaborazioni marine e progetti editoriali con BITE a bordo di S/Y Spritz: prodotti testati in mare, recensioni, storie e contenuti da uso reale.",
+      en: "Collaborate with BITE aboard S/Y Spritz on field research at sea, citizen science, creator projects, editorial stories, brand partnerships and real-use documentation.",
+      it: "Collabora con BITE a bordo di S/Y Spritz su ricerca sul campo in mare, citizen science, creator project, storie editoriali, brand partnership e documentazione da uso reale.",
     },
     structuredData: (lang) => ({
       "@context": "https://schema.org",
       "@type": "CollectionPage",
-      name: lang === "it" ? "Partnership nautiche e collaborazioni" : "Sailing partnerships and collaborations",
+      name: lang === "it" ? "Collaborazioni, ricerca sul campo e creator project" : "Collaborations, field research and creator projects",
       description:
         lang === "it"
-          ? "Collaborazioni editoriali e partnership nautiche per attrezzatura, elettronica marina, connettività, abbigliamento tecnico, accessori per animali a bordo e sostenibilità."
-          : "Editorial collaborations and sailing partnerships for marine gear, marine electronics, connectivity, technical clothing, pet gear aboard and sustainability.",
+          ? "Collaborazioni con ricercatori, creator, brand e organizzazioni per ricerca in mare, citizen science, progetti editoriali, contenuti social e test da uso reale a bordo."
+          : "Collaborations with researchers, creators, brands and organizations for field research at sea, citizen science, editorial projects, social formats and real-use testing aboard.",
       url: `${SITE_URL}/${lang}/collaborations`,
       inLanguage: lang,
       isPartOf: { "@id": `${SITE_URL}/#website` },
       publisher: { "@id": ORGANIZATION_ID },
       about: [
-        "partnership nautica",
-        "collaborazioni nautiche",
+        "ricerca sul campo in mare",
+        "citizen science",
+        "collaborazioni creator",
+        "field research at sea",
+        "creator collaborations",
         "sailing partnerships",
-        "marine gear collaborations",
-        "attrezzatura nautica",
-        "elettronica marina",
+        "brand partnerships",
       ],
     }),
   },

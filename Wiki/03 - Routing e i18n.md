@@ -52,7 +52,7 @@ Protette da `AdminRoute`. Vedi [[16 - Admin]].
 - Sitemap dinamica via `/api/sitemap` (rewrite in `vercel.json` da `/sitemap-live.xml`) e `scripts/generate-sitemap.mjs` in build.
 - `x-default` e la shell HTML iniziale puntano alla home italiana (`/it`) per evitare che Google Italia mostri titolo/descrizione inglesi sulla root.
 - Prerender per crawler: `apps/web/api/prerender.ts` + `middleware.ts`. Le pagine indice `/it|en/logbook` e `/it|en/voyages` servono HTML con link `<a>` bilingui verso tutti gli articoli/viaggi pubblici; le pagine dettaglio includono testo, metadati, JSON-LD e link interni.
-- Le pagine statiche ad alto intento SEO (`/crew`, `/collaborations`) hanno metadati e contenuto prerender dedicati: `/crew` espone Spritz come **Deerberg Beryll 32** e la ciurma; `/collaborations` espone partnership nautiche, collaborazioni marine, attrezzatura nautica/elettronica marina e progetti editoriali.
+- Le pagine statiche ad alto intento SEO (`/crew`, `/collaborations`) hanno metadati e contenuto prerender dedicati: `/crew` espone Spritz come **Deerberg Beryll 32** e la ciurma; `/collaborations` espone collaborazioni con ricercatori, citizen science, creator/editoriale, brand partnership e documentazione da uso reale in mare.
 - Gli URL pubblici legacy senza prefisso lingua (`/logbook`, `/voyages`, `/manifesto`, ecc.) vengono reindirizzati a `/it/*` o `/en/*` già in middleware, prima del prerender, per evitare duplicati indicizzabili.
 - Header `X-Robots-Tag: noindex` su `/admin*`, `/login`, `/signup`, `/bookings`, `/profile`, `/newsletter/confirm` (in `vercel.json`).
 

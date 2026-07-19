@@ -36,8 +36,9 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 ## Invio & digest
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
 - `send-newsletter-digest` — digest periodico
-- `process-email-queue` — worker della coda email (verify_jwt) con invio Resend, retry/backoff e DLQ. Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) ed eventuale cron `pg_cron` lato dashboard Supabase (non versionato).
+- `process-email-queue` — worker della coda email (verify_jwt) con invio Resend, retry/backoff e DLQ. Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) e dal cron versionato `process-email-queue` ogni 5 minuti via `invoke_email_queue_worker()`.
 - `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima service-role; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
+- `dispatch-voyage-availability-updates` — svuota la coda `voyage_availability_notifications` e invia il template transazionale `voyage-availability-update` agli utenti che hanno chiesto aggiornamenti sui nuovi viaggi o sulle tratte piene tornate disponibili.
 
 ## Tracking
 - `newsletter-track-open` — pixel apertura
@@ -49,7 +50,9 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 - `publish-scheduled-articles` — pubblicazione programmata
 - `dispatch-engagement-notifications` — like/commenti/letture
 - `dispatch-voyage-booking-notifications` — eventi booking, email e push admin → [[13 - Booking Voyage]]
+- `dispatch-voyage-availability-updates` — aggiornamenti informativi non commerciali su nuovi voyage partecipabili o disponibilità riaperta su tratte osservate → [[13 - Booking Voyage]]
 - Booking voyage: la coda `voyage_booking_notifications` copre conferma richiesta, waitlist, approvazione admin, conferma utente, cancellazione, rifiuto, promozione dalla waitlist, aggiunta manuale, pagamento in sospeso/ricevuto/scaduto, cambio planning, briefing viaggio e notifiche admin correlate. Le mail utente e admin usano la stessa struttura visuale: pill di stato, riepilogo operativo, box tratte, importi evidenziati e callout messaggi. Gli eventi admin (`admin_*`) inviano anche Web Push agli admin con device registrato; `push_sent_at` evita invii duplicati.
+- Aggiornamenti disponibilità viaggio: `voyage-availability-update` usa la stessa shell editoriale, ma il copy resta volutamente informativo ("hai chiesto aggiornamenti", "chiedere di partecipare", "si è liberata disponibilità") e rimanda a `/bookings?voyage=<id>`. Non crea candidatura automatica e non sostituisce il flusso booking.
 - Briefing viaggio: il template React Email `voyage-briefing` gestisce `first_briefing` e `second_briefing`. Il primo briefing viene accodato automaticamente quando un booking passa a `user_confirmed` o quando un partecipante invitato accetta; include riepilogo viaggio/tratte, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti già a bordo. Il secondo briefing è predisposto per invio operativo successivo e copre vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F con visual, USB-A/USB-C, frigo e suggerimenti esperienze.
 - Cambi planning booking: `voyage_booking_plan_changes` accoda `plan_change_pending` quando serve approvazione utente. La mail mostra tratte prima/proposta e rimanda al booking per accettare, annullare con rimborso completo o chiedere una variazione; i cambi auto-accettati per equipaggio non richiedono approvazione manuale.
 - Inviti partecipanti: `/api/bookings/invite` invia il template React Email `voyage-participant-invite` agli ospiti ancora pending e marca `invite_sent_at`; può essere chiamato dal lead oppure dall'admin quando l'invito nasce da `/admin/bookings` con email esterna. La lingua dell'invito segue la lingua del sito al momento dell'invio (`/it` → italiano, `/en` → inglese) e il link punta alla sezione booking nella stessa lingua.
