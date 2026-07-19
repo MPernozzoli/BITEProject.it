@@ -12,15 +12,53 @@ import { supabase } from "@/integrations/supabase/client";
 import { isProfileComplete } from "@/lib/profile-completeness";
 import { toast } from "sonner";
 
-const normalizeInternalRedirect = (value: string | null | undefined) => {
+const TRUSTED_BITE_HOST_RE = /(^|\.)biteproject\.it$/i;
+
+const normalizeTrustedRedirect = (value: string | null | undefined) => {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
   try {
     const parsed = new URL(value, window.location.origin);
     if (parsed.origin !== window.location.origin) return "";
+    if (parsed.pathname === "/login" || parsed.pathname === "/signup" || parsed.pathname === "/complete-profile") return "";
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return "";
   }
+};
+
+const normalizeTrustedReturnUrl = (value: string | null | undefined) => {
+  if (!value) return "";
+
+  const internal = normalizeTrustedRedirect(value);
+  if (internal) return internal;
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !TRUSTED_BITE_HOST_RE.test(parsed.hostname)) return "";
+    if (
+      parsed.hostname === "login.biteproject.it" &&
+      (parsed.pathname === "/login" || parsed.pathname === "/signup" || parsed.pathname === "/complete-profile")
+    ) {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
+const goToTrustedRedirect = (navigate: ReturnType<typeof useNavigate>, redirectTo: string) => {
+  if (/^https:\/\//i.test(redirectTo)) {
+    window.location.assign(redirectTo);
+    return;
+  }
+
+  if (window.location.hostname === "login.biteproject.it") {
+    window.location.assign(new URL(redirectTo, "https://biteproject.it").toString());
+    return;
+  }
+
+  navigate(redirectTo, { replace: true });
 };
 
 const COPY = {
@@ -80,7 +118,7 @@ const CompleteProfile = () => {
 
   const copy = COPY[lang === "en" ? "en" : "it"];
   const homeRedirect = lang === "en" ? "/en" : "/it";
-  const redirectTo = normalizeInternalRedirect((location.state as { from?: string } | null)?.from) || homeRedirect;
+  const redirectTo = normalizeTrustedReturnUrl((location.state as { from?: string } | null)?.from) || homeRedirect;
 
   useEffect(() => {
     if (authLoading) return;
@@ -107,7 +145,7 @@ const CompleteProfile = () => {
       }
 
       if (data && isProfileComplete(data)) {
-        navigate(redirectTo, { replace: true });
+        goToTrustedRedirect(navigate, redirectTo);
         return;
       }
 
@@ -171,7 +209,7 @@ const CompleteProfile = () => {
   };
 
   const goToRedirect = useCallback(() => {
-    navigate(redirectTo, { replace: true });
+    goToTrustedRedirect(navigate, redirectTo);
   }, [navigate, redirectTo]);
 
   const handleSave = async () => {

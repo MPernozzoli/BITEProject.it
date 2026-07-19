@@ -73,6 +73,10 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._voyage_availability_updates.sql` — introduce `voyage_availability_watches` e `voyage_availability_notifications`, RPC `list_my_voyage_availability_watches`/`set_voyage_availability_watch` e trigger che accodano email quando un voyage diventa partecipabile o una tratta piena torna disponibile → [[13 - Booking Voyage]].
 - `..._email_queue_cron_for_availability_updates.sql` — aggiunge `invoke_email_queue_worker()` e cron `process-email-queue` ogni 5 minuti; il worker svuota anche `voyage_availability_notifications`.
 - `..._email_queue_cron_secret_auth.sql` — aggiorna `invoke_email_queue_worker()` per usare `email_queue_cron_secret` da Vault, con fallback opzionale a `supabase_service_role_key`.
+- `..._community_membership.sql` — introduce il dominio [[23 - Community]]: tier, subscription, pagamenti membership, audit benefit, post/community commenti/reaction/live events, RLS e Realtime.
+- `..._community_membership_advisor_fixes.sql` — rende `touch_updated_at` conforme agli advisor e separa le policy admin community per evitare warning multipolicy sulle nuove tabelle.
+- `..._community_engagement_surfaces.sql` — aggiunge live messages, poll, opzioni/voti, policy member-only e trigger per poll a scelta singola.
+- `..._community_poll_stats_no_definer_rpc.sql` — sostituisce la RPC aggregata dei poll con `community_poll_option_stats` mantenuta da trigger non eseguibile dal client, eliminando il warning advisor su funzione `SECURITY DEFINER`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -96,6 +100,9 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `inbound_emails` / `sent_emails` — casella admin e storico invii per mail ordinarie `@biteproject.it` e automatiche `@mail.biteproject.it`; `assigned_to_profile_id` collega gli inbound a un admin quando l'alias destinatario è deterministico. Entrambe le tabelle hanno campi conversazionali (`thread_key`, `message_id`, `in_reply_to`, `references`) per comporre thread inbound/outbound; `inbound_emails.attachments` conserva metadata e URL firmati temporanei Resend, `sent_emails.attachments` conserva solo metadata degli allegati inviati → [[12 - Newsletter ed Email]]
 - `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `article_seo_optimizations` — output SEO generato da `optimize-article-seo`; la pagina articolo lo usa per meta title/description, keyword e arricchimento JSON-LD quando `status = ready`, mentre la dashboard admin segnala i record `failed` → [[17 - Content Model]]
+- `membership_tiers` / `membership_subscriptions` / `membership_payments` / `membership_benefit_events` — modello Crew Pass e pagamenti Bunq membership → [[23 - Community]]
+- `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — feed, discussioni, reaction e live thread della sub-app `apps/crew` → [[23 - Community]]
+- `community_polls` / `community_poll_options` / `community_poll_votes` / `community_poll_option_stats` — poll della community, voti member-only e conteggi aggregati leggibili senza esporre i voti degli altri utenti → [[23 - Community]]
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
@@ -109,6 +116,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `homepage-media` consente listing pubblico solo per `hero-horizontal/` e `hero-vertical/` con estensioni media consentite.
 - Il flusso `supabase db push --dry-run` è tornato pulito dopo la rimozione delle migrazioni duplicate `20260416113000_voyage_date_windows.sql` e `20260710130000_crew_auto_booking.sql`.
 - Gli helper interni `deactivate_past_voyage_bookable_legs`, `promote_waitlisted_voyage_bookings`, `enqueue_voyage_booking_notification` e `enqueue_admin_voyage_booking_notifications` non sono più invocabili direttamente da `anon`/`authenticated`; restano utilizzabili da `service_role` e da funzioni `SECURITY DEFINER` server-side.
+- Le migration community sono state applicate al remoto e `supabase db advisors --linked` non segnala warning filtrando `community_`, `membership_`, `sync_community`, `get_community` e `touch_updated_at`.
 - Restano warning advisor da valutare separatamente: le RPC `SECURITY DEFINER` pubbliche/`authenticated` sono intenzionali ma richiedono revisione puntuale, e la leaked-password protection va abilitata nelle impostazioni Auth Supabase.
 
 ## Collegamenti

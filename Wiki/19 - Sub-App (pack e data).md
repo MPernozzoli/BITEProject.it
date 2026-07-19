@@ -1,7 +1,7 @@
 ---
 tags: [monorepo, apps, sub-app]
 ---
-# 19 - Sub-App (pack e data)
+# 19 - Sub-App (pack, data e crew)
 
 ⬅️ [[Home]] · sorgente: `apps/` · build: `scripts/copy-subapp-builds.mjs`
 
@@ -12,6 +12,9 @@ Il repo è un **monorepo leggero**: tutte le app Vite vivono in `apps/`, ognuna 
 | `apps/web` | `@biteproject/web` | `/` | sito principale BITE |
 | `apps/pack` | `@biteproject/pack` | `/pack/` | sito dei cani / pack |
 | `apps/data` | `@biteproject/data` | `/Data/` | portale **citizen science** su `data.biteproject.it` → [[22 - Citizen Science e Osservazioni]]; superficie del [[15 - Semantic Layer (AI Agents)]] (dati/GeoJSON) |
+| `apps/crew` | `@biteproject/crew` | `/Crew/` | community/membership **BITE Crew** su `crew.biteproject.it`, isolata dalla main app finché non è pronta → [[23 - Community]] |
+
+Ogni sub-app può esporre `/login` e `/signup` solo come bridge verso `login.biteproject.it`, preservando un `redirect` assoluto verso la pagina corrente. In locale il bridge usa `VITE_LOGIN_URL` o `http://127.0.0.1:5173`.
 
 ## Build integrata
 In `package.json` root:
@@ -19,8 +22,9 @@ In `package.json` root:
 build:web   = npm run build --workspace @biteproject/web
 build:pack  = VITE_BASE_PATH=/pack/ npm run build --workspace @biteproject/pack
 build:data  = VITE_BASE_PATH=/Data/ npm run build --workspace @biteproject/data
+build:crew  = VITE_BASE_PATH=/Crew/ npm run build --workspace @biteproject/crew
 ```
-Poi `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build, `apps/pack/dist` in `dist/pack` e `apps/data/dist` in `dist/Data`, così le app vengono servite come sotto-percorsi dello stesso dominio (coerente con la strategia same-origin → [[15 - Semantic Layer (AI Agents)]]).
+Poi `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build, `apps/pack/dist` in `dist/pack`, `apps/data/dist` in `dist/Data` e `apps/crew/dist` in `dist/Crew`, così le app vengono servite come sotto-percorsi dello stesso dominio (coerente con la strategia same-origin → [[15 - Semantic Layer (AI Agents)]]).
 
 ## Design system condiviso (`apps/data`)
 `apps/data` **non** ha un proprio tema: usa quello di `apps/web`, così i due non possono divergere (prima divergevano già — palette fredda contro quella calda del sito, `--radius` e teal diversi).
@@ -43,4 +47,4 @@ Poi `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla 
 - Stato di `apps/pack`: la galleria legge solo `pack_gallery_photos`/bucket `pack-gallery`; le metriche Instagram, inclusi i numeri nel capitolo hero del media kit, chiamano la Edge Function `instagram-metrics`, che usa esclusivamente la connessione OAuth del canale editoriale `instagram_dogs` e salva uno snapshot in `pack.external_metrics_cache`. Senza collegamento OAuth valido, il sito resta sul fallback statico embedded, allineato allo snapshot Instagram Graph del 16 luglio 2026.
 
 ## Collegamenti
-- [[18 - Deploy e Configurazione]] · [[20 - Comandi e Workflow]] · [[15 - Semantic Layer (AI Agents)]] · [[22 - Citizen Science e Osservazioni]]
+- [[18 - Deploy e Configurazione]] · [[20 - Comandi e Workflow]] · [[15 - Semantic Layer (AI Agents)]] · [[22 - Citizen Science e Osservazioni]] · [[23 - Community]]

@@ -22,6 +22,21 @@ const Loading = () => (
   </div>
 );
 
+const LoginRedirect = ({ mode = "login" }: { mode?: "login" | "signup" }) => {
+  const localHostnames = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+  const configuredLoginUrl = import.meta.env.VITE_LOGIN_URL;
+  const loginOrigin = configuredLoginUrl
+    ? configuredLoginUrl.replace(/\/$/, "")
+    : localHostnames.has(window.location.hostname)
+      ? "http://127.0.0.1:5173"
+      : `${window.location.protocol}//login.biteproject.it`;
+  const target = new URL(mode === "signup" ? "/signup" : "/login", loginOrigin);
+  target.pathname = mode === "signup" ? "/signup" : "/login";
+  target.searchParams.set("redirect", window.location.href);
+  window.location.replace(target.toString());
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -38,6 +53,8 @@ const App = () => (
               <Route path="/downloads" element={<DownloadsPage />} />
               <Route path="/collaborate" element={<CollaboratePage />} />
               <Route path="/contact" element={<ContactRedirect />} />
+              <Route path="/login" element={<LoginRedirect />} />
+              <Route path="/signup" element={<LoginRedirect mode="signup" />} />
 
               {/* Retired routes. A dataset URL a researcher saved has to keep resolving,
                   so these redirect rather than 404. */}

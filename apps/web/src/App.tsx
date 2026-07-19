@@ -18,7 +18,7 @@ import {
   LegacyArticleRedirect,
   LegacyStoryRedirect,
 } from "@/components/LegacyLangRedirect";
-import { getMainSiteUrl, isCurrentAdminHostname } from "@/lib/admin-host";
+import { getLoginUrl, getMainSiteUrl, isCurrentAdminHostname, isCurrentLoginHostname } from "@/lib/admin-host";
 import { detectPreferredLang, withLang } from "@/lib/seo";
 
 const createAppQueryClient = () =>
@@ -102,26 +102,40 @@ const RequireMainHost = () => {
 };
 
 /**
- * Sends auth/WebAuthn-sensitive routes to the main site when reached from the admin subdomain.
+ * Sends auth/WebAuthn-sensitive routes to the dedicated login host in production.
  * Passkey registration/sign-in must happen from an origin allowed by Supabase's RP configuration.
  * Uses a hard redirect since it crosses hostnames.
  */
-const RequireMainHostForAuth = ({ children }: { children: JSX.Element }) => {
+const RequireLoginHostForAuth = ({ children }: { children: JSX.Element }) => {
   const location = useLocation();
 
-  if (isCurrentAdminHostname()) {
+  if (!isCurrentLoginHostname() && typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(location.search);
       const stateRedirect = (location.state as { from?: string } | null)?.from;
 
       if (!params.has("redirect") && stateRedirect?.startsWith("/") && !stateRedirect.startsWith("//")) {
-        params.set("redirect", stateRedirect);
+        params.set("redirect", new URL(stateRedirect, window.location.origin).toString());
       }
 
       const search = params.toString();
       window.location.replace(
-        getMainSiteUrl(`${location.pathname}${search ? `?${search}` : ""}${location.hash}`),
+        getLoginUrl(`${location.pathname}${search ? `?${search}` : ""}${location.hash}`),
       );
+    }
+    return null;
+  }
+
+  return children;
+};
+
+/** Keeps the profile editing surface off the admin subdomain. */
+const RequireMainHostForProfile = ({ children }: { children: JSX.Element }) => {
+  const location = useLocation();
+
+  if (isCurrentAdminHostname()) {
+    if (typeof window !== "undefined") {
+      window.location.replace(getMainSiteUrl(`${location.pathname}${location.search}${location.hash}`));
     }
     return null;
   }
@@ -198,29 +212,29 @@ const App = () => {
                       <Route path="*" element={<NotFound />} />
                     </Route>
 
-                    {/* Auth and admin routes — login/profile flows are forced onto the main site for WebAuthn. */}
+                    {/* Auth and admin routes — login/signup/profile completion live on the dedicated login host. */}
                     <Route
                       path="/login"
                       element={
-                        <RequireMainHostForAuth>
+                        <RequireLoginHostForAuth>
                           <UserLogin />
-                        </RequireMainHostForAuth>
+                        </RequireLoginHostForAuth>
                       }
                     />
                     <Route
                       path="/signup"
                       element={
-                        <RequireMainHostForAuth>
+                        <RequireLoginHostForAuth>
                           <UserLogin />
-                        </RequireMainHostForAuth>
+                        </RequireLoginHostForAuth>
                       }
                     />
                     <Route
                       path="/complete-profile"
                       element={
-                        <RequireMainHostForAuth>
+                        <RequireLoginHostForAuth>
                           <CompleteProfile />
-                        </RequireMainHostForAuth>
+                        </RequireLoginHostForAuth>
                       }
                     />
                     <Route path="/admin/login" element={<AdminLogin />} />
@@ -238,9 +252,9 @@ const App = () => {
                     <Route
                       path="/profile"
                       element={
-                        <RequireMainHostForAuth>
+                        <RequireMainHostForProfile>
                           <AdminProfile />
-                        </RequireMainHostForAuth>
+                        </RequireMainHostForProfile>
                       }
                     />
                   </Routes>

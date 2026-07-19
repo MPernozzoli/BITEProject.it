@@ -22,13 +22,17 @@
       "destination": "/Data/index.html"
     },
     {
+      "source": "/Crew/:path*",
+      "destination": "/Crew/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
   ],
   "headers": [
     {
-      "source": "/(login|signup|bookings|profile|unsubscribe)",
+      "source": "/(login|signup|complete-profile|bookings|profile|unsubscribe)",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     },
     {
@@ -41,6 +45,10 @@
     },
     {
       "source": "/newsletter/confirm",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/Crew/:path*",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     }
   ]

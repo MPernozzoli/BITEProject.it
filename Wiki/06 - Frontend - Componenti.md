@@ -45,5 +45,14 @@ tags: [frontend, componenti, ui]
 - `home/` — sezioni della homepage
 - `legal/` — blocchi pagine legali
 
+## Sub-app BITE Crew → [[23 - Community]]
+Sorgente: `apps/crew/src/components/`.
+
+- `CrewLayout.tsx` — shell separata della community, con navbar `BITE Crew`, link a Feed/Live/Polls/Account, link al sito principale e accesso condizionale allo studio admin.
+- `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`).
+- `TiptapRenderer.tsx` — renderer minimale del JSON TipTap dei post community.
+- `admin/RichTextEditor.tsx` e `admin/MediaFigureNodeView.tsx` — copia isolata dell'editor articoli, usata dallo studio community senza importare l'admin della main app.
+- `ui/` — primitives shadcn copiate per rendere `apps/crew` autosufficiente.
+
 ## Collegamenti
 - [[05 - Frontend - Pagine]] · [[07 - Frontend - Lib e Hooks]]

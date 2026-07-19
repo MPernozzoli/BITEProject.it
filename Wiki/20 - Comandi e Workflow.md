@@ -9,10 +9,11 @@ tags: [comandi, workflow, script, dx]
 | Comando | Azione |
 |---|---|
 | `npm run dev` | dev server Vite di `@biteproject/web` (`apps/web`) |
-| `npm run build` | build completa: web + pack + data + copia dist sotto-app |
+| `npm run build` | build completa: web + pack + data + crew + copia dist sotto-app |
 | `npm run build:web` | genera sitemap + `vite build` in `apps/web` |
 | `npm run build:pack` | build `apps/pack` con base `/pack/` → [[19 - Sub-App (pack e data)]] |
 | `npm run build:data` | build `apps/data` con base `/Data/` |
+| `npm run build:crew` | build `apps/crew` con base `/Crew/` → [[23 - Community]] |
 | `npm run build:dev` | build development di `@biteproject/web` |
 | `npm run preview` | preview di `@biteproject/web` |
 | `npm run lint` | ESLint di `@biteproject/web` |
@@ -35,6 +36,7 @@ tags: [comandi, workflow, script, dx]
 - **Sviluppo UI:** `npm run dev` → modifica in `apps/web/src/` → [[05 - Frontend - Pagine]] / [[06 - Frontend - Componenti]].
 - **Nuovo endpoint dati pubblico:** aggiungi/modifica function `public-*` → [[15 - Semantic Layer (AI Agents)]].
 - **Modifica schema:** nuova migrazione SQL + rigenera `apps/web/src/integrations/supabase/types.ts`.
+- **Community:** `npm run build:crew` per la sola sub-app; `npm run build` copia poi `apps/crew/dist` in `dist/Crew`.
 - **Deploy:** push su `main` → Vercel build (`npm run build`) → [[18 - Deploy e Configurazione]].
 
 ## Workflow agenti AI
@@ -47,4 +49,4 @@ Usare npm come package manager operativo del progetto. `package-lock.json` è il
 Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`; l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18.
 
 ## Collegamenti
-- [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]]
+- [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]] · [[23 - Community]]

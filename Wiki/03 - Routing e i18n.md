@@ -9,6 +9,7 @@ tags: [routing, i18n, react-router]
 - Bilingue **IT/EN** con prefisso di rotta: `/it/*` e `/en/*`.
 - Provider `I18nProvider` (`apps/web/src/lib/i18n.tsx`) espone traduzioni e lingua corrente.
 - `/` reindirizza a `/it` o `/en` in base a preferenza persistita / lingua browser (`detectPreferredLang()`, `withLang()` in `apps/web/src/lib/seo.ts`); se non ci sono segnali espliciti il fallback pubblico è **italiano**.
+- La preferenza persistita distingue fonte `manual` e `profile`: quando l'utente usa il selettore lingua della navbar, la scelta manuale diventa override e l'allineamento automatico alla lingua del profilo non la sovrascrive più.
 - Il documento Vite monta direttamente l'app React: la vecchia boot splash non è più collegata al caricamento iniziale delle rotte, quindi `/`, `/it` e `/en` mostrano subito il sito.
 - **Redirect legacy**: vecchi URL senza prefisso (`/logbook`, `/voyages`, `/about`→`/crew`, `/linktree`→`/links`, ecc.) vengono reindirizzati alla variante localizzata via `LegacyLangRedirect` e componenti dedicati (`LegacyVoyageRedirect`, `LegacyArticleRedirect`, `LegacyStoryRedirect`).
 
@@ -35,7 +36,7 @@ Definite in `LocalizedRoutes` (App.tsx):
 - `/bookings`, `/bookings/:id/participants` — area prenotazioni utente ([[13 - Booking Voyage]])
 - `/unsubscribe`, `/newsletter/confirm` — [[12 - Newsletter ed Email]]
 - `/privacy-policy`, `/cookie-policy` — legali
-- `/login`, `/signup`, `/complete-profile` — auth utente; se aperte da `admin.biteproject.it` vengono spostate su `biteproject.it` preservando `redirect`, perché passkey/WebAuthn deve partire da un origin ammesso dalla configurazione Supabase.
+- `/login`, `/signup`, `/complete-profile` — auth utente centralizzata su `login.biteproject.it`; se questi path vengono aperti dal dominio principale o da una sub-app, il middleware li sposta sul sottodominio login preservando `redirect`.
 - `/profile` — profilo (AdminProfile riusato)
 
 ## Rotte admin (sottodominio `admin.`)
@@ -45,7 +46,16 @@ Protette da `AdminRoute`. Vedi [[16 - Admin]].
 - `/admin/bookings`, `/admin/candidates`, `/admin/media`, `/admin/trackers`
 - `/admin/article/:id` (editor)
 
-`RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RequireMainHostForAuth` forza login/signup/completamento profilo/profilo sul dominio principale per evitare errori WebAuthn da origin admin; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.
+`RequireMainHost` tiene le rotte marketing fuori dal sottodominio admin; `RequireLoginHostForAuth` forza login/signup/completamento profilo su `login.biteproject.it`; `RootLangRedirect` porta `/` → `/admin` quando si è su host admin. Logica host in `apps/web/src/lib/admin-host.ts`.
+
+## Auth cross-subdomain
+
+- Host dedicato: `login.biteproject.it`.
+- Slug bridge: `/login` e `/signup` nelle sub-app (`apps/pack`, `apps/data`, `apps/crew`) reindirizzano al login host con `redirect` assoluto di ritorno.
+- Storage sessione: cookie/local storage Supabase condiviso su `.biteproject.it` tramite `createSharedSupabaseAuthStorage`, così il login centralizzato è visibile anche da `crew.biteproject.it`, `pack.biteproject.it`, `data.biteproject.it` e `admin.biteproject.it`.
+- Redirect consentiti: il client accetta solo path interni o URL `https://*.biteproject.it`, evitando open redirect verso domini esterni.
+- In sviluppo locale i bridge usano `VITE_LOGIN_URL` se presente, altrimenti `http://127.0.0.1:5173`.
+- Supabase Auth deve avere in allow-list gli URL del login host e gli URL di ritorno BITE usati in produzione.
 
 ## SEO & prerender
 - `SeoManager` + `StructuredData` (JSON-LD) sulle pagine pubbliche.

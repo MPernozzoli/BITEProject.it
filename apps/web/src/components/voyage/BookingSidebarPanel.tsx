@@ -1,4 +1,4 @@
-import { useState, type TouchEvent } from "react";
+import { useLayoutEffect, useRef, useState, type TouchEvent } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, TicketCheck, Users, X } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
@@ -72,8 +72,13 @@ const BookingSidebarPanel = ({
   onSubmit,
 }: BookingSidebarPanelProps) => {
   const [step, setStep] = useState<"legs" | "about">("legs");
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const selectedLegs = selectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
   const rejectedLegs = rejectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
+
+  useLayoutEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [step]);
 
   const hazardSummary = (() => {
     if (selectedLegs.length === 0) return null;
@@ -133,6 +138,7 @@ const BookingSidebarPanel = ({
       </div>
 
       <div
+        ref={scrollContainerRef}
         className={`min-h-0 flex-1 overflow-y-auto px-3 py-3 ${isMobile ? "overscroll-contain" : ""}`}
         style={isMobile ? { touchAction: "pan-y" } : undefined}
       >

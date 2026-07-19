@@ -17,6 +17,21 @@ const Loading = () => (
   <div className="min-h-screen bg-background" aria-label="Loading" />
 );
 
+const LoginRedirect = ({ mode = "login" }: { mode?: "login" | "signup" }) => {
+  const localHostnames = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+  const configuredLoginUrl = import.meta.env.VITE_LOGIN_URL;
+  const loginOrigin = configuredLoginUrl
+    ? configuredLoginUrl.replace(/\/$/, "")
+    : localHostnames.has(window.location.hostname)
+      ? "http://127.0.0.1:5173"
+      : `${window.location.protocol}//login.biteproject.it`;
+  const target = new URL(mode === "signup" ? "/signup" : "/login", loginOrigin);
+  target.pathname = mode === "signup" ? "/signup" : "/login";
+  target.searchParams.set("redirect", window.location.href);
+  window.location.replace(target.toString());
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -26,6 +41,8 @@ const App = () => (
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/login" element={<LoginRedirect />} />
+            <Route path="/signup" element={<LoginRedirect mode="signup" />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

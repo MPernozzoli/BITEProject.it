@@ -22,8 +22,9 @@ const LAST_AUTH_METHOD_STORAGE_KEY = "bite_last_auth_method";
 const PENDING_SIGNUP_NEWSLETTER_KEY = "bite_pending_signup_newsletter";
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 const AUTH_ROUTES = new Set(["/login", "/signup"]);
+const TRUSTED_BITE_HOST_RE = /(^|\.)biteproject\.it$/i;
 
-const normalizeInternalRedirect = (value: string | null | undefined) => {
+const normalizeTrustedRedirect = (value: string | null | undefined) => {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
   try {
     const parsed = new URL(value, window.location.origin);
@@ -33,6 +34,36 @@ const normalizeInternalRedirect = (value: string | null | undefined) => {
   } catch {
     return "";
   }
+};
+
+const normalizeTrustedReturnUrl = (value: string | null | undefined) => {
+  if (!value) return "";
+
+  const internal = normalizeTrustedRedirect(value);
+  if (internal) return internal;
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || !TRUSTED_BITE_HOST_RE.test(parsed.hostname)) return "";
+    if (parsed.hostname === "login.biteproject.it" && AUTH_ROUTES.has(parsed.pathname)) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
+const goToTrustedRedirect = (navigate: ReturnType<typeof useNavigate>, redirectTo: string) => {
+  if (/^https:\/\//i.test(redirectTo)) {
+    window.location.assign(redirectTo);
+    return;
+  }
+
+  if (window.location.hostname === "login.biteproject.it") {
+    window.location.assign(new URL(redirectTo, "https://biteproject.it").toString());
+    return;
+  }
+
+  navigate(redirectTo, { replace: true });
 };
 
 const AUTH_COPY = {
@@ -321,8 +352,8 @@ const UserLogin = () => {
 
   const authMode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
   const searchParams = new URLSearchParams(location.search);
-  const stateRedirect = normalizeInternalRedirect((location.state as { from?: string } | null)?.from);
-  const queryRedirect = normalizeInternalRedirect(searchParams.get("redirect"));
+  const stateRedirect = normalizeTrustedReturnUrl((location.state as { from?: string } | null)?.from);
+  const queryRedirect = normalizeTrustedReturnUrl(searchParams.get("redirect"));
   const homeRedirect = lang === "en" ? "/en" : "/it";
   const redirectTo = stateRedirect || queryRedirect || homeRedirect;
   const ui = AUTH_COPY[lang === "it" ? "it" : "en"];
@@ -335,7 +366,7 @@ const UserLogin = () => {
   const completeAuthNavigation = async (userId: string) => {
     const complete = await fetchIsProfileComplete(userId);
     if (complete) {
-      navigate(redirectTo, { replace: true });
+      goToTrustedRedirect(navigate, redirectTo);
     } else {
       navigate("/complete-profile", { state: { from: redirectTo }, replace: true });
     }

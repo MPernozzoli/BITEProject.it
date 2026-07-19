@@ -14,6 +14,8 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 | `status.ts` | GET | fallback polling: ri-verifica lo stato del pagamento per `bookingRequestId`, azzera la deadline quando non restano pending e accoda `payment_received` |
 | `webhook.ts` | POST | riceve callback Bunq alla liquidazione, azzera la deadline quando non restano pending e accoda `payment_received` |
 | `bank-transfer.ts` | POST | flusso alternativo bonifico bancario (per importi oltre limite Bunq), con stessa deadline 48h ed email `payment_pending` |
+| `membership/request.ts` | POST | crea request-inquiry Bunq per un tier **BITE Crew**, ricalcola importo da `membership_tiers`, salva `membership_payments`, ritorna link `bunq.me` → [[23 - Community]] |
+| `membership/status.ts` | GET | polling del pagamento Crew Pass: se Bunq risulta pagato, marca `membership_payments.paid` e crea/aggiorna `membership_subscriptions` |
 
 ## 📅 Booking (`apps/web/api/bookings/`)
 - `invite.ts` — invito partecipanti a una prenotazione; autorizza il lead della prenotazione o un admin, accetta `language` (`it`/`en`) dalla UI corrente e invia `voyage-participant-invite` agli ospiti pending → [[13 - Booking Voyage]]
@@ -36,6 +38,7 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 ## Note
 - La logica Bunq server-side vive in `apps/web/src/server/bunq/` (`client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`).
 - Gli importi sono **sempre ricalcolati lato server** (`apps/web/src/lib/booking-deposit.ts`), mai fidati dal client.
+- Gli importi membership sono ricalcolati lato server da `membership_tiers`, separati dai depositi booking.
 
 ## Collegamenti
-- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]]
+- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]] · [[23 - Community]]

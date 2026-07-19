@@ -7,11 +7,12 @@ tags: [architettura, overview]
 
 ## Visione d'insieme
 
-BITE Project è una **SPA React** servita da Vercel, con **Supabase** come backend unico (database, autenticazione, storage, funzioni serverless). Il sito è bilingue (IT/EN) e distingue tre superfici:
+BITE Project è una **SPA React** servita da Vercel, con **Supabase** come backend unico (database, autenticazione, storage, funzioni serverless). Il sito è bilingue (IT/EN) e distingue tre superfici attive, più una superficie community in progettazione:
 
 1. **Sito editoriale pubblico** — logbook, racconti, viaggi, crew, manifesto, contatti.
 2. **Area utente / booking** — login, profilo, prenotazione viaggi con contributo spese via [[11 - Pagamenti Bunq]].
 3. **Admin** — su sottodominio dedicato `admin.biteproject.it`, gestione contenuti/newsletter/media/booking. Vedi [[16 - Admin]].
+4. **Community / membership** — proposta **BITE Crew** su `crew.biteproject.it`, con stesso account Supabase, tier a pagamento, contenuti realtime e benefit booking. Vedi [[23 - Community]].
 
 Esiste inoltre un **layer semantico/geospaziale** machine-readable (JSON, GeoJSON, `llms.txt`) pensato per crawler e agenti AI — vedi [[15 - Semantic Layer (AI Agents)]].
 
@@ -42,3 +43,4 @@ Browser ──► Vercel (SPA + edge middleware.ts) ──► index.html + bundl
 - Stack completo: [[02 - Stack Tecnologico]]
 - Come sono organizzate le cartelle: [[04 - Struttura Repository]]
 - Deploy e ambiente: [[18 - Deploy e Configurazione]]
+- Community e membership: [[23 - Community]]

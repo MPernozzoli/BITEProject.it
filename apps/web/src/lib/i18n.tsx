@@ -6,6 +6,7 @@ import {
   DEFAULT_LANG,
   detectPreferredLang,
   getLangFromPath,
+  hasManualLangPreference,
   persistLangPreference,
   swapLangInPath,
   withLang,
@@ -255,7 +256,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
           const { data: { session } } = await supabase.auth.getSession();
           nextUserId = session?.user?.id ?? null;
         }
-        if (!nextUserId || cancelled) return;
+        if (!nextUserId || cancelled || hasManualLangPreference()) return;
 
         const { data, error } = await supabase
           .from("profiles")
@@ -265,7 +266,7 @@ export const I18nProvider = ({ children }: { children: ReactNode }) => {
         if (cancelled || error || !data?.preferred_language) return;
 
         const preferred = resolveToSiteLanguage(data.preferred_language, data.secondary_language);
-        persistLangPreference(preferred);
+        persistLangPreference(preferred, "profile");
         const fromPath = getLangFromPath(window.location.pathname);
         if (fromPath && fromPath !== preferred) {
           navigate(swapLangInPath(window.location.pathname, preferred, window.location.search), {

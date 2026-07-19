@@ -3,6 +3,11 @@ import type { Language } from "@/lib/i18n";
 export const SITE_URL = "https://biteproject.it";
 export const SUPPORTED_LANGS: Language[] = ["it", "en"];
 export const DEFAULT_LANG: Language = "it";
+export type LangPreferenceSource = "manual" | "profile";
+
+const LANG_STORAGE_KEY = "bite-lang";
+const LANG_SOURCE_STORAGE_KEY = "bite-lang-source";
+const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 // ---------------------------------------------------------------------------
 // Legacy constants (used across pages and SeoManager)
@@ -72,13 +77,13 @@ export function swapLangInPath(pathname: string, nextLang: Language, search = ""
 export function detectPreferredLang(): Language {
   if (typeof window === "undefined") return DEFAULT_LANG;
   try {
-    const stored = window.localStorage.getItem("bite-lang");
+    const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
     if (stored === "it" || stored === "en") return stored;
   } catch {
     // ignore
   }
   if (typeof document !== "undefined") {
-    const cookie = document.cookie.split("; ").find((c) => c.startsWith("bite-lang="));
+    const cookie = document.cookie.split("; ").find((c) => c.startsWith(`${LANG_STORAGE_KEY}=`));
     if (cookie) {
       const value = cookie.split("=")[1];
       if (value === "it" || value === "en") return value;
@@ -97,15 +102,47 @@ export function detectPreferredLang(): Language {
   return DEFAULT_LANG;
 }
 
-export function persistLangPreference(lang: Language) {
+function readCookieValue(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const encodedName = encodeURIComponent(name);
+  const cookie = document.cookie.split("; ").find((c) => c.startsWith(`${encodedName}=`));
+  if (!cookie) return null;
+  return decodeURIComponent(cookie.slice(encodedName.length + 1));
+}
+
+export function hasManualLangPreference(): boolean {
+  if (typeof window !== "undefined") {
+    try {
+      const source = window.localStorage.getItem(LANG_SOURCE_STORAGE_KEY);
+      if (source === "manual") return true;
+      if (source === "profile") return false;
+
+      const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
+      if (stored === "it" || stored === "en") return true;
+    } catch {
+      // fall back to cookies
+    }
+  }
+
+  const cookieSource = readCookieValue(LANG_SOURCE_STORAGE_KEY);
+  if (cookieSource === "manual") return true;
+  if (cookieSource === "profile") return false;
+
+  const cookieLang = readCookieValue(LANG_STORAGE_KEY);
+  return cookieLang === "it" || cookieLang === "en";
+}
+
+export function persistLangPreference(lang: Language, source: LangPreferenceSource = "manual") {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem("bite-lang", lang);
+    window.localStorage.setItem(LANG_STORAGE_KEY, lang);
+    window.localStorage.setItem(LANG_SOURCE_STORAGE_KEY, source);
   } catch {
     // ignore
   }
   if (typeof document !== "undefined") {
-    document.cookie = `bite-lang=${lang}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+    document.cookie = `${LANG_STORAGE_KEY}=${lang}; path=/; max-age=${LANG_COOKIE_MAX_AGE}; SameSite=Lax`;
+    document.cookie = `${LANG_SOURCE_STORAGE_KEY}=${source}; path=/; max-age=${LANG_COOKIE_MAX_AGE}; SameSite=Lax`;
   }
 }
 

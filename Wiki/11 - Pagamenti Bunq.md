@@ -8,6 +8,8 @@ tags: [pagamenti, bunq, booking, funzionalita]
 ## Cosa è
 Il flusso di [[13 - Booking Voyage]] richiede un **contributo equo alle spese vive del viaggio** pagato via **Bunq** prima della conferma. Inquadramento legale: BITE **non** è charter/turismo/trasporto — è un viaggio privato della crew aperto a chi vuole partecipare condividendo parte dei costi reali. Il cibo è gestito a bordo e non incluso.
 
+[[23 - Community]] riusa Bunq per il **Crew Pass** membership, ma come dominio separato dal contributo viaggio: importi membership e benefit booking sono tracciati in tabelle dedicate e riconciliati server-side.
+
 ## Calcolo importo (server-authoritative)
 Ricalcolato in `apps/web/src/lib/booking-deposit.ts`, **mai** fidato dal client:
 
@@ -52,8 +54,10 @@ La API Bunq non espone un refund dedicato per `request-inquiry`: il rimborso vie
 ## Endpoint → [[10 - API Vercel]]
 `request` · `status` · `webhook` · `bank-transfer` · `bookings/status` per transizioni terminali con rimborso
 
+Membership Crew Pass: `membership/request` e `membership/status` creano/pollano request-inquiry Bunq separate dai depositi booking → [[23 - Community]].
+
 ## Codice server → [[07 - Frontend - Lib e Hooks]]
 `apps/web/src/server/bunq/`: `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`
 
 ## Collegamenti
-- [[13 - Booking Voyage]] · [[10 - API Vercel]] · [[08 - Supabase]]
+- [[13 - Booking Voyage]] · [[10 - API Vercel]] · [[08 - Supabase]] · [[23 - Community]]

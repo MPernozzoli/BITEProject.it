@@ -77,6 +77,18 @@ Su iPhone/PWA, `Layout.tsx` aggiunge un dock mobile admin persistente su `/admin
 
 Nel tab Piano editoriale, `AdminDashboard.tsx` monta `AdminEditorialPlan`: calendario multicanale con cockpit social mensile, target social gestibili e raccolta insight sui post tramite `editorial_post_insights` → [[16 - Admin]].
 
+## Sub-app BITE Crew → [[23 - Community]]
+Sorgente: `apps/crew/src/pages/`. Router separato dalla main app, servito su `/Crew/` e `crew.biteproject.it`.
+
+| Pagina | Rotta | Descrizione |
+|---|---|---|
+| `CrewHome.tsx` | `/` | feed community, tier Crew Pass, stato subscription e CTA Bunq |
+| `CrewPostPage.tsx` | `/post/:slug` | dettaglio post con contenuto TipTap e discussione |
+| `CrewLivePage.tsx` | `/live` | live thread realtime per navigazioni, Q&A e aggiornamenti guidati; creazione eventi admin |
+| `CrewPollsPage.tsx` | `/polls` | poll member-only con risultati aggregati e form admin |
+| `CrewAccountPage.tsx` | `/account` | stato Crew Pass, benefit, pagamenti e cambio tier |
+| `CrewEditor.tsx` | `/studio`, `/studio/:id` | studio admin isolato per creare/modificare post BITE Crew |
+
 ## Collegamenti
 - Componenti usati: [[06 - Frontend - Componenti]]
 - Logica condivisa: [[07 - Frontend - Lib e Hooks]]

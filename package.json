@@ -6,14 +6,16 @@
   "workspaces": [
     "apps/web",
     "apps/pack",
-    "apps/data"
+    "apps/data",
+    "apps/crew"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @biteproject/web",
-    "build": "npm run build:web && npm run build:pack && npm run build:data && node scripts/copy-subapp-builds.mjs",
+    "build": "npm run build:web && npm run build:pack && npm run build:data && npm run build:crew && node scripts/copy-subapp-builds.mjs",
     "build:web": "npm run build --workspace @biteproject/web",
     "build:pack": "VITE_BASE_PATH=/pack/ npm run build --workspace @biteproject/pack",
     "build:data": "VITE_BASE_PATH=/Data/ npm run build --workspace @biteproject/data",
+    "build:crew": "VITE_BASE_PATH=/Crew/ npm run build --workspace @biteproject/crew",
     "build:dev": "npm run build:dev --workspace @biteproject/web",
     "lint": "npm run lint --workspace @biteproject/web",
     "preview": "npm run preview --workspace @biteproject/web",

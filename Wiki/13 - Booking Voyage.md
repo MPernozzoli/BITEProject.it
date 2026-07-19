@@ -27,6 +27,7 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 ## Regole di dominio
 - **No doppia prenotazione** della stessa tratta (migrazione `prevent_duplicate_leg_booking`).
 - **Minimo fisso contributo:** i €20 sono una tantum per utente/viaggio. Una seconda prenotazione dello stesso utente su altre tratte dello stesso voyage non riapplica il fisso, ma mantiene la parte variabile per NM e complessità → [[11 - Pagamenti Bunq]].
+- **Benefit membership in progettazione:** [[23 - Community]] propone di applicare eventuali benefit solo su elementi accessori come accesso anticipato o riduzione/esenzione del minimo fisso; la parte variabile per NM e complessità resta contributo alle spese vive e non va azzerata automaticamente.
 - **Scadenza pending pagamento:** una prenotazione senza pagamento pendente non scade mentre aspetta l'approvazione admin; quando viene creato un deposito Bunq/bonifico `pending`, la deadline è 48 ore ed è gestita da `expire_pending_voyage_booking_payments()` → [[11 - Pagamenti Bunq]].
 - **Max ospiti** per prenotazione (`backfill_voyage_booking_max_guests`).
 - **Candidature non bloccanti:** `requested` e `waitlisted` non occupano posti e non riducono la disponibilità pubblica. La capacità viene scalata solo da `admin_approved` e `user_confirmed`; quindi si possono ricevere candidature illimitate per tratta e l'admin approva solo finché restano posti disponibili.
@@ -72,4 +73,4 @@ Le pagine `PrivacyPolicy.tsx` e `CookiePolicy.tsx` sono aggiornate al 12 luglio 
 - Widget viaggio in corso in dashboard admin (`VoyageLiveWidget.tsx`), con versione read-only su `/bookings` → [[21 - Tracking Real-Time Viaggi]].
 
 ## Collegamenti
-- [[11 - Pagamenti Bunq]] · [[10 - API Vercel]] · [[14 - Mappe e Layer Geospaziale]] · [[12 - Newsletter ed Email]] · [[21 - Tracking Real-Time Viaggi]]
+- [[11 - Pagamenti Bunq]] · [[10 - API Vercel]] · [[14 - Mappe e Layer Geospaziale]] · [[12 - Newsletter ed Email]] · [[21 - Tracking Real-Time Viaggi]] · [[23 - Community]]

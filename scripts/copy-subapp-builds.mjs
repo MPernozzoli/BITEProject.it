@@ -9,6 +9,7 @@ const builds = [
   { name: "web", source: "apps/web/dist", destination: "dist" },
   { name: "pack", source: "apps/pack/dist", destination: "dist/pack" },
   { name: "data", source: "apps/data/dist", destination: "dist/Data" },
+  { name: "crew", source: "apps/crew/dist", destination: "dist/Crew" },
 ];
 
 rmSync(dist, { recursive: true, force: true });

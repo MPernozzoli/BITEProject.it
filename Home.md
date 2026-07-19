@@ -33,6 +33,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[11 - Pagamenti Bunq]] — contributo viaggio e flusso pagamento
 - [[12 - Newsletter ed Email]] — newsletter + email transazionali
 - [[13 - Booking Voyage]] — prenotazione tratte e partecipanti
+- [[23 - Community]] — proposta BITE Crew: membership, tier, contenuti realtime e benefit booking
 - [[21 - Tracking Real-Time Viaggi]] — date effettive, ricalcolo a cascata, stati derivati
 - [[14 - Mappe e Layer Geospaziale]] — MapLibre, rotte, waypoint
 - [[22 - Citizen Science e Osservazioni]] — campionamenti, catalogo parametri, mappa e export su `data.`
@@ -50,7 +51,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 
 | | |
 |---|---|
-| **Dominio** | biteproject.it (+ sottodominio `admin.`) |
+| **Dominio** | biteproject.it (+ sottodomini `admin.`, `data.`, `pack.`, proposta `crew.`) |
 | **Build tool** | Vite 5 (+ SWC) |
 | **UI** | React 18, shadcn/ui, Radix, Tailwind, framer-motion |
 | **Backend** | Supabase (progetto `ekwloweuicrqjjgabfdp`) |

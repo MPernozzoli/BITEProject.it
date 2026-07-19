@@ -17,7 +17,8 @@ iubgicrwfovrnvoqr/
 │   │   ├── scripts/   # generate-sitemap
 │   │   └── supabase/  # backend Supabase sorgente → [[08 - Supabase]]
 │   ├── pack/          # @biteproject/pack, sito cani servito in /pack
-│   └── data/          # @biteproject/data, app dati servita in /Data
+│   ├── data/          # @biteproject/data, app dati servita in /Data
+│   └── crew/          # @biteproject/crew, community BITE Crew servita in /Crew
 ├── api -> apps/web/api
 │                       # symlink per compatibilità Vercel root
 ├── middleware.ts -> apps/web/middleware.ts
@@ -29,7 +30,7 @@ iubgicrwfovrnvoqr/
 │   ├── payments-bunq.md            → [[11 - Pagamenti Bunq]]
 │   └── migration/     # schema storico/consolidato
 ├── scripts/           # copy-subapp-builds (composizione dist root)
-├── dist/              # output build root generato: web + /pack + /Data
+├── dist/              # output build root generato: web + /pack + /Data + /Crew
 ├── middleware.ts      # edge middleware (prerender/routing)
 ├── vercel.json        # rewrite + header → [[18 - Deploy e Configurazione]]
 └── package.json       # workspace + script root → [[20 - Comandi e Workflow]]
@@ -45,4 +46,4 @@ iubgicrwfovrnvoqr/
 - `.env` — variabili Vite (vedi [[18 - Deploy e Configurazione]])
 
 ## Collegamenti
-- [[01 - Architettura]] · [[02 - Stack Tecnologico]]
+- [[01 - Architettura]] · [[02 - Stack Tecnologico]] · [[23 - Community]]

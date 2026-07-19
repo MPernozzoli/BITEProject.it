@@ -64,5 +64,15 @@ Usati dalle [[10 - API Vercel]]:
 - `http.ts` — util richieste
 - `bunq/` — `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `bank-details.ts`, `supabase.ts` → [[11 - Pagamenti Bunq]]
 
+## Sub-app BITE Crew → [[23 - Community]]
+Sorgente: `apps/crew/src/lib/`, `apps/crew/src/integrations/`.
+
+- `community.ts` — tipi e helper per tier, subscription, pagamenti, benefit, post, live event, poll, slug, date, valuta e label benefit.
+- `auth-redirect.ts` — costruzione del redirect verso `login.biteproject.it` mantenendo `redirect` di ritorno alla sub-app.
+- `supabase-auth-storage.ts` — stessa logica cookie/localStorage condivisa della main app per sessione cross-subdomain.
+- `supabase-auth.ts` — helper sessione locale della sub-app.
+- `article-media.tsx` / `article-map-anchor.ts` — copie isolate delle estensioni TipTap usate dall'editor post.
+- `integrations/supabase/client.ts` — client Supabase della crew app con auth condivisa e passkey abilitate.
+
 ## Collegamenti
 - [[06 - Frontend - Componenti]] · [[08 - Supabase]]

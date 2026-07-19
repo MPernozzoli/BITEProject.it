@@ -1,0 +1,75 @@
+@import "../../web/src/index.css";
+
+@layer base {
+  :root {
+    --crew-ink: 205 48% 18%;
+    --crew-sea: 188 38% 42%;
+    --crew-signal: 42 72% 56%;
+  }
+}
+
+@layer components {
+  .crew-panel {
+    @apply border shadow-[0_24px_80px_rgba(15,23,42,0.10)] backdrop-blur-xl;
+    border-color: rgb(255 255 255 / 0.45);
+    background-color: rgb(255 255 255 / 0.72);
+  }
+
+  .crew-field {
+    @apply w-full rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-base text-slate-950 outline-none transition-colors focus:border-[hsl(var(--teal))] focus:ring-2 focus:ring-[hsl(var(--teal)/0.18)];
+  }
+
+  .crew-label {
+    @apply block text-sm font-medium text-slate-800;
+  }
+
+  .crew-muted {
+    @apply text-sm text-slate-600;
+  }
+
+  .crew-prose {
+    max-width: none;
+    color: rgb(51 65 85);
+    font-size: 1rem;
+    line-height: 1.8;
+  }
+
+  .crew-prose :where(h2, h3) {
+    font-family: var(--font-serif);
+    color: rgb(15 23 42);
+    line-height: 1.12;
+    margin-block: 1.7em 0.55em;
+  }
+
+  .crew-prose h2 {
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+  }
+
+  .crew-prose h3 {
+    font-size: 1.5rem;
+  }
+
+  .crew-prose p,
+  .crew-prose ul,
+  .crew-prose ol,
+  .crew-prose blockquote,
+  .crew-prose figure {
+    margin-block: 1.15em;
+  }
+
+  .crew-prose a {
+    color: hsl(var(--teal));
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  .crew-prose blockquote {
+    border-inline-start: 3px solid hsl(var(--teal) / 0.38);
+    padding-inline-start: 1rem;
+    color: rgb(71 85 105);
+  }
+
+  .crew-prose img {
+    border-radius: 1rem;
+  }
+}

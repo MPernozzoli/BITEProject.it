@@ -16,15 +16,18 @@ tags: [deploy, vercel, config, env]
 - `/sitemap-live.xml` → `/api/sitemap`
 - `/pack/:path*` → `/pack/index.html`
 - `/Data/:path*` → `/Data/index.html`
+- `/Crew/:path*` → `/Crew/index.html`
 - `/(.*)` → `/` (SPA fallback, React Router lato client)
 
-**Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`.
+**Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`.
 
 ## Edge middleware
 - `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. Mantiene lo stesso contenuto operativo di `apps/web/middleware.ts`, ma resta un file reale per evitare problemi di packaging Edge su Vercel.
 - Il middleware Edge non importa helper da `@vercel/functions`: usa direttamente gli header `x-middleware-next` e `x-middleware-rewrite`, così Vercel non include moduli Node non supportati nell'Edge runtime.
 - Gli URL pubblici legacy senza prefisso lingua vengono reindirizzati a `/it/*` o `/en/*` prima del fallback SPA/prerender.
 - I sottodomini `pack.biteproject.it` e `data.biteproject.it` vengono riscritti rispettivamente sui prefissi `/pack` e `/Data`.
+- `crew.biteproject.it` viene riscritto su `/Crew`, con sub-app dedicata `apps/crew`, stesso backend Supabase e nessun link dalla main app finché la community non è pronta → [[23 - Community]].
+- `login.biteproject.it` è l'host dedicato per `/login`, `/signup` e `/complete-profile`; gli stessi path aperti da altri host production vengono reindirizzati lì preservando query string e redirect di ritorno.
 
 ## Variabili d'ambiente (`.env`)
 Il progetto usa **un solo `.env` root** per lo sviluppo locale. `apps/web` legge lo stesso file via `envDir` in `apps/web/vite.config.ts`; le sotto-app possono mantenere lo stesso pattern se servono variabili condivise. Non mantenere `.env` separati nelle sotto-cartelle.
@@ -33,6 +36,7 @@ Prefisso Vite `VITE_` (esposte al client):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PROJECT_ID`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_LOGIN_URL` opzionale per lo sviluppo delle sub-app: se assente, i bridge locali `/login` puntano a `http://127.0.0.1:5173`.
 
 > ⚠️ I segreti server (Bunq, service role Supabase, chiavi email/VAPID) **non** stanno qui: vanno nelle env di Vercel / secret delle Supabase Functions, mai committati.
 
@@ -58,9 +62,9 @@ OAuth social del calendario editoriale (secret Supabase Functions, non Vercel):
 Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ_WEBHOOK_SECRET`, da configurare in Vercel e nella callback Bunq.
 
 ## Build
-- `npm run build` orchestra: `build:web` (sitemap + Vite build in `apps/web`) → `build:pack` (`/pack/`) → `build:data` (`/Data/`) → `copy-subapp-builds.mjs`.
+- `npm run build` orchestra: `build:web` (sitemap + Vite build in `apps/web`) → `build:pack` (`/pack/`) → `build:data` (`/Data/`) → `build:crew` (`/Crew/`) → `copy-subapp-builds.mjs`.
 - Base path sotto-app via `VITE_BASE_PATH`. Vedi [[19 - Sub-App (pack e data)]] e [[20 - Comandi e Workflow]].
-- `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build e copia `apps/pack/dist` in `dist/pack`, `apps/data/dist` in `dist/Data`.
+- `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build e copia `apps/pack/dist` in `dist/pack`, `apps/data/dist` in `dist/Data`, `apps/crew/dist` in `dist/Crew`.
 - `apps/web/scripts/generate-sitemap.mjs` legge sia `apps/web/.env` sia `.env` root, così la build monorepo locale genera anche URL dinamici di articoli/viaggi e non solo le rotte statiche.
 - Chunking Vite: app principale e sub-app separano vendor pesanti (`router`, `query`, `radix`, `icons`, `maps`, `three`/`tiptap` dove presenti). `apps/pack` carica la pagina principale in lazy route; `apps/data` isola MapLibre nel chunk `maps`, così la route `/map` resta leggera e il vendor viene scaricato/cacheato separatamente.
 
@@ -71,6 +75,7 @@ Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ
 - `.obsidian/` **non** è in `.gitignore`: valuta se ignorare il vault o versionarlo.
 - Supabase Cron è usato per manutenzioni DB (`deactivate-past-voyage-bookable-legs`, `expire-pending-voyage-booking-payments`) → [[08 - Supabase]].
 - Hardening residuo da dashboard: abilitare **leaked password protection** in Supabase Auth. `homepage-media` è listabile pubblicamente solo sui prefissi hero usati dalla home.
+- Supabase Auth: registrare `login.biteproject.it` e gli URL di ritorno BITE tra gli allowed redirect URLs, usando URL production espliciti dove possibile.
 
 ## Collegamenti
-- [[10 - API Vercel]] · [[19 - Sub-App (pack e data)]] · [[20 - Comandi e Workflow]]
+- [[10 - API Vercel]] · [[19 - Sub-App (pack e data)]] · [[20 - Comandi e Workflow]] · [[23 - Community]]

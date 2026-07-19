@@ -1,8 +1,11 @@
 const PACK_HOSTNAME = "pack.biteproject.it";
 const DATA_HOSTNAME = "data.biteproject.it";
+const CREW_HOSTNAME = "crew.biteproject.it";
 const ADMIN_HOSTNAME = "admin.biteproject.it";
+const LOGIN_HOSTNAME = "login.biteproject.it";
 const PACK_PREFIX = "/pack";
 const DATA_PREFIX = "/Data";
+const CREW_PREFIX = "/Crew";
 const PUBLIC_FILE_RE = /\.[a-z0-9]+$/i;
 
 const next = () =>
@@ -48,9 +51,37 @@ const getPreferredLang = (request: Request): "it" | "en" => {
   return "it";
 };
 
+const isLocalHostname = (hostname: string) =>
+  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+
+const isAuthPath = (pathname: string) =>
+  pathname === "/login" || pathname === "/signup" || pathname === "/complete-profile";
+
 export default function middleware(request: Request) {
   const hostname = getHostname(request);
   const url = new URL(request.url);
+
+  if (hostname === LOGIN_HOSTNAME) {
+    if (url.pathname === "/") {
+      url.pathname = "/login";
+      return Response.redirect(url, 307);
+    }
+
+    if (url.pathname.startsWith("/api/") || PUBLIC_FILE_RE.test(url.pathname) || isAuthPath(url.pathname)) {
+      return next();
+    }
+
+    const target = new URL(url);
+    target.hostname = "biteproject.it";
+    target.pathname = url.pathname;
+    return Response.redirect(target, 307);
+  }
+
+  if (!isLocalHostname(hostname) && isAuthPath(url.pathname)) {
+    const target = new URL(url);
+    target.hostname = LOGIN_HOSTNAME;
+    return Response.redirect(target, 307);
+  }
 
   if (hostname === ADMIN_HOSTNAME && url.pathname === "/") {
     url.pathname = "/admin";
@@ -62,6 +93,8 @@ export default function middleware(request: Request) {
       ? PACK_PREFIX
       : hostname === DATA_HOSTNAME
         ? DATA_PREFIX
+        : hostname === CREW_HOSTNAME
+          ? CREW_PREFIX
         : null;
 
   if (!prefix) {
@@ -99,6 +132,10 @@ export default function middleware(request: Request) {
       return rewrite(target);
     }
 
+    return next();
+  }
+
+  if (url.pathname.startsWith("/api/")) {
     return next();
   }
 
