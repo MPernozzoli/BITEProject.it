@@ -45,10 +45,10 @@ const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: 
     description: DEFAULT_DESCRIPTION,
   },
   "/crew": {
-    title: { en: "Crew | BITE", it: "La Ciurma | BITE" },
+    title: { en: "Crew and S/Y Spritz Deerberg Beryll 32 | BITE", it: "Ciurma e S/Y Spritz Deerberg Beryll 32 | BITE" },
     description: {
-      en: "Meet the crew behind BITE and the life aboard S/Y Spritz.",
-      it: "Scopri la ciurma dietro BITE e la vita a bordo di S/Y Spritz.",
+      en: "Meet Massimo, Sami, Godot and Freyja aboard Spritz, a 1975 Deerberg Beryll 32 sailboat refitted for Mediterranean sailing, remote work and life at sea.",
+      it: "Conosci Massimo, Sami, Godot e Freyja a bordo di Spritz, una Deerberg Beryll 32 del 1975 riadattata per vela, lavoro remoto e vita in mare.",
     },
   },
   "/manifesto": {
@@ -84,10 +84,10 @@ const STATIC_ROUTES: Record<string, { title: Record<Lang, string>; description: 
     },
   },
   "/collaborations": {
-    title: { en: "Collaborations | BITE", it: "Collaborazioni | BITE" },
+    title: { en: "Sailing Partnerships and Collaborations | BITE", it: "Partnership nautiche e collaborazioni | BITE" },
     description: {
-      en: "Partnerships, editorial work, and creative collaborations with BITE.",
-      it: "Partnership, lavoro editoriale e collaborazioni creative con BITE.",
+      en: "Sailing partnerships, marine gear collaborations and editorial projects with BITE aboard S/Y Spritz: field-tested products, reviews, stories and content from real use at sea.",
+      it: "Partnership nautiche, collaborazioni marine e progetti editoriali con BITE a bordo di S/Y Spritz: prodotti testati in mare, recensioni, storie e contenuti da uso reale.",
     },
   },
   "/contact": {
@@ -188,6 +188,123 @@ interface HtmlSection {
 const absoluteUrl = (path: string) => `${SITE_URL}${path}`;
 const localizedUrl = (lang: Lang, path: string) => absoluteUrl(withLang(lang, path));
 
+const STATIC_ROUTE_SECTIONS: Partial<Record<string, Record<Lang, HtmlSection[]>>> = {
+  "/crew": {
+    en: [
+      {
+        heading: "Who is aboard Spritz",
+        body: "BITE is the sailing and storytelling project of Massimo, Sami, Godot and Freyja aboard S/Y Spritz.",
+      },
+      {
+        heading: "S/Y Spritz",
+        body: "Spritz is a Deerberg Beryll 32 sailboat built in Germany in 1975. She was originally built as a ketch, later converted to a cutter, refitted after leaving Lake Constance and sailed through inland waterways, the Black Sea, Greece and Italy.",
+      },
+      {
+        heading: "What BITE documents",
+        body: "The crew documents Mediterranean sailing, boat refit, liveaboard routines, remote work from a sailboat, slow travel and practical choices for life at sea.",
+      },
+    ],
+    it: [
+      {
+        heading: "Chi è a bordo di Spritz",
+        body: "BITE è il progetto di navigazione e racconto di Massimo, Sami, Godot e Freyja a bordo di S/Y Spritz.",
+      },
+      {
+        heading: "S/Y Spritz",
+        body: "Spritz è una barca a vela Deerberg Beryll 32 costruita in Germania nel 1975. Nata ketch, poi convertita a cutter, è stata refittata dopo il Lago di Costanza e ha navigato lungo canali interni, Mar Nero, Grecia e Italia.",
+      },
+      {
+        heading: "Cosa racconta BITE",
+        body: "La ciurma documenta vela nel Mediterraneo, refit, vita a bordo, lavoro remoto da una barca a vela, viaggio lento e scelte pratiche per la vita in mare.",
+      },
+    ],
+  },
+  "/collaborations": {
+    en: [
+      {
+        heading: "Sailing partnerships",
+        body: "BITE collaborates on marine gear, sailing hardware, marine electronics, connectivity, expedition clothing, pet gear for life aboard, sustainability, repair and self-sufficiency.",
+      },
+      {
+        heading: "Editorial collaborations",
+        body: "Collaborations can include long-form articles, photo essays, technical reviews, video content and social storytelling based on real daily use aboard S/Y Spritz.",
+      },
+      {
+        heading: "Useful search intents",
+        body: "This page is relevant for sailing partnerships, nautical collaborations, marine gear collaborations, partnership nautica, collaborazioni nautiche and editorial projects connected to life at sea.",
+      },
+    ],
+    it: [
+      {
+        heading: "Partnership nautiche",
+        body: "BITE collabora su attrezzatura nautica, ferramenta di bordo, elettronica marina, connettività, abbigliamento tecnico, accessori per animali a bordo, sostenibilità, riparazione e autosufficienza.",
+      },
+      {
+        heading: "Collaborazioni editoriali",
+        body: "Le collaborazioni possono includere articoli di lunga forma, reportage fotografici, recensioni tecniche, contenuti video e storytelling social basati sull'uso quotidiano reale a bordo di S/Y Spritz.",
+      },
+      {
+        heading: "Intenti di ricerca",
+        body: "Questa pagina è rilevante per partnership nautica, collaborazioni nautiche, collaborazioni marine, sailing partnerships, marine gear collaborations e progetti editoriali legati alla vita in mare.",
+      },
+    ],
+  },
+};
+
+const buildStaticJsonLd = (lang: Lang, path: string): Record<string, unknown> | undefined => {
+  if (path === "/crew") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      name: STATIC_ROUTES[path].title[lang],
+      description: STATIC_ROUTES[path].description[lang],
+      url: localizedUrl(lang, path),
+      inLanguage: lang,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      about: [
+        { "@type": "Person", name: "Massimo" },
+        { "@type": "Person", name: "Sami" },
+        { "@type": "Person", name: "Godot" },
+        { "@type": "Person", name: "Freyja" },
+        {
+          "@type": "Product",
+          name: "S/Y Spritz",
+          model: "Deerberg Beryll 32",
+          category: "Sailboat",
+          description:
+            lang === "it"
+              ? "Barca a vela Deerberg Beryll 32 costruita in Germania nel 1975, nata ketch e poi convertita a cutter."
+              : "Deerberg Beryll 32 sailboat built in Germany in 1975, originally a ketch and later converted to a cutter.",
+        },
+      ],
+    };
+  }
+
+  if (path === "/collaborations") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: STATIC_ROUTES[path].title[lang],
+      description: STATIC_ROUTES[path].description[lang],
+      url: localizedUrl(lang, path),
+      inLanguage: lang,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      about: [
+        "partnership nautica",
+        "collaborazioni nautiche",
+        "sailing partnerships",
+        "marine gear collaborations",
+        "attrezzatura nautica",
+        "elettronica marina",
+      ],
+    };
+  }
+
+  return undefined;
+};
+
 const buildStaticPage = (lang: Lang, path: string): PageData | null => {
   const meta = STATIC_ROUTES[path];
   if (!meta) return null;
@@ -196,6 +313,8 @@ const buildStaticPage = (lang: Lang, path: string): PageData | null => {
     description: meta.description[lang],
     paths: { it: path, en: path },
     ogType: "website",
+    sections: STATIC_ROUTE_SECTIONS[path]?.[lang],
+    jsonLd: buildStaticJsonLd(lang, path),
     status: 200,
     robots: meta.robots ?? "index, follow",
   };

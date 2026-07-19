@@ -4,8 +4,11 @@ import {
   applySeo,
   DEFAULT_DESCRIPTION,
   DEFAULT_DESCRIPTION_IT,
+  ORGANIZATION_ID,
+  SITE_URL,
   stripLangPrefix,
 } from "@/lib/seo";
+import type { SeoStructuredData } from "@/lib/seo";
 import { useI18n } from "@/lib/i18n";
 import type { Language } from "@/lib/i18n";
 
@@ -13,6 +16,7 @@ type SeoConfig = {
   title: { en: string; it: string };
   description: { en: string; it: string };
   robots?: string;
+  structuredData?: (lang: Language) => SeoStructuredData;
 };
 
 const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
@@ -27,11 +31,40 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
   },
   "/crew": {
-    title: { en: "Crew | BITE", it: "La Ciurma | BITE" },
+    title: { en: "Crew and S/Y Spritz Deerberg Beryll 32 | BITE", it: "Ciurma e S/Y Spritz Deerberg Beryll 32 | BITE" },
     description: {
-      en: "Meet the crew behind BITE and the life aboard S/Y Spritz.",
-      it: "Scopri la ciurma dietro BITE e la vita a bordo di S/Y Spritz.",
+      en: "Meet Massimo, Sami, Godot and Freyja aboard Spritz, a 1975 Deerberg Beryll 32 sailboat refitted for Mediterranean sailing, remote work and life at sea.",
+      it: "Conosci Massimo, Sami, Godot e Freyja a bordo di Spritz, una Deerberg Beryll 32 del 1975 riadattata per vela, lavoro remoto e vita in mare.",
     },
+    structuredData: (lang) => ({
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      name: lang === "it" ? "Ciurma e S/Y Spritz Deerberg Beryll 32" : "Crew and S/Y Spritz Deerberg Beryll 32",
+      description:
+        lang === "it"
+          ? "Pagina sulla ciurma BITE e su Spritz, barca a vela Deerberg Beryll 32 del 1975."
+          : "Page about the BITE crew and Spritz, a 1975 Deerberg Beryll 32 sailboat.",
+      url: `${SITE_URL}/${lang}/crew`,
+      inLanguage: lang,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      publisher: { "@id": ORGANIZATION_ID },
+      about: [
+        { "@type": "Person", name: "Massimo" },
+        { "@type": "Person", name: "Sami" },
+        { "@type": "Person", name: "Godot" },
+        { "@type": "Person", name: "Freyja" },
+        {
+          "@type": "Product",
+          name: "S/Y Spritz",
+          model: "Deerberg Beryll 32",
+          category: "Sailboat",
+          description:
+            lang === "it"
+              ? "Barca a vela Deerberg Beryll 32 costruita in Germania nel 1975, nata ketch e poi convertita a cutter."
+              : "Deerberg Beryll 32 sailboat built in Germany in 1975, originally a ketch and later converted to a cutter.",
+        },
+      ],
+    }),
   },
   "/manifesto": {
     // Temporarily withheld while the Manifesto is being reworked: not linked in
@@ -65,11 +98,32 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
     },
   },
   "/collaborations": {
-    title: { en: "Collaborations | BITE", it: "Collaborazioni | BITE" },
+    title: { en: "Sailing Partnerships and Collaborations | BITE", it: "Partnership nautiche e collaborazioni | BITE" },
     description: {
-      en: "Partnerships, editorial work, and creative collaborations with BITE.",
-      it: "Partnership, lavoro editoriale e collaborazioni creative con BITE.",
+      en: "Sailing partnerships, marine gear collaborations and editorial projects with BITE aboard S/Y Spritz: field-tested products, reviews, stories and content from real use at sea.",
+      it: "Partnership nautiche, collaborazioni marine e progetti editoriali con BITE a bordo di S/Y Spritz: prodotti testati in mare, recensioni, storie e contenuti da uso reale.",
     },
+    structuredData: (lang) => ({
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: lang === "it" ? "Partnership nautiche e collaborazioni" : "Sailing partnerships and collaborations",
+      description:
+        lang === "it"
+          ? "Collaborazioni editoriali e partnership nautiche per attrezzatura, elettronica marina, connettività, abbigliamento tecnico, accessori per animali a bordo e sostenibilità."
+          : "Editorial collaborations and sailing partnerships for marine gear, marine electronics, connectivity, technical clothing, pet gear aboard and sustainability.",
+      url: `${SITE_URL}/${lang}/collaborations`,
+      inLanguage: lang,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      publisher: { "@id": ORGANIZATION_ID },
+      about: [
+        "partnership nautica",
+        "collaborazioni nautiche",
+        "sailing partnerships",
+        "marine gear collaborations",
+        "attrezzatura nautica",
+        "elettronica marina",
+      ],
+    }),
   },
   "/contact": {
     title: { en: "Contact | BITE", it: "Contatti | BITE" },
@@ -232,6 +286,7 @@ const SeoManager = () => {
         strippedPath === "/logbook" || strippedPath === "/voyages"
           ? "collection"
           : "website",
+      structuredData: seo.structuredData?.(activeLang),
     });
   }, [pathname, lang]);
 

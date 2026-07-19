@@ -1,5 +1,6 @@
 import { useI18n } from "@/lib/i18n";
 import { Heart, Music } from "lucide-react";
+import crewHeroGodot from "@/assets/crew-hero-godot.webp";
 import boatSunset from "@/assets/boat-sunset.webp";
 import sailingCockpit from "@/assets/sailing-cockpit.webp";
 import boatHarbor from "@/assets/boat-harbor.webp";
@@ -27,11 +28,20 @@ const TheCrew = () => {
   const { t, lang } = useI18n();
   const massimoAge = calculateAge("1996-10-16");
   const samiAge = calculateAge("1999-05-25");
+  const godotAge = calculateAge("2019-11-17");
+  const freyjaAge = calculateAge("2023-11-21");
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       <section className="relative min-h-[78vh] overflow-hidden px-4 pb-6 pt-24 md:px-6 md:pb-8 md:pt-28">
         <div className="absolute inset-0">
+          <img
+            src={crewHeroGodot}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover object-[50%_48%]"
+            aria-hidden="true"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_34%),linear-gradient(180deg,rgba(17,28,43,0.38)_0%,rgba(17,28,43,0.64)_42%,rgba(17,28,43,0.9)_100%)]" />
         </div>
         <div className="relative z-10 mx-auto flex min-h-[calc(78vh-7rem)] max-w-6xl items-end">
@@ -149,7 +159,7 @@ const TheCrew = () => {
             <div>
               <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.godot.title")}</h3>
               <p className="editorial-body text-muted-foreground leading-relaxed">
-                {t("crew.godot.text")}
+                {t("crew.godot.text", { age: godotAge })}
               </p>
             </div>
           </div>
@@ -162,7 +172,7 @@ const TheCrew = () => {
             <div className="order-2 lg:order-1">
               <h3 className="editorial-heading text-2xl md:text-4xl mb-6">{t("crew.freyja.title")}</h3>
               <p className="editorial-body text-muted-foreground leading-relaxed">
-                {t("crew.freyja.text")}
+                {t("crew.freyja.text", { age: freyjaAge })}
               </p>
             </div>
             <div className="glass-frame rounded-[30px] p-2 aspect-[4/3] order-1 lg:order-2">

@@ -14,7 +14,7 @@ tags: [mappe, geo, maplibre, funzionalita]
 - `LazyVoyageMap.tsx` — mappa rotta viaggio (lazy) → usata da `VoyagePage.tsx`
 - `VoyageMap.tsx` — mappa MapLibre del logbook; durante il booking riceve le tratte selezionate e disegna un overlay verde sopra i segmenti interessati.
   - Nei tooltip waypoint dei voyage prenotabili mostra anche le date della sosta (`Arrivo` dalla leg in ingresso, `Ripartenza` dalla leg in uscita); i voyage senza booking attivo non espongono queste date nel tooltip.
-- `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale in articolo
+- `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale in articolo. Quando l'articolo è collegato a un viaggio prenotabile, `ArticleReader.tsx` carica `get_public_voyage_leg_availability` e mostra sulla minimappa la CTA **Partecipa** solo se esiste almeno un tratto ancora disponibile; per articoli agganciati a un segmento considera solo le tratte comprese nel segmento.
 - `MapLoadingPlaceholder.tsx` — placeholder di caricamento
 - `AdminMapPresenceManager.tsx`, `ArticleMiniMapEditor.tsx`, `AdminVoyageManager.tsx` — editing lato admin → [[16 - Admin]]
 - `AdminVoyageManager.tsx` usa `requestFullscreen()` sul workspace mappa per l'editor rotte, ascolta `fullscreenchange` per sincronizzare lo stato UI e forza `map.resize()` dopo il cambio dimensione.

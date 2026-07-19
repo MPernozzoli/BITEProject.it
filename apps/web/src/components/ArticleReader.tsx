@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { generateHTML } from "@tiptap/react";
 import { format } from "date-fns";
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, User } from "lucide-react";
@@ -17,6 +18,12 @@ import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import { articlePathForLang, storyPathForLang } from "@/lib/article-slug";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  getLegRangeBetweenWaypoints,
+  isVoyageBookableNow,
+  type BookableLegAvailability,
+} from "@/lib/booking-utils";
 import {
   getArticleSceneCameraCenter,
   getArticleSceneAnchorId,
@@ -138,6 +145,27 @@ const ArticleReader = ({
     if (!article || linkedVoyageWaypoints.length === 0) return null;
     return resolveArticleRouteRange(article as GeoArticle, linkedVoyageWaypoints);
   }, [article, linkedVoyageWaypoints]);
+  const shouldLoadBookingAvailability = Boolean(
+    article.voyage_id &&
+      linkedVoyage &&
+      linkedVoyageWaypoints.length >= 2 &&
+      isVoyageBookableNow(linkedVoyage)
+  );
+  const { data: voyageBookingLegs = [] } = useQuery({
+    queryKey: ["article-public-voyage-leg-availability", article.voyage_id],
+    enabled: shouldLoadBookingAvailability,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_public_voyage_leg_availability", {
+        _voyage_ids: [article.voyage_id!],
+      });
+      if (error) {
+        console.warn("[ArticleReader] get_public_voyage_leg_availability unavailable", error);
+        return [] as BookableLegAvailability[];
+      }
+      return ((data || []) as BookableLegAvailability[]).sort((a, b) => a.sort_order - b.sort_order);
+    },
+    staleTime: 1000 * 30,
+  });
 
   const articleWaypointsMap = useMemo(() => {
     const vid = article.voyage_id;
@@ -281,6 +309,34 @@ const ArticleReader = ({
       }));
     });
   }, [article.voyage_id, articleRouteSegment, lang, linkedVoyageWaypoints]);
+  const availableBookingLegsForArticle = useMemo(() => {
+    if (!shouldLoadBookingAvailability || voyageBookingLegs.length === 0) return [];
+    let relevantLegs = voyageBookingLegs;
+
+    if (articleRouteSegment && articleRouteSegment[0] !== articleRouteSegment[1]) {
+      const [startIndex, endIndex] = articleRouteSegment;
+      const fromWaypointId = linkedVoyageWaypoints[startIndex]?.id;
+      const toWaypointId = linkedVoyageWaypoints[endIndex]?.id;
+      if (!fromWaypointId || !toWaypointId) return [];
+
+      const waypointIds = linkedVoyageWaypoints.map((waypoint) => waypoint.id);
+      relevantLegs = getLegRangeBetweenWaypoints(waypointIds, voyageBookingLegs, fromWaypointId, toWaypointId);
+    }
+
+    return relevantLegs.filter((leg) => leg.available && leg.remaining > 0);
+  }, [articleRouteSegment, linkedVoyageWaypoints, shouldLoadBookingAvailability, voyageBookingLegs]);
+  const bookingCta = useMemo(() => {
+    if (!article.voyage_id || availableBookingLegsForArticle.length === 0) return null;
+    const count = availableBookingLegsForArticle.length;
+    return {
+      href: `/bookings?voyage=${encodeURIComponent(article.voyage_id)}`,
+      label: lang === "it" ? "Partecipa" : "Join",
+      description:
+        lang === "it"
+          ? `${count} ${count === 1 ? "tratto ancora selezionabile" : "tratti ancora selezionabili"}`
+          : `${count} ${count === 1 ? "leg is still selectable" : "legs are still selectable"}`,
+    };
+  }, [article.voyage_id, availableBookingLegsForArticle.length, lang]);
 
   const fallbackSceneCoordinates = useMemo(() => {
     if (hasGeo) return { latitude: article.latitude!, longitude: article.longitude! };
@@ -529,6 +585,7 @@ const ArticleReader = ({
                     primaryRouteCoordinates={primaryRouteCoordinates}
                     distanceValue={articleRouteDistance?.value ?? null}
                     distanceUnit={articleRouteDistance?.unit ?? null}
+                    bookingCta={bookingCta}
                   />
                 )}
                 {articleVoyageMediaItems.length > 0 && <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />}

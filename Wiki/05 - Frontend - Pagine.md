@@ -23,6 +23,10 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `Links.tsx` | `links` | Pagina linktree |
 | `NotFound.tsx` | `*` | 404 |
 
+SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orientati a ciurma, Spritz e **Deerberg Beryll 32**; `/collaborations` usa title/description e JSON-LD mirati a partnership nautiche, collaborazioni marine, attrezzatura nautica, elettronica marina e progetti editoriali.
+
+`About.tsx` usa `crew-hero-godot.webp` come immagine hero locale della pagina crew, con overlay scuro per mantenere leggibili titolo e intro.
+
 ## Area utente / booking → [[13 - Booking Voyage]]
 | Pagina | Rotta |
 |---|---|

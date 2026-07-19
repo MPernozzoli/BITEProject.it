@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { MapPin, Navigation, Ship } from "lucide-react";
+import { CalendarCheck, MapPin, Navigation, Ship } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
 import { buildVesselRouteCoordinates, destinationPoint, getRouteTerminalAngle } from "@/lib/article-map";
@@ -36,6 +37,11 @@ interface ArticleMapAsideProps {
   primaryRouteCoordinates?: [number, number][] | null;
   distanceValue?: number | null;
   distanceUnit?: "NM" | "KM" | null;
+  bookingCta?: {
+    href: string;
+    label: string;
+    description?: string;
+  } | null;
 }
 
 const ArticleMapAside = ({
@@ -48,6 +54,7 @@ const ArticleMapAside = ({
   primaryRouteCoordinates = null,
   distanceValue = null,
   distanceUnit = null,
+  bookingCta = null,
 }: ArticleMapAsideProps) => {
   const { lang } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -462,7 +469,7 @@ const ArticleMapAside = ({
               />
             ) : null}
           </div>
-          {(activeScene?.description || activeScene?.windLabel || (distanceValue ?? 0) > 0) && (
+          {(activeScene?.description || activeScene?.windLabel || (distanceValue ?? 0) > 0 || bookingCta) && (
             <div className="border-t glass-divider px-4 py-3 space-y-2">
               {activeScene?.description && (
                 <p className="text-xs font-sans leading-relaxed text-muted-foreground">{activeScene.description}</p>
@@ -499,6 +506,27 @@ const ArticleMapAside = ({
                     </span>
                   ))}
                 </div>
+              )}
+              {bookingCta && (
+                <Link
+                  to={bookingCta.href}
+                  className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-emerald-300/70 bg-emerald-50/85 px-3 py-3 text-left transition-colors hover:border-emerald-400 hover:bg-emerald-50"
+                >
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-emerald-950">
+                      <CalendarCheck size={15} className="shrink-0 text-emerald-700" />
+                      {bookingCta.label}
+                    </span>
+                    {bookingCta.description && (
+                      <span className="mt-1 block text-xs leading-relaxed text-emerald-900/80">
+                        {bookingCta.description}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white">
+                    {lang === "it" ? "Vai" : "Open"}
+                  </span>
+                </Link>
               )}
             </div>
           )}
