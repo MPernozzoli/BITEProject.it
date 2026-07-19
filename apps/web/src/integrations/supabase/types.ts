@@ -535,6 +535,56 @@ export type Database = {
           },
         ]
       }
+      community_channels: {
+        Row: {
+          channel_order: number
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          is_active: boolean
+          min_tier_id: string | null
+          name: string
+          slug: string
+          updated_at: string
+          visibility: Database["public"]["Enums"]["community_post_visibility"]
+        }
+        Insert: {
+          channel_order?: number
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          min_tier_id?: string | null
+          name: string
+          slug: string
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["community_post_visibility"]
+        }
+        Update: {
+          channel_order?: number
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          is_active?: boolean
+          min_tier_id?: string | null
+          name?: string
+          slug?: string
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["community_post_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_channels_min_tier_id_fkey"
+            columns: ["min_tier_id"]
+            isOneToOne: false
+            referencedRelation: "membership_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_comments: {
         Row: {
           content: string
@@ -602,6 +652,8 @@ export type Database = {
           created_at: string
           ends_at: string | null
           id: string
+          livekit_mode: string
+          livekit_room_name: string | null
           metadata: Json
           min_tier_id: string | null
           post_id: string | null
@@ -614,6 +666,8 @@ export type Database = {
           created_at?: string
           ends_at?: string | null
           id?: string
+          livekit_mode?: string
+          livekit_room_name?: string | null
           metadata?: Json
           min_tier_id?: string | null
           post_id?: string | null
@@ -626,6 +680,8 @@ export type Database = {
           created_at?: string
           ends_at?: string | null
           id?: string
+          livekit_mode?: string
+          livekit_room_name?: string | null
           metadata?: Json
           min_tier_id?: string | null
           post_id?: string | null
@@ -908,17 +964,21 @@ export type Database = {
       community_posts: {
         Row: {
           author_profile_id: string
+          channel_id: string | null
           content_en: Json
           content_it: Json
           cover_image: string | null
           created_at: string
           excerpt_en: string
           excerpt_it: string
+          external_url: string | null
           id: string
           live_ends_at: string | null
           live_starts_at: string | null
+          media_urls: Json
           metadata: Json
           min_tier_id: string | null
+          post_type: string
           published_at: string | null
           slug: string
           status: Database["public"]["Enums"]["community_post_status"]
@@ -929,17 +989,21 @@ export type Database = {
         }
         Insert: {
           author_profile_id: string
+          channel_id?: string | null
           content_en?: Json
           content_it?: Json
           cover_image?: string | null
           created_at?: string
           excerpt_en?: string
           excerpt_it?: string
+          external_url?: string | null
           id?: string
           live_ends_at?: string | null
           live_starts_at?: string | null
+          media_urls?: Json
           metadata?: Json
           min_tier_id?: string | null
+          post_type?: string
           published_at?: string | null
           slug: string
           status?: Database["public"]["Enums"]["community_post_status"]
@@ -950,17 +1014,21 @@ export type Database = {
         }
         Update: {
           author_profile_id?: string
+          channel_id?: string | null
           content_en?: Json
           content_it?: Json
           cover_image?: string | null
           created_at?: string
           excerpt_en?: string
           excerpt_it?: string
+          external_url?: string | null
           id?: string
           live_ends_at?: string | null
           live_starts_at?: string | null
+          media_urls?: Json
           metadata?: Json
           min_tier_id?: string | null
+          post_type?: string
           published_at?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["community_post_status"]
@@ -982,6 +1050,13 @@ export type Database = {
             columns: ["author_profile_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_posts_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "community_channels"
             referencedColumns: ["id"]
           },
           {
@@ -2189,6 +2264,7 @@ export type Database = {
           metadata: Json
           paid_at: string | null
           payment_method: string
+          period_count: number
           period_end: string | null
           period_start: string
           profile_id: string
@@ -2209,6 +2285,7 @@ export type Database = {
           metadata?: Json
           paid_at?: string | null
           payment_method?: string
+          period_count?: number
           period_end?: string | null
           period_start?: string
           profile_id: string
@@ -2229,6 +2306,7 @@ export type Database = {
           metadata?: Json
           paid_at?: string | null
           payment_method?: string
+          period_count?: number
           period_end?: string | null
           period_start?: string
           profile_id?: string
@@ -2277,9 +2355,12 @@ export type Database = {
           created_at: string
           current_period_end: string | null
           current_period_start: string
+          expired_reminder_sent_at: string | null
+          grace_period_end: string | null
           id: string
           metadata: Json
           profile_id: string
+          renewal_reminder_sent_at: string | null
           status: Database["public"]["Enums"]["membership_subscription_status"]
           tier_id: string
           updated_at: string
@@ -2290,9 +2371,12 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string
+          expired_reminder_sent_at?: string | null
+          grace_period_end?: string | null
           id?: string
           metadata?: Json
           profile_id: string
+          renewal_reminder_sent_at?: string | null
           status?: Database["public"]["Enums"]["membership_subscription_status"]
           tier_id: string
           updated_at?: string
@@ -2303,9 +2387,12 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string
+          expired_reminder_sent_at?: string | null
+          grace_period_end?: string | null
           id?: string
           metadata?: Json
           profile_id?: string
+          renewal_reminder_sent_at?: string | null
           status?: Database["public"]["Enums"]["membership_subscription_status"]
           tier_id?: string
           updated_at?: string
@@ -2345,7 +2432,10 @@ export type Database = {
           is_active: boolean
           name: string
           price_cents: number
+          renewal_policy: string
           slug: string
+          sort_label: string | null
+          tier_family: string
           tier_order: number
           updated_at: string
         }
@@ -2359,7 +2449,10 @@ export type Database = {
           is_active?: boolean
           name: string
           price_cents: number
+          renewal_policy?: string
           slug: string
+          sort_label?: string | null
+          tier_family: string
           tier_order: number
           updated_at?: string
         }
@@ -2373,7 +2466,10 @@ export type Database = {
           is_active?: boolean
           name?: string
           price_cents?: number
+          renewal_policy?: string
           slug?: string
+          sort_label?: string | null
+          tier_family?: string
           tier_order?: number
           updated_at?: string
         }
@@ -4717,6 +4813,19 @@ export type Database = {
           participant_id: string
         }[]
       }
+      admin_list_community_roles: {
+        Args: never
+        Returns: {
+          active_period_end: string
+          active_subscription_id: string
+          active_tier_name: string
+          email: string
+          is_admin: boolean
+          is_moderator: boolean
+          name: string
+          profile_id: string
+        }[]
+      }
       admin_propose_voyage_booking_legs: {
         Args: {
           _admin_note?: string
@@ -4731,6 +4840,10 @@ export type Database = {
           _admin_note?: string
           _booking_request_id: string
         }
+        Returns: undefined
+      }
+      admin_set_community_moderator: {
+        Args: { _enabled: boolean; _profile_id: string }
         Returns: undefined
       }
       admin_set_voyage_booking_status: {
@@ -4791,6 +4904,10 @@ export type Database = {
           _stop_nights: number
         }
         Returns: string
+      }
+      can_read_community_channel: {
+        Args: { _channel_id: string; _profile_id: string }
+        Returns: boolean
       }
       can_read_community_live_event: {
         Args: { _event_id: string; _profile_id: string }
@@ -4858,6 +4975,10 @@ export type Database = {
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
+      }
+      dispatch_membership_renewal_reminders: {
+        Args: { _limit?: number }
+        Returns: number
       }
       enqueue_admin_voyage_booking_notifications: {
         Args: {
@@ -4932,6 +5053,10 @@ export type Database = {
         }[]
       }
       has_active_membership: { Args: { _profile_id: string }; Returns: boolean }
+      has_community_moderation_role: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -4974,6 +5099,14 @@ export type Database = {
           party_size: number
           status: string
         }[]
+      }
+      membership_period_end: {
+        Args: {
+          _billing_interval: string
+          _period_count: number
+          _start: string
+        }
+        Returns: string
       }
       move_to_dlq: {
         Args: {

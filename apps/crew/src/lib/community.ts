@@ -8,6 +8,10 @@ export type MembershipTier = {
   price_cents: number;
   currency: string;
   billing_interval: string;
+  period_count?: number;
+  tier_family?: string | null;
+  sort_label?: string | null;
+  renewal_policy?: string;
   tier_order: number;
   benefits: Record<string, unknown>;
 };
@@ -26,12 +30,32 @@ export type CommunityPost = {
   status: "draft" | "published" | "archived";
   visibility: "public" | "members" | "tier";
   min_tier_id: string | null;
+  channel_id?: string | null;
+  post_type?: "text" | "media" | "poll" | "live" | "link";
+  media_urls?: unknown[];
+  external_url?: string | null;
   published_at: string | null;
   live_starts_at: string | null;
   live_ends_at: string | null;
   created_at: string;
   updated_at: string;
   profiles?: { name: string | null; avatar_url: string | null } | null;
+  membership_tiers?: { name: string; slug: string; tier_order: number } | null;
+  community_channels?: CommunityChannel | null;
+};
+
+export type CommunityChannel = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  visibility: "public" | "members" | "tier";
+  min_tier_id: string | null;
+  channel_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
   membership_tiers?: { name: string; slug: string; tier_order: number } | null;
 };
 
@@ -43,6 +67,9 @@ export type CommunitySubscription = {
   current_period_start: string;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  renewal_reminder_sent_at?: string | null;
+  expired_reminder_sent_at?: string | null;
+  grace_period_end?: string | null;
   membership_tiers?: MembershipTier | null;
 };
 
@@ -52,6 +79,7 @@ export type MembershipPayment = {
   amount_cents: number;
   currency: string;
   status: "pending" | "paid" | "cancelled" | "failed" | "refunded";
+  period_count?: number;
   share_url: string | null;
   reference: string;
   period_start: string;
@@ -78,6 +106,8 @@ export type CommunityLiveEvent = {
   ends_at: string | null;
   visibility: "public" | "members" | "tier";
   min_tier_id: string | null;
+  livekit_room_name: string | null;
+  livekit_mode: "video" | "audio" | "stage" | "off";
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -132,6 +162,9 @@ export const benefitLabel = (key: string) => {
   const labels: Record<string, string> = {
     community_feed: "Feed riservato",
     live_chat: "Live chat",
+    livekit_publish: "Intervento in live room",
+    comments: "Commenti",
+    polls: "Poll dei membri",
     private_briefings: "Briefing privati",
     early_access_hours: "Accesso anticipato",
     waive_fixed_minimum_cents: "Riduzione quota fissa",
@@ -144,6 +177,12 @@ export const benefitValue = (key: string, value: unknown) => {
   if (key === "early_access_hours" && typeof value === "number") return `${value} ore`;
   if (key === "waive_fixed_minimum_cents" && typeof value === "number") return formatCurrency(value);
   return String(value);
+};
+
+export const billingIntervalLabel = (interval: string, quantity = 1) => {
+  if (interval === "year") return quantity === 1 ? "anno" : `${quantity} anni`;
+  if (interval === "month") return quantity === 1 ? "mese" : `${quantity} mesi`;
+  return interval;
 };
 
 export const formatCurrency = (cents: number, currency = "EUR") =>
@@ -178,9 +217,9 @@ export const slugify = (input: string) =>
 
 export async function loadMembership() {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return { session: null, subscription: null, isAdmin: false };
+  if (!session) return { session: null, subscription: null, isAdmin: false, isModerator: false };
 
-  const [subscriptionRes, adminRes] = await Promise.all([
+  const [subscriptionRes, adminRes, moderatorRes] = await Promise.all([
     supabase
       .from("membership_subscriptions")
       .select("*, membership_tiers(*)")
@@ -190,11 +229,13 @@ export async function loadMembership() {
       .limit(1)
       .maybeSingle(),
     supabase.rpc("has_role", { _user_id: session.user.id, _role: "admin" }),
+    supabase.rpc("has_role", { _user_id: session.user.id, _role: "moderator" }),
   ]);
 
   return {
     session,
     subscription: (subscriptionRes.data as CommunitySubscription | null) ?? null,
     isAdmin: Boolean(adminRes.data),
+    isModerator: Boolean(adminRes.data || moderatorRes.data),
   };
 }

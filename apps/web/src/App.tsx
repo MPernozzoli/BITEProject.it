@@ -257,6 +257,7 @@ const App = () => {
                         </RequireMainHostForProfile>
                       }
                     />
+                    <Route path="/profilo" element={<Navigate to="/profile" replace />} />
                   </Routes>
                 </Suspense>
               </Layout>

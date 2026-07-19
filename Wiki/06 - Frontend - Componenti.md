@@ -8,7 +8,7 @@ tags: [frontend, componenti, ui]
 ## Componenti di layout & navigazione
 - `Layout.tsx` — shell dell'app (header + footer + main); non monta il footer sulle rotte `/admin` e `/admin/*`
 - `Navbar.tsx`, `NavLink.tsx`, `Footer.tsx`
-- `admin/AdminMobileNavigation.tsx` — dock mobile della PWA admin, visibile agli admin su `/admin/*` e `/profile`, con shortcut persistenti a Home admin, booking, candidati, media, mail, tracker e profilo → [[16 - Admin]]
+- `admin/AdminMobileNavigation.tsx` — dock mobile della PWA admin, visibile agli admin su `/admin/*` e `/profile`, con shortcut persistenti a Home admin, booking, community, media, mail, tracker e profilo → [[16 - Admin]]
 - `AppErrorBoundary.tsx` — error boundary globale
 - `AdminRoute.tsx` — guard rotte admin → [[16 - Admin]]
 - `LegacyLangRedirect.tsx` — redirect URL legacy → [[03 - Routing e i18n]]
@@ -23,6 +23,7 @@ tags: [frontend, componenti, ui]
 
 ## Profilo / social
 - `ProfileCard.tsx`, `ProfileAvatar.tsx`, `ProfileNotificationsMenu.tsx` — il menu notifiche mostra solo le notifiche engagement non lette; al click imposta `read_at` e rimuove subito la riga dalla lista → [[12 - Newsletter ed Email]]
+- `profile/ProfileCrewPassPanel.tsx` — pannello membership dentro `/profile`: stato Crew Pass, rinnovo manuale Bunq, tier disponibili e pagamenti recenti → [[23 - Community]]
 - `ShareButton.tsx`, `AppleShareIcon.tsx`, `SeaPeopleIcon.tsx`
 
 ## SEO
@@ -39,7 +40,7 @@ tags: [frontend, componenti, ui]
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
-- `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminNewsletterManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… `AdminEditorialPlan` mostra il cockpit social del mese, mentre `AdminEditorialPlanSlotDialog` gestisce asset/target/caption/stato e snapshot insight dei post. `BookingGanttTable.tsx` usa dialog in portal per aggiunta persone e dettagli profilo, evitando popover tagliati dentro la matrice → [[16 - Admin]]
+- `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminCommunityManager`, `AdminNewsletterManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… `AdminCommunityManager` governa Crew Pass, prezzi, canali/subfeed, ruoli moderator, live e snapshot pagamenti; `AdminEditorialPlan` mostra il cockpit social del mese, mentre `AdminEditorialPlanSlotDialog` gestisce asset/target/caption/stato e snapshot insight dei post. `BookingGanttTable.tsx` usa dialog in portal per aggiunta persone e dettagli profilo, evitando popover tagliati dentro la matrice → [[16 - Admin]]
 - `booking/` — flusso candidatura, condizioni, prenotazione e pagamento; include `CandidateInfoForm.tsx` per raccogliere esperienza nautica, lingue, lavoro remoto, regimi alimentari, motivazione e note → [[13 - Booking Voyage]]
 - `voyage/` — componenti dettaglio viaggio
 - `home/` — sezioni della homepage
@@ -48,7 +49,8 @@ tags: [frontend, componenti, ui]
 ## Sub-app BITE Crew → [[23 - Community]]
 Sorgente: `apps/crew/src/components/`.
 
-- `CrewLayout.tsx` — shell separata della community, con navbar `BITE Crew`, link a Feed/Live/Polls/Account, link al sito principale e accesso condizionale allo studio admin.
+- `CrewLayout.tsx` — shell separata della community, con navbar `BITE Crew`, link a vetrina, Feed, Live, Polls, Profilo main app, sito principale e accesso condizionale allo studio admin.
+- `CrewFeedPage.tsx` — feed protetto per membri attivi: composer in cima, post più recenti in alto, sidebar canali e subfeed `/feed/:channelSlug`.
 - `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`).
 - `TiptapRenderer.tsx` — renderer minimale del JSON TipTap dei post community.
 - `admin/RichTextEditor.tsx` e `admin/MediaFigureNodeView.tsx` — copia isolata dell'editor articoli, usata dallo studio community senza importare l'admin della main app.

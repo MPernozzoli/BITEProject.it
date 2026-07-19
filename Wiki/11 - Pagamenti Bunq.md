@@ -54,7 +54,7 @@ La API Bunq non espone un refund dedicato per `request-inquiry`: il rimborso vie
 ## Endpoint → [[10 - API Vercel]]
 `request` · `status` · `webhook` · `bank-transfer` · `bookings/status` per transizioni terminali con rimborso
 
-Membership Crew Pass: `membership/request` e `membership/status` creano/pollano request-inquiry Bunq separate dai depositi booking → [[23 - Community]].
+Membership Crew Pass: `membership/request` e `membership/status` creano/pollano request-inquiry Bunq separate dai depositi booking → [[23 - Community]]. Il rinnovo è manuale per scelta: niente addebiti periodici automatici, ma email di promemoria prima/dopo la scadenza e possibilità di pagare fino a 3 periodi alla volta.
 
 ## Codice server → [[07 - Frontend - Lib e Hooks]]
 `apps/web/src/server/bunq/`: `client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`

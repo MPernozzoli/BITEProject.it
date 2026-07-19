@@ -11,6 +11,7 @@ const CrewPostPage = () => {
   const [post, setPost] = useState<CommunityPost | null>(null);
   const [subscription, setSubscription] = useState<CommunitySubscription | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -18,6 +19,7 @@ const CrewPostPage = () => {
     const membership = await loadMembership();
     setSubscription(membership.subscription);
     setIsAdmin(membership.isAdmin);
+    setIsModerator(membership.isModerator);
     const { data } = await supabase
       .from("community_posts")
       .select("*, profiles:public_profiles(name, avatar_url), membership_tiers(name, slug, tier_order)")
@@ -68,7 +70,7 @@ const CrewPostPage = () => {
       <div className="crew-panel mt-8 rounded-[2rem] p-6 md:p-8">
         <TiptapRenderer content={(post.content_it && Object.keys(post.content_it).length ? post.content_it : post.content_en) as Record<string, unknown>} />
       </div>
-      <CommunityComments postId={post.id} canComment={canComment} isAdmin={isAdmin} />
+      <CommunityComments postId={post.id} canComment={canComment} isAdmin={isAdmin || isModerator} />
     </article>
   );
 };

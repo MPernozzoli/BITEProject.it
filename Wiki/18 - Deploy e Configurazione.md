@@ -37,6 +37,7 @@ Prefisso Vite `VITE_` (esposte al client):
 - `VITE_SUPABASE_PROJECT_ID`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_LOGIN_URL` opzionale per lo sviluppo delle sub-app: se assente, i bridge locali `/login` puntano a `http://127.0.0.1:5173`.
+- `VITE_LIVEKIT_URL` opzionale solo se si vuole mostrare esplicitamente l'URL LiveKit lato client; la room usa comunque `/api/community/livekit-token`.
 
 > ⚠️ I segreti server (Bunq, service role Supabase, chiavi email/VAPID) **non** stanno qui: vanno nelle env di Vercel / secret delle Supabase Functions, mai committati.
 
@@ -50,6 +51,7 @@ Mail admin e invio Resend:
 - `OPENAI_API_KEY` tra i secret Supabase Functions per i flussi IA editoriali (`translate-editor-content`, `optimize-article-seo`). `TRANSLATION_OPENAI_MODEL` e `SEO_OPENAI_MODEL` sono opzionali; se assenti le function usano `gpt-5.6-luna`. Le vecchie variabili `TRANSLATION_AI_API_KEY` / `TRANSLATION_AI_MODEL` restano accettate solo come fallback di transizione per la traduzione.
 - `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY`/`VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel per autenticare admin e scrivere lo storico mail.
 - `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` in Vercel per notificare gli admin quando arrivano nuove mail.
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in Vercel per generare token delle room BITE Crew.
 - Le Supabase Edge Functions automatiche usano `mail.biteproject.it` come sender domain.
 
 OAuth social del calendario editoriale (secret Supabase Functions, non Vercel):

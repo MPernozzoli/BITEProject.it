@@ -1,10 +1,11 @@
-import { CalendarCheck, Home, Mail, MapPinned, User, Images, Wine } from "lucide-react";
+import { CalendarCheck, Home, Mail, MapPinned, User, Images, UsersRound, Wine } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const adminNavItems = [
   { to: "/admin", label: "Home", icon: Home, exact: true },
   { to: "/admin/bookings", label: "Booking", icon: CalendarCheck },
+  { to: "/admin?section=community", label: "Community", icon: UsersRound },
   { to: "/admin/media", label: "Media", icon: Images },
   { to: "/admin/mail", label: "Mail", icon: Mail },
   { to: "/admin/trackers", label: "Tracker", icon: MapPinned },
@@ -24,9 +25,12 @@ const AdminMobileNavigation = () => {
         <div className="admin-action-strip flex items-stretch gap-1 overflow-x-auto overscroll-x-contain px-2 py-2">
           {adminNavItems.map((item) => {
             const Icon = item.icon;
+            const [itemPath, itemSearch = ""] = item.to.split("?");
             const active = item.exact
-              ? location.pathname === item.to
-              : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+              ? location.pathname === itemPath && (!itemSearch || location.search === `?${itemSearch}`)
+              : itemSearch
+                ? location.pathname === itemPath && location.search === `?${itemSearch}`
+                : location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`);
 
             return (
               <NavLink

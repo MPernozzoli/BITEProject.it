@@ -77,6 +77,9 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._community_membership_advisor_fixes.sql` — rende `touch_updated_at` conforme agli advisor e separa le policy admin community per evitare warning multipolicy sulle nuove tabelle.
 - `..._community_engagement_surfaces.sql` — aggiunge live messages, poll, opzioni/voti, policy member-only e trigger per poll a scelta singola.
 - `..._community_poll_stats_no_definer_rpc.sql` — sostituisce la RPC aggregata dei poll con `community_poll_option_stats` mantenuta da trigger non eseguibile dal client, eliminando il warning advisor su funzione `SECURITY DEFINER`.
+- `..._community_livekit_manual_renewals.sql` — aggiunge LiveKit metadata sui live event, ruolo community moderator tramite `app_role = moderator`, prezzi Crew Pass mensili/annuali, `period_count` 1-3 sui pagamenti e reminder email membership accodati dal cron email esistente.
+- `..._community_admin_governance.sql` — aggiunge RPC admin-only `admin_list_community_roles()` e `admin_set_community_moderator()` per governare la community da `/admin?section=community` senza esporre gestione ruoli generica al client.
+- `..._community_feed_channels.sql` — aggiunge `community_channels`, collega i post a un canale, introduce `post_type`/media/link metadata, seed `main`, `boat-tips`, `ricette`, RLS per subfeed tier-gated e policy per post creati da membri attivi.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -101,8 +104,12 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `article_seo_optimizations` — output SEO generato da `optimize-article-seo`; la pagina articolo lo usa per meta title/description, keyword e arricchimento JSON-LD quando `status = ready`, mentre la dashboard admin segnala i record `failed` → [[17 - Content Model]]
 - `membership_tiers` / `membership_subscriptions` / `membership_payments` / `membership_benefit_events` — modello Crew Pass e pagamenti Bunq membership → [[23 - Community]]
-- `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — feed, discussioni, reaction e live thread della sub-app `apps/crew` → [[23 - Community]]
+- `community_channels` / `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — canali/subfeed, feed protetto, discussioni, reaction e live thread della sub-app `apps/crew` → [[23 - Community]]
 - `community_polls` / `community_poll_options` / `community_poll_votes` / `community_poll_option_stats` — poll della community, voti member-only e conteggi aggregati leggibili senza esporre i voti degli altri utenti → [[23 - Community]]
+- `has_community_moderation_role` — helper RLS per consentire moderazione a `admin` e `moderator` senza allargare i permessi admin.
+- `can_read_community_channel` — helper RLS per canali pubblici/member/tier; `can_read_community_post` lo usa per filtrare i post collegati a subfeed.
+- `admin_list_community_roles` / `admin_set_community_moderator` — RPC `SECURITY DEFINER` protette da `has_role(auth.uid(), 'admin')`: l'admin globale è anche admin community e può assegnare/rimuovere solo il ruolo `moderator` per commenti/live.
+- `dispatch_membership_renewal_reminders` — RPC service-role/postgres che accoda email di rinnovo manuale Crew Pass nella coda transazionale esistente.
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 

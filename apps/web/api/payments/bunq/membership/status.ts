@@ -76,6 +76,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           current_period_start: row.period_start,
           current_period_end: row.period_end,
           cancel_at_period_end: false,
+          renewal_reminder_sent_at: null,
+          expired_reminder_sent_at: null,
+          grace_period_end: row.period_end,
         };
 
         const subscriptionResult = existingSubscription

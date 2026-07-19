@@ -10,6 +10,7 @@ import {
   MembershipTier,
   benefitLabel,
   benefitValue,
+  billingIntervalLabel,
   formatCurrency,
   formatDateTime,
   isActiveSubscription,
@@ -25,9 +26,21 @@ const CrewAccountPage = () => {
   const [loading, setLoading] = useState(true);
   const [busyTier, setBusyTier] = useState<string | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [tierChoices, setTierChoices] = useState<Record<string, { tierId: string; quantity: number }>>({});
 
   const active = isActiveSubscription(subscription);
   const currentBenefits = useMemo(() => subscription?.membership_tiers?.benefits ?? {}, [subscription]);
+  const tierFamilies = useMemo(() => {
+    const groups = new Map<string, MembershipTier[]>();
+    tiers.forEach((tier) => {
+      const key = tier.tier_family || tier.slug;
+      groups.set(key, [...(groups.get(key) ?? []), tier]);
+    });
+    return [...groups.entries()].map(([key, rows]) => ({
+      key,
+      tiers: rows.sort((a, b) => a.tier_order - b.tier_order),
+    }));
+  }, [tiers]);
 
   const load = async () => {
     setLoading(true);
@@ -62,7 +75,7 @@ const CrewAccountPage = () => {
     void load();
   }, []);
 
-  const requestMembership = async (tierId: string) => {
+  const requestMembership = async (tierId: string, quantity = 1) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
       redirectToLogin();
@@ -77,7 +90,7 @@ const CrewAccountPage = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ tierId }),
+        body: JSON.stringify({ tierId, quantity }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "membership_payment_failed");
@@ -206,26 +219,58 @@ const CrewAccountPage = () => {
           <div className="crew-panel rounded-[2rem] p-5">
             <h2 className="font-serif text-2xl text-slate-950">Cambia tier</h2>
             <div className="mt-4 space-y-3">
-              {tiers.map((tier) => (
-                <div key={tier.id} className="rounded-3xl border border-slate-200/80 bg-white/68 p-4">
+              {tierFamilies.map((family) => {
+                const selected = tierChoices[family.key];
+                const currentTier = family.tiers.find((tier) => tier.id === selected?.tierId) ?? family.tiers[0];
+                const quantity = selected?.quantity ?? 1;
+                return (
+                <div key={family.key} className="rounded-3xl border border-slate-200/80 bg-white/68 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-serif text-xl text-slate-950">{tier.name}</h3>
-                      <p className="mt-1 text-sm text-slate-600">{tier.description}</p>
+                      <h3 className="font-serif text-xl text-slate-950">{currentTier.sort_label || currentTier.name}</h3>
+                      <p className="mt-1 text-sm text-slate-600">{currentTier.description}</p>
                     </div>
-                    <p className="text-sm font-semibold text-slate-950">{formatCurrency(tier.price_cents, tier.currency)}</p>
+                    <p className="text-sm font-semibold text-slate-950">{formatCurrency(currentTier.price_cents * quantity, currentTier.currency)}</p>
                   </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {family.tiers.map((tier) => (
+                      <button
+                        key={tier.id}
+                        type="button"
+                        onClick={() => setTierChoices((current) => ({ ...current, [family.key]: { tierId: tier.id, quantity } }))}
+                        className={`rounded-full px-3 py-2 text-xs font-medium ${currentTier.id === tier.id ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}
+                      >
+                        {formatCurrency(tier.price_cents, tier.currency)}/{billingIntervalLabel(tier.billing_interval)}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mt-3 block">
+                    <span className="crew-label">Copertura</span>
+                    <select
+                      className="crew-field mt-1 min-h-10 py-2 text-sm"
+                      value={quantity}
+                      onChange={(event) => setTierChoices((current) => ({ ...current, [family.key]: { tierId: currentTier.id, quantity: Number(event.target.value) } }))}
+                    >
+                      {[1, 2, 3].map((count) => (
+                        <option key={count} value={count}>{billingIntervalLabel(currentTier.billing_interval, count)}</option>
+                      ))}
+                    </select>
+                  </label>
                   <button
                     type="button"
-                    onClick={() => void requestMembership(tier.id)}
-                    disabled={busyTier === tier.id || subscription?.tier_id === tier.id}
+                    onClick={() => void requestMembership(currentTier.id, quantity)}
+                    disabled={busyTier === currentTier.id}
                     className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-slate-950 px-4 text-sm font-medium text-white disabled:opacity-45"
                   >
-                    {subscription?.tier_id === tier.id ? "Tier attuale" : busyTier === tier.id ? "Avvio..." : "Attiva"}
+                    {busyTier === currentTier.id ? "Avvio..." : subscription?.tier_id === currentTier.id ? "Rinnova" : "Attiva"}
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
+            <p className="mt-4 text-xs leading-5 text-slate-500">
+              Rinnovo manuale: niente addebiti automatici. Puoi coprire fino a 3 mesi o 3 anni alla volta.
+            </p>
           </div>
 
           <div className="crew-panel rounded-[2rem] p-5">

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { CalendarClock, Lock, MessageCircle, Radio, Send } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,14 +13,19 @@ import {
   type CommunitySubscription,
 } from "@/lib/community";
 
+const LivekitRoomPanel = lazy(() => import("@/components/LivekitRoomPanel"));
+
 const CrewLivePage = () => {
   const [events, setEvents] = useState<CommunityLiveEvent[]>([]);
   const [messages, setMessages] = useState<CommunityLiveMessage[]>([]);
   const [tiers, setTiers] = useState<MembershipTier[]>([]);
   const [subscription, setSubscription] = useState<CommunitySubscription | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [livekitSession, setLivekitSession] = useState<{ url: string; token: string; roomName: string; canPublish: boolean } | null>(null);
+  const [livekitBusy, setLivekitBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,6 +35,7 @@ const CrewLivePage = () => {
     ends_at: "",
     visibility: "members" as "public" | "members" | "tier",
     min_tier_id: "",
+    livekit_mode: "video" as "video" | "audio" | "stage" | "off",
   });
 
   const selected = useMemo(() => events.find((event) => event.id === selectedId) ?? events[0] ?? null, [events, selectedId]);
@@ -67,6 +73,7 @@ const CrewLivePage = () => {
       const membership = await loadMembership();
       setSubscription(membership.subscription);
       setIsAdmin(membership.isAdmin);
+      setIsModerator(membership.isModerator);
       setUserId(membership.session?.user.id ?? null);
       const tierRes = await supabase.from("membership_tiers").select("*").eq("is_active", true).order("tier_order", { ascending: true });
       setTiers((tierRes.data ?? []) as MembershipTier[]);
@@ -83,6 +90,10 @@ const CrewLivePage = () => {
       void supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    setLivekitSession(null);
+  }, [selected?.id]);
 
   useEffect(() => {
     if (!selected?.id) {
@@ -125,6 +136,40 @@ const CrewLivePage = () => {
     setMessage("");
   };
 
+  const joinLivekit = async () => {
+    if (!selected) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      redirectToLogin();
+      return;
+    }
+
+    setLivekitBusy(true);
+    try {
+      const response = await fetch("/api/community/livekit-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ eventId: selected.id }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "livekit_join_failed");
+      setLivekitSession({
+        url: body.url,
+        token: body.token,
+        roomName: body.roomName,
+        canPublish: Boolean(body.canPublish),
+      });
+    } catch (error) {
+      console.error(error);
+      toast.error("LiveKit non disponibile per questo live.");
+    } finally {
+      setLivekitBusy(false);
+    }
+  };
+
   const createEvent = async (event: FormEvent) => {
     event.preventDefault();
     const { data: { session } } = await supabase.auth.getSession();
@@ -144,6 +189,7 @@ const CrewLivePage = () => {
       ends_at: newEvent.ends_at ? new Date(newEvent.ends_at).toISOString() : null,
       visibility: newEvent.visibility,
       min_tier_id: newEvent.visibility === "tier" ? newEvent.min_tier_id : null,
+      livekit_mode: newEvent.livekit_mode,
       metadata: { source: "crew_studio" },
     });
     if (error) {
@@ -151,7 +197,7 @@ const CrewLivePage = () => {
       return;
     }
     toast.success("Live creato.");
-    setNewEvent({ title: "", starts_at: new Date().toISOString().slice(0, 16), ends_at: "", visibility: "members", min_tier_id: "" });
+    setNewEvent({ title: "", starts_at: new Date().toISOString().slice(0, 16), ends_at: "", visibility: "members", min_tier_id: "", livekit_mode: "video" });
     await loadEvents();
   };
 
@@ -228,6 +274,15 @@ const CrewLivePage = () => {
                   </select>
                 </label>
               )}
+              <label className="space-y-2">
+                <span className="crew-label">LiveKit</span>
+                <select className="crew-field" value={newEvent.livekit_mode} onChange={(event) => setNewEvent((current) => ({ ...current, livekit_mode: event.target.value as typeof newEvent.livekit_mode }))}>
+                  <option value="video">Video room</option>
+                  <option value="audio">Audio room</option>
+                  <option value="stage">Stage</option>
+                  <option value="off">Solo thread</option>
+                </select>
+              </label>
               <button type="submit" className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-medium text-white">
                 Crea live
               </button>
@@ -248,9 +303,33 @@ const CrewLivePage = () => {
                   </div>
                   <h2 className="mt-2 font-serif text-4xl text-slate-950">{selected.title}</h2>
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{messages.length} messaggi</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{messages.length} messaggi</span>
+                  {selected.livekit_mode !== "off" && (
+                    <button
+                      type="button"
+                      onClick={() => void joinLivekit()}
+                      disabled={livekitBusy}
+                      className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {livekitBusy ? "Connessione..." : livekitSession ? "Riconnetti room" : "Entra in room"}
+                    </button>
+                  )}
+                </div>
               </div>
             </header>
+
+            {livekitSession && (
+              <div className="mt-5 overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-950">
+                <Suspense fallback={<div className="flex min-h-[24rem] items-center justify-center text-sm text-white/70">Caricamento room...</div>}>
+                  <LivekitRoomPanel
+                    serverUrl={livekitSession.url}
+                    token={livekitSession.token}
+                    video={selected.livekit_mode !== "audio"}
+                  />
+                </Suspense>
+              </div>
+            )}
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-5">
               {messages.map((item) => (
@@ -265,7 +344,7 @@ const CrewLivePage = () => {
                         <span>{formatDateTime(item.created_at)}</span>
                       </div>
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.status === "hidden" ? "Messaggio nascosto." : item.content}</p>
-                      {isAdmin && item.status === "visible" && (
+                      {(isAdmin || isModerator) && item.status === "visible" && (
                         <button type="button" onClick={() => void hideMessage(item.id)} className="mt-2 text-xs text-slate-500 hover:text-slate-950">
                           Nascondi
                         </button>

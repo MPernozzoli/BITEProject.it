@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Plus,
@@ -18,6 +18,7 @@ import {
   CalendarClock,
   CalendarCheck,
   Award,
+  UsersRound,
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
@@ -49,8 +50,18 @@ const AdminVoyageManager = lazy(() => import("@/components/admin/AdminVoyageMana
 const AdminNewsletterManager = lazy(() => import("@/components/admin/AdminNewsletterManager"));
 const AdminBadgeManager = lazy(() => import("@/components/admin/AdminBadgeManager"));
 const AdminEditorialPlan = lazy(() => import("@/components/admin/AdminEditorialPlan"));
+const AdminCommunityManager = lazy(() => import("@/components/admin/AdminCommunityManager"));
 const ADMIN_DASHBOARD_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
-type AdminSection = "articles" | "editorial" | "stories" | "route" | "newsletter" | "badges";
+type AdminSection = "articles" | "editorial" | "stories" | "route" | "newsletter" | "badges" | "community";
+
+const isAdminSection = (value: string | null): value is AdminSection =>
+  value === "articles" ||
+  value === "editorial" ||
+  value === "stories" ||
+  value === "route" ||
+  value === "newsletter" ||
+  value === "badges" ||
+  value === "community";
 
 interface Article {
   id: string;
@@ -199,15 +210,10 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<AdminSection>(() => {
     if (typeof window === "undefined") return "articles";
+    const urlSection = new URLSearchParams(window.location.search).get("section");
+    if (isAdminSection(urlSection)) return urlSection;
     const storedValue = window.sessionStorage.getItem(ADMIN_DASHBOARD_SECTION_STORAGE_KEY);
-    return storedValue === "articles" ||
-      storedValue === "editorial" ||
-      storedValue === "stories" ||
-      storedValue === "route" ||
-      storedValue === "newsletter" ||
-      storedValue === "badges"
-      ? storedValue
-      : "articles";
+    return isAdminSection(storedValue) ? storedValue : "articles";
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
@@ -226,6 +232,7 @@ const AdminDashboard = () => {
   const [storyFiltersExpanded, setStoryFiltersExpanded] = useState(false);
   const [storyFiltersAdvanced, setStoryFiltersAdvanced] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const socialOAuthReturnHandled = useRef(false);
   const userId = session?.user?.id ?? null;
 
@@ -379,6 +386,13 @@ const AdminDashboard = () => {
     if (!(await runRouteLeaveGuard())) return;
     setActiveSection(nextSection);
   }, [activeSection, runRouteLeaveGuard]);
+
+  useEffect(() => {
+    const section = new URLSearchParams(location.search).get("section");
+    if (isAdminSection(section) && section !== activeSection) {
+      void handleSectionChange(section);
+    }
+  }, [activeSection, handleSectionChange, location.search]);
 
   const deleteArticle = async (id: string, title: string) => {
     if (!confirm(`Delete "${title}"?`)) return;
@@ -535,6 +549,7 @@ const AdminDashboard = () => {
     { id: "editorial" as const, label: "Piano editoriale", eyebrow: "Calendario", description: "Slot, assegnazioni e uscite", icon: CalendarDays, count: scheduledCount },
     { id: "stories" as const, label: "Stories", eyebrow: "Narrativa", description: "Archi editoriali e slug", icon: BookOpen, count: stories.length },
     { id: "route" as const, label: "Rotte", eyebrow: "Mappa", description: "Voyage, waypoint e geometrie", icon: Navigation, count: voyages.length },
+    { id: "community" as const, label: "Community", eyebrow: "Crew", description: "Prezzi, ruoli, live e rinnovi", icon: UsersRound, count: null },
     { id: "newsletter" as const, label: "Newsletter", eyebrow: "Audience", description: "Campagne, liste e automazioni", icon: Mail, count: null },
     { id: "badges" as const, label: "Badge", eyebrow: "Community", description: "Reward e profili collegati", icon: Award, count: null },
   ];
@@ -546,6 +561,7 @@ const AdminDashboard = () => {
       items: [
         { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
         { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
+        { to: "/admin?section=community", label: "Community", description: "Tier, ruoli e live", icon: UsersRound, badge: 0 },
       ],
     },
     {
@@ -581,7 +597,7 @@ const AdminDashboard = () => {
   const sectionGroups = [
     { label: "Contenuti", items: sectionTabs.filter((tab) => tab.id === "articles" || tab.id === "editorial" || tab.id === "stories") },
     { label: "Mappa", items: sectionTabs.filter((tab) => tab.id === "route") },
-    { label: "Community", items: sectionTabs.filter((tab) => tab.id === "newsletter" || tab.id === "badges") },
+    { label: "Community", items: sectionTabs.filter((tab) => tab.id === "community" || tab.id === "newsletter" || tab.id === "badges") },
   ];
 
   if (!isAdminDevBypassEnabled() && (authLoading || !session)) {
@@ -1520,6 +1536,18 @@ const AdminDashboard = () => {
                 </div>
                 <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading badge manager...</div>}>
                   <AdminBadgeManager />
+                </Suspense>
+              </div>
+            )}
+
+            {activeSection === "community" && (
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Crew community</p>
+                  <h2 className="editorial-heading text-3xl md:text-4xl">Community</h2>
+                </div>
+                <Suspense fallback={<div className="glass-panel-soft rounded-[28px] p-8 text-muted-foreground">Loading community manager...</div>}>
+                  <AdminCommunityManager />
                 </Suspense>
               </div>
             )}

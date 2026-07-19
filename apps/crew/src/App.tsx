@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import CrewLayout from "@/components/CrewLayout";
 import CrewHome from "@/pages/CrewHome";
+import CrewFeedPage from "@/pages/CrewFeedPage";
 import CrewPostPage from "@/pages/CrewPostPage";
 import CrewEditor from "@/pages/CrewEditor";
 import CrewLivePage from "@/pages/CrewLivePage";
@@ -29,6 +30,8 @@ const App = () => (
         <CrewLayout>
           <Routes>
             <Route path="/" element={<CrewHome />} />
+            <Route path="/feed" element={<CrewFeedPage />} />
+            <Route path="/feed/:channelSlug" element={<CrewFeedPage />} />
             <Route path="/post/:slug" element={<CrewPostPage />} />
             <Route path="/live" element={<CrewLivePage />} />
             <Route path="/polls" element={<CrewPollsPage />} />
@@ -37,7 +40,6 @@ const App = () => (
             <Route path="/studio/:id" element={<CrewEditor />} />
             <Route path="/login" element={<LoginRedirect />} />
             <Route path="/signup" element={<LoginRedirect mode="signup" />} />
-            <Route path="/feed" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </CrewLayout>

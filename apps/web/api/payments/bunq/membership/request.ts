@@ -32,9 +32,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   }
 
   let tierId = "";
+  let quantity = 1;
   try {
-    const body = await readJsonBody<{ tierId?: string }>(req);
+    const body = await readJsonBody<{ tierId?: string; quantity?: number }>(req);
     tierId = String(body.tierId ?? "").trim();
+    quantity = Math.max(1, Math.min(3, Number(body.quantity ?? 1) || 1));
   } catch {
     sendJson(res, 400, { error: "invalid_body" });
     return;
@@ -78,17 +80,13 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       .limit(1)
       .maybeSingle();
 
-    if (active && (active as { tier_id: string }).tier_id === selectedTier.id) {
-      sendJson(res, 200, { alreadyActive: true });
-      return;
-    }
-
     const { data: pending } = await db
       .from("membership_payments")
       .select("id, share_url, amount_cents, reference")
       .eq("profile_id", userData.user.id)
       .eq("tier_id", selectedTier.id)
       .eq("status", "pending")
+      .eq("period_count", quantity)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -101,9 +99,10 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       return;
     }
 
-    const amountEur = selectedTier.price_cents / 100;
-    const reference = `CREW-${selectedTier.slug.slice(0, 8)}-${randomUUID().slice(0, 6)}`.toUpperCase();
-    const description = `BITE Crew Pass ${selectedTier.name} — ${reference}`;
+    const amountCents = selectedTier.price_cents * quantity;
+    const amountEur = amountCents / 100;
+    const reference = `CREW-${selectedTier.slug.slice(0, 8)}-${quantity}X-${randomUUID().slice(0, 6)}`.toUpperCase();
+    const description = `BITE Crew Pass ${selectedTier.name} ${quantity}x — ${reference}`;
 
     const created = await createBunqPaymentRequest({
       amountEur,
@@ -112,23 +111,38 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       redirectUrl: `${crewUrl()}?membership=processing`,
     });
 
-    const periodStart = new Date();
+    const activeRow = active as { tier_id: string; current_period_end: string | null } | null;
+    const now = new Date();
+    const activeEnd = activeRow?.tier_id === selectedTier.id && activeRow.current_period_end
+      ? new Date(activeRow.current_period_end)
+      : null;
+    const periodStart = activeEnd && activeEnd > now ? activeEnd : now;
     const periodEnd = new Date(periodStart);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+    if (selectedTier.billing_interval === "year") {
+      periodEnd.setFullYear(periodEnd.getFullYear() + quantity);
+    } else {
+      periodEnd.setMonth(periodEnd.getMonth() + quantity);
+    }
 
     const { error: insertError } = await db.from("membership_payments").insert({
       profile_id: userData.user.id,
       tier_id: selectedTier.id,
       environment: environment(),
       payment_method: "bunq_link",
-      amount_cents: selectedTier.price_cents,
+      amount_cents: amountCents,
       currency: selectedTier.currency,
       status: "pending",
       bunq_request_id: created.id,
       share_url: created.shareUrl,
       reference,
+      period_count: quantity,
       period_start: periodStart.toISOString(),
       period_end: periodEnd.toISOString(),
+      metadata: {
+        renewal_policy: "manual",
+        billing_interval: selectedTier.billing_interval,
+        period_count: quantity,
+      },
     });
     if (insertError) throw new Error(insertError.message);
 
@@ -142,4 +156,3 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     sendJson(res, 500, { error: "membership_request_failed" });
   }
 }
-

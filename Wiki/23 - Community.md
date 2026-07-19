@@ -19,8 +19,12 @@ Implementazione iniziale completata e isolata:
 - editor admin `/studio` e `/studio/:id` con TipTap/RichTextEditor derivato dalla creazione articoli;
 - feed `/`, dettaglio `/post/:slug`, commenti realtime e reaction;
 - live thread `/live` con messaggi realtime e moderazione admin;
+- LiveKit predisposto per room video/audio/stage dei live, con token firmati server-side da `/api/community/livekit-token`;
 - poll `/polls` con voting member-only, risultati aggregati e form admin;
-- account `/account` con stato Crew Pass, benefit, pagamenti e cambio tier;
+- home `/` come vetrina per utenti anonimi/non abbonati e feed reale protetto su `/feed`;
+- canali/subfeed `community_channels` con accesso opzionalmente limitato per tier;
+- gestione Crew Pass spostata nel profilo principale `/profile` (`/profilo` redirect), riusando `profiles`;
+- governance operativa in admin (`/admin?section=community`) per prezzi, ruoli moderator, live, membership e pagamenti recenti;
 - endpoint Bunq membership in [[10 - API Vercel]];
 - migrazioni applicate sul progetto Supabase remoto; advisor filtrati sul dominio community puliti.
 
@@ -61,9 +65,11 @@ Copy guida:
 
 | Tier | Prezzo indicativo | Accesso | Benefit viaggio |
 |---|---:|---|---|
-| **Deck** | 7 €/mese | feed riservato, commenti, aggiornamenti live, Q&A periodici | `early_access_hours = 24` |
-| **Wake** | 15 €/mese | tutto Deck + live/chat durante navigazioni, contenuti lunghi | `early_access_hours = 72` |
-| **Harbor** | 35 €/mese | tutto Wake + briefing privati e benefit viaggio accessori | `early_access_hours = 168`, `waive_fixed_minimum_cents = 2000` |
+| **Deck / Base** | 3 €/mese · 30 €/anno | feed riservato, commenti, poll, aggiornamenti live testuali | `early_access_hours = 24` |
+| **Wake / Intermedio** | 5 €/mese · 50 €/anno | tutto Deck + live chat, Q&A e contenuti lunghi | `early_access_hours = 72` |
+| **Harbor / Top** | 10 €/mese · 100 €/anno | tutto Wake + live room prioritarie, briefing privati e benefit viaggio accessori | `early_access_hours = 168`, `waive_fixed_minimum_cents = 2000` |
+
+Ogni tier esiste come variante mensile e annuale (`billing_interval = month|year`) e può essere pagato per 1, 2 o 3 periodi alla volta. Non esistono rinnovi automatici: è una scelta di design esplicita. BITE non vuole addebiti dimenticati; il membro riceve un promemoria e rinnova solo se vuole continuare a far parte dell'equipaggio.
 
 Regola consigliata per i viaggi: non azzerare il contributo per NM e complessita, perche quello rappresenta spese vive ripartite. Il benefit membership puo invece:
 - eliminare/ridurre il minimo fisso da 20 euro;
@@ -104,10 +110,11 @@ Tabelle:
 | Tabella | Scopo |
 |---|---|
 | `membership_tiers` | definizione tier, prezzo, valuta, visibilita, ordinamento, benefit JSONB |
-| `membership_subscriptions` | stato abbonamento per profilo: tier, status, periodo, rinnovo, cancellazione |
-| `membership_payments` | richieste Bunq/bonifico, stato pagamento, importi, audit |
+| `membership_subscriptions` | stato membership per profilo: tier, status, periodo, reminder rinnovo/scadenza |
+| `membership_payments` | richieste Bunq/bonifico, stato pagamento, importi, `period_count` 1-3 e audit |
 | `membership_benefit_events` | audit dei benefit applicati, es. early access o riduzione minimo fisso |
-| `community_posts` | contenuti riservati, con visibilita per tier |
+| `community_channels` | canali/subfeed stile Reddit con slug, ordine, stato attivo e accesso per tier |
+| `community_posts` | contenuti riservati, con visibilita per tier, tipo post e canale |
 | `community_comments` | thread/commenti sui post |
 | `community_reactions` | reaction semplici senza appesantire il modello |
 | `community_live_events` | finestre live, Q&A, aggiornamenti in tempo reale |
@@ -120,10 +127,17 @@ Tabelle:
 RLS:
 - contenuti pubblici leggibili da tutti solo se marcati pubblici;
 - contenuti tier leggibili da utenti con subscription attiva a tier sufficiente;
+- `/feed` è protetto dalla UI per account con membership attiva; la home `/` resta vetrina/paywall;
+- i canali possono essere `public`, `members` o `tier` e filtrano anche i post collegati;
 - commenti scrivibili solo da membri attivi;
-- admin/moderator gestiscono contenuti e moderazione;
+- membri attivi possono pubblicare post propri `members`/`tier` nei canali accessibili;
+- `admin` globale è anche admin community e può gestire tutto da `/admin?section=community`; `moderator` in `user_roles` può moderare commenti e live messages senza diventare admin globale;
 - nessuna decisione autorizzativa basata su `user_metadata`.
-- `community_posts`, `community_comments`, `community_reactions`, `community_live_events`, `community_live_messages`, `community_polls`, `community_poll_options`, `community_poll_votes` e `community_poll_option_stats` sono nella publication Realtime.
+- `community_channels`, `community_posts`, `community_comments`, `community_reactions`, `community_live_events`, `community_live_messages`, `community_polls`, `community_poll_options`, `community_poll_votes` e `community_poll_option_stats` sono nella publication Realtime.
+
+RPC admin:
+- `admin_list_community_roles()` elenca admin, moderator e membri con subscription attiva per la governance community;
+- `admin_set_community_moderator(profile_id, enabled)` aggiunge/rimuove solo il ruolo `moderator`, richiedendo `has_role(auth.uid(), 'admin')`.
 
 ### Pagamenti Bunq
 
@@ -132,13 +146,20 @@ Riusa il pattern Bunq esistente ma separando il dominio:
 - `GET /api/payments/bunq/membership/status`;
 - il polling `/status` attiva la subscription quando Bunq segna la request-inquiry come pagata;
 - importi ricalcolati server-side da `membership_tiers`, mai dal client;
+- il client può passare `quantity` 1-3; il server moltiplica importo e durata;
+- se l'utente rinnova lo stesso tier attivo, il nuovo periodo parte dalla scadenza corrente, non da `now()`;
 - fallback bonifico e webhook/router membership restano da implementare.
 
-Attenzione: Bunq `request-inquiry` e ottimo per richieste singole, ma una membership ricorrente vera richiede una strategia operativa. Prima versione consigliata:
-- abbonamento mensile rinnovato via nuova richiesta Bunq prima della scadenza;
-- reminder email/push;
-- grace period breve;
-- downgrade automatico a free/expired se non pagato.
+Posizionamento prodotto: Bunq non viene usato per addebiti ricorrenti automatici. Il copy deve esplicitare che il rinnovo manuale è intenzionale: niente abbonamenti dimenticati, solo partecipazione rinnovata per scelta. `dispatch_membership_renewal_reminders()` accoda email automatiche attraverso la coda transazionale esistente quando la membership scade entro 7 giorni o risulta appena scaduta.
+
+### LiveKit
+
+I live sincroni usano LiveKit:
+- `community_live_events.livekit_mode` definisce `video`, `audio`, `stage` o `off`;
+- `community_live_events.livekit_room_name` conserva la room reale;
+- `/api/community/livekit-token` genera token firmati server-side con `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`;
+- il frontend `CrewLivePage` usa `@livekit/components-react` e degrada sul thread testuale se LiveKit non è configurato;
+- membri attivi possono pubblicare audio/video, moderator/admin ricevono anche permessi di moderazione room.
 
 ### Booking benefit
 
@@ -156,22 +177,26 @@ La candidatura anticipata richiede un'estensione a `get_public_voyage_leg_availa
 ### Navigazione principale
 
 Schermate minime:
-- **Home feed**: aggiornamenti, post, live ora, prossimo evento, CTA membership se non membro.
-- **Live**: thread realtime guidati per navigazioni, Q&A e presenza crew; admin crea eventi, membri attivi scrivono, admin può nascondere messaggi.
+- **Home vetrina**: posizionamento BITE Crew, tier Crew Pass e CTA; non mostra il feed completo.
+- **Feed `/feed`**: stile Facebook, post piu recenti in alto, composer in cima e sidebar canali.
+- **Subfeed `/feed/:channelSlug`**: canali tematici tipo Reddit, es. `boat-tips` e `ricette`, con accesso per tier.
+- **Live**: room LiveKit video/audio/stage piu thread realtime guidato; admin crea eventi, membri attivi partecipano, moderator/admin possono nascondere messaggi.
 - **Polls**: input strutturato dei membri per temi, rotte, priorità e Q&A, con scelta singola/multipla e chiusura programmata.
 - **Discussioni**: commenti sui post e thread tematici leggeri.
 - **Viaggi**: anteprime, early access, benefit applicabili, candidature gia integrate nel booking esistente.
-- **Account**: tier attivo, rinnovo, pagamenti, benefit correnti, audit benefit applicati e cambio tier via Bunq.
+- **Profilo main app**: tier attivo, rinnovo manuale, pagamenti e cambio tier via Bunq dentro `/profile`.
 
-### Studio
+### Admin e studio
 
-Per tenere la main app incontaminata, la prima gestione editoriale vive dentro `apps/crew`:
+La gestione generale vive nell'admin esistente:
+- `/admin?section=community` gestisce prezzi/tier, attivazione tier, canali/subfeed, ruoli moderator, snapshot iscrizioni/pagamenti e live programmate;
+- gli admin esistenti non ricevono un ruolo community duplicato: `app_role = admin` resta la sorgente di verità e abilita accesso completo anche alla community.
+
+Per tenere la main app incontaminata finché la parte editoriale non sarà pronta al 100%, la prima gestione dei post vive ancora dentro `apps/crew`:
 - `/studio` crea un post;
 - `/studio/:id` modifica un post;
 - accesso consentito solo agli admin via RPC `has_role`;
 - riusa `RichTextEditor`, `MediaFigure`, upload su bucket `logbook-media` e contenuto TipTap JSON bilingue come gli articoli.
-
-Quando la community sarà stabile si potrà decidere se spostare questa gestione in `admin.biteproject.it` oppure lasciarla nel sottodominio crew.
 
 ## Roadmap
 
@@ -191,8 +216,14 @@ Quando la community sarà stabile si potrà decidere se spostare questa gestione
 - [x] live event testuale;
 - [x] poll member-only;
 - [x] account membership con pagamenti e benefit;
-- [x] moderazione admin base;
-- notifiche email/push;
+- [x] gestione Crew Pass nel profilo principale;
+- [x] home vetrina separata dal feed protetto `/feed`;
+- [x] canali/subfeed gestibili da admin;
+- [x] moderazione admin/moderator base;
+- [x] LiveKit token endpoint e UI room base;
+- [x] reminder email rinnovo manuale membership;
+- [x] governance admin per prezzi, ruoli moderator, live e membership snapshot;
+- notifiche push;
 - upload foto/live media dedicati.
 
 ### Fase 3 - Integrazione viaggi
@@ -216,7 +247,7 @@ Quando la community sarà stabile si potrà decidere se spostare questa gestione
 
 - Fallback bonifico per membership.
 - Webhook Bunq membership, oggi coperto dal polling `/status`.
-- Flusso rinnovi/grace period automatico.
+- Template React Email dedicato ai reminder membership: oggi la migrazione accoda HTML/testo minimale.
 - Se il tier piu alto deve includere call/briefing privati o solo contenuti asincroni.
 - Quanto forte deve essere la priorita sui viaggi: accesso anticipato e piu pulito di priorita automatica.
 - Se gestire rinnovi mensili manuali via Bunq o valutare un provider subscription-native in futuro.

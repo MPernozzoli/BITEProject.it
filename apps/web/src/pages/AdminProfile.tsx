@@ -40,6 +40,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import { ProfileCrewPassPanel } from "@/components/profile/ProfileCrewPassPanel";
 import AvatarCropDialog from "@/components/admin/AvatarCropDialog";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -2210,6 +2211,19 @@ const AdminProfile = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {lang === "en" ? "Membership" : "Community"}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">Crew Pass</h2>
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {lang === "en"
+                  ? "Manage your BITE Crew access from the same profile used for comments, bookings, and public identity."
+                  : "Gestisci l'accesso a BITE Crew dallo stesso profilo usato per commenti, booking e identita pubblica."}
+              </p>
+              <ProfileCrewPassPanel />
             </div>
 
             <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">

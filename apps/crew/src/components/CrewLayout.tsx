@@ -11,6 +11,13 @@ const mainSiteUrl = () => {
     : "https://biteproject.it";
 };
 
+const mainProfileUrl = () => {
+  if (typeof window === "undefined") return "https://biteproject.it/profile";
+  return ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname)
+    ? "/profile"
+    : "https://biteproject.it/profile";
+};
+
 const CrewLayout = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -47,6 +54,9 @@ const CrewLayout = ({ children }: { children: ReactNode }) => {
   const nav = (
     <>
       <Link className="rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" to="/">
+        Crew Pass
+      </Link>
+      <Link className="rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" to="/feed">
         Feed
       </Link>
       <Link className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" to="/live">
@@ -57,10 +67,10 @@ const CrewLayout = ({ children }: { children: ReactNode }) => {
         <Vote size={14} />
         Polls
       </Link>
-      <Link className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" to="/account">
+      <a className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" href={mainProfileUrl()}>
         <UserCircle size={14} />
-        Account
-      </Link>
+        Profilo
+      </a>
       {isAdmin && (
         <Link className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-700 transition-colors hover:text-slate-950" to="/studio">
           <PenLine size={14} />

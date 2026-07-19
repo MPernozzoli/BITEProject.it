@@ -63,6 +63,8 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |
 
+`/profilo` è un alias verso `/profile`.
+
 `ArticlePage.tsx` resta responsabile di query, SEO, redirect slug e conteggi lettura, ma delega il rendering visivo a `ArticleReader.tsx`. `ArticleEditor.tsx` usa lo stesso reader per il pulsante **Anteprima**, alimentandolo con lo stato corrente non salvato dell'editor.
 
 `AdminMail.tsx` mantiene la lista messaggi pulita senza badge dominio/routing, con header compatto e ricerca per mittente/destinatario/corpo/data. Mostra il nome mittente quando disponibile o inferibile dalla firma e usa l'indirizzo solo come fallback. L'anteprima usa solo il testo nuovo prima del thread citato; nel corpo le citazioni restano collassabili con azioni "Mostra di più da..." / "Nascondi", mentre gli URL in testo semplice diventano link cliccabili. Il layout di lettura usa una colonna messaggio centrata con larghezza tipografica controllata, header dettaglio sticky, wrapping robusto per URL lunghi e altezze scroll separate tra lista e dettaglio su desktop. Su mobile la pagina usa un drill-down: elenco e dettaglio non si impilano, `?message=` apre una vista mail dedicata con toolbar superiore per tornare all'elenco, rispondere, rispondere a tutti, preferire e archiviare. Gli allegati inbound sono mostrati come card con preview immagine quando l'URL firmato Resend è fresco e download rigenerato via API quando serve; la modale compose accetta allegati da file picker e drag&drop desktop.
@@ -77,16 +79,21 @@ Su iPhone/PWA, `Layout.tsx` aggiunge un dock mobile admin persistente su `/admin
 
 Nel tab Piano editoriale, `AdminDashboard.tsx` monta `AdminEditorialPlan`: calendario multicanale con cockpit social mensile, target social gestibili e raccolta insight sui post tramite `editorial_post_insights` → [[16 - Admin]].
 
+La dashboard supporta anche `?section=community`, che monta `AdminCommunityManager` per governance BITE Crew: prezzi Crew Pass, stato tier, canali/subfeed, ruoli moderator, live programmate e snapshot membership/pagamenti → [[23 - Community]].
+
+`AdminProfile.tsx` monta `ProfileCrewPassPanel`: la gestione membership non vive più solo nella sub-app Crew, ma nel profilo principale insieme a identità, avatar, bio, preferenze e link social riusati nella community.
+
 ## Sub-app BITE Crew → [[23 - Community]]
 Sorgente: `apps/crew/src/pages/`. Router separato dalla main app, servito su `/Crew/` e `crew.biteproject.it`.
 
 | Pagina | Rotta | Descrizione |
 |---|---|---|
-| `CrewHome.tsx` | `/` | feed community, tier Crew Pass, stato subscription e CTA Bunq |
+| `CrewHome.tsx` | `/` | vetrina pubblica/paywall con tier Crew Pass e CTA |
+| `CrewFeedPage.tsx` | `/feed`, `/feed/:channelSlug` | feed protetto per membri attivi, composer e canali/subfeed |
 | `CrewPostPage.tsx` | `/post/:slug` | dettaglio post con contenuto TipTap e discussione |
 | `CrewLivePage.tsx` | `/live` | live thread realtime per navigazioni, Q&A e aggiornamenti guidati; creazione eventi admin |
 | `CrewPollsPage.tsx` | `/polls` | poll member-only con risultati aggregati e form admin |
-| `CrewAccountPage.tsx` | `/account` | stato Crew Pass, benefit, pagamenti e cambio tier |
+| `CrewAccountPage.tsx` | `/account` | legacy account Crew; la gestione principale del pass è su `/profile` |
 | `CrewEditor.tsx` | `/studio`, `/studio/:id` | studio admin isolato per creare/modificare post BITE Crew |
 
 ## Collegamenti
