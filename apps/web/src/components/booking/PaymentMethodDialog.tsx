@@ -12,7 +12,7 @@ import { useI18n } from "@/lib/i18n";
 interface PaymentMethodDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPayNow: () => void;
+  onPayNow: (reservedWindow?: Window | null) => void;
   onBankTransfer: () => void;
   loading?: boolean;
 }
@@ -25,6 +25,12 @@ const PaymentMethodDialog = ({
   loading = false,
 }: PaymentMethodDialogProps) => {
   const { lang } = useI18n();
+
+  const handlePayNow = () => {
+    const reservedWindow = window.open("about:blank", "_blank");
+    if (reservedWindow) reservedWindow.opener = null;
+    onPayNow(reservedWindow);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,7 +47,7 @@ const PaymentMethodDialog = ({
         <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={onPayNow}
+            onClick={handlePayNow}
             disabled={loading}
             className="min-h-32 rounded-lg border border-accent/70 bg-accent/10 p-4 text-left text-foreground transition-colors hover:bg-accent/15 disabled:cursor-wait disabled:opacity-70"
           >

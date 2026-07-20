@@ -51,6 +51,24 @@ La API Bunq non espone un refund dedicato per `request-inquiry`: il rimborso vie
 ## Scadenza pending pagamento
 `expire_pending_voyage_booking_payments()` è una RPC `service_role` schedulata ogni ora con `pg_cron`: cancella le prenotazioni attive con depositi `pending` più vecchi di 48 ore, marca quei depositi come `cancelled`, invia le notifiche e libera/promuove eventuali posti in waitlist. Non interviene sulle richieste che aspettano solo una decisione admin.
 
+## Interventi aperti rilevati dall'audit
+Priorità immediata: il flusso **Paga adesso** deve essere verificabile da mobile. Il click passa da `PaymentMethodDialog` e poi chiama `POST /api/payments/bunq/request`; sui browser mobile/in-app l'apertura del link esterno dopo una promise può essere fragile. Mitigazione applicata nel client: al tap su **Paga adesso** viene aperta subito una tab/finestra `about:blank` e, quando l'API ritorna `shareUrl`, quella finestra viene puntata al link `bunq.me`; se il browser blocca la finestra, resta il fallback `window.location.assign`.
+
+Interventi software ancora necessari:
+
+- Aggiungere logging client/server dedicato per `startDepositPayment`: booking id, risposta HTTP, errore API, presenza/normalizzazione `shareUrl`, user agent mobile e fallback usato. Serve per distinguere mancata apertura browser da errore Bunq/API.
+- Mostrare nella dialog un fallback esplicito quando il redirect mobile fallisce: pulsante/link copiabile **Apri Bunq** con `href` diretto al `shareUrl`, oltre all'opzione bonifico.
+- Verificare in produzione mobile Safari, Chrome Android e browser in-app Instagram/Facebook/WhatsApp: tap su **Paga adesso**, apertura tab Bunq, ritorno a `/bookings?deposit=processing`.
+- Controllare Vercel logs per `/api/payments/bunq/request` quando l'utente segnala "non succede nulla": se non c'è chiamata il problema è UI/browser; se c'è `503` mancano env Bunq; se c'è `no_share_url`/`invalid_share_url` il problema è risposta Bunq.
+- Verificare che `createBunqPaymentRequest` ritorni sempre un URL assoluto `https://bunq.me/...` o normalizzabile dal client.
+- Implementare un worker schedulato di riconciliazione bonifici `pending`: oggi il bonifico viene validato da webhook o polling `/status`, non da un job dedicato.
+- Rendere paginata la scansione movimenti Bunq per bonifico: `findIncomingPaymentDetailsByReference` legge solo gli ultimi 50 pagamenti, quindi un movimento valido può non essere trovato se il conto riceve molti movimenti.
+- Agganciare `voyage_booking_deposits` al pannello admin candidature: mostrare metodo, importo, causale, scadenza e stato; disabilitare `Approva` se esiste un deposito `pending`.
+- Aggiornare le email `payment_pending` utente e admin: per `bank_transfer` devono dire che la candidatura non verrà esaminata finché importo e causale non combaciano.
+- Portare `booking_request_id`, `event_type`, `payment_reference` e `payment_method` dentro `email_send_log.metadata`, così customer care e audit possono ricostruire cosa è stato inviato.
+- Definire una procedura admin per bonifici anomali: importo errato, causale mancante, doppio pagamento, arrivo dopo scadenza, pagamento parziale, rimborso o match manuale tracciato.
+- Rivalutare la deadline di 48 ore per bonifico SEPA: può essere troppo corta nei weekend o nei festivi.
+
 ## Sicurezza webhook
 `apps/web/api/payments/bunq/webhook.ts` richiede `BUNQ_WEBHOOK_SECRET`: la callback Bunq deve includerlo nella URL (`?secret=...`) oppure in header `x-bite-bunq-webhook-secret` se passa da un proxy. Senza secret valido l'endpoint risponde `401` e non tenta alcuna riconciliazione. Il polling `/status` resta il controllo live autorevole verso Bunq.
 

@@ -832,15 +832,20 @@ const UserBookings = () => {
     }
   };
 
-  const startOnlinePayment = async () => {
+  const startOnlinePayment = async (reservedWindow?: Window | null) => {
     if (!paymentChoice) return;
     setPaymentStarting(true);
     try {
       const payment = await startDepositPayment(paymentChoice.bookingRequestId, paymentChoice.participantId);
       if (payment.ok && "shareUrl" in payment) {
-        window.location.assign(payment.shareUrl);
+        if (reservedWindow && !reservedWindow.closed) {
+          reservedWindow.location.href = payment.shareUrl;
+        } else {
+          window.location.assign(payment.shareUrl);
+        }
         return;
       }
+      reservedWindow?.close();
       setPaymentChoice(null);
       toast.info(
         lang === "it"
