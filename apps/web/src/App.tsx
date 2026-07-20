@@ -53,6 +53,13 @@ const Contact = lazy(() => import("./pages/Contact"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminArticles = lazy(() => import("./pages/AdminArticles"));
+const AdminEditorialPlanPage = lazy(() => import("./pages/AdminEditorialPlanPage"));
+const AdminStories = lazy(() => import("./pages/AdminStories"));
+const AdminRoutes = lazy(() => import("./pages/AdminRoutes"));
+const AdminCommunityPage = lazy(() => import("./pages/AdminCommunityPage"));
+const AdminNewsletterPage = lazy(() => import("./pages/AdminNewsletterPage"));
+const AdminBadgesPage = lazy(() => import("./pages/AdminBadgesPage"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
 const AdminSpritzDiscoveries = lazy(() => import("./pages/AdminSpritzDiscoveries"));
 const AdminMedia = lazy(() => import("./pages/AdminMedia"));
@@ -239,6 +246,13 @@ const App = () => {
                     />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+                    <Route path="/admin/articles" element={<AdminRoute><AdminArticles /></AdminRoute>} />
+                    <Route path="/admin/editorial" element={<AdminRoute><AdminEditorialPlanPage /></AdminRoute>} />
+                    <Route path="/admin/stories" element={<AdminRoute><AdminStories /></AdminRoute>} />
+                    <Route path="/admin/route" element={<AdminRoute><AdminRoutes /></AdminRoute>} />
+                    <Route path="/admin/community" element={<AdminRoute><AdminCommunityPage /></AdminRoute>} />
+                    <Route path="/admin/newsletter" element={<AdminRoute><AdminNewsletterPage /></AdminRoute>} />
+                    <Route path="/admin/badges" element={<AdminRoute><AdminBadgesPage /></AdminRoute>} />
                     <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />
                     <Route path="/admin/candidates" element={<Navigate to="/admin/bookings" replace />} />
                     <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />

@@ -1150,7 +1150,7 @@ const AdminVoyageBookings = () => {
       <div className="mx-auto max-w-[92rem] space-y-6">
         <section className="glass-panel rounded-[34px] px-6 py-8 md:px-9">
           <Link to="/admin" className="glass-chip mb-6 inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft size={14} /> Dashboard
+            <ArrowLeft size={14} /> Torna alla Dashboard
           </Link>
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div>

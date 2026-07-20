@@ -632,7 +632,7 @@ const AdminMail = () => {
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
               <Link to="/admin" className="inline-flex items-center gap-2 text-sm font-sans text-muted-foreground hover:text-foreground">
                 <ArrowLeft size={16} />
-                Dashboard
+                Torna alla Dashboard
               </Link>
               <h1 className="editorial-heading text-3xl leading-none md:text-4xl">Mail</h1>
             </div>

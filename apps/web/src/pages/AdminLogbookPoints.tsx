@@ -401,7 +401,7 @@ const AdminLogbookPoints = () => {
           <Button variant="ghost" size="sm" asChild className="-ml-2">
             <Link to="/admin">
               <ArrowLeft size={16} className="mr-1.5" />
-              Admin
+              Torna alla Dashboard
             </Link>
           </Button>
           <div>

@@ -14,7 +14,7 @@ const AdminSpritzDiscoveriesPage = () => {
               className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground hover:text-foreground transition-colors mb-5"
             >
               <ArrowLeft size={14} />
-              Dashboard
+              Torna alla Dashboard
             </Link>
             <div className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-5">
               <Wine size={14} />

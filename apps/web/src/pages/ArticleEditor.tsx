@@ -2153,7 +2153,7 @@ const ArticleEditor = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <button type="button" onClick={() => requestLeave("/admin")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={16} /> Back
+            <ArrowLeft size={16} /> Torna alla Dashboard
           </button>
           <div className="flex items-center gap-3">
             <button

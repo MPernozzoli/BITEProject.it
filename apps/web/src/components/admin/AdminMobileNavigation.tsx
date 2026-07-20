@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const adminNavItems = [
   { to: "/admin", label: "Home", icon: Home, exact: true },
   { to: "/admin/bookings", label: "Booking", icon: CalendarCheck },
-  { to: "/admin?section=community", label: "Community", icon: UsersRound },
+  { to: "/admin/community", label: "Community", icon: UsersRound },
   { to: "/admin/media", label: "Media", icon: Images },
   { to: "/admin/mail", label: "Mail", icon: Mail },
   { to: "/admin/trackers", label: "Tracker", icon: MapPinned },
