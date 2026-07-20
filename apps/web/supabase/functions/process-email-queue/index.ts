@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { isInjectedServiceKey } from '../_shared/service-auth.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -201,7 +202,7 @@ Deno.serve(async (req) => {
     // Defense in depth: service-role callers still use Authorization.
     const token = authHeader.slice('Bearer '.length).trim()
     const claims = parseJwtClaims(token)
-    if (claims?.role !== 'service_role') {
+    if (!isInjectedServiceKey(token) && claims?.role !== 'service_role') {
       return new Response(
         JSON.stringify({ error: 'Forbidden' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }

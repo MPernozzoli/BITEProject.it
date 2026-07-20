@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { isInjectedServiceKey } from '../_shared/service-auth.ts'
 
 // Suppression event payload sent by the Go API when Mailgun reports
 // a bounce, complaint, or unsubscribe.
@@ -48,6 +49,7 @@ function authorizeSuppressionCaller(req: Request): Response | null {
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
+  if (isInjectedServiceKey(token)) return null
   const claims = parseJwtClaims(token)
   if (claims?.role === 'service_role') return null
 

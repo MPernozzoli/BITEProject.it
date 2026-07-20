@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
+import { isInjectedServiceKey } from '../_shared/service-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,7 +58,9 @@ function isAuthorizedRequest(req: Request): boolean {
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) return false
-  const claims = parseJwtClaims(authHeader.slice('Bearer '.length).trim())
+  const token = authHeader.slice('Bearer '.length).trim()
+  if (isInjectedServiceKey(token)) return true
+  const claims = parseJwtClaims(token)
   return claims?.role === 'service_role'
 }
 

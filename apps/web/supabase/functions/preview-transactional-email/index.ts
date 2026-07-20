@@ -1,6 +1,7 @@
 import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
+import { isInjectedServiceKey } from '../_shared/service-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,6 +35,7 @@ function authorizeInternalCaller(req: Request): Response | null {
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
+  if (isInjectedServiceKey(token)) return null
   const claims = parseJwtClaims(token)
   if (claims?.role === 'service_role') return null
 

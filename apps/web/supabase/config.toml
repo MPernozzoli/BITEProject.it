@@ -7,12 +7,18 @@ project_id = "ekwloweuicrqjjgabfdp"
     verify_jwt = false
   [functions.dispatch-community-live-notifications]
     verify_jwt = false
+  # Internal-only functions: gateway JWT verification is disabled because they are
+  # invoked service-to-service with the injected SUPABASE_SERVICE_ROLE_KEY (which may
+  # be a non-JWT `sb_secret_...` key). They enforce their own service-role auth in code
+  # (see _shared/service-auth.ts), so unauthenticated callers are still rejected.
+  [functions.dispatch-voyage-booking-notifications]
+    verify_jwt = false
   [functions.dispatch-voyage-availability-updates]
-    verify_jwt = true
+    verify_jwt = false
   [functions.send-transactional-email]
-    verify_jwt = true
+    verify_jwt = false
   [functions.preview-transactional-email]
-    verify_jwt = true
+    verify_jwt = false
   [functions.handle-email-unsubscribe]
     verify_jwt = false
   [functions.handle-email-suppression]
