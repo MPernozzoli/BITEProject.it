@@ -107,6 +107,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const created = await createBunqPaymentRequest({
       amountEur,
       description,
+      counterpartyEmail: userData.user.email,
       redirectUrl: `${crewUrl()}?membership=processing`,
     });
 

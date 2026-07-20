@@ -100,6 +100,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const created = await createBunqPaymentRequest({
       amountEur,
       description,
+      counterpartyEmail: user.email ?? undefined,
       redirectUrl: `${siteUrl()}/bookings?deposit=processing`,
     });
 
