@@ -74,8 +74,6 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     });
     const { data: isAdmin } = await db.rpc("has_role", { _user_id: userId, _role: "admin" });
     const { data: isModerator } = await db.rpc("has_role", { _user_id: userId, _role: "moderator" });
-    const { data: hasMembership } = await db.rpc("has_active_membership", { _profile_id: userId });
-
     if (!canRead && !isAdmin && !isModerator) {
       sendJson(res, 403, { error: "not_allowed" });
       return;
@@ -92,7 +90,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       .eq("id", userId)
       .maybeSingle();
 
-    const canPublish = Boolean(isAdmin || isModerator || hasMembership);
+    const canPublish = Boolean(isAdmin);
     const accessToken = new AccessToken(livekitApiKey(), livekitApiSecret(), {
       identity: userId,
       name: (profile as { name?: string } | null)?.name || userData.user.email || "BITE Crew",
@@ -104,7 +102,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       canSubscribe: true,
       canPublish,
       canPublishData: canPublish,
-      roomAdmin: Boolean(isAdmin || isModerator),
+      roomAdmin: Boolean(isAdmin),
     });
 
     sendJson(res, 200, {
@@ -113,6 +111,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       roomName,
       canPublish,
       isModerator: Boolean(isAdmin || isModerator),
+      isAdmin: Boolean(isAdmin),
     });
   } catch (error) {
     console.error("[community/livekit-token] failed", error);

@@ -591,6 +591,7 @@ export type Database = {
           created_at: string
           id: string
           is_hidden: boolean
+          linked_resources: Json
           parent_id: string | null
           post_id: string
           profile_id: string
@@ -601,6 +602,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
+          linked_resources?: Json
           parent_id?: string | null
           post_id: string
           profile_id: string
@@ -611,6 +613,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_hidden?: boolean
+          linked_resources?: Json
           parent_id?: string | null
           post_id?: string
           profile_id?: string
@@ -647,9 +650,71 @@ export type Database = {
           },
         ]
       }
+      community_live_event_reminders: {
+        Row: {
+          advance_email_sent_at: string | null
+          advance_push_sent_at: string | null
+          created_at: string
+          id: string
+          live_event_id: string
+          profile_id: string
+          remind_before_minutes: number
+          start_email_sent_at: string | null
+          start_push_sent_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          advance_email_sent_at?: string | null
+          advance_push_sent_at?: string | null
+          created_at?: string
+          id?: string
+          live_event_id: string
+          profile_id: string
+          remind_before_minutes?: number
+          start_email_sent_at?: string | null
+          start_push_sent_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          advance_email_sent_at?: string | null
+          advance_push_sent_at?: string | null
+          created_at?: string
+          id?: string
+          live_event_id?: string
+          profile_id?: string
+          remind_before_minutes?: number
+          start_email_sent_at?: string | null
+          start_push_sent_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_live_event_reminders_live_event_id_fkey"
+            columns: ["live_event_id"]
+            isOneToOne: false
+            referencedRelation: "community_live_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_live_event_reminders_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_live_event_reminders_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_live_events: {
         Row: {
           created_at: string
+          created_by: string | null
           ends_at: string | null
           id: string
           livekit_mode: string
@@ -664,6 +729,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           ends_at?: string | null
           id?: string
           livekit_mode?: string
@@ -678,6 +744,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           ends_at?: string | null
           id?: string
           livekit_mode?: string
@@ -691,6 +758,20 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["community_post_visibility"]
         }
         Relationships: [
+          {
+            foreignKeyName: "community_live_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_live_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "community_live_events_min_tier_id_fkey"
             columns: ["min_tier_id"]
@@ -973,6 +1054,7 @@ export type Database = {
           excerpt_it: string
           external_url: string | null
           id: string
+          linked_resources: Json
           live_ends_at: string | null
           live_starts_at: string | null
           media_urls: Json
@@ -998,6 +1080,7 @@ export type Database = {
           excerpt_it?: string
           external_url?: string | null
           id?: string
+          linked_resources?: Json
           live_ends_at?: string | null
           live_starts_at?: string | null
           media_urls?: Json
@@ -1023,6 +1106,7 @@ export type Database = {
           excerpt_it?: string
           external_url?: string | null
           id?: string
+          linked_resources?: Json
           live_ends_at?: string | null
           live_starts_at?: string | null
           media_urls?: Json
@@ -4976,6 +5060,10 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      dispatch_community_live_event_email_reminders: {
+        Args: { _limit?: number }
+        Returns: number
+      }
       dispatch_membership_renewal_reminders: {
         Args: { _limit?: number }
         Returns: number
@@ -5073,6 +5161,19 @@ export type Database = {
         Returns: number
       }
       invoke_email_queue_worker: { Args: never; Returns: number }
+      list_due_community_live_event_push_reminders: {
+        Args: { _limit?: number }
+        Returns: {
+          advance_push_due: boolean
+          live_event_id: string
+          profile_id: string
+          remind_before_minutes: number
+          reminder_id: string
+          start_push_due: boolean
+          starts_at: string
+          title: string
+        }[]
+      }
       list_my_voyage_availability_watches: {
         Args: never
         Returns: {

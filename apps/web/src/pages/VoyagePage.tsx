@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
@@ -24,11 +24,31 @@ import {
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
-import { ArrowLeft, CalendarCheck, MapPinned, Navigation } from "lucide-react";
+import { ArrowLeft, CalendarCheck, MapPinned, Navigation, Route } from "lucide-react";
+
+type ReferencedLeg = {
+  id: string;
+  planned_nautical_miles: number;
+  sort_order: number;
+  from?: { name: string | null; name_it: string | null; name_en: string | null } | null;
+  to?: { name: string | null; name_it: string | null; name_en: string | null } | null;
+};
+
+const referencedLegWaypointName = (
+  waypoint: ReferencedLeg["from"] | ReferencedLeg["to"] | undefined,
+  lang: "it" | "en",
+  fallback: string
+) => {
+  if (!waypoint) return fallback;
+  if (lang === "it") return waypoint.name_it || waypoint.name_en || waypoint.name || fallback;
+  return waypoint.name_en || waypoint.name_it || waypoint.name || fallback;
+};
 
 const VoyagePage = () => {
   const { voyageRef } = useParams();
+  const location = useLocation();
   const voyageId = getVoyageIdFromRouteParam(voyageRef);
+  const referencedLegId = useMemo(() => new URLSearchParams(location.search).get("leg"), [location.search]);
   const { lang } = useI18n();
   const locale = lang === "it" ? "it-IT" : "en-US";
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
@@ -88,6 +108,21 @@ const VoyagePage = () => {
     },
   });
   const articles = snapshotArticles ?? liveArticles;
+
+  const { data: referencedLeg = null } = useQuery<ReferencedLeg | null>({
+    queryKey: ["voyage-referenced-leg", referencedLegId, voyageId],
+    enabled: Boolean(referencedLegId && voyageId),
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("voyage_bookable_legs")
+        .select("id,planned_nautical_miles,sort_order,from:voyage_waypoints!voyage_bookable_legs_from_waypoint_id_fkey(name,name_it,name_en),to:voyage_waypoints!voyage_bookable_legs_to_waypoint_id_fkey(name,name_it,name_en)") as any)
+        .eq("id", referencedLegId)
+        .eq("voyage_id", voyageId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data || null) as ReferencedLeg | null;
+    },
+  });
 
   const publicWaypoints = useMemo(
     () => getPublicVoyageWaypoints(waypoints, articles, voyageId),
@@ -232,6 +267,20 @@ const VoyagePage = () => {
                 <CalendarCheck size={16} />
                 {lang === "it" ? "Richiedi imbarco su questo viaggio" : "Request a berth on this voyage"}
               </Link>
+            )}
+            {referencedLeg && (
+              <div className="glass-panel-soft mt-6 rounded-[24px] border-accent/35 p-4">
+                <p className="mb-2 inline-flex items-center gap-2 text-[11px] font-sans uppercase tracking-[0.24em] text-accent">
+                  <Route size={14} />
+                  {lang === "it" ? "Tratta referenziata" : "Referenced leg"}
+                </p>
+                <p className="text-sm text-foreground">
+                  {referencedLegWaypointName(referencedLeg.from, lang, lang === "it" ? "Partenza" : "Departure")} → {referencedLegWaypointName(referencedLeg.to, lang, lang === "it" ? "Arrivo" : "Arrival")}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {Number(referencedLeg.planned_nautical_miles || 0).toFixed(1)} NM · #{referencedLeg.sort_order + 1}
+                </p>
+              </div>
             )}
           </div>
         </div>

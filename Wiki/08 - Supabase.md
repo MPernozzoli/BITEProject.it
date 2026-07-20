@@ -80,6 +80,8 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._community_livekit_manual_renewals.sql` — aggiunge LiveKit metadata sui live event, ruolo community moderator tramite `app_role = moderator`, prezzi Crew Pass mensili/annuali, `period_count` 1-3 sui pagamenti e reminder email membership accodati dal cron email esistente.
 - `..._community_admin_governance.sql` — aggiunge RPC admin-only `admin_list_community_roles()` e `admin_set_community_moderator()` per governare la community da `/admin?section=community` senza esporre gestione ruoli generica al client.
 - `..._community_feed_channels.sql` — aggiunge `community_channels`, collega i post a un canale, introduce `post_type`/media/link metadata, seed `main`, `boat-tips`, `ricette`, RLS per subfeed tier-gated e policy per post creati da membri attivi.
+- `..._community_inline_composer_surfaces.sql` — abilita il composer unico del feed: `created_by` sui live event e policy per membri attivi che creano/aggiornano/eliminano poll, opzioni poll e live propri collegati ai post.
+- `..._community_live_reminders.sql` — aggiunge `community_live_event_reminders`, dispatch email pre-live/start, lista push due service-role-only e aggancio del cron email alla Edge Function `dispatch-community-live-notifications`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -104,19 +106,21 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `article_seo_optimizations` — output SEO generato da `optimize-article-seo`; la pagina articolo lo usa per meta title/description, keyword e arricchimento JSON-LD quando `status = ready`, mentre la dashboard admin segnala i record `failed` → [[17 - Content Model]]
 - `membership_tiers` / `membership_subscriptions` / `membership_payments` / `membership_benefit_events` — modello Crew Pass e pagamenti Bunq membership → [[23 - Community]]
-- `community_channels` / `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — canali/subfeed, feed protetto, discussioni, reaction e live thread della sub-app `apps/crew` → [[23 - Community]]
+- `community_channels` / `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — canali/subfeed, feed protetto, discussioni, reaction e live thread della sub-app `apps/crew`; post e commenti hanno `linked_resources` JSONB per snapshot/link a articoli, stories, viaggi e tratte dell'app principale → [[23 - Community]]
+- `community_live_event_reminders` — opt-in "Avvisami" sui live programmati, con campi `advance_*_sent_at` e `start_*_sent_at` per email e Web Push → [[23 - Community]]
 - `community_polls` / `community_poll_options` / `community_poll_votes` / `community_poll_option_stats` — poll della community, voti member-only e conteggi aggregati leggibili senza esporre i voti degli altri utenti → [[23 - Community]]
 - `has_community_moderation_role` — helper RLS per consentire moderazione a `admin` e `moderator` senza allargare i permessi admin.
 - `can_read_community_channel` — helper RLS per canali pubblici/member/tier; `can_read_community_post` lo usa per filtrare i post collegati a subfeed.
 - `admin_list_community_roles` / `admin_set_community_moderator` — RPC `SECURITY DEFINER` protette da `has_role(auth.uid(), 'admin')`: l'admin globale è anche admin community e può assegnare/rimuovere solo il ruolo `moderator` per commenti/live.
 - `dispatch_membership_renewal_reminders` — RPC service-role/postgres che accoda email di rinnovo manuale Crew Pass nella coda transazionale esistente.
+- `dispatch_community_live_event_email_reminders` / `list_due_community_live_event_push_reminders` — RPC service-role/postgres per reminder live: la prima accoda mail transazionali, la seconda alimenta il dispatcher Web Push.
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
 ## Hardening remoto applicato
 - `expire_pending_voyage_booking_payments` è schedulata ogni ora su Supabase Cron.
 - Gli autopublisher editoriali `publish-scheduled-articles` e `publish-social-queue` sono schedulati via Supabase Cron; entrambi passano da `public.invoke_editorial_edge_function()` e si autenticano con secret cron dedicati sincronizzati tra Edge Function secrets e Supabase Vault.
-- `process-email-queue` è schedulato ogni 5 minuti via `public.invoke_email_queue_worker()`; richiede `email_queue_cron_secret` in Vault e `EMAIL_QUEUE_CRON_SECRET` tra i secret Supabase Functions.
+- `process-email-queue` è schedulato ogni 5 minuti via `public.invoke_email_queue_worker()`; richiede `email_queue_cron_secret` in Vault e `EMAIL_QUEUE_CRON_SECRET` tra i secret Supabase Functions. Lo stesso invoke accoda i reminder Crew Pass/live e chiama `dispatch-community-live-notifications` per le push live.
 - Le RPC booking/partecipanti/admin che richiedono login non sono più eseguibili dal ruolo `anon`.
 - `_migration_exec` non è più eseguibile da `anon`/`authenticated`; `_migration_chunks` ha RLS e nessun accesso diretto client.
 - `logbook-media` non consente più listing pubblico degli oggetti; resta servibile tramite public object URL.

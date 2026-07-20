@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Heart, Reply, Send } from "lucide-react";
+import { CommunityReferenceCards, CommunityReferencePicker } from "@/components/CommunityReferences";
 import { supabase } from "@/integrations/supabase/client";
 import { redirectToLogin } from "@/lib/auth-redirect";
-import { formatDateTime } from "@/lib/community";
+import { CommunityLinkedResource, formatDateTime } from "@/lib/community";
 import { toast } from "sonner";
 
 type CommentRow = {
@@ -11,6 +12,7 @@ type CommentRow = {
   profile_id: string;
   parent_id: string | null;
   content: string;
+  linked_resources: unknown[];
   is_hidden: boolean;
   created_at: string;
   profiles?: { name: string | null; avatar_url: string | null } | null;
@@ -23,8 +25,10 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
+  const [linkedResources, setLinkedResources] = useState<CommunityLinkedResource[]>([]);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [replyLinkedResources, setReplyLinkedResources] = useState<CommunityLinkedResource[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -89,9 +93,9 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
     };
   }, [postId]);
 
-  const submit = async (parentId: string | null, value: string) => {
+  const submit = async (parentId: string | null, value: string, resources: CommunityLinkedResource[] = []) => {
     const content = value.trim();
-    if (!content) return;
+    if (!content && resources.length === 0) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       redirectToLogin();
@@ -102,7 +106,8 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
       post_id: postId,
       profile_id: session.user.id,
       parent_id: parentId,
-      content,
+      content: content || " ",
+      linked_resources: resources,
     });
     setBusy(false);
     if (error) {
@@ -110,14 +115,16 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
       return;
     }
     setText("");
+    setLinkedResources([]);
     setReplyText("");
+    setReplyLinkedResources([]);
     setReplyTo(null);
     await load();
   };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void submit(null, text);
+    void submit(null, text, linkedResources);
   };
 
   const toggleLike = async (comment: CommentRow) => {
@@ -156,6 +163,7 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">
               {comment.is_hidden ? "Commento nascosto." : comment.content}
             </p>
+            {!comment.is_hidden && <CommunityReferenceCards resources={comment.linked_resources} />}
             <div className="mt-3 flex items-center gap-4">
               {!comment.is_hidden && (
                 <button type="button" onClick={() => void toggleLike(comment)} className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-950">
@@ -176,12 +184,15 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
               )}
             </div>
             {replyTo === comment.id && (
-              <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); void submit(comment.id, replyText); }}>
+              <form className="mt-3" onSubmit={(event) => { event.preventDefault(); void submit(comment.id, replyText, replyLinkedResources); }}>
                 <label className="sr-only" htmlFor={`reply-${comment.id}`}>Risposta</label>
-                <input id={`reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" required />
-                <button type="submit" disabled={busy} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-white disabled:opacity-50">
-                  <Send size={15} />
-                </button>
+                <div className="flex gap-2">
+                  <input id={`reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" />
+                  <button type="submit" disabled={busy} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-white disabled:opacity-50">
+                    <Send size={15} />
+                  </button>
+                </div>
+                <CommunityReferencePicker value={replyLinkedResources} onChange={setReplyLinkedResources} />
               </form>
             )}
           </div>
@@ -204,9 +215,9 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
             value={text}
             onChange={(event) => setText(event.target.value)}
             className="crew-field mt-2 min-h-28"
-            required
             maxLength={4000}
           />
+          <CommunityReferencePicker value={linkedResources} onChange={setLinkedResources} />
           <div className="mt-3 flex justify-end">
             <button type="submit" disabled={busy} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-medium text-white disabled:opacity-50">
               <Send size={15} />

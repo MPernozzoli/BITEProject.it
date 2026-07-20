@@ -16,16 +16,16 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[01 - Architettura]] — visione d'insieme e flussi principali
 - [[02 - Stack Tecnologico]] — librerie, framework, servizi
 - [[04 - Struttura Repository]] — dove sta ogni cosa
-- [[03 - Routing e i18n]] — rotte, lingue, sottodominio admin
+- [[03 - Routing e i18n]] — rotte, lingue, sottodomini admin/login/community
 
 ### Frontend
-- [[05 - Frontend - Pagine]] — le 29 pagine dell'app
+- [[05 - Frontend - Pagine]] — pagine web, admin e sub-app
 - [[06 - Frontend - Componenti]] — libreria componenti (UI, admin, booking, voyage)
 - [[07 - Frontend - Lib e Hooks]] — logica condivisa lato client
 
 ### Backend & Dati
 - [[08 - Supabase]] — Postgres, Auth, Storage, RLS
-- [[09 - Edge Functions]] — le 28 function serverless
+- [[09 - Edge Functions]] — le function serverless Supabase
 - [[10 - API Vercel]] — endpoint `/api/*` (pagamenti, sitemap, prerender)
 - [[17 - Content Model]] — modello dati editoriale/geospaziale
 
@@ -33,7 +33,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[11 - Pagamenti Bunq]] — contributo viaggio e flusso pagamento
 - [[12 - Newsletter ed Email]] — newsletter + email transazionali
 - [[13 - Booking Voyage]] — prenotazione tratte e partecipanti
-- [[23 - Community]] — proposta BITE Crew: membership, tier, contenuti realtime e benefit booking
+- [[23 - Community]] — BITE Crew: membership, feed, live, tier e benefit booking
 - [[21 - Tracking Real-Time Viaggi]] — date effettive, ricalcolo a cascata, stati derivati
 - [[14 - Mappe e Layer Geospaziale]] — MapLibre, rotte, waypoint
 - [[22 - Citizen Science e Osservazioni]] — campionamenti, catalogo parametri, mappa e export su `data.`
@@ -51,14 +51,14 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 
 | | |
 |---|---|
-| **Dominio** | biteproject.it (+ sottodomini `admin.`, `data.`, `pack.`, proposta `crew.`) |
+| **Dominio** | biteproject.it (+ sottodomini `admin.`, `login.`, `data.`, `pack.`, `crew.`) |
 | **Build tool** | Vite 5 (+ SWC) |
 | **UI** | React 18, shadcn/ui, Radix, Tailwind, framer-motion |
 | **Backend** | Supabase (progetto `ekwloweuicrqjjgabfdp`) |
 | **App principale** | `apps/web` (`@biteproject/web`) |
-| **Sub-app** | `apps/pack` su `/pack`, `apps/data` su `/Data` |
+| **Sub-app** | `apps/pack` su `/pack`, `apps/data` su `/Data`, `apps/crew` su `/Crew` |
 | **Migrations** | 37+ file in `apps/web/supabase/migrations/` |
-| **Edge Functions** | 28 in `apps/web/supabase/functions/` |
+| **Edge Functions** | 31+ in `apps/web/supabase/functions/` |
 | **Pagamenti** | Bunq (request-inquiry) + bonifico bancario |
 | **Mappe** | MapLibre GL + supercluster |
 | **Origine** | nato su Lovable Cloud, poi migrato fuori da Lovable |

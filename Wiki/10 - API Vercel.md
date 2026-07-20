@@ -20,7 +20,7 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 ## 🎥 Community / LiveKit (`apps/web/api/community/`) → [[23 - Community]]
 | Endpoint | Metodo | Scopo |
 |---|---|---|
-| `livekit-token.ts` | POST | autentica l'utente Supabase, verifica accesso al live event, genera token LiveKit server-side e ritorna `url`, `token`, `roomName`, permessi publish/moderazione |
+| `livekit-token.ts` | POST | autentica l'utente Supabase, verifica accesso al live event, genera token LiveKit server-side e ritorna `url`, `token`, `roomName`; i membri ricevono solo subscribe/viewer, solo gli admin ricevono publish/screen/audio/video e room admin |
 
 ## 📅 Booking (`apps/web/api/bookings/`)
 - `invite.ts` — invito partecipanti a una prenotazione; autorizza il lead della prenotazione o un admin, accetta `language` (`it`/`en`) dalla UI corrente e invia `voyage-participant-invite` agli ospiti pending → [[13 - Booking Voyage]]
@@ -44,7 +44,7 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 - La logica Bunq server-side vive in `apps/web/src/server/bunq/` (`client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`).
 - Gli importi sono **sempre ricalcolati lato server** (`apps/web/src/lib/booking-deposit.ts`), mai fidati dal client.
 - Gli importi membership sono ricalcolati lato server da `membership_tiers`, separati dai depositi booking.
-- I token LiveKit sono sempre firmati server-side; il client non vede mai `LIVEKIT_API_SECRET`.
+- I token LiveKit sono sempre firmati server-side; il client non vede mai `LIVEKIT_API_SECRET`. La policy dei grant è coerente con live tipo YouTube: viewer per membri, regia solo admin.
 
 ## Collegamenti
 - [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]] · [[23 - Community]]

@@ -17,6 +17,8 @@ SEO generata da IA: `article_seo_optimizations` è una tabella one-to-one per ar
 ### ⛵ Voyage / segmenti di rotta
 `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{start,end}`, `coordinates.{departure,arrival}`, `route_association.{waypoint_count, geometry_points, route_type, status, distance, geojson_url, semantic_url}`, `entities_involved`, `linked_media`, `related_articles`, `related_waypoints`, `canonical_url`.
 
+I riferimenti community salvano i viaggi con URL canonico `/voyages/:id--slug`; le tratte prenotabili sono salvate come snapshot `kind: "leg"` con `voyageId`, label partenza-arrivo e URL del viaggio con query `?leg=<bookable_leg_id>`.
+
 ### 📍 Waypoint / tappe
 `id`, `type`, `title`, `slug`, `summary`, `date.{start,end,event_date,event_time}`, `coordinates`, `route_association.{voyage_id, sequence, visibility_mode, waypoint_type}`, `entities_involved`, `linked_media`, `related_articles`.
 
@@ -48,6 +50,8 @@ Modello separato da quello editoriale: **normalizzato in scrittura, wide in lett
 
 ## Persistenza
 Tutto in Postgres su [[08 - Supabase]]; schema evoluto tramite le migrazioni in `apps/web/supabase/migrations/`.
+
+Per BITE Crew, `community_posts.linked_resources` e `community_comments.linked_resources` sono array JSONB denormalizzati. Ogni item contiene almeno `kind` (`article`, `story`, `voyage`, `leg`), `id`, `label` e `href`; opzionalmente `subtitle`, `coverImage` e `voyageId`. La scelta evita dipendenze RLS/FK tra la sub-app community e tutte le superfici editoriali, pur mantenendo link espliciti verso contenuti principali.
 
 ## Collegamenti
 - [[15 - Semantic Layer (AI Agents)]] · [[08 - Supabase]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

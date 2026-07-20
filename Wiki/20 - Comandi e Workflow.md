@@ -31,12 +31,22 @@ tags: [comandi, workflow, script, dx]
 - Config progetto in `apps/web/supabase/config.toml` (project `ekwloweuicrqjjgabfdp`); `supabase` root è un symlink.
 - Migrazioni in `apps/web/supabase/migrations/` → [[08 - Supabase]].
 - Edge Functions in `apps/web/supabase/functions/` (Deno) → [[09 - Edge Functions]].
+- Nuove migrazioni: usare sempre `cd apps/web && supabase migration new nome_descrittivo`; non inventare timestamp a mano.
+- Dopo una migrazione applicata al remoto: rigenerare tipi web e copiare in crew se la sub-app usa le nuove tabelle.
+
+```bash
+cd apps/web
+supabase gen types typescript --linked --schema public > src/integrations/supabase/types.ts
+cp src/integrations/supabase/types.ts ../crew/src/integrations/supabase/types.ts
+```
 
 ## Workflow tipici
 - **Sviluppo UI:** `npm run dev` → modifica in `apps/web/src/` → [[05 - Frontend - Pagine]] / [[06 - Frontend - Componenti]].
 - **Nuovo endpoint dati pubblico:** aggiungi/modifica function `public-*` → [[15 - Semantic Layer (AI Agents)]].
 - **Modifica schema:** nuova migrazione SQL + rigenera `apps/web/src/integrations/supabase/types.ts`.
-- **Community:** `npm run build:crew` per la sola sub-app; `npm run build` copia poi `apps/crew/dist` in `dist/Crew`.
+- **Community:** `npm run build:crew` per la sola sub-app; `npm run build` copia poi `apps/crew/dist` in `dist/Crew`. Per lavoro su feed/live eseguire almeno `npx tsc --noEmit -p apps/crew/tsconfig.app.json`.
+- **Community Supabase:** dopo modifiche RLS/RPC, eseguire `supabase db push --linked --dry-run`, poi `supabase db push --linked --yes`, poi advisor filtrati sui nuovi oggetti.
+- **Edge Function community live push:** deploy con `cd apps/web && supabase functions deploy dispatch-community-live-notifications --no-verify-jwt --use-api`.
 - **Deploy:** push su `main` → Vercel build (`npm run build`) → [[18 - Deploy e Configurazione]].
 
 ## Workflow agenti AI

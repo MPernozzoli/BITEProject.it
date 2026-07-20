@@ -5,6 +5,8 @@ project_id = "ekwloweuicrqjjgabfdp"
     verify_jwt = false
   [functions.process-email-queue]
     verify_jwt = false
+  [functions.dispatch-community-live-notifications]
+    verify_jwt = false
   [functions.dispatch-voyage-availability-updates]
     verify_jwt = true
   [functions.send-transactional-email]

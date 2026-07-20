@@ -18,15 +18,149 @@ Implementazione iniziale completata e isolata:
 - design system importato da `apps/web/src/index.css`, come fa `apps/data`;
 - editor admin `/studio` e `/studio/:id` con TipTap/RichTextEditor derivato dalla creazione articoli;
 - feed `/`, dettaglio `/post/:slug`, commenti realtime e reaction;
-- live thread `/live` con messaggi realtime e moderazione admin;
-- LiveKit predisposto per room video/audio/stage dei live, con token firmati server-side da `/api/community/livekit-token`;
+- live thread `/live` con messaggi realtime, layout video + chat e moderazione admin;
+- LiveKit predisposto per eventi video/audio/stage programmabili, con token firmati server-side da `/api/community/livekit-token`;
+- reminder live "Avvisami" per utente/evento, con mail e Web Push 10 minuti prima e all'avvio;
 - poll `/polls` con voting member-only, risultati aggregati e form admin;
 - home `/` come vetrina per utenti anonimi/non abbonati e feed reale protetto su `/feed`;
 - canali/subfeed `community_channels` con accesso opzionalmente limitato per tier;
+- card complete nel feed e nel dettaglio post per link, media URL, poll e live collegati;
+- riferimenti nei post e nei commenti verso articoli, stories, viaggi e tratte dell'app principale, salvati in `linked_resources`;
+- CTA dai post live verso `/live?event=<id>` con stato derivato programmata/in corso/terminata;
 - gestione Crew Pass spostata nel profilo principale `/profile` (`/profilo` redirect), riusando `profiles`;
-- governance operativa in admin (`/admin?section=community`) per prezzi, ruoli moderator, live, membership e pagamenti recenti;
+- governance operativa in admin (`/admin?section=community`) per prezzi, ruoli moderator, canali, live modificabili, membership e pagamenti recenti;
 - endpoint Bunq membership in [[10 - API Vercel]];
 - migrazioni applicate sul progetto Supabase remoto; advisor filtrati sul dominio community puliti.
+
+## Handoff nuova chat
+
+Questa sezione è il punto di ripartenza operativo per continuare lo sviluppo in una nuova chat.
+
+### Stato reale al 20 luglio 2026
+
+Completato e verificato:
+- sub-app `apps/crew` isolata dalla main app, base `/Crew/`, host `crew.biteproject.it`;
+- login centralizzato su `login.biteproject.it`, sessione Supabase condivisa su `.biteproject.it`;
+- vetrina pubblica su `/`, feed protetto su `/feed` e subfeed su `/feed/:channelSlug`;
+- composer unico in cima al feed per `text`, `link`, `media`, `poll`, `live`;
+- poll e live creati dal composer, non da pagine dedicate;
+- LiveKit collegato tramite `/api/community/livekit-token`;
+- live programmabili con `starts_at`, chat laterale e pulsante "Avvisami";
+- stato live derivato in UI da `starts_at`/`ends_at`: programmata, in corso, terminata;
+- token LiveKit viewer-only per membri e publishing solo admin;
+- reminder live email/push tramite `community_live_event_reminders`, RPC SQL e Edge Function `dispatch-community-live-notifications`;
+- Crew Pass con tier mensile/annuale, rinnovo manuale, pagamento 1-3 periodi via Bunq;
+- gestione pass nel profilo principale `/profile`, con `/profilo` redirect;
+- governance community in admin su `/admin?section=community`;
+- ruolo `moderator` in `user_roles` per moderare commenti/live messages;
+- post `link`, `media`, `poll` e `live` renderizzati come card dedicate nel feed e nel dettaglio;
+- post e commenti possono allegare riferimenti a contenuti principali tramite picker: articoli pubblicati, stories, viaggi pubblicati e tratte prenotabili;
+- poll votabili anche inline dai post collegati, riusando `community_poll_option_stats`;
+- post live collegati alla pagina `/live?event=<id>` con CTA e badge stato;
+- admin community con modifica rapida di live già create: titolo, inizio/fine, accesso, tier minimo, modalità LiveKit e archiviazione;
+- tipi Supabase rigenerati in `apps/web/src/integrations/supabase/types.ts` e `apps/crew/src/integrations/supabase/types.ts`;
+- migrazioni community applicate al Supabase remoto `ekwloweuicrqjjgabfdp`;
+- build monorepo verificata con `npm run build`.
+
+Verifiche gia eseguite:
+- `npx tsc --noEmit -p apps/crew/tsconfig.app.json`;
+- `npx tsc --noEmit -p apps/web/tsconfig.app.json`;
+- `npx tsc --noEmit -p apps/web/tsconfig.node.json`;
+- `npm run build`;
+- `supabase db push --linked --yes`;
+- deploy Edge Function `dispatch-community-live-notifications`;
+- `supabase db advisors --linked --type all --level warn --fail-on none` filtrato sui nuovi oggetti live reminder: nessun warning nuovo.
+
+### File principali toccati finora
+
+Frontend Crew:
+- `apps/crew/src/pages/CrewHome.tsx` — vetrina/paywall;
+- `apps/crew/src/pages/CrewFeedPage.tsx` — feed protetto, subfeed e composer unico;
+- `apps/crew/src/pages/CrewPostPage.tsx` — dettaglio post con contenuto TipTap, card allegati/poll/live e discussione;
+- `apps/crew/src/pages/CrewLivePage.tsx` — live programmati, stato derivato, room LiveKit, chat e reminder;
+- `apps/crew/src/pages/CrewPollsPage.tsx` — voting/risultati, senza creazione separata;
+- `apps/crew/src/components/CommunityReferences.tsx` — picker e card per riferimenti a logbook, stories, viaggi e tratte;
+- `apps/crew/src/components/CommunityPostSurface.tsx` — card condivisa per link, media URL, poll inline e CTA live;
+- `apps/crew/src/components/LivekitRoomPanel.tsx` — layout LiveKit admin/viewer;
+- `apps/crew/src/components/CommunityComments.tsx` — commenti realtime/moderazione;
+- `apps/crew/src/lib/community.ts` — tipi e helper community;
+- `apps/crew/src/lib/auth-redirect.ts` — bridge verso `login.biteproject.it`.
+
+Main app / admin:
+- `apps/web/src/components/admin/AdminCommunityManager.tsx` — governance community;
+- `apps/web/src/components/profile/ProfileCrewPassPanel.tsx` — gestione Crew Pass in `/profile`;
+- `apps/web/api/payments/bunq/membership/request.ts` — richiesta pagamento membership;
+- `apps/web/api/payments/bunq/membership/status.ts` — polling pagamento membership;
+- `apps/web/api/community/livekit-token.ts` — token LiveKit e policy viewer/admin.
+
+Supabase:
+- `apps/web/supabase/migrations/20260719164335_community_membership.sql`;
+- `apps/web/supabase/migrations/20260719171903_community_engagement_surfaces.sql`;
+- `apps/web/supabase/migrations/20260719180813_community_livekit_manual_renewals.sql`;
+- `apps/web/supabase/migrations/20260719182313_community_admin_governance.sql`;
+- `apps/web/supabase/migrations/20260719183946_community_feed_channels.sql`;
+- `apps/web/supabase/migrations/20260719190933_community_inline_composer_surfaces.sql`;
+- `apps/web/supabase/migrations/20260720045907_community_live_reminders.sql`;
+- `apps/web/supabase/migrations/20260720052234_community_content_references.sql`;
+- `apps/web/supabase/functions/dispatch-community-live-notifications/index.ts`;
+- `apps/web/supabase/config.toml`.
+
+### Decisioni gia prese
+
+- Nome prodotto: **BITE Crew**.
+- Nome abbonamento: **Crew Pass**.
+- I rinnovi sono manuali per scelta di design, non un limite tecnico da nascondere.
+- Bunq resta il flusso di pagamento one-shot; niente recurring automatico.
+- Gli admin globali sono anche admin community.
+- `moderator` modera contenuti community, ma non ha permessi LiveKit di regia.
+- I membri live sono viewer-only: possono vedere/ascoltare e scrivere in chat, ma non attivano camera, microfono o screen share.
+- Le live sono eventi programmati in anticipo, non room create come pagina separata.
+- Poll e live si creano sempre dal composer del feed.
+- La main app resta non contaminata da link pubblici alla community finché la community non è pronta al lancio.
+- La gestione generale sta in admin, mentre la gestione dell'abbonamento utente sta in `/profile`.
+
+### Pezzi mancanti prioritari
+
+Da fare prima di considerare la community pronta:
+- sostituire URL media manuali con upload dedicato foto/video/audio, probabilmente su bucket separato `community-media`;
+- implementare webhook Bunq membership o worker server-side, oggi il pagamento si conferma via polling `/status`;
+- implementare fallback bonifico per membership, se deve esistere anche per Crew Pass;
+- creare template React Email dedicati per reminder membership/live invece dell'HTML minimale SQL;
+- integrare benefit viaggio reali nel booking: early access, riduzione minimo fisso, audit benefit;
+- aggiungere analytics community: iscritti attivi, churn, rinnovi in scadenza, conversione vetrina → pass;
+- aggiungere test mirati per RLS/RPC community e token LiveKit;
+- fare QA visuale responsive completa su `/`, `/feed`, `/live`, `/polls`, `/profile` e admin community;
+- decidere quando rimuovere `noindex,nofollow` da `/Crew/*` e quando linkare la community dalla main app.
+
+### Azioni umane/config richieste o da verificare
+
+- DNS: puntare `crew.biteproject.it` e `login.biteproject.it` al deploy Vercel, se non gia fatto.
+- Supabase Auth: mantenere allowed redirect URLs per `https://login.biteproject.it/**`, `https://biteproject.it/**`, `https://admin.biteproject.it/**`, `https://crew.biteproject.it/**`.
+- Supabase passkey: Relying Party ID `biteproject.it`; origins includono almeno `https://login.biteproject.it`.
+- Vercel env: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` per `/api/community/livekit-token`.
+- Supabase Functions secrets: `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` per `dispatch-community-live-notifications`.
+- Supabase Functions secrets/Vault: `EMAIL_QUEUE_CRON_SECRET` e `email_queue_cron_secret` devono combaciare per il cron email/push.
+- VAPID client: verificare che gli utenti community possano iscriversi alle push, non solo gli admin nella PWA admin.
+- LiveKit dashboard: creare/proteggere progetto e controllare limiti/costi prima del lancio pubblico.
+
+### Comandi utili per ripartire
+
+```bash
+npm run build:crew
+npx tsc --noEmit -p apps/crew/tsconfig.app.json
+npx tsc --noEmit -p apps/web/tsconfig.app.json
+npm run build
+cd apps/web && supabase db push --linked --dry-run
+cd apps/web && supabase gen types typescript --linked --schema public > src/integrations/supabase/types.ts
+cp apps/web/src/integrations/supabase/types.ts apps/crew/src/integrations/supabase/types.ts
+```
+
+Quando si aggiunge una migrazione Supabase, crearla sempre con:
+
+```bash
+cd apps/web
+supabase migration new nome_descrittivo
+```
 
 ## Nome
 
@@ -119,6 +253,7 @@ Tabelle:
 | `community_reactions` | reaction semplici senza appesantire il modello |
 | `community_live_events` | finestre live, Q&A, aggiornamenti in tempo reale |
 | `community_live_messages` | messaggi realtime dei live event, moderabili |
+| `community_live_event_reminders` | opt-in "Avvisami" per live programmati, con stato invio email/push pre-live e start |
 | `community_polls` | domande/poll per input dei membri, opzionalmente legati a post |
 | `community_poll_options` | opzioni dei poll |
 | `community_poll_votes` | voti member-only, visibili direttamente solo al proprietario/admin |
@@ -131,6 +266,8 @@ RLS:
 - i canali possono essere `public`, `members` o `tier` e filtrano anche i post collegati;
 - commenti scrivibili solo da membri attivi;
 - membri attivi possono pubblicare post propri `members`/`tier` nei canali accessibili;
+- il composer del feed è il punto unico di creazione: testo, link, media URL, poll e live programmati vengono creati da `/feed`, non dalle pagine dedicate;
+- i reminder live sono leggibili/modificabili solo dal proprietario o dagli admin; la dispatch è service-role/postgres;
 - `admin` globale è anche admin community e può gestire tutto da `/admin?section=community`; `moderator` in `user_roles` può moderare commenti e live messages senza diventare admin globale;
 - nessuna decisione autorizzativa basata su `user_metadata`.
 - `community_channels`, `community_posts`, `community_comments`, `community_reactions`, `community_live_events`, `community_live_messages`, `community_polls`, `community_poll_options`, `community_poll_votes` e `community_poll_option_stats` sono nella publication Realtime.
@@ -159,7 +296,11 @@ I live sincroni usano LiveKit:
 - `community_live_events.livekit_room_name` conserva la room reale;
 - `/api/community/livekit-token` genera token firmati server-side con `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`;
 - il frontend `CrewLivePage` usa `@livekit/components-react` e degrada sul thread testuale se LiveKit non è configurato;
-- membri attivi possono pubblicare audio/video, moderator/admin ricevono anche permessi di moderazione room.
+- gli eventi live vengono programmati dal composer del feed con data/ora future;
+- i membri vedono/ascoltano e scrivono nella chat laterale, ma non possono pubblicare microfono, camera o screen share;
+- solo gli admin ricevono grant LiveKit `canPublish`, `canPublishData` e `roomAdmin`;
+- i moderator continuano a moderare i messaggi live via RLS, ma non ricevono permessi di regia LiveKit;
+- `community_live_event_reminders` abilita "Avvisami": `dispatch_community_live_event_email_reminders()` accoda le mail, mentre la Edge Function `dispatch-community-live-notifications` invia Web Push usando le subscription esistenti.
 
 ### Booking benefit
 
@@ -179,9 +320,10 @@ La candidatura anticipata richiede un'estensione a `get_public_voyage_leg_availa
 Schermate minime:
 - **Home vetrina**: posizionamento BITE Crew, tier Crew Pass e CTA; non mostra il feed completo.
 - **Feed `/feed`**: stile Facebook, post piu recenti in alto, composer in cima e sidebar canali.
+- **Composer feed**: crea direttamente testo, link esterni, media URL, poll con opzioni e live programmabili LiveKit/thread collegati al post e al canale corrente.
 - **Subfeed `/feed/:channelSlug`**: canali tematici tipo Reddit, es. `boat-tips` e `ricette`, con accesso per tier.
-- **Live**: room LiveKit video/audio/stage piu thread realtime guidato; admin crea eventi, membri attivi partecipano, moderator/admin possono nascondere messaggi.
-- **Polls**: input strutturato dei membri per temi, rotte, priorità e Q&A, con scelta singola/multipla e chiusura programmata.
+- **Live**: room LiveKit video/audio/stage piu chat realtime laterale; creazione da composer, reminder "Avvisami", membri viewer-only, admin in regia e moderator/admin sui messaggi.
+- **Polls**: vista aggregata per votare e leggere risultati; creazione da composer feed.
 - **Discussioni**: commenti sui post e thread tematici leggeri.
 - **Viaggi**: anteprime, early access, benefit applicabili, candidature gia integrate nel booking esistente.
 - **Profilo main app**: tier attivo, rinnovo manuale, pagamenti e cambio tier via Bunq dentro `/profile`.
@@ -219,6 +361,7 @@ Per tenere la main app incontaminata finché la parte editoriale non sarà pront
 - [x] gestione Crew Pass nel profilo principale;
 - [x] home vetrina separata dal feed protetto `/feed`;
 - [x] canali/subfeed gestibili da admin;
+- [x] composer unico nel feed per testo/link/media/poll/live;
 - [x] moderazione admin/moderator base;
 - [x] LiveKit token endpoint e UI room base;
 - [x] reminder email rinnovo manuale membership;

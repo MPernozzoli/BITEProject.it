@@ -1,12 +1,12 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BarChart3, Check, Lock, Plus, Vote } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { BarChart3, Check, Lock, Vote } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { redirectToLogin } from "@/lib/auth-redirect";
 import {
   CommunityPoll,
   CommunityPollOption,
-  MembershipTier,
   formatDateTime,
   isActiveSubscription,
   loadMembership,
@@ -21,21 +21,11 @@ type PollStat = {
 const CrewPollsPage = () => {
   const [polls, setPolls] = useState<CommunityPoll[]>([]);
   const [options, setOptions] = useState<Record<string, CommunityPollOption[]>>({});
-  const [tiers, setTiers] = useState<MembershipTier[]>([]);
   const [subscription, setSubscription] = useState<CommunitySubscription | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyPoll, setBusyPoll] = useState<string | null>(null);
-  const [draft, setDraft] = useState({
-    question: "",
-    description: "",
-    options: "Si\nNo\nNe parliamo nel live",
-    visibility: "members" as "public" | "members" | "tier",
-    min_tier_id: "",
-    allow_multiple: false,
-    closes_at: "",
-  });
 
   const canVote = isAdmin || isActiveSubscription(subscription);
 
@@ -46,8 +36,7 @@ const CrewPollsPage = () => {
     setIsAdmin(membership.isAdmin);
     setUserId(membership.session?.user.id ?? null);
 
-    const [tierRes, pollRes] = await Promise.all([
-      supabase.from("membership_tiers").select("*").eq("is_active", true).order("tier_order", { ascending: true }),
+    const [pollRes] = await Promise.all([
       supabase
         .from("community_polls")
         .select("*, membership_tiers(name, slug, tier_order)")
@@ -56,7 +45,6 @@ const CrewPollsPage = () => {
     ]);
 
     const nextPolls = (pollRes.data ?? []) as CommunityPoll[];
-    setTiers((tierRes.data ?? []) as MembershipTier[]);
     setPolls(nextPolls);
 
     const pollIds = nextPolls.map((poll) => poll.id);
@@ -148,60 +136,6 @@ const CrewPollsPage = () => {
       toast.error(error.message.includes("single") ? "Questo poll consente una sola opzione." : "Voto non registrato.");
       return;
     }
-    await load();
-  };
-
-  const createPoll = async (event: FormEvent) => {
-    event.preventDefault();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      redirectToLogin();
-      return;
-    }
-    if (draft.visibility === "tier" && !draft.min_tier_id) {
-      toast.error("Scegli il tier minimo.");
-      return;
-    }
-    const labels = draft.options.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 8);
-    if (labels.length < 2) {
-      toast.error("Servono almeno due opzioni.");
-      return;
-    }
-
-    const { data: poll, error } = await supabase
-      .from("community_polls")
-      .insert({
-        created_by: session.user.id,
-        question: draft.question.trim(),
-        description: draft.description.trim(),
-        visibility: draft.visibility,
-        min_tier_id: draft.visibility === "tier" ? draft.min_tier_id : null,
-        allow_multiple: draft.allow_multiple,
-        closes_at: draft.closes_at ? new Date(draft.closes_at).toISOString() : null,
-        is_published: true,
-      })
-      .select("id")
-      .single();
-
-    if (error || !poll) {
-      toast.error("Poll non creato.");
-      return;
-    }
-
-    const { error: optionError } = await supabase.from("community_poll_options").insert(
-      labels.map((label, index) => ({
-        poll_id: poll.id,
-        label,
-        option_order: index,
-      })),
-    );
-
-    if (optionError) {
-      toast.error("Poll creato, ma opzioni non salvate.");
-      return;
-    }
-    toast.success("Poll pubblicato.");
-    setDraft({ question: "", description: "", options: "Si\nNo\nNe parliamo nel live", visibility: "members", min_tier_id: "", allow_multiple: false, closes_at: "" });
     await load();
   };
 
@@ -297,64 +231,18 @@ const CrewPollsPage = () => {
       </section>
 
       <aside>
-        {isAdmin ? (
-          <form className="crew-panel rounded-[2rem] p-5" onSubmit={createPoll}>
-            <div className="flex items-center gap-3">
-              <Vote size={20} className="text-[hsl(var(--teal))]" />
-              <h2 className="font-serif text-2xl text-slate-950">Nuovo poll</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              <label className="space-y-2">
-                <span className="crew-label">Domanda</span>
-                <input className="crew-field" value={draft.question} onChange={(event) => setDraft((current) => ({ ...current, question: event.target.value }))} required />
-              </label>
-              <label className="space-y-2">
-                <span className="crew-label">Descrizione</span>
-                <textarea className="crew-field min-h-20" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} />
-              </label>
-              <label className="space-y-2">
-                <span className="crew-label">Opzioni, una per riga</span>
-                <textarea className="crew-field min-h-32" value={draft.options} onChange={(event) => setDraft((current) => ({ ...current, options: event.target.value }))} required />
-              </label>
-              <label className="space-y-2">
-                <span className="crew-label">Visibilità</span>
-                <select className="crew-field" value={draft.visibility} onChange={(event) => setDraft((current) => ({ ...current, visibility: event.target.value as typeof draft.visibility }))}>
-                  <option value="public">Pubblico</option>
-                  <option value="members">Membri</option>
-                  <option value="tier">Tier specifico</option>
-                </select>
-              </label>
-              {draft.visibility === "tier" && (
-                <label className="space-y-2">
-                  <span className="crew-label">Tier minimo</span>
-                  <select className="crew-field" value={draft.min_tier_id} onChange={(event) => setDraft((current) => ({ ...current, min_tier_id: event.target.value }))} required>
-                    <option value="">Scegli tier</option>
-                    {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name}</option>)}
-                  </select>
-                </label>
-              )}
-              <label className="flex items-center gap-3 rounded-2xl bg-white/62 px-3 py-3 text-sm text-slate-800">
-                <input type="checkbox" checked={draft.allow_multiple} onChange={(event) => setDraft((current) => ({ ...current, allow_multiple: event.target.checked }))} />
-                Scelta multipla
-              </label>
-              <label className="space-y-2">
-                <span className="crew-label">Chiusura</span>
-                <input type="datetime-local" className="crew-field" value={draft.closes_at} onChange={(event) => setDraft((current) => ({ ...current, closes_at: event.target.value }))} />
-              </label>
-              <button type="submit" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-medium text-white">
-                <Plus size={15} />
-                Pubblica poll
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="crew-panel rounded-[2rem] p-5">
-            <h2 className="font-serif text-2xl text-slate-950">Perché i poll</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              I poll tengono la community concreta: scelte di contenuto, priorità live e feedback sui viaggi vengono raccolti in modo leggibile.
-            </p>
+        <div className="crew-panel rounded-[2rem] p-5">
+          <div className="flex items-center gap-3">
+            <Vote size={20} className="text-[hsl(var(--teal))]" />
+            <h2 className="font-serif text-2xl text-slate-950">Crea dal feed</h2>
           </div>
-        )}
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            I poll si creano dal riquadro in cima al feed, così ogni contenuto parte dallo stesso punto e resta agganciato al canale corretto.
+          </p>
+          <Link to="/feed" className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-medium text-white">
+            Apri composer
+          </Link>
+        </div>
       </aside>
     </div>
   );

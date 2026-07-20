@@ -34,6 +34,7 @@ export type CommunityPost = {
   post_type?: "text" | "media" | "poll" | "live" | "link";
   media_urls?: unknown[];
   external_url?: string | null;
+  linked_resources?: unknown[];
   published_at: string | null;
   live_starts_at: string | null;
   live_ends_at: string | null;
@@ -42,6 +43,18 @@ export type CommunityPost = {
   profiles?: { name: string | null; avatar_url: string | null } | null;
   membership_tiers?: { name: string; slug: string; tier_order: number } | null;
   community_channels?: CommunityChannel | null;
+};
+
+export type CommunityReferenceKind = "article" | "story" | "voyage" | "leg";
+
+export type CommunityLinkedResource = {
+  kind: CommunityReferenceKind;
+  id: string;
+  label: string;
+  subtitle?: string | null;
+  href: string;
+  coverImage?: string | null;
+  voyageId?: string | null;
 };
 
 export type CommunityChannel = {
@@ -113,6 +126,8 @@ export type CommunityLiveEvent = {
   updated_at: string;
   membership_tiers?: { name: string; slug: string; tier_order: number } | null;
 };
+
+export type CommunityLiveStatus = "scheduled" | "live" | "ended";
 
 export type CommunityLiveMessage = {
   id: string;
@@ -193,6 +208,21 @@ export const formatDateTime = (value: string | null | undefined) => {
   return new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 };
 
+export const liveStatusFor = (event: Pick<CommunityLiveEvent, "starts_at" | "ends_at">): CommunityLiveStatus => {
+  const now = Date.now();
+  const startsAt = new Date(event.starts_at).getTime();
+  const endsAt = event.ends_at ? new Date(event.ends_at).getTime() : startsAt + 2 * 60 * 60 * 1000;
+  if (now < startsAt) return "scheduled";
+  if (now <= endsAt) return "live";
+  return "ended";
+};
+
+export const liveStatusLabel = (status: CommunityLiveStatus) => {
+  if (status === "scheduled") return "Programmata";
+  if (status === "live") return "In corso";
+  return "Terminata";
+};
+
 export const titleFor = (post: Pick<CommunityPost, "title_it" | "title_en">) =>
   post.title_it?.trim() || post.title_en?.trim() || "Untitled";
 
@@ -214,6 +244,29 @@ export const slugify = (input: string) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .slice(0, 100);
+
+export const linkedResourcesFrom = (value: unknown): CommunityLinkedResource[] => {
+  if (!Array.isArray(value)) return [];
+  const resources: Array<CommunityLinkedResource | null> = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Partial<CommunityLinkedResource>;
+      if (!row.kind || !row.id || !row.label || !row.href) return null;
+      if (!["article", "story", "voyage", "leg"].includes(row.kind)) return null;
+      return {
+        kind: row.kind,
+        id: String(row.id),
+        label: String(row.label),
+        subtitle: row.subtitle ? String(row.subtitle) : null,
+        href: String(row.href),
+        coverImage: row.coverImage ? String(row.coverImage) : null,
+        voyageId: row.voyageId ? String(row.voyageId) : null,
+      };
+    });
+  return resources
+    .filter((item): item is CommunityLinkedResource => Boolean(item))
+    .slice(0, 8);
+};
 
 export async function loadMembership() {
   const { data: { session } } = await supabase.auth.getSession();

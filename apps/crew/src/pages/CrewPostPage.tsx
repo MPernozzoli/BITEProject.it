@@ -1,10 +1,24 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Lock, PenLine } from "lucide-react";
+import { toast } from "sonner";
+import { CommunityReferenceCards } from "@/components/CommunityReferences";
+import CommunityPostSurface from "@/components/CommunityPostSurface";
 import { supabase } from "@/integrations/supabase/client";
 import CommunityComments from "@/components/CommunityComments";
 import TiptapRenderer from "@/components/TiptapRenderer";
-import { CommunityPost, CommunitySubscription, excerptFor, formatDateTime, loadMembership, titleFor } from "@/lib/community";
+import {
+  CommunityLiveEvent,
+  CommunityPoll,
+  CommunityPollOption,
+  CommunityPost,
+  CommunitySubscription,
+  excerptFor,
+  formatDateTime,
+  isActiveSubscription,
+  loadMembership,
+  titleFor,
+} from "@/lib/community";
 
 const CrewPostPage = () => {
   const { slug } = useParams();
@@ -12,6 +26,11 @@ const CrewPostPage = () => {
   const [subscription, setSubscription] = useState<CommunitySubscription | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isModerator, setIsModerator] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [poll, setPoll] = useState<CommunityPoll | null>(null);
+  const [pollOptions, setPollOptions] = useState<CommunityPollOption[]>([]);
+  const [liveEvent, setLiveEvent] = useState<CommunityLiveEvent | null>(null);
+  const [busyPoll, setBusyPoll] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -20,12 +39,55 @@ const CrewPostPage = () => {
     setSubscription(membership.subscription);
     setIsAdmin(membership.isAdmin);
     setIsModerator(membership.isModerator);
+    setProfileId(membership.session?.user.id ?? null);
     const { data } = await supabase
       .from("community_posts")
-      .select("*, profiles:public_profiles(name, avatar_url), membership_tiers(name, slug, tier_order)")
+      .select("*, profiles:public_profiles(name, avatar_url), membership_tiers(name, slug, tier_order), community_channels(*)")
       .eq("slug", slug)
       .maybeSingle();
-    setPost((data as CommunityPost | null) ?? null);
+    const nextPost = (data as CommunityPost | null) ?? null;
+    setPost(nextPost);
+
+    if (nextPost?.id) {
+      const [pollRes, liveRes] = await Promise.all([
+        supabase.from("community_polls").select("*, membership_tiers(name, slug, tier_order)").eq("post_id", nextPost.id).maybeSingle(),
+        supabase.from("community_live_events").select("*, membership_tiers(name, slug, tier_order)").eq("post_id", nextPost.id).maybeSingle(),
+      ]);
+      const nextPoll = (pollRes.data as CommunityPoll | null) ?? null;
+      setPoll(nextPoll);
+      setLiveEvent((liveRes.data as CommunityLiveEvent | null) ?? null);
+
+      if (nextPoll?.id) {
+        const optionRes = await supabase
+          .from("community_poll_options")
+          .select("*")
+          .eq("poll_id", nextPoll.id)
+          .order("option_order", { ascending: true });
+        const options = (optionRes.data ?? []) as CommunityPollOption[];
+        const optionIds = options.map((option) => option.id);
+        const [statsRes, mineRes] = await Promise.all([
+          optionIds.length
+            ? supabase.from("community_poll_option_stats").select("option_id, votes_count").in("option_id", optionIds)
+            : Promise.resolve({ data: [] }),
+          membership.session && optionIds.length
+            ? supabase.from("community_poll_votes").select("option_id").eq("profile_id", membership.session.user.id).in("option_id", optionIds)
+            : Promise.resolve({ data: [] }),
+        ]);
+        const statsByOption = new Map(((statsRes.data ?? []) as { option_id: string; votes_count: number }[]).map((stat) => [stat.option_id, stat]));
+        const mine = new Set(((mineRes.data ?? []) as { option_id: string }[]).map((vote) => vote.option_id));
+        setPollOptions(options.map((option) => ({
+          ...option,
+          votes_count: Number(statsByOption.get(option.id)?.votes_count ?? 0),
+          voted_by_me: mine.has(option.id),
+        })));
+      } else {
+        setPollOptions([]);
+      }
+    } else {
+      setPoll(null);
+      setPollOptions([]);
+      setLiveEvent(null);
+    }
     setLoading(false);
   };
 
@@ -34,6 +96,34 @@ const CrewPostPage = () => {
   }, [slug]);
 
   const canComment = Boolean(subscription && ["trialing", "active"].includes(subscription.status));
+
+  const voteOption = async (currentPoll: CommunityPoll, option: CommunityPollOption) => {
+    if (!profileId) return;
+
+    setBusyPoll(currentPoll.id);
+    if (option.voted_by_me) {
+      await supabase.from("community_poll_votes").delete().eq("option_id", option.id).eq("profile_id", profileId);
+      setBusyPoll(null);
+      await load();
+      return;
+    }
+
+    if (!currentPoll.allow_multiple) {
+      await supabase.from("community_poll_votes").delete().eq("poll_id", currentPoll.id).eq("profile_id", profileId);
+    }
+
+    const { error } = await supabase.from("community_poll_votes").insert({
+      poll_id: currentPoll.id,
+      option_id: option.id,
+      profile_id: profileId,
+    });
+    setBusyPoll(null);
+    if (error) {
+      toast.error(error.message.includes("single") ? "Questo poll consente una sola opzione." : "Voto non registrato.");
+      return;
+    }
+    await load();
+  };
 
   if (loading) {
     return <div className="mx-auto max-w-3xl px-4 py-16 text-sm text-slate-500">Caricamento...</div>;
@@ -69,6 +159,16 @@ const CrewPostPage = () => {
       )}
       <div className="crew-panel mt-8 rounded-[2rem] p-6 md:p-8">
         <TiptapRenderer content={(post.content_it && Object.keys(post.content_it).length ? post.content_it : post.content_en) as Record<string, unknown>} />
+        <CommunityPostSurface
+          post={post}
+          poll={poll}
+          pollOptions={pollOptions}
+          liveEvent={liveEvent}
+          canVote={isAdmin || isActiveSubscription(subscription)}
+          busyPollId={busyPoll}
+          onVote={voteOption}
+        />
+        <CommunityReferenceCards resources={post.linked_resources} />
       </div>
       <CommunityComments postId={post.id} canComment={canComment} isAdmin={isAdmin || isModerator} />
     </article>

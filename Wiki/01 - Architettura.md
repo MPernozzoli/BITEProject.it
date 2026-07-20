@@ -7,12 +7,12 @@ tags: [architettura, overview]
 
 ## Visione d'insieme
 
-BITE Project è una **SPA React** servita da Vercel, con **Supabase** come backend unico (database, autenticazione, storage, funzioni serverless). Il sito è bilingue (IT/EN) e distingue tre superfici attive, più una superficie community in progettazione:
+BITE Project è una **SPA React** servita da Vercel, con **Supabase** come backend unico (database, autenticazione, storage, funzioni serverless). Il sito è bilingue (IT/EN) e distingue quattro superfici prodotto:
 
 1. **Sito editoriale pubblico** — logbook, racconti, viaggi, crew, manifesto, contatti.
 2. **Area utente / booking** — login, profilo, prenotazione viaggi con contributo spese via [[11 - Pagamenti Bunq]].
 3. **Admin** — su sottodominio dedicato `admin.biteproject.it`, gestione contenuti/newsletter/media/booking. Vedi [[16 - Admin]].
-4. **Community / membership** — proposta **BITE Crew** su `crew.biteproject.it`, con stesso account Supabase, tier a pagamento, contenuti realtime e benefit booking. Vedi [[23 - Community]].
+4. **Community / membership** — **BITE Crew** su `crew.biteproject.it`, sub-app isolata con stesso account Supabase, Crew Pass a pagamento, feed, subfeed, poll, live programmati e benefit booking. Vedi [[23 - Community]].
 
 Esiste inoltre un **layer semantico/geospaziale** machine-readable (JSON, GeoJSON, `llms.txt`) pensato per crawler e agenti AI — vedi [[15 - Semantic Layer (AI Agents)]].
 
@@ -36,8 +36,8 @@ Browser ──► Vercel (SPA + edge middleware.ts) ──► index.html + bundl
 - **Amount trust server-side**: importi di pagamento e regole di sicurezza sono ricalcolati lato server, mai fidati dal client (vedi [[11 - Pagamenti Bunq]]).
 - **Cache client persistente**: React Query con `PersistQueryClientProvider` su `localStorage` (chiave `bite-query-cache-v1`), solo per query marcate `meta.persist`.
 - **Lazy loading** di tutte le pagine per ridurre il bundle iniziale.
-- **Separazione host**: il codice riconosce il sottodominio admin (`isCurrentAdminHostname()` in `apps/web/src/lib/admin-host.ts`) e reindirizza di conseguenza.
-- **Monorepo leggero**: la web app principale + sotto-app `apps/pack` e `apps/data` — vedi [[19 - Sub-App (pack e data)]].
+- **Separazione host**: il codice riconosce sottodomini admin/login/pack/data/crew e reindirizza/riscrive di conseguenza.
+- **Monorepo leggero**: la web app principale + sotto-app `apps/pack`, `apps/data` e `apps/crew` — vedi [[19 - Sub-App (pack e data)]].
 
 ## Collegamenti
 - Stack completo: [[02 - Stack Tecnologico]]

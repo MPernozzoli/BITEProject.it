@@ -67,7 +67,7 @@ Usati dalle [[10 - API Vercel]]:
 ## Sub-app BITE Crew → [[23 - Community]]
 Sorgente: `apps/crew/src/lib/`, `apps/crew/src/integrations/`.
 
-- `community.ts` — tipi e helper per tier, subscription, pagamenti, benefit, post, live event, poll, slug, date, valuta e label benefit.
+- `community.ts` — tipi e helper per tier, subscription, pagamenti, benefit, post, live event, poll, slug, date, valuta, label benefit e normalizzazione `linked_resources` community.
 - `auth-redirect.ts` — costruzione del redirect verso `login.biteproject.it` mantenendo `redirect` di ritorno alla sub-app.
 - `supabase-auth-storage.ts` — stessa logica cookie/localStorage condivisa della main app per sessione cross-subdomain.
 - `supabase-auth.ts` — helper sessione locale della sub-app.

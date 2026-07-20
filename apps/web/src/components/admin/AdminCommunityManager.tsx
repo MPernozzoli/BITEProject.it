@@ -20,6 +20,7 @@ type TierRow = Database["public"]["Tables"]["membership_tiers"]["Row"];
 type TierUpdate = Database["public"]["Tables"]["membership_tiers"]["Update"];
 type LiveEventRow = Database["public"]["Tables"]["community_live_events"]["Row"];
 type ChannelRow = Database["public"]["Tables"]["community_channels"]["Row"];
+type LiveEventUpdate = Database["public"]["Tables"]["community_live_events"]["Update"];
 
 type SubscriptionRow = {
   id: string;
@@ -85,6 +86,23 @@ const formatDateTime = (value: string | null) => {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+};
+
+const datetimeLocalValue = (value: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const liveStatusForAdmin = (event: Pick<LiveEventRow, "starts_at" | "ends_at">) => {
+  const now = Date.now();
+  const startsAt = new Date(event.starts_at).getTime();
+  const endsAt = event.ends_at ? new Date(event.ends_at).getTime() : startsAt + 2 * 60 * 60 * 1000;
+  if (now < startsAt) return "programmata";
+  if (now <= endsAt) return "in corso";
+  return "terminata";
 };
 
 const intervalLabel = (interval: string) => (interval === "year" ? "annuale" : "mensile");
@@ -288,6 +306,27 @@ const AdminCommunityManager = () => {
       toast.error(error.message || "Canale non aggiornato.");
     } else {
       toast.success("Canale aggiornato.");
+      await load();
+    }
+  };
+
+  const saveLiveEvent = async (event: LiveEventRow, patch: LiveEventUpdate) => {
+    const nextVisibility = patch.visibility ?? event.visibility;
+    const payload: LiveEventUpdate = {
+      ...patch,
+      min_tier_id:
+        nextVisibility === "tier"
+          ? (patch.min_tier_id ?? event.min_tier_id ?? tiers[0]?.id ?? null)
+          : null,
+    };
+    const { error } = await adminSupabase
+      .from("community_live_events")
+      .update(payload)
+      .eq("id", event.id);
+    if (error) {
+      toast.error(error.message || "Live non aggiornata.");
+    } else {
+      toast.success("Live aggiornata.");
       await load();
     }
   };
@@ -678,17 +717,98 @@ const AdminCommunityManager = () => {
             ) : (
               liveEvents.map((event) => (
                 <article key={event.id} className="rounded-[20px] border border-stone-200/80 bg-white/60 px-4 py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h4 className="truncate font-serif text-xl leading-tight text-foreground">{event.title}</h4>
-                      <p className="mt-1 text-xs font-sans text-muted-foreground">
-                        {formatDateTime(event.starts_at)} · {event.visibility} · {event.livekit_mode}
-                      </p>
-                      {event.livekit_room_name && (
-                        <p className="mt-1 truncate text-[11px] font-sans text-muted-foreground">{event.livekit_room_name}</p>
-                      )}
+                  <div className="mb-3 flex items-start justify-between gap-4">
+                    <span className="glass-chip px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
+                      {liveStatusForAdmin(event)}
+                    </span>
+                    <CalendarClock size={16} className="shrink-0 text-muted-foreground" />
+                  </div>
+                  <div className="grid gap-3">
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Titolo</span>
+                      <input
+                        defaultValue={event.title}
+                        onBlur={(inputEvent) => {
+                          const title = inputEvent.target.value.trim();
+                          if (title && title !== event.title) void saveLiveEvent(event, { title });
+                        }}
+                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                      />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Inizio</span>
+                        <input
+                          type="datetime-local"
+                          defaultValue={datetimeLocalValue(event.starts_at)}
+                          onBlur={(inputEvent) => {
+                            const value = inputEvent.target.value;
+                            const nextDate = value ? new Date(value) : null;
+                            if (nextDate && !Number.isNaN(nextDate.getTime()) && nextDate.toISOString() !== event.starts_at) {
+                              void saveLiveEvent(event, { starts_at: nextDate.toISOString() });
+                            }
+                          }}
+                          className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Fine</span>
+                        <input
+                          type="datetime-local"
+                          defaultValue={datetimeLocalValue(event.ends_at)}
+                          onBlur={(inputEvent) => {
+                            const value = inputEvent.target.value;
+                            const nextValue = value ? new Date(value).toISOString() : null;
+                            if (nextValue !== event.ends_at) void saveLiveEvent(event, { ends_at: nextValue });
+                          }}
+                          className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                        />
+                      </label>
                     </div>
-                    <CalendarClock size={16} className="mt-1 shrink-0 text-muted-foreground" />
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <select
+                        value={event.visibility}
+                        onChange={(selectEvent) => void saveLiveEvent(event, { visibility: selectEvent.target.value as LiveEventRow["visibility"] })}
+                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                      >
+                        <option value="public">Pubblica</option>
+                        <option value="members">Membri</option>
+                        <option value="tier">Tier</option>
+                      </select>
+                      <select
+                        value={event.min_tier_id || "none"}
+                        disabled={event.visibility !== "tier"}
+                        onChange={(selectEvent) => void saveLiveEvent(event, { min_tier_id: selectEvent.target.value === "none" ? null : selectEvent.target.value })}
+                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
+                      >
+                        <option value="none">Nessun tier</option>
+                        {tiers.map((tier) => (
+                          <option key={tier.id} value={tier.id}>{tier.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={event.livekit_mode}
+                        onChange={(selectEvent) => void saveLiveEvent(event, { livekit_mode: selectEvent.target.value as LiveEventRow["livekit_mode"] })}
+                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                      >
+                        <option value="video">Video</option>
+                        <option value="audio">Audio</option>
+                        <option value="stage">Stage</option>
+                        <option value="off">Off</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="truncate text-[11px] font-sans text-muted-foreground">
+                        {event.livekit_room_name || `post ${event.post_id || "non collegato"}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void saveLiveEvent(event, { ends_at: new Date().toISOString() })}
+                        className="rounded-full border border-border/70 bg-background px-3 py-2 text-xs font-sans text-muted-foreground hover:text-foreground"
+                      >
+                        Archivia
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))

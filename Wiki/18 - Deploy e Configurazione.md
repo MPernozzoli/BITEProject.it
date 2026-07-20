@@ -54,6 +54,11 @@ Mail admin e invio Resend:
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in Vercel per generare token delle room BITE Crew.
 - Le Supabase Edge Functions automatiche usano `mail.biteproject.it` come sender domain.
 
+Secret Supabase Functions / Vault specifici community:
+- `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` devono essere presenti anche tra i secret Supabase Functions: `dispatch-community-live-notifications` li usa per le push dei live BITE Crew.
+- `EMAIL_QUEUE_CRON_SECRET` tra i secret Supabase Functions deve combaciare con `email_queue_cron_secret` in Supabase Vault: `public.invoke_email_queue_worker()` lo usa per chiamare sia `process-email-queue` sia `dispatch-community-live-notifications`.
+- `LIVEKIT_*` resta su Vercel, non su Supabase Functions, perche i token vengono generati da `/api/community/livekit-token`.
+
 OAuth social del calendario editoriale (secret Supabase Functions, non Vercel):
 - `SOCIAL_OAUTH_STATE_SECRET` — segreto HMAC per firmare lo state OAuth.
 - `SOCIAL_OAUTH_CALLBACK_URL` — `https://ekwloweuicrqjjgabfdp.supabase.co/functions/v1/social-oauth-callback`, da registrare anche nei portali provider.
@@ -78,6 +83,7 @@ Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ
 - Supabase Cron è usato per manutenzioni DB (`deactivate-past-voyage-bookable-legs`, `expire-pending-voyage-booking-payments`) → [[08 - Supabase]].
 - Hardening residuo da dashboard: abilitare **leaked password protection** in Supabase Auth. `homepage-media` è listabile pubblicamente solo sui prefissi hero usati dalla home.
 - Supabase Auth: registrare `login.biteproject.it` e gli URL di ritorno BITE tra gli allowed redirect URLs, usando URL production espliciti dove possibile.
+- Community launch checklist: prima di linkare `crew.biteproject.it` dalla main app, verificare DNS, redirect auth, LiveKit env Vercel, VAPID secret Supabase Functions, iscrizione push per utenti non-admin e rimozione eventuale di `X-Robots-Tag: noindex,nofollow` su `/Crew/:path*`.
 
 ## Collegamenti
 - [[10 - API Vercel]] · [[19 - Sub-App (pack e data)]] · [[20 - Comandi e Workflow]] · [[23 - Community]]

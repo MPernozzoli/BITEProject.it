@@ -17,7 +17,7 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `ArticlePage.tsx` | `logbook/:slug` | Articolo singolo (con mappa, related) |
 | `StoryPage.tsx` | `logbook/story/:slug` | Racconto/story |
 | `Voyages.tsx` | `voyages` | Elenco viaggi |
-| `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta |
+| `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta; supporta `?leg=<bookable_leg_id>` per evidenziare una tratta referenziata dalla community |
 | `Collaborations.tsx` | `collaborations` | Collaborazioni aperte: ricerca in mare, creator/editoriale e brand |
 | `Contact.tsx` | `contact` | Form contatti → [[09 - Edge Functions\|contact-form-submit]] |
 | `Links.tsx` | `links` | Pagina linktree |
@@ -89,10 +89,10 @@ Sorgente: `apps/crew/src/pages/`. Router separato dalla main app, servito su `/C
 | Pagina | Rotta | Descrizione |
 |---|---|---|
 | `CrewHome.tsx` | `/` | vetrina pubblica/paywall con tier Crew Pass e CTA |
-| `CrewFeedPage.tsx` | `/feed`, `/feed/:channelSlug` | feed protetto per membri attivi, composer e canali/subfeed |
-| `CrewPostPage.tsx` | `/post/:slug` | dettaglio post con contenuto TipTap e discussione |
-| `CrewLivePage.tsx` | `/live` | live thread realtime per navigazioni, Q&A e aggiornamenti guidati; creazione eventi admin |
-| `CrewPollsPage.tsx` | `/polls` | poll member-only con risultati aggregati e form admin |
+| `CrewFeedPage.tsx` | `/feed`, `/feed/:channelSlug` | feed protetto per membri attivi, composer unico per testo/link/media/poll/live programmabili, riferimenti ad app principale, canali/subfeed e card complete per allegati/poll/live |
+| `CrewPostPage.tsx` | `/post/:slug` | dettaglio post con contenuto TipTap, card link/media/poll/live, riferimenti ad articoli/storie/viaggi/tratte e discussione |
+| `CrewLivePage.tsx` | `/live` | live programmati con stato programmata/in corso/terminata, room LiveKit, chat laterale, "Avvisami" email/push e viewer-only per membri; la creazione avviene dal composer del feed |
+| `CrewPollsPage.tsx` | `/polls` | poll member-only con risultati aggregati; la creazione avviene dal composer del feed |
 | `CrewAccountPage.tsx` | `/account` | legacy account Crew; la gestione principale del pass è su `/profile` |
 | `CrewEditor.tsx` | `/studio`, `/studio/:id` | studio admin isolato per creare/modificare post BITE Crew |
 

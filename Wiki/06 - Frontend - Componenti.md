@@ -40,7 +40,7 @@ tags: [frontend, componenti, ui]
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
-- `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminCommunityManager`, `AdminNewsletterManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… `AdminCommunityManager` governa Crew Pass, prezzi, canali/subfeed, ruoli moderator, live e snapshot pagamenti; `AdminEditorialPlan` mostra il cockpit social del mese, mentre `AdminEditorialPlanSlotDialog` gestisce asset/target/caption/stato e snapshot insight dei post. `BookingGanttTable.tsx` usa dialog in portal per aggiunta persone e dettagli profilo, evitando popover tagliati dentro la matrice → [[16 - Admin]]
+- `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminCommunityManager`, `AdminNewsletterManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… `AdminCommunityManager` governa Crew Pass, prezzi, canali/subfeed, ruoli moderator, live modificabili (titolo, date, accesso, tier, modalità, archiviazione) e snapshot pagamenti; `AdminEditorialPlan` mostra il cockpit social del mese, mentre `AdminEditorialPlanSlotDialog` gestisce asset/target/caption/stato e snapshot insight dei post. `BookingGanttTable.tsx` usa dialog in portal per aggiunta persone e dettagli profilo, evitando popover tagliati dentro la matrice → [[16 - Admin]]
 - `booking/` — flusso candidatura, condizioni, prenotazione e pagamento; include `CandidateInfoForm.tsx` per raccogliere esperienza nautica, lingue, lavoro remoto, regimi alimentari, motivazione e note → [[13 - Booking Voyage]]
 - `voyage/` — componenti dettaglio viaggio
 - `home/` — sezioni della homepage
@@ -50,8 +50,10 @@ tags: [frontend, componenti, ui]
 Sorgente: `apps/crew/src/components/`.
 
 - `CrewLayout.tsx` — shell separata della community, con navbar `BITE Crew`, link a vetrina, Feed, Live, Polls, Profilo main app, sito principale e accesso condizionale allo studio admin.
-- `CrewFeedPage.tsx` — feed protetto per membri attivi: composer in cima, post più recenti in alto, sidebar canali e subfeed `/feed/:channelSlug`.
-- `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`).
+- `CrewFeedPage.tsx` — feed protetto per membri attivi: composer unico in cima per testo/link/media URL/poll/live, post più recenti in alto, sidebar canali e subfeed `/feed/:channelSlug`.
+- `CommunityReferences.tsx` — picker e renderer card per referenziare contenuti dell'app principale nei post/commenti: articoli, stories, viaggi e tratte prenotabili.
+- `CommunityPostSurface.tsx` — card condivisa per superfici community: preview link esterni, foto/video/audio da URL, poll inline con risultati e voto, live con stato e CTA a `/live?event=...`.
+- `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`) e riferimenti a contenuti principali.
 - `TiptapRenderer.tsx` — renderer minimale del JSON TipTap dei post community.
 - `admin/RichTextEditor.tsx` e `admin/MediaFigureNodeView.tsx` — copia isolata dell'editor articoli, usata dallo studio community senza importare l'admin della main app.
 - `ui/` — primitives shadcn copiate per rendere `apps/crew` autosufficiente.
