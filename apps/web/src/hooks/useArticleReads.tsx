@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getOrCreateVisitorKey } from "@/lib/visitor-key";
+import { getCachedAccessToken, sendArticleDwell } from "@/lib/article-dwell";
 
 const READ_RETRY_MS = 5_000;
 
@@ -111,16 +112,19 @@ export function useArticleReads() {
   return { readArticleIds, isRead };
 }
 
+type RegisterArticleReadVars = { articleId: string; lang?: string | null };
+
 export function useRegisterArticleRead(articleSlug?: string) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const userId = session?.user?.id;
 
   return useMutation({
-    mutationFn: async (articleId: string) => {
+    mutationFn: async ({ articleId, lang }: RegisterArticleReadVars) => {
       const { data, error } = await supabase.rpc("increment_article_view_count", {
         _article_id: articleId,
         _visitor_key: getOrCreateVisitorKey(),
+        _lang: lang ?? undefined,
       });
 
       if (!error) {
@@ -138,7 +142,7 @@ export function useRegisterArticleRead(articleSlug?: string) {
 
       throw error;
     },
-    onSuccess: (count, articleId) => {
+    onSuccess: (count, { articleId }) => {
       patchArticleViewCountInCache(queryClient, articleId, count, articleSlug);
       void dismissArticlePublicationNotifications(articleId, userId);
 
@@ -146,16 +150,23 @@ export function useRegisterArticleRead(articleSlug?: string) {
         queryClient.invalidateQueries({ queryKey: ["article-reads", userId] });
       }
     },
-    onError: (error, articleId) => {
+    onError: (error, { articleId }) => {
       console.error("Failed to register qualified article read", { articleId, error });
     },
   });
 }
 
-export function useQualifiedArticleRead(articleId?: string | null, articleSlug?: string) {
+export function useQualifiedArticleRead(
+  articleId?: string | null,
+  articleSlug?: string,
+  lang?: string | null
+) {
   const { mutateAsync: registerArticleRead } = useRegisterArticleRead(articleSlug);
   const trackedReadFor = useRef<string | null>(null);
   const readRequestInFlightFor = useRef<string | null>(null);
+  // Keep the latest language without re-registering the read when it changes.
+  const langRef = useRef<string | null | undefined>(lang);
+  langRef.current = lang;
 
   useEffect(() => {
     if (!articleId) return;
@@ -171,7 +182,7 @@ export function useQualifiedArticleRead(articleId?: string | null, articleSlug?:
       readRequestInFlightFor.current = articleId;
 
       try {
-        await registerArticleRead(articleId);
+        await registerArticleRead({ articleId, lang: langRef.current });
         trackedReadFor.current = articleId;
       } catch {
         readRequestInFlightFor.current = null;
@@ -193,6 +204,62 @@ export function useQualifiedArticleRead(articleId?: string | null, articleSlug?:
       }
     };
   }, [articleId, registerArticleRead]);
+}
+
+/**
+ * Measures how long an article stays visible on screen and reports the total
+ * reading time to the backend. The timer accumulates only while the tab is
+ * visible, and the value is flushed when the reader hides the tab, navigates
+ * away, or switches to a different article.
+ */
+export function useArticleDwellTracking(articleId?: string | null) {
+  useEffect(() => {
+    if (!articleId) return;
+    if (typeof document === "undefined") return;
+
+    const visitorKey = getOrCreateVisitorKey();
+    let accessToken: string | null = null;
+    void getCachedAccessToken().then((token) => {
+      accessToken = token;
+    });
+
+    let accumulatedMs = 0;
+    let visibleSince: number | null = document.visibilityState === "visible" ? performance.now() : null;
+
+    const accumulate = () => {
+      if (visibleSince !== null) {
+        accumulatedMs += performance.now() - visibleSince;
+        visibleSince = null;
+      }
+    };
+
+    const flush = () => {
+      accumulate();
+      sendArticleDwell({ articleId, visitorKey, dwellMs: accumulatedMs, accessToken });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        if (visibleSince === null) visibleSince = performance.now();
+      } else {
+        flush();
+      }
+    };
+
+    const handlePageHide = () => {
+      flush();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
+      // Flush the reading time accrued for this article before switching away.
+      flush();
+    };
+  }, [articleId]);
 }
 
 export function useSyncArticleViewCount(articleId?: string | null, articleSlug?: string) {

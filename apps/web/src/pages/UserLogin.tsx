@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Compass, Fingerprint, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
 import boatHarbor from "@/assets/boat-harbor.webp";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
@@ -161,6 +171,15 @@ const AUTH_COPY = {
       resend: "Rinvia codice",
       resendIn: (seconds: number) => `Rinvia tra ${seconds}s`,
     },
+    missingAccountDialog: {
+      title: "Nessun account trovato",
+      description:
+        "Non troviamo un profilo BITE associato a questa email. Vuoi crearne uno ora?",
+      nextStep:
+        "Ti portiamo alla registrazione con la stessa email: dovrai aggiungere solo il nome e confermare il codice.",
+      cancel: "No, cambio email",
+      confirm: "Crea account",
+    },
     errors: {
       nameRequired: "Inserisci come vuoi farti chiamare.",
       sessionNotReady: "Sessione non pronta. Riprova tra un secondo.",
@@ -268,6 +287,15 @@ const AUTH_COPY = {
       resend: "Resend code",
       resendIn: (seconds: number) => `Resend in ${seconds}s`,
     },
+    missingAccountDialog: {
+      title: "No account found",
+      description:
+        "We couldn't find a BITE profile linked to this email. Do you want to create one now?",
+      nextStep:
+        "We'll take you to sign up with the same email: you only need to add your name and confirm the code.",
+      cancel: "No, change email",
+      confirm: "Create account",
+    },
     errors: {
       nameRequired: "Enter the name you want to use.",
       sessionNotReady: "Session is not ready yet. Try again in a second.",
@@ -283,18 +311,21 @@ const AUTH_COPY = {
   },
 } as const;
 
+const isMissingAccountError = (message: string) => {
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("signups not allowed") ||
+    lowered.includes("user not found") ||
+    lowered.includes("invalid login")
+  );
+};
+
 const mapAuthError = (
   message: string,
   mode: AuthMode,
   errors: { loginMissingAccount: string },
 ) => {
-  const lowered = message.toLowerCase();
-  if (
-    mode === "login" &&
-    (lowered.includes("signups not allowed") ||
-      lowered.includes("user not found") ||
-      lowered.includes("invalid login"))
-  ) {
+  if (mode === "login" && isMissingAccountError(message)) {
     return errors.loginMissingAccount;
   }
   return message;
@@ -345,6 +376,7 @@ const UserLogin = () => {
   const [signupNewsletterOptIn, setSignupNewsletterOptIn] = useState(true);
   const [lastUsedMethod, setLastUsedMethod] = useState<AuthMethod | null>(null);
   const [submittedNewsletterOptIn, setSubmittedNewsletterOptIn] = useState(true);
+  const [missingAccountEmail, setMissingAccountEmail] = useState("");
   const { lang } = useI18n();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -408,6 +440,7 @@ const UserLogin = () => {
     setError("");
     setSubmittedEmail("");
     setSubmittedNewsletterOptIn(true);
+    setMissingAccountEmail("");
     setResendCooldown(0);
   }, [authMode]);
 
@@ -443,6 +476,11 @@ const UserLogin = () => {
     setLoading(false);
 
     if (otpError) {
+      if (mode === "login" && isMissingAccountError(otpError.message)) {
+        setMissingAccountEmail(normalizedEmail);
+        setError("");
+        return false;
+      }
       setError(mapAuthError(otpError.message, mode, ui.errors));
       return false;
     }
@@ -462,6 +500,17 @@ const UserLogin = () => {
 
     setOtp("");
     setStep("verify");
+  };
+
+  const handleCreateMissingAccount = () => {
+    if (missingAccountEmail) {
+      setEmailInput(missingAccountEmail);
+    }
+    setError("");
+    setStep("email");
+    setOtp("");
+    setMissingAccountEmail("");
+    navigate({ pathname: "/signup", search: location.search }, { state: location.state });
   };
 
   const handleResend = async () => {
@@ -630,12 +679,13 @@ const UserLogin = () => {
         ];
 
   return (
-    <div
-      className={cn(
-        "relative isolate overflow-hidden sm:px-8 lg:px-12",
-        isMobile ? "px-4 pb-10 pt-6" : "px-6 pb-24 pt-24",
-      )}
-    >
+    <>
+      <div
+        className={cn(
+          "relative isolate overflow-hidden sm:px-8 lg:px-12",
+          isMobile ? "px-4 pb-10 pt-6" : "px-6 pb-24 pt-24",
+        )}
+      >
       {!isMobile && (
         <>
           <div className="absolute inset-0 -z-20 bg-[linear-gradient(135deg,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_44%,_hsl(var(--secondary))_100%)]" />
@@ -1024,7 +1074,39 @@ const UserLogin = () => {
           </div>
         </section>
       </div>
-    </div>
+      </div>
+
+      <AlertDialog
+        open={Boolean(missingAccountEmail)}
+        onOpenChange={(open) => {
+          if (!open) setMissingAccountEmail("");
+        }}
+      >
+        <AlertDialogContent className="max-w-[520px] rounded-[28px] border-white/75 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96)_0%,_rgba(255,255,255,0.9)_100%)] shadow-[0_32px_80px_-42px_hsl(var(--navy)/0.55)]">
+          <AlertDialogHeader className="text-left">
+            <AlertDialogTitle className="editorial-heading text-2xl leading-tight text-foreground">
+              {ui.missingAccountDialog.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-sm leading-6 text-muted-foreground">
+              <span className="block">{ui.missingAccountDialog.description}</span>
+              <span className="block break-all font-medium text-foreground">{missingAccountEmail}</span>
+              <span className="block">{ui.missingAccountDialog.nextStep}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:justify-end">
+            <AlertDialogCancel className="mt-0 rounded-full border-white/80 bg-white/70">
+              {ui.missingAccountDialog.cancel}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCreateMissingAccount}
+              className="rounded-full bg-primary px-5 font-semibold text-primary-foreground hover:bg-navy-light"
+            >
+              {ui.missingAccountDialog.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

@@ -324,7 +324,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     });
     const experience = experienceOptions.find((option) => option.value === candidateInfo.sailingExperienceLevel)?.it || "Non indicato";
     return (
-      <div className="grid gap-3 text-sm md:grid-cols-2">
+      <div className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
         <InfoLine label="Esperienza" value={experience} />
         <InfoLine label="Tipo navigazione" value={`${valueList(candidateInfo.sailingKinds)} · ${candidateInfo.navigationRange || "range non indicato"}`} />
         <InfoLine label="Eta" value={candidateInfo.ageRange || "Non indicata"} />
@@ -332,14 +332,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
         <InfoLine label="Lavoro remoto" value={candidateInfo.workDuringVoyage || "Non indicato"} />
         <InfoLine label="Professione" value={candidateInfo.workRole || "Non indicata"} />
         <InfoLine label="Cibo/allergie" value={`${valueList(candidateInfo.foodRegimes)}${candidateInfo.allergies ? ` · ${candidateInfo.allergies}` : ""}`} />
-        <div className="md:col-span-2">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Motivazione</p>
+        <div className="sm:col-span-2 lg:col-span-1 xl:col-span-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Motivazione</p>
           <p className="mt-1 whitespace-pre-line leading-relaxed text-foreground">{candidateInfo.motivation || "Non indicata"}</p>
         </div>
         {candidateInfo.notes && (
-          <div className="md:col-span-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Altre note</p>
-            <p className="mt-1 whitespace-pre-line leading-relaxed text-muted-foreground">{candidateInfo.notes}</p>
+          <div className="sm:col-span-2 lg:col-span-1 xl:col-span-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Altre note</p>
+            <p className="mt-1 whitespace-pre-line leading-relaxed text-foreground/80">{candidateInfo.notes}</p>
           </div>
         )}
       </div>
@@ -442,8 +442,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
-                  <section className="rounded-[24px] border border-border/70 bg-background/45 p-4">
+                <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+                  <section className="min-w-0 rounded-[24px] border border-border/70 bg-background/45 p-4">
                     <div className="mb-4 flex items-start gap-3">
                       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border border-border bg-accent/10">
                         <ProfileAvatar
@@ -486,7 +486,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                     {renderCandidateInfo(request.candidate_info)}
                   </section>
 
-                  <section className="space-y-4 rounded-[24px] border border-border/70 bg-background/45 p-4">
+                  <section className="min-w-0 space-y-4 rounded-[24px] border border-border/70 bg-background/45 p-4">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Tratte richieste</p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -610,9 +610,9 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
 };
 
 const InfoLine = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-    <p className="mt-1 text-foreground">{value}</p>
+  <div className="min-w-0">
+    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+    <p className="mt-0.5 break-words leading-snug text-foreground">{value}</p>
   </div>
 );
 

@@ -262,6 +262,36 @@ export type Database = {
           },
         ]
       }
+      article_read_events: {
+        Row: {
+          article_id: string
+          counted_at: string
+          dwell_ms: number | null
+          id: string
+          lang: string | null
+          profile_id: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          counted_at?: string
+          dwell_ms?: number | null
+          id?: string
+          lang?: string | null
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          counted_at?: string
+          dwell_ms?: number | null
+          id?: string
+          lang?: string | null
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: []
+      }
       article_reads: {
         Row: {
           article_id: string
@@ -5199,9 +5229,40 @@ export type Database = {
         }
         Returns: boolean
       }
+      admin_article_view_insight_one: {
+        Args: { _article_id: string }
+        Returns: Json
+      }
+      admin_article_view_insights: {
+        Args: never
+        Returns: {
+          article_id: string
+          anonymous_views: number
+          avg_dwell_ms: number
+          distinct_registered: number
+          distinct_visitors: number
+          last_view_at: string
+          measured_dwell_count: number
+          published_at: string
+          registered_views: number
+          status: string
+          story_id: string
+          title_en: string
+          title_it: string
+          top_lang: string
+          tracked_views: number
+          view_count: number
+          views_en: number
+          views_it: number
+        }[]
+      }
       increment_article_view_count: {
-        Args: { _article_id: string; _visitor_key?: string }
+        Args: { _article_id: string; _lang?: string; _visitor_key?: string }
         Returns: number
+      }
+      record_article_read_dwell: {
+        Args: { _article_id: string; _dwell_ms: number; _visitor_key: string }
+        Returns: undefined
       }
       invoke_editorial_edge_function: {
         Args: { _function_name: string }

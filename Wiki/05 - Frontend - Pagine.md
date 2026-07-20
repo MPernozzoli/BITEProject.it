@@ -38,7 +38,7 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `UserBookings.tsx` | `/bookings` |
 | `ManageBookingParticipants.tsx` | `/bookings/:id/participants` |
 
-`UserLogin.tsx` usa un layout passwordless con azioni Google, passkey ed email OTP, autocomplete `username` sull'email e stato "ultimo usato" mostrato sulle azioni effettive; il riepilogo visuale dei metodi non viene più renderizzato. `/admin/login` continua a rimandare allo stesso flusso unificato, ma il router lo forza sul dominio principale per evitare errori WebAuthn sull'origin admin.
+`UserLogin.tsx` usa un layout passwordless con azioni Google, passkey ed email OTP, autocomplete `username` sull'email e stato "ultimo usato" mostrato sulle azioni effettive; il riepilogo visuale dei metodi non viene più renderizzato. Se un utente prova ad accedere via email con un indirizzo non registrato, la pagina apre una dialog di conferma e può portarlo alla registrazione preservando la stessa email e il redirect di ritorno. `/admin/login` continua a rimandare allo stesso flusso unificato, ma il router lo forza sul dominio principale per evitare errori WebAuthn sull'origin admin.
 
 `UserBookings.tsx` è compilabile anche senza sessione quando l'utente arriva da un viaggio (`/bookings?voyage=...`): salva una bozza candidatura in `localStorage`, manda al login solo al momento dell'invio e poi riprende lo stesso URL. Da loggato sincronizza la bozza anche su Supabase (`voyage_booking_drafts`). Mostra inoltre, per booking confermati, la sezione **Mail briefing** divisa in primo briefing e secondo briefing operativo; la seconda scheda include anche la visualizzazione delle prese tipo L/F presenti a bordo.
 

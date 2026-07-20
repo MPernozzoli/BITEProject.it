@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { addDays, eachDayOfInterval, endOfWeek, format, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
-import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, Music2, Plus, Settings2, TrendingUp, Youtube } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, LineChart, Music2, Plus, Settings2, TrendingUp, Youtube } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import AdminEditorialPlanSettingsDialog from "./AdminEditorialPlanSettingsDialog";
 import AdminEditorialPlanSlotDialog from "./AdminEditorialPlanSlotDialog";
+import AdminArticleInsightsDialog from "./AdminArticleInsightsDialog";
 
 type ArticleLite = ArticleForPlan & { title_en: string; title_it: string };
 type ChannelRow = Database["public"]["Tables"]["editorial_plan_channels"]["Row"];
@@ -98,6 +99,7 @@ export default function AdminEditorialPlan() {
   /** Canale i cui KPI sono mostrati nel pannello (default: sito). */
   const [kpiChannelCode, setKpiChannelCode] = useState<EditorialChannelCode>("site");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotForPlan | null>(null);
 
@@ -511,6 +513,10 @@ export default function AdminEditorialPlan() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setInsightsOpen(true)}>
+            <LineChart size={16} />
+            Insight articoli
+          </Button>
           <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setSettingsOpen(true)}>
             <Settings2 size={16} />
             Impostazioni
@@ -752,6 +758,8 @@ export default function AdminEditorialPlan() {
           </div>
         </div>
       )}
+
+      <AdminArticleInsightsDialog open={insightsOpen} onOpenChange={setInsightsOpen} />
 
       <AdminEditorialPlanSettingsDialog
         open={settingsOpen}

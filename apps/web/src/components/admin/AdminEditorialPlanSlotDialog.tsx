@@ -25,6 +25,7 @@ import {
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { useNavigate } from "react-router-dom";
 import { BarChart3, Bookmark, Eye, Heart, MessageCircle, MousePointerClick, Share2, TrendingUp } from "lucide-react";
+import AdminArticleInsightSummary from "./AdminArticleInsightSummary";
 
 type ArticleLite = {
   id: string;
@@ -1058,6 +1059,10 @@ export default function AdminEditorialPlanSlotDialog({
                   Libera slot
                 </Button>
               </div>
+              <AdminArticleInsightSummary
+                articleId={slot.assigned_article_id}
+                titleFallback={effectiveArticle?.title_it || effectiveArticle?.title_en}
+              />
             </div>
           )}
 

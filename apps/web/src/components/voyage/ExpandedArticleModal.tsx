@@ -10,7 +10,7 @@ import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import LiveReadCounter from "@/components/LiveReadCounter";
-import { useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
+import { useArticleDwellTracking, useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
@@ -102,8 +102,9 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
     },
   });
 
-  useQualifiedArticleRead(article?.id ?? null, slug ?? undefined);
+  useQualifiedArticleRead(article?.id ?? null, slug ?? undefined, lang);
   useSyncArticleViewCount(article?.id ?? null, slug ?? undefined);
+  useArticleDwellTracking(article?.id ?? null);
 
   const { data: authors = [] } = useQuery({
     queryKey: ["article-authors", article?.id],
