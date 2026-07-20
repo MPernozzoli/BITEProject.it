@@ -5111,6 +5111,10 @@ export type Database = {
         Args: { _limit?: number }
         Returns: number
       }
+      editorial_plan_slot_scheduled_at: {
+        Args: { _slot_date: string; _slot_time: string; _timezone: string }
+        Returns: string
+      }
       enqueue_admin_voyage_booking_notifications: {
         Args: {
           _booking_request_id: string

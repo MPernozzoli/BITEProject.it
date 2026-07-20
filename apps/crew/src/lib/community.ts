@@ -38,6 +38,7 @@ export type CommunityPost = {
   published_at: string | null;
   live_starts_at: string | null;
   live_ends_at: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   profiles?: { name: string | null; avatar_url: string | null } | null;
@@ -255,6 +256,14 @@ export const authorsFor = (post: Pick<CommunityPost, "profiles" | "community_pos
 
 export const authorLabelFor = (post: Pick<CommunityPost, "profiles" | "community_post_authors">) =>
   authorsFor(post).map((author) => author.name).join(", ");
+
+export const sourceArticleIdFor = (post: Pick<CommunityPost, "metadata">) => {
+  const metadata = post.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return typeof metadata.source_article_id === "string" && metadata.source_article_id.trim()
+    ? metadata.source_article_id
+    : null;
+};
 
 export const emptyDoc = () => ({
   type: "doc",

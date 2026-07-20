@@ -520,7 +520,7 @@ export default function AdminEditorialPlanSlotDialog({
       return;
     }
 
-    toast.success("Bozza creata e collegata allo slot.");
+    toast.success("Bozza creata e programmata nello slot.");
     setSaving(false);
     handleOpenChange(false);
     await onDone();
@@ -555,7 +555,7 @@ export default function AdminEditorialPlanSlotDialog({
       return;
     }
 
-    toast.success("Articolo associato allo slot.");
+    toast.success("Articolo programmato nello slot.");
     setSaving(false);
     handleOpenChange(false);
     await onDone();
@@ -1121,7 +1121,7 @@ export default function AdminEditorialPlanSlotDialog({
                   </select>
                 </div>
                 <Button type="button" disabled={saving} onClick={() => void quickDraft()}>
-                  Crea bozza e assegna
+                  Crea bozza e programma
                 </Button>
               </TabsContent>
               <TabsContent value="assign" className="space-y-3 pt-3">
@@ -1138,7 +1138,7 @@ export default function AdminEditorialPlanSlotDialog({
                   ))}
                 </select>
                 <Button type="button" disabled={saving} onClick={() => void assignExisting()}>
-                  Assegna allo slot
+                  Programma nello slot
                 </Button>
               </TabsContent>
             </Tabs>

@@ -337,6 +337,30 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/story/comprare-una-barca-a-vela" />
   </url>
   <url>
+    <loc>https://biteproject.it/it/logbook/spritz-cambia-mare</loc>
+    <lastmod>2026-07-20T07:37:00.869Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
+    <image:image>
+      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1784315739020-m3kero4dakh.png</image:loc>
+      <image:caption>Spritz is changing seas. And perhaps this is where the real journey begins.</image:caption>
+      <image:title>Spritz is changing seas. And perhaps this is where the real journey begins.</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/logbook/spritz-is-changing-seas</loc>
+    <lastmod>2026-07-20T07:37:00.869Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
+    <image:image>
+      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1784315739020-m3kero4dakh.png</image:loc>
+      <image:caption>Spritz is changing seas. And perhaps this is where the real journey begins.</image:caption>
+      <image:title>Spritz is changing seas. And perhaps this is where the real journey begins.</image:title>
+    </image:image>
+  </url>
+  <url>
     <loc>https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca</loc>
     <lastmod>2026-07-19T13:19:19.567Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />

@@ -53,7 +53,8 @@ Sorgente: `apps/crew/src/components/`.
 - `CrewFeedPage.tsx` — feed protetto per membri attivi: composer unico in cima per testo/link/media URL/poll/live, post più recenti in alto, sidebar canali e subfeed `/feed/:channelSlug`.
 - `CommunityReferences.tsx` — picker e renderer card per referenziare contenuti dell'app principale nei post/commenti: articoli, stories, viaggi e tratte prenotabili. I riferimenti ad articoli aprono una modale interna con contenuto logbook e autori, oltre al link esterno al sito principale.
 - `CommunityPostSurface.tsx` — card condivisa per superfici community: preview link esterni, foto/video/audio da URL, poll inline con risultati e voto, live con stato e CTA a `/live?event=...`.
-- `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`) e riferimenti a contenuti principali.
+- `ArticleThreadComments.tsx` — thread pubblico per post Crew generati da articoli: riusa `article_comments`/`comment_likes`, quindi i commenti sono gli stessi tra logbook e Crew.
+- `CommunityComments.tsx` — commenti/reply/reaction realtime sui post nativi community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`) e riferimenti a contenuti principali.
 - `TiptapRenderer.tsx` — renderer minimale del JSON TipTap dei post community.
 - `admin/RichTextEditor.tsx` e `admin/MediaFigureNodeView.tsx` — copia isolata dell'editor articoli, usata dallo studio community senza importare l'admin della main app.
 - `ui/` — primitives shadcn copiate per rendere `apps/crew` autosufficiente.

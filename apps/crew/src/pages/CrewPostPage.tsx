@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { CommunityReferenceCards } from "@/components/CommunityReferences";
 import CommunityPostSurface from "@/components/CommunityPostSurface";
 import { supabase } from "@/integrations/supabase/client";
+import ArticleThreadComments from "@/components/ArticleThreadComments";
 import CommunityComments from "@/components/CommunityComments";
 import TiptapRenderer from "@/components/TiptapRenderer";
 import {
@@ -17,7 +18,9 @@ import {
   excerptFor,
   formatDateTime,
   isActiveSubscription,
+  linkedResourcesFrom,
   loadMembership,
+  sourceArticleIdFor,
   titleFor,
 } from "@/lib/community";
 
@@ -97,6 +100,10 @@ const CrewPostPage = () => {
   }, [slug]);
 
   const canComment = Boolean(subscription && ["trialing", "active"].includes(subscription.status));
+  const sourceArticleId = post ? sourceArticleIdFor(post) : null;
+  const sourceArticleHref = post
+    ? linkedResourcesFrom(post.linked_resources).find((resource) => resource.kind === "article" && resource.id === sourceArticleId)?.href
+    : null;
 
   const voteOption = async (currentPoll: CommunityPoll, option: CommunityPollOption) => {
     if (!profileId) return;
@@ -172,7 +179,11 @@ const CrewPostPage = () => {
         />
         <CommunityReferenceCards resources={post.linked_resources} />
       </div>
-      <CommunityComments postId={post.id} canComment={canComment} isAdmin={isAdmin || isModerator} />
+      {sourceArticleId ? (
+        <ArticleThreadComments articleId={sourceArticleId} articleHref={sourceArticleHref} />
+      ) : (
+        <CommunityComments postId={post.id} canComment={canComment} isAdmin={isAdmin || isModerator} />
+      )}
     </article>
   );
 };
