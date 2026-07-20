@@ -98,14 +98,26 @@ export function isPaidStatus(status: string): boolean {
   return status.toUpperCase() === "ACCEPTED";
 }
 
-type BunqPaymentListResponse = Array<{
-  Payment: {
-    id: number;
-    description: string;
-    amount: { value: string; currency: string };
-    counterparty_alias?: BunqCounterpartyAlias | null;
-  };
-}>;
+type BunqPayment = {
+  id: number;
+  description: string;
+  amount: { value: string; currency: string };
+  counterparty_alias?: BunqCounterpartyAlias | null;
+};
+
+type BunqPagination = {
+  older_url?: string | null;
+  newer_url?: string | null;
+  future_url?: string | null;
+};
+
+type BunqPaymentListResponse = Array<
+  | { Payment: BunqPayment }
+  | { Pagination: BunqPagination }
+>;
+
+const BUNQ_PAYMENT_SCAN_COUNT = 200;
+const BUNQ_PAYMENT_SCAN_MAX_PAGES = 5;
 
 /**
  * Scans the account's recent incoming payments for one whose description carries the given
@@ -126,22 +138,45 @@ export async function findIncomingPaymentDetailsByReference(
   amountValue: string;
   counterpartyAlias: BunqCounterpartyAlias | null;
 } | null> {
-  const result = await bunqRequest<BunqPaymentListResponse>(`${accountPath()}/payment?count=50`);
   const target = reference.toUpperCase();
   const expectedCents = Math.round(expectedAmountEur * 100);
-  const matched = result.find(({ Payment: payment }) => {
-    if (!payment?.description?.toUpperCase().includes(target)) return false;
-    // Incoming transfers post as a positive amount. Match the exact expected amount,
-    // allowing only the unavoidable 1-cent floating/formatting tolerance.
-    const amountCents = Math.round(Number(payment.amount?.value ?? 0) * 100);
-    return Math.abs(amountCents - expectedCents) <= 1;
-  });
-  if (!matched?.Payment) return null;
-  return {
-    id: matched.Payment.id,
-    amountValue: matched.Payment.amount.value,
-    counterpartyAlias: matched.Payment.counterparty_alias ?? null,
-  };
+  let path = `${accountPath()}/payment?count=${BUNQ_PAYMENT_SCAN_COUNT}`;
+
+  for (let page = 0; page < BUNQ_PAYMENT_SCAN_MAX_PAGES; page += 1) {
+    const result = await bunqRequest<BunqPaymentListResponse>(path);
+    const matched = result
+      .map((entry) => ("Payment" in entry ? entry.Payment : null))
+      .find((payment) => {
+        if (!payment?.description?.toUpperCase().includes(target)) return false;
+        // Incoming transfers post as a positive amount. Match the exact expected amount,
+        // allowing only the unavoidable 1-cent floating/formatting tolerance.
+        const amountCents = Math.round(Number(payment.amount?.value ?? 0) * 100);
+        return Math.abs(amountCents - expectedCents) <= 1;
+      });
+    if (matched) {
+      return {
+        id: matched.id,
+        amountValue: matched.amount.value,
+        counterpartyAlias: matched.counterparty_alias ?? null,
+      };
+    }
+
+    const pagination = result.find((entry): entry is { Pagination: BunqPagination } => "Pagination" in entry)?.Pagination;
+    const olderPath = normalizeBunqPaginationPath(pagination?.older_url);
+    if (!olderPath) return null;
+    path = olderPath;
+  }
+
+  return null;
+}
+
+function normalizeBunqPaginationPath(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const rawPath = url.startsWith("http")
+    ? `${new URL(url).pathname}${new URL(url).search}`
+    : url;
+  const path = rawPath.replace(/^\/v1(?=\/)/, "");
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 type BunqPaymentCreateResponse = Array<{

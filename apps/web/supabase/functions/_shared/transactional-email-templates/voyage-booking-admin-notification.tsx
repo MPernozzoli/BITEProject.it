@@ -42,6 +42,7 @@ interface VoyageBookingAdminNotificationProps {
   bookingUrl?: string | null
   message?: string | null
   amountEur?: number | null
+  paymentMethod?: string | null
   paymentReference?: string | null
   changeKind?: string | null
   oldLegs?: string[] | null
@@ -82,8 +83,18 @@ const COPY = {
     proposedLegsTitle: 'Proposta',
     partySize: 'Persone',
     amount: 'Importo',
+    paymentMethod: 'Metodo',
     paymentReference: 'Riferimento',
     travelerTitle: 'Richiedente',
+    bankTransferPendingIntro: (name: string, voyageName: string, travelerName: string) => {
+      const prefix = name ? `${name}, ` : ''
+      const traveler = travelerName || 'Un utente'
+      return `${prefix}${traveler} ha scelto il bonifico per ${voyageName}. Non esaminare la candidatura finche Bunq non conferma importo corretto e causale.`
+    },
+    paymentMethodLabels: {
+      bank_transfer: 'Bonifico',
+      bunq_link: 'Carta / Apple Pay / Google Pay',
+    },
     status: {
       admin_new_booking: 'Nuova richiesta',
       admin_cancelled: 'Annullato',
@@ -127,8 +138,18 @@ const COPY = {
     proposedLegsTitle: 'Proposed',
     partySize: 'People',
     amount: 'Amount',
+    paymentMethod: 'Method',
     paymentReference: 'Reference',
     travelerTitle: 'Requester',
+    bankTransferPendingIntro: (name: string, voyageName: string, travelerName: string) => {
+      const prefix = name ? `${name}, ` : ''
+      const traveler = travelerName || 'A user'
+      return `${prefix}${traveler} chose bank transfer for ${voyageName}. Do not review the application until Bunq confirms the exact amount and reference.`
+    },
+    paymentMethodLabels: {
+      bank_transfer: 'Bank transfer',
+      bunq_link: 'Card / Apple Pay / Google Pay',
+    },
     status: {
       admin_new_booking: 'New request',
       admin_cancelled: 'Cancelled',
@@ -173,6 +194,7 @@ const VoyageBookingAdminNotificationEmail = ({
   bookingUrl,
   message,
   amountEur,
+  paymentMethod,
   paymentReference,
   changeKind,
   oldLegs,
@@ -189,6 +211,14 @@ const VoyageBookingAdminNotificationEmail = ({
   const resolvedTravelerName = travelerName?.trim() || ''
   const safeOldLegs = oldLegs?.filter((item) => item?.trim()) ?? []
   const safeProposedLegs = proposedLegs?.filter((item) => item?.trim()) ?? []
+  const paymentMethodKey = paymentMethod?.trim() as keyof typeof copy.paymentMethodLabels | undefined
+  const paymentMethodLabel = paymentMethodKey && copy.paymentMethodLabels[paymentMethodKey]
+    ? copy.paymentMethodLabels[paymentMethodKey]
+    : paymentMethod
+  const introText =
+    variant === 'admin_payment_pending' && paymentMethod === 'bank_transfer'
+      ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName, resolvedTravelerName)
+      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, resolvedTravelerName)
   const amountLabel =
     typeof amountEur === 'number' && amountEur > 0
       ? new Intl.NumberFormat(lang === 'it' ? 'it-IT' : 'en-IE', {
@@ -205,7 +235,7 @@ const VoyageBookingAdminNotificationEmail = ({
       title={copy.title[variant]}
       intro={
         <EmailBodyText>
-          {copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, resolvedTravelerName)}
+          {introText}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
@@ -232,6 +262,7 @@ const VoyageBookingAdminNotificationEmail = ({
         <EmailDetailRow label={copy.partySize} value={partySize ? String(partySize) : null} />
         <EmailRouteBox label={copy.legsTitle} routes={safeLegs} />
         {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
+        <EmailDetailRow label={copy.paymentMethod} value={paymentMethodLabel} />
         <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
         {message?.trim() ? <EmailCallout>{message.trim()}</EmailCallout> : null}
       </EmailCard>

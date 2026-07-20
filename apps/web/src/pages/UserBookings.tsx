@@ -16,7 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
-import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
+import {
+  buildCandidateInfoPrefill,
+  emptyCandidateInfo,
+  getCandidateInfoValidationError,
+  type CandidateInfo,
+} from "@/lib/booking-candidate-info";
 import {
   buildBookingApplicationDraft,
   clearCloudBookingApplicationDraft,
@@ -542,12 +547,9 @@ const UserBookings = () => {
       toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
       return false;
     }
-    if (candidateInfo.motivation.trim().length < 20) {
-      toast.error(
-        lang === "it"
-          ? "Scrivi qualche riga sul perche vorresti partecipare."
-          : "Write a few lines about why you would like to join."
-      );
+    const candidateInfoError = getCandidateInfoValidationError(candidateInfo, lang);
+    if (candidateInfoError) {
+      toast.error(candidateInfoError);
       return false;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
@@ -801,12 +803,9 @@ const UserBookings = () => {
 
   const handleAcceptConfirm = async () => {
     if (!acceptTarget) return;
-    if (acceptCandidateInfo.motivation.trim().length < 20) {
-      toast.error(
-        lang === "it"
-          ? "Scrivi qualche riga sul perche vorresti partecipare."
-          : "Write a few lines about why you would like to join."
-      );
+    const candidateInfoError = getCandidateInfoValidationError(acceptCandidateInfo, lang);
+    if (candidateInfoError) {
+      toast.error(candidateInfoError);
       return;
     }
     setAcceptSubmitting(true);

@@ -159,3 +159,51 @@ export function buildCandidateInfoPrefill(params: {
     notes: "",
   };
 }
+
+export function getCandidateInfoValidationError(
+  value: CandidateInfo,
+  lang: "it" | "en"
+) {
+  const candidateInfo = normalizeCandidateInfo(value);
+  const hasKnownLanguage = candidateInfo.languages.length > 0;
+  const hasOtherLanguage = candidateInfo.otherLanguages.trim().length > 0;
+
+  if (candidateInfo.sailingKinds.length === 0) {
+    return lang === "it"
+      ? "Seleziona almeno un tipo di esperienza nautica."
+      : "Select at least one type of sailing experience.";
+  }
+  if (!candidateInfo.navigationRange) {
+    return lang === "it"
+      ? "Indica il tipo di navigazione che conosci."
+      : "Select the navigation range you know.";
+  }
+  if (!candidateInfo.ageRange) {
+    return lang === "it" ? "Seleziona la tua fascia d'eta." : "Select your age range.";
+  }
+  if (!hasKnownLanguage && !hasOtherLanguage) {
+    return lang === "it" ? "Indica almeno una lingua che parli." : "Add at least one language you speak.";
+  }
+  if (!candidateInfo.workDuringVoyage) {
+    return lang === "it"
+      ? "Indica se lavorerai durante il viaggio."
+      : "Select whether you will work during the voyage.";
+  }
+  if (candidateInfo.foodRegimes.length === 0) {
+    return lang === "it"
+      ? "Seleziona almeno un regime alimentare."
+      : "Select at least one food preference.";
+  }
+  if (candidateInfo.foodRegimes.includes("allergies") && candidateInfo.allergies.trim().length === 0) {
+    return lang === "it"
+      ? "Aggiungi i dettagli delle allergie o intolleranze."
+      : "Add details about your allergies or intolerances.";
+  }
+  if (candidateInfo.motivation.trim().length < 20) {
+    return lang === "it"
+      ? "Scrivi qualche riga sul perche vorresti partecipare."
+      : "Write a few lines about why you would like to join.";
+  }
+
+  return null;
+}

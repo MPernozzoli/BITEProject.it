@@ -150,6 +150,7 @@ async function queueEmail(params: {
   templateName: string
   idempotencyKey: string
   templateData: Record<string, unknown>
+  metadata?: Record<string, unknown>
 }) {
   const response = await fetch(`${params.supabaseUrl}/functions/v1/send-transactional-email`, {
     method: 'POST',
@@ -162,6 +163,7 @@ async function queueEmail(params: {
       recipientEmail: params.recipientEmail,
       idempotencyKey: params.idempotencyKey,
       templateData: params.templateData,
+      metadata: params.metadata,
     }),
   })
 
@@ -584,6 +586,14 @@ Deno.serve(async (req) => {
     const adminMessage = metadataString(metadata, 'admin_message') ?? metadataString(metadata, 'admin_note')
     const amountEur = metadataNumber(metadata, 'amount_eur') ?? metadataNumber(metadata, 'amountEur')
     const paymentReference = metadataString(metadata, 'payment_reference') ?? metadataString(metadata, 'reference')
+    const paymentMethod = metadataString(metadata, 'payment_method')
+    const emailMetadata = {
+      notification_id: notification.id,
+      booking_request_id: notification.booking_request_id,
+      event_type: notification.event_type,
+      payment_method: paymentMethod,
+      payment_reference: paymentReference,
+    }
 
     let emailedAt = notification.emailed_at
     let pushSentAt = notification.push_sent_at
@@ -626,6 +636,7 @@ Deno.serve(async (req) => {
                 bookingUrl: `${PUBLIC_SITE_URL}/admin/bookings?voyage=${booking.voyage_id}`,
                 message: booking.message,
                 amountEur,
+                paymentMethod,
                 paymentReference,
                 changeKind: metadataString(metadata, 'change_kind'),
                 oldLegs,
@@ -641,7 +652,7 @@ Deno.serve(async (req) => {
                 bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
                 message: adminMessage ?? booking.message,
                 amountEur,
-                paymentMethod: metadataString(metadata, 'payment_method'),
+                paymentMethod,
                 paymentReference,
                 paymentExpiresAt: metadataString(metadata, 'payment_expires_at'),
                 changeKind: metadataString(metadata, 'change_kind'),
@@ -650,6 +661,7 @@ Deno.serve(async (req) => {
                 oldLegs,
                 proposedLegs,
               },
+          metadata: emailMetadata,
         })
         emailedAt = new Date().toISOString()
       }

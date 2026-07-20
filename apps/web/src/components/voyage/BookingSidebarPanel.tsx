@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type TouchEvent } from "react";
 import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, TicketCheck, Users, X } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
@@ -43,6 +43,9 @@ interface BookingSidebarPanelProps {
   onMessageChange: (message: string) => void;
   onCandidateInfoChange: (candidateInfo: CandidateInfo) => void;
   onSubmit: () => void;
+  initialStep?: "legs" | "about";
+  stepResetKey?: string;
+  onStepChange?: (step: "legs" | "about") => void;
 }
 
 const BookingSidebarPanel = ({
@@ -70,11 +73,22 @@ const BookingSidebarPanel = ({
   onMessageChange,
   onCandidateInfoChange,
   onSubmit,
+  initialStep = "legs",
+  stepResetKey,
+  onStepChange,
 }: BookingSidebarPanelProps) => {
-  const [step, setStep] = useState<"legs" | "about">("legs");
+  const [step, setStep] = useState<"legs" | "about">(initialStep);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const selectedLegs = selectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
   const rejectedLegs = rejectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
+
+  useEffect(() => {
+    setStep(initialStep);
+  }, [initialStep, stepResetKey]);
+
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [onStepChange, step]);
 
   useLayoutEffect(() => {
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: "auto" });

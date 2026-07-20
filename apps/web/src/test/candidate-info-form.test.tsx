@@ -4,6 +4,7 @@ import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import {
   buildCandidateInfoPrefill,
   emptyCandidateInfo,
+  getCandidateInfoValidationError,
   normalizeCandidateInfo,
 } from "@/lib/booking-candidate-info";
 
@@ -36,5 +37,36 @@ describe("CandidateInfoForm workRole field", () => {
       latestCandidateInfo: { ...emptyCandidateInfo, workRole: "insegnante" },
     });
     expect(prefill.workRole).toBe("insegnante");
+  });
+
+  it("validates required candidate info fields before confirmation", () => {
+    expect(getCandidateInfoValidationError(emptyCandidateInfo, "it")).toBe(
+      "Seleziona almeno un tipo di esperienza nautica.",
+    );
+
+    const missingAllergyDetails = {
+      ...emptyCandidateInfo,
+      sailingKinds: ["sail"],
+      navigationRange: "coastal_only",
+      ageRange: "25_34",
+      languages: ["it"],
+      languageLevels: { it: "native" as const },
+      workDuringVoyage: "no",
+      foodRegimes: ["allergies"],
+      motivation: "Vorrei partecipare per imparare la vita a bordo.",
+    };
+    expect(getCandidateInfoValidationError(missingAllergyDetails, "it")).toBe(
+      "Aggiungi i dettagli delle allergie o intolleranze.",
+    );
+
+    expect(
+      getCandidateInfoValidationError(
+        {
+          ...missingAllergyDetails,
+          allergies: "Noci",
+        },
+        "it",
+      ),
+    ).toBeNull();
   });
 });

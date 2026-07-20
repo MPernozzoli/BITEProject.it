@@ -58,6 +58,19 @@ type CandidateProfile = BookingProfile & {
   social_seapeople?: string | null;
 };
 
+type BookingDeposit = {
+  id: string;
+  booking_request_id: string;
+  participant_id: string | null;
+  payment_method: string;
+  status: string;
+  amount_cents: number;
+  currency: string;
+  reference: string;
+  created_at: string;
+  paid_at: string | null;
+};
+
 type VoyageCandidatesPanelProps = {
   /** When set, only candidates for this voyage are shown/loaded. */
   voyageId?: string;
@@ -74,6 +87,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   const [legs, setLegs] = useState<BookableLeg[]>([]);
   const [waypoints, setWaypoints] = useState<BookingWaypoint[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
+  const [deposits, setDeposits] = useState<BookingDeposit[]>([]);
   const [proposalLegIds, setProposalLegIds] = useState<Record<string, string[]>>({});
   const [proposalNotes, setProposalNotes] = useState<Record<string, string>>({});
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
@@ -108,7 +122,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     const loadedRequests = ((requestsRes.data as BookingRequest[] | null) || []).filter((request) => !request.is_crew);
     const requestIds = loadedRequests.map((request) => request.id);
     const profileIds = [...new Set(loadedRequests.map((request) => request.profile_id))];
-    const [requestLegsRes, profilesRes] = await Promise.all([
+    const [requestLegsRes, profilesRes, depositsRes] = await Promise.all([
       requestIds.length
         ? typedSupabase.from("voyage_booking_request_legs").select("*").in("booking_request_id", requestIds)
         : Promise.resolve({ data: [], error: null }),
@@ -118,10 +132,17 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             .select("id,name,email,avatar_url,bio,preferred_language,secondary_language,social_instagram,social_youtube,social_tiktok,social_facebook,social_x,social_linkedin,social_website,social_seapeople")
             .in("id", profileIds)
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_deposits")
+            .select("id,booking_request_id,participant_id,payment_method,status,amount_cents,currency,reference,created_at,paid_at")
+            .in("booking_request_id", requestIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (requestLegsRes.error || profilesRes.error) {
-      toast.error(requestLegsRes.error?.message || profilesRes.error?.message || "Unable to load candidate details");
+    if (requestLegsRes.error || profilesRes.error || depositsRes.error) {
+      toast.error(requestLegsRes.error?.message || profilesRes.error?.message || depositsRes.error?.message || "Unable to load candidate details");
       setLoading(false);
       return;
     }
@@ -132,6 +153,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     setLegs((legsRes.data as BookableLeg[] | null) || []);
     setRequestLegs((requestLegsRes.data as BookingRequestLeg[] | null) || []);
     setProfiles((profilesRes.data as CandidateProfile[] | null) || []);
+    setDeposits((depositsRes.data as BookingDeposit[] | null) || []);
     setLoading(false);
   }, [voyageId]);
 
@@ -159,6 +181,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     return map;
   }, [requestLegs]);
   const legsById = useMemo(() => Object.fromEntries(legs.map((leg) => [leg.id, leg])), [legs]);
+  const depositsByRequest = useMemo(() => {
+    const map: Record<string, BookingDeposit[]> = {};
+    for (const deposit of deposits) {
+      if (!map[deposit.booking_request_id]) map[deposit.booking_request_id] = [];
+      map[deposit.booking_request_id].push(deposit);
+    }
+    return map;
+  }, [deposits]);
 
   const candidates = useMemo(
     () => requests.filter((request) => reviewStatuses.has(request.status) || request.plan_change_status === "pending_user_approval"),
@@ -170,6 +200,10 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   }, [candidates.length, onCountChange]);
 
   const setStatus = async (request: BookingRequest, status: VoyageBookingStatus) => {
+    if (status === "admin_approved" && (depositsByRequest[request.id] || []).some((deposit) => deposit.status === "pending")) {
+      toast.error("Pagamento contributo ancora in sospeso: la candidatura resta bloccata finche Bunq non conferma il pagamento.");
+      return;
+    }
     const adminMessage = decisionMessages[request.id]?.trim() || null;
     setSavingId(request.id);
     const result =
@@ -312,13 +346,39 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     );
   };
 
+  const formatDepositAmount = (deposit: BookingDeposit) =>
+    new Intl.NumberFormat("it-IT", {
+      style: "currency",
+      currency: deposit.currency || "EUR",
+    }).format(deposit.amount_cents / 100);
+
+  const paymentMethodLabel = (method: string) =>
+    method === "bank_transfer" ? "Bonifico" : method === "bunq_link" ? "Bunq online" : method;
+
+  const depositStatusLabel = (status: string) => {
+    if (status === "pending") return "Pagamento in attesa";
+    if (status === "paid") return "Pagamento ricevuto";
+    if (status === "cancelled") return "Pagamento annullato";
+    if (status === "failed") return "Pagamento fallito";
+    if (status === "refunded") return "Rimborsato";
+    if (status === "partially_refunded") return "Rimborso parziale";
+    return status;
+  };
+
+  const depositStatusClass = (status: string) => {
+    if (status === "pending") return "border-amber-300/70 bg-amber-100/70 text-amber-900";
+    if (status === "paid") return "border-emerald-300/70 bg-emerald-100/70 text-emerald-900";
+    if (status === "cancelled" || status === "failed") return "border-destructive/30 bg-destructive/10 text-destructive";
+    return "border-border/70 bg-background/60 text-muted-foreground";
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Candidature in revisione</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Valuta le informazioni, approva, scarta o proponi tratte diverse prima del pagamento/conferma.
+            Valuta le informazioni e proponi tratte diverse. Le candidature con contributo pending restano bloccate finche Bunq non conferma il pagamento.
           </p>
         </div>
         <button
@@ -349,6 +409,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             const selectedProposal = proposalLegIds[request.id] || [];
             const voyageRequests = requests.filter((item) => item.voyage_id === request.voyage_id);
             const socialLinks = profileSocialLinks(profile);
+            const requestDeposits = depositsByRequest[request.id] || [];
+            const hasPendingDeposit = requestDeposits.some((deposit) => deposit.status === "pending");
             return (
               <article key={request.id} className="rounded-[30px] border border-border/70 bg-background/40 p-5 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -437,6 +499,41 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                     </div>
 
                     <div className="border-t border-border/70 pt-4">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Pagamento contributo</p>
+                      {requestDeposits.length === 0 ? (
+                        <p className="mt-2 rounded-2xl border border-dashed border-border p-3 text-sm text-muted-foreground">
+                          Nessun contributo di candidatura registrato per questa richiesta.
+                        </p>
+                      ) : (
+                        <div className="mt-2 space-y-2">
+                          {requestDeposits.map((deposit) => (
+                            <div key={deposit.id} className="rounded-2xl border border-border/70 bg-background/60 p-3 text-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${depositStatusClass(deposit.status)}`}>
+                                  {depositStatusLabel(deposit.status)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {paymentMethodLabel(deposit.payment_method)} · {formatDepositAmount(deposit)}
+                                </span>
+                              </div>
+                              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                                <InfoLine label="Causale" value={deposit.reference} />
+                                <InfoLine label="Creato" value={formatBookingDate(deposit.created_at, "it-IT")} />
+                                <InfoLine label="Ricevuto" value={deposit.paid_at ? formatBookingDate(deposit.paid_at, "it-IT") : "Non ancora"} />
+                                <InfoLine label="Metodo" value={paymentMethodLabel(deposit.payment_method)} />
+                              </div>
+                            </div>
+                          ))}
+                          {hasPendingDeposit && (
+                            <p className="rounded-2xl border border-amber-300/70 bg-amber-100/70 p-3 text-xs font-semibold text-amber-900">
+                              Non approvare finche il conto Bunq non conferma importo e causale: la candidatura resta in pending.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-border/70 pt-4">
                       <div className="mb-3">
                         <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Gantt revisione</p>
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -484,7 +581,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         <button
                           type="button"
                           onClick={() => void setStatus(request, "admin_approved")}
-                          disabled={savingId === request.id}
+                          disabled={savingId === request.id || hasPendingDeposit}
+                          title={hasPendingDeposit ? "Pagamento contributo in attesa di conferma Bunq." : undefined}
                           className="glass-chip inline-flex flex-1 items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
                         >
                           {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}

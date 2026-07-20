@@ -117,6 +117,14 @@ const COPY = {
     paymentMethod: 'Metodo',
     paymentReference: 'Riferimento',
     paymentExpiresAt: 'Scadenza',
+    bankTransferPendingIntro: (name: string, voyageName: string) => {
+      const prefix = name ? `${name}, ` : ''
+      return `${prefix}abbiamo registrato il bonifico in attesa per ${voyageName}. La candidatura non verra esaminata finche non riceviamo l'importo corretto con la causale indicata.`
+    },
+    paymentMethodLabels: {
+      bank_transfer: 'Bonifico',
+      bunq_link: 'Carta / Apple Pay / Google Pay',
+    },
     status: {
       requested: 'Richiesta ricevuta',
       waitlisted: 'Waiting list',
@@ -191,6 +199,14 @@ const COPY = {
     paymentMethod: 'Method',
     paymentReference: 'Reference',
     paymentExpiresAt: 'Deadline',
+    bankTransferPendingIntro: (name: string, voyageName: string) => {
+      const prefix = name ? `${name}, ` : ''
+      return `${prefix}we recorded your pending bank transfer for ${voyageName}. Your application will not be reviewed until we receive the exact amount with the required reference.`
+    },
+    paymentMethodLabels: {
+      bank_transfer: 'Bank transfer',
+      bunq_link: 'Card / Apple Pay / Google Pay',
+    },
     status: {
       requested: 'Request received',
       waitlisted: 'Waiting list',
@@ -289,6 +305,14 @@ const VoyageBookingNotificationEmail = ({
   const paymentExpiresAtLabel = formatDateTime(paymentExpiresAt, lang)
   const newDepartureLabel = formatDateTime(newDepartureAt, lang)
   const baselineDepartureLabel = formatDateTime(baselineDepartureBy, lang)
+  const paymentMethodKey = paymentMethod?.trim() as keyof typeof copy.paymentMethodLabels | undefined
+  const paymentMethodLabel = paymentMethodKey && copy.paymentMethodLabels[paymentMethodKey]
+    ? copy.paymentMethodLabels[paymentMethodKey]
+    : paymentMethod
+  const introText =
+    variant === 'payment_pending' && paymentMethod === 'bank_transfer'
+      ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName)
+      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)
 
   return (
     <EditorialEmailShell
@@ -298,7 +322,7 @@ const VoyageBookingNotificationEmail = ({
       title={copy.title[variant]}
       intro={
         <EmailBodyText>
-          {copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)}
+          {introText}
         </EmailBodyText>
       }
       primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
@@ -326,7 +350,7 @@ const VoyageBookingNotificationEmail = ({
         <EmailCard>
           <EmailSectionLabel>{copy.paymentTitle}</EmailSectionLabel>
           {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
-          <EmailDetailRow label={copy.paymentMethod} value={paymentMethod} />
+          <EmailDetailRow label={copy.paymentMethod} value={paymentMethodLabel} />
           <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
           <EmailDetailRow label={copy.paymentExpiresAt} value={paymentExpiresAtLabel} />
         </EmailCard>

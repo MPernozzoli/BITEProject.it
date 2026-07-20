@@ -12,6 +12,7 @@ export type BookingApplicationDraft = {
   partySize: string;
   message: string;
   candidateInfo: CandidateInfo;
+  applicationStep?: "legs" | "about";
   updatedAt: string;
 };
 
@@ -50,6 +51,7 @@ export const buildBookingApplicationDraft = (params: {
   partySize: string;
   message: string;
   candidateInfo: CandidateInfo;
+  applicationStep?: "legs" | "about";
 }): BookingApplicationDraft => ({
   version: DRAFT_VERSION,
   voyageId: params.voyageId,
@@ -57,6 +59,7 @@ export const buildBookingApplicationDraft = (params: {
   partySize: params.partySize,
   message: params.message,
   candidateInfo: normalizeCandidateInfo(params.candidateInfo),
+  applicationStep: params.applicationStep,
   updatedAt: new Date().toISOString(),
 });
 

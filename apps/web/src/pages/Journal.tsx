@@ -2,7 +2,7 @@ import { useI18n } from "@/lib/i18n";
 import { useState, useMemo, useRef, useCallback, useEffect, type TouchEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Search, Plus, Map, List, Ship, Mountain, Navigation, Anchor, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
@@ -27,7 +27,20 @@ import {
   type PriorVoyageContributionBooking,
 } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
-import { buildCandidateInfoPrefill, emptyCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
+import {
+  buildCandidateInfoPrefill,
+  emptyCandidateInfo,
+  getCandidateInfoValidationError,
+  type CandidateInfo,
+} from "@/lib/booking-candidate-info";
+import {
+  buildBookingApplicationDraft,
+  clearCloudBookingApplicationDraft,
+  clearLocalBookingApplicationDraft,
+  isBookingApplicationDraftEmpty,
+  loadBookingApplicationDraft,
+  saveLocalBookingApplicationDraft,
+} from "@/lib/booking-application-draft";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
@@ -86,6 +99,7 @@ const Journal = () => {
   const MOBILE_SHEET_SWIPE_THRESHOLD = 48;
   const { t, lang } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const { session, isAdmin } = useAuth();
   const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState("");
@@ -112,6 +126,8 @@ const Journal = () => {
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingCandidateInfo, setBookingCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [bookingCandidateInfoTouched, setBookingCandidateInfoTouched] = useState(false);
+  const [bookingSidebarStep, setBookingSidebarStep] = useState<"legs" | "about">("legs");
+  const [bookingSidebarResetKey, setBookingSidebarResetKey] = useState("initial");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
   const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string } | null>(
@@ -127,6 +143,7 @@ const Journal = () => {
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
   const mobileSidebarTouchStartRef = useRef<number | null>(null);
+  const restoredBookingDraftRef = useRef<string | null>(null);
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
 
   const { data: mapPresenceRows = [] } = useQuery({
@@ -353,7 +370,7 @@ const Journal = () => {
   );
   const bookableVoyageIdsKey = useMemo(() => [...bookableVoyageIds].sort().join(","), [bookableVoyageIds]);
 
-  const { data: bookingLegs = [], refetch: refetchBookingLegs } = useQuery({
+  const { data: bookingLegs = [], isLoading: isBookingLegsLoading, refetch: refetchBookingLegs } = useQuery({
     queryKey: ["public-voyage-leg-availability", bookableVoyageIdsKey],
     enabled: bookableVoyageIds.length > 0,
     queryFn: async () => {
@@ -530,6 +547,8 @@ const Journal = () => {
     setBookingCandidateInfoTouched(false);
     setBookingCandidateInfo(bookingCandidateInfoPrefill);
     setBookingPartySize(1);
+    setBookingSidebarStep("legs");
+    setBookingSidebarResetKey(`clear-${Date.now()}`);
   }, [bookingCandidateInfoPrefill]);
 
   const handleParticipate = useCallback((voyageId: string) => {
@@ -548,6 +567,8 @@ const Journal = () => {
     } else {
       setSidebarOpen(true);
     }
+    setBookingSidebarStep("legs");
+    setBookingSidebarResetKey(`voyage-${voyageId}-${Date.now()}`);
 
     const fromWaypointId = waypointIds[0];
     const toWaypointId = waypointIds[waypointIds.length - 1];
@@ -580,6 +601,117 @@ const Journal = () => {
     }
   }, [bookingLegsByVoyage, bookingPartySize, isMobile, lang, waypointsMap]);
 
+  const buildLogbookBookingReturnPath = useCallback(
+    (voyageId: string) => `/${lang}/logbook?booking=${encodeURIComponent(voyageId)}`,
+    [lang]
+  );
+
+  const saveLogbookBookingDraft = useCallback((step: "legs" | "about" = bookingSidebarStep) => {
+    if (!bookingAnchor) return null;
+    const draft = buildBookingApplicationDraft({
+      voyageId: bookingAnchor.voyageId,
+      selectedLegIds: selectedBookingLegIds,
+      partySize: String(Math.max(1, bookingPartySize)),
+      message: bookingMessage,
+      candidateInfo: bookingCandidateInfo,
+      applicationStep: step,
+    });
+    saveLocalBookingApplicationDraft(draft);
+    return draft;
+  }, [
+    bookingAnchor,
+    bookingCandidateInfo,
+    bookingMessage,
+    bookingPartySize,
+    bookingSidebarStep,
+    selectedBookingLegIds,
+  ]);
+
+  const redirectGuestToLoginForBooking = useCallback((step: "legs" | "about" = bookingSidebarStep) => {
+    const draft = saveLogbookBookingDraft(step);
+    const voyageId = draft?.voyageId || bookingAnchor?.voyageId;
+    navigate("/login", { state: { from: voyageId ? buildLogbookBookingReturnPath(voyageId) : `/${lang}/logbook` } });
+  }, [bookingAnchor?.voyageId, bookingSidebarStep, buildLogbookBookingReturnPath, lang, navigate, saveLogbookBookingDraft]);
+
+  useEffect(() => {
+    if (!bookingAnchor || session?.user) return;
+    const draft = buildBookingApplicationDraft({
+      voyageId: bookingAnchor.voyageId,
+      selectedLegIds: selectedBookingLegIds,
+      partySize: String(Math.max(1, bookingPartySize)),
+      message: bookingMessage,
+      candidateInfo: bookingCandidateInfo,
+      applicationStep: bookingSidebarStep,
+    });
+    if (isBookingApplicationDraftEmpty(draft)) return;
+
+    const timer = window.setTimeout(() => {
+      saveLocalBookingApplicationDraft(draft);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [bookingAnchor, bookingCandidateInfo, bookingMessage, bookingPartySize, bookingSidebarStep, selectedBookingLegIds, session?.user]);
+
+  useEffect(() => {
+    const requestedVoyageId = new URLSearchParams(location.search).get("booking");
+    if (
+      !requestedVoyageId ||
+      restoredBookingDraftRef.current === requestedVoyageId ||
+      isVoyagesLoading ||
+      isWaypointsLoading ||
+      isBookingLegsLoading
+    ) {
+      return;
+    }
+
+    const voyage = voyages.find((entry) => entry.id === requestedVoyageId);
+    const voyageWaypoints = waypointsMap[requestedVoyageId] || [];
+    if (!voyage || !isVoyageBookableNow(voyage) || voyageWaypoints.length < 2) return;
+
+    let cancelled = false;
+    void (async () => {
+      const draft = await loadBookingApplicationDraft(requestedVoyageId, session?.user.id);
+      if (cancelled || restoredBookingDraftRef.current === requestedVoyageId) return;
+      if (!draft) return;
+
+      restoredBookingDraftRef.current = requestedVoyageId;
+      setFocusedVoyageId(requestedVoyageId);
+      setSelectedRouteVoyageId(requestedVoyageId);
+      setPanelArticle(null);
+      setPanelProfileId(null);
+      setHideMapChromeOnScroll(false);
+      if (isMobile) {
+        setMobileSidebarMode("expanded");
+      } else {
+        setSidebarOpen(true);
+      }
+      setBookingAnchor({ voyageId: requestedVoyageId, waypointId: voyageWaypoints[0].id });
+      setSelectedBookingLegIds(draft.selectedLegIds.filter((legId) => bookingLegsById[legId]?.voyage_id === requestedVoyageId));
+      setBookingRejectedLegIds([]);
+      setBookingPartySize(Math.max(1, Number.parseInt(draft.partySize, 10) || 1));
+      setBookingMessage(draft.message);
+      setBookingCandidateInfo(draft.candidateInfo);
+      setBookingCandidateInfoTouched(true);
+      const restoredStep = draft.applicationStep || (draft.selectedLegIds.length > 0 ? "about" : "legs");
+      setBookingSidebarStep(restoredStep);
+      setBookingSidebarResetKey(`restore-${requestedVoyageId}-${draft.updatedAt}`);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bookingLegsById,
+    isBookingLegsLoading,
+    isMobile,
+    isVoyagesLoading,
+    isWaypointsLoading,
+    location.search,
+    session?.user.id,
+    voyages,
+    waypointsMap,
+  ]);
+
   const toggleBookingLeg = useCallback((legId: string) => {
     const leg = bookingLegsById[legId];
     if (!leg) return;
@@ -597,7 +729,7 @@ const Journal = () => {
 
   const submitBookingFromLogbook = useCallback(async () => {
     if (!session?.user) {
-      navigate("/login", { state: { from: `/${lang}/logbook` } });
+      redirectGuestToLoginForBooking("about");
       return;
     }
 
@@ -605,12 +737,9 @@ const Journal = () => {
       toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
       return;
     }
-    if (bookingCandidateInfo.motivation.trim().length < 20) {
-      toast.error(
-        lang === "it"
-          ? "Scrivi qualche riga sul perche vorresti partecipare."
-          : "Write a few lines about why you would like to join."
-      );
+    const candidateInfoError = getCandidateInfoValidationError(bookingCandidateInfo, lang);
+    if (candidateInfoError) {
+      toast.error(candidateInfoError);
       return;
     }
 
@@ -664,6 +793,13 @@ const Journal = () => {
       );
 
       const bookingRequestId = result?.booking_request_id;
+      const submittedVoyageId = bookingAnchor.voyageId;
+      clearLocalBookingApplicationDraft(submittedVoyageId);
+      if (session?.user.id) {
+        void clearCloudBookingApplicationDraft(session.user.id, submittedVoyageId).catch((draftError) => {
+          console.error("Failed to clear logbook booking draft", draftError);
+        });
+      }
 
       // Multi-person bookings go to the participants page (add guests, choose who pays).
       if (bookingRequestId && Math.max(1, bookingPartySize) > 1) {
@@ -706,6 +842,7 @@ const Journal = () => {
     lang,
     navigate,
     refetchBookingLegs,
+    redirectGuestToLoginForBooking,
     selectedBookingLegIds,
     session?.user,
     voyages,
@@ -1382,13 +1519,21 @@ const Journal = () => {
                   setBookingCandidateInfoTouched(true);
                   setBookingCandidateInfo(nextInfo);
                 }}
+                initialStep={bookingSidebarStep}
+                stepResetKey={bookingSidebarResetKey}
+                onStepChange={setBookingSidebarStep}
                 onSubmit={() => {
                   if (!session?.user) {
-                    navigate("/login", { state: { from: `/${lang}/logbook` } });
+                    redirectGuestToLoginForBooking("about");
                     return;
                   }
                   if (selectedBookingLegIds.length === 0) {
                     toast.error(lang === "it" ? "Seleziona almeno una tratta disponibile." : "Select at least one available leg.");
+                    return;
+                  }
+                  const candidateInfoError = getCandidateInfoValidationError(bookingCandidateInfo, lang);
+                  if (candidateInfoError) {
+                    toast.error(candidateInfoError);
                     return;
                   }
                   setBookingConfirmOpen(true);
