@@ -14,10 +14,12 @@ tags: [deploy, vercel, config, env]
 - `/llms.txt` → `/api/llms`
 - `/llms-full.txt` → `/api/llms?full=1`
 - `/sitemap-live.xml` → `/api/sitemap`
-- `/pack/:path*` → `/pack/index.html`
-- `/Data/:path*` → `/Data/index.html`
-- `/Crew/:path*` → `/Crew/index.html`
-- `/(.*)` → `/` (SPA fallback, React Router lato client)
+- `/pack/((?!.*\.[^/]+$).*)` → `/pack/index.html`
+- `/Data/((?!.*\.[^/]+$).*)` → `/Data/index.html`
+- `/Crew/((?!.*\.[^/]+$).*)` → `/Crew/index.html`
+- `/((?!.*\.[^/]+$).*)` → `/` (SPA fallback, React Router lato client)
+
+I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, immagini, manifest, ecc.): un asset/chunk Vite mancante deve restituire 404, non `index.html`, altrimenti browser con shell vecchie dopo un deploy possono tentare di eseguire HTML come modulo JavaScript.
 
 **Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`.
 

@@ -14,19 +14,19 @@
       "destination": "/api/sitemap"
     },
     {
-      "source": "/pack/:path*",
+      "source": "/pack/((?!.*\\.[^/]+$).*)",
       "destination": "/pack/index.html"
     },
     {
-      "source": "/Data/:path*",
+      "source": "/Data/((?!.*\\.[^/]+$).*)",
       "destination": "/Data/index.html"
     },
     {
-      "source": "/Crew/:path*",
+      "source": "/Crew/((?!.*\\.[^/]+$).*)",
       "destination": "/Crew/index.html"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!.*\\.[^/]+$).*)",
       "destination": "/"
     }
   ],

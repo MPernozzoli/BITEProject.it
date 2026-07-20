@@ -12,8 +12,10 @@ import {
   type BookingWaypoint,
   type VoyageBookingStatus,
   formatBookingDate,
+  formatBookingWindow,
   getBookingStatusClass,
   getBookingStatusLabel,
+  getLegDurationHours,
   getLegLabel,
   getLocalizedBookingVoyageName,
 } from "@/lib/booking-utils";
@@ -544,6 +546,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         request={request}
                         requests={voyageRequests}
                         profilesById={profilesById}
+                        waypointsById={waypointsById}
                         legs={voyageLegs}
                         requestLegIds={legIdsByRequest}
                         selectedProposalLegIds={selectedProposal}
@@ -620,6 +623,7 @@ type CandidateReviewGanttProps = {
   request: BookingRequest;
   requests: BookingRequest[];
   profilesById: Record<string, CandidateProfile>;
+  waypointsById: Record<string, BookingWaypoint>;
   legs: BookableLeg[];
   requestLegIds: Record<string, string[]>;
   selectedProposalLegIds: string[];
@@ -631,6 +635,7 @@ const CandidateReviewGantt = ({
   request,
   requests,
   profilesById,
+  waypointsById,
   legs,
   requestLegIds,
   selectedProposalLegIds,
@@ -653,20 +658,60 @@ const CandidateReviewGantt = ({
     return <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">Nessuna tratta disponibile per questo viaggio.</p>;
   }
 
+  // Legs the candidate is actually involved in — currently booked or part of the
+  // proposal being composed — expand to show full details; the rest stay compact "T#".
+  const highlightedLegIds = new Set<string>([
+    ...(requestLegIds[request.id] || []),
+    ...selectedProposalLegIds,
+  ]);
+
   const columnStyle = {
-    gridTemplateColumns: `minmax(132px, 0.9fr) repeat(${sortedLegs.length}, minmax(52px, 1fr))`,
+    gridTemplateColumns: `minmax(132px, 0.9fr) ${sortedLegs
+      .map((leg) => (highlightedLegIds.has(leg.id) ? "minmax(184px, 1.8fr)" : "minmax(44px, 0.65fr)"))
+      .join(" ")}`,
   };
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-border/70 bg-background/60">
       <div className="min-w-[720px]">
-        <div className="grid border-b border-border/70 text-[11px] uppercase tracking-[0.14em] text-muted-foreground" style={columnStyle}>
-          <div className="border-r border-border/70 px-3 py-2">Persona</div>
-          {sortedLegs.map((leg) => (
-            <div key={leg.id} className="border-r border-border/50 px-2 py-2 text-center last:border-r-0">
-              T{leg.sort_order}
-            </div>
-          ))}
+        <div className="grid items-stretch border-b border-border/70 text-[11px] uppercase tracking-[0.14em] text-muted-foreground" style={columnStyle}>
+          <div className="flex items-center border-r border-border/70 px-3 py-2">Persona</div>
+          {sortedLegs.map((leg) => {
+            if (!highlightedLegIds.has(leg.id)) {
+              return (
+                <div key={leg.id} className="flex items-center justify-center border-r border-border/50 px-2 py-2 text-center last:border-r-0">
+                  T{leg.sort_order}
+                </div>
+              );
+            }
+            const route = getLegLabel(leg, waypointsById, "it");
+            const nm = leg.planned_nautical_miles != null ? Math.round(leg.planned_nautical_miles) : null;
+            const hours = getLegDurationHours(leg);
+            const durationLabel = hours != null && hours > 0 ? `${Math.round(hours)} h` : null;
+            const departure = formatBookingWindow(leg.starts_at_window_start, leg.starts_at_window_end, "it-IT");
+            const arrival = formatBookingWindow(leg.ends_at_window_start, leg.ends_at_window_end, "it-IT");
+            return (
+              <div key={leg.id} className="border-r border-border/50 px-2.5 py-2 text-left normal-case tracking-normal last:border-r-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="shrink-0 rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">T{leg.sort_order}</span>
+                  <span className="truncate text-[11px] font-semibold text-foreground" title={route}>{route}</span>
+                </div>
+                {(nm != null || durationLabel) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] font-medium text-foreground/70">
+                    {nm != null && <span>{nm} nm</span>}
+                    {nm != null && durationLabel && <span className="text-border">·</span>}
+                    {durationLabel && <span>{durationLabel}</span>}
+                  </div>
+                )}
+                {(departure || arrival) && (
+                  <div className="mt-1 space-y-0.5 text-[10px] leading-tight text-muted-foreground">
+                    {departure && <div className="truncate" title={departure}><span className="text-foreground/55">Part.</span> {departure}</div>}
+                    {arrival && <div className="truncate" title={arrival}><span className="text-foreground/55">Arr.</span> {arrival}</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         {rows.map((row) => {
           const isCandidate = row.id === request.id;
@@ -692,7 +737,7 @@ const CandidateReviewGantt = ({
                 const currentlySelected = activeLegs.has(leg.id);
                 const proposed = isCandidate && proposedLegs.has(leg.id);
                 const emptyCandidateCell = isCandidate && !currentlySelected && !proposed;
-                const cellLabel = getLegLabel(leg, {}, "it");
+                const cellLabel = getLegLabel(leg, waypointsById, "it");
                 return (
                   <button
                     key={leg.id}
@@ -726,6 +771,7 @@ const CandidateReviewGantt = ({
       <div className="flex flex-wrap gap-3 border-t border-border/70 px-3 py-2 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-5 rounded-full bg-accent/30" /> Tratte attuali</span>
         <span className="inline-flex items-center gap-1"><span className="h-2.5 w-5 rounded-full bg-sky-300/80" /> Proposta in composizione</span>
+        <span>Le tratte prenotate o proposte mostrano percorso, distanza, durata e date.</span>
         <span>Maiuscolo+click seleziona un intervallo.</span>
       </div>
     </div>
