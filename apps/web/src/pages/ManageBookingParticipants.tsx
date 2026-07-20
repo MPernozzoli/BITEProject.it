@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, CreditCard, Landmark, Loader2, Users, Wallet } from "lucide-react";
+import { ArrowRight, Loader2, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/booking-participants";
 import { startDepositPayment } from "@/lib/booking-payment";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
-import type { PaymentMethodChoice } from "@/components/booking/BookingConfirmDialog";
+import PaymentMethodDialog from "@/components/booking/PaymentMethodDialog";
 
 type QueryResult<T> = Promise<{ data: T | null; error: { message?: string } | null }>;
 type QueryBuilder<T> = QueryResult<T> & {
@@ -52,8 +52,9 @@ const ManageBookingParticipants = () => {
   const [legs, setLegs] = useState<DepositLeg[]>([]);
   const [guests, setGuests] = useState<ParticipantInput[]>([]);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("lead_pays_all");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodChoice>("bunq_link");
   const [submitting, setSubmitting] = useState(false);
+  const [paymentChoiceOpen, setPaymentChoiceOpen] = useState(false);
+  const [paymentStarting, setPaymentStarting] = useState(false);
   const [bankTransferOpen, setBankTransferOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -192,15 +193,20 @@ const ManageBookingParticipants = () => {
         );
       }
 
-      // Lead pays their share now (× party size if paying for all, otherwise × 1).
-      if (paymentMethod === "bank_transfer") {
-        setBankTransferOpen(true);
-        return;
-      }
+      setPaymentChoiceOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
+  const startOnlinePayment = async () => {
+    setPaymentStarting(true);
+    try {
       const payment = await startDepositPayment(id);
       if (payment.ok && "shareUrl" in payment) {
-        window.location.href = payment.shareUrl;
+        window.location.assign(payment.shareUrl);
         return;
       }
       if (!payment.ok && "notConfigured" in payment) {
@@ -212,14 +218,13 @@ const ManageBookingParticipants = () => {
         navigate("/bookings");
       } else if (!payment.ok) {
         // Keep the user here so they can complete the contribution by bank transfer.
+        setPaymentChoiceOpen(false);
         setBankTransferOpen(true);
       } else {
         navigate("/bookings");
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error");
     } finally {
-      setSubmitting(false);
+      setPaymentStarting(false);
     }
   };
 
@@ -333,49 +338,6 @@ const ManageBookingParticipants = () => {
               </span>
             </span>
           </label>
-          <div className="pt-2">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {lang === "it" ? "Metodo di pagamento" : "Payment method"}
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("bunq_link")}
-                className={`min-h-24 rounded-lg border p-3 text-left transition-colors ${
-                  paymentMethod === "bunq_link"
-                    ? "border-accent bg-accent/10 text-foreground"
-                    : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50 hover:text-foreground"
-                }`}
-                aria-pressed={paymentMethod === "bunq_link"}
-              >
-                <CreditCard size={17} className="mb-2" />
-                <span className="block text-sm font-semibold">{lang === "it" ? "Paga adesso" : "Pay now"}</span>
-                <span className="mt-1 block text-xs leading-relaxed">
-                  {lang === "it"
-                    ? "Apri il link Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili."
-                    : "Open the Bunq link and pay by card, Apple Pay, Google Pay, or other available methods."}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("bank_transfer")}
-                className={`min-h-24 rounded-lg border p-3 text-left transition-colors ${
-                  paymentMethod === "bank_transfer"
-                    ? "border-accent bg-accent/10 text-foreground"
-                    : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50 hover:text-foreground"
-                }`}
-                aria-pressed={paymentMethod === "bank_transfer"}
-              >
-                <Landmark size={17} className="mb-2" />
-                <span className="block text-sm font-semibold">{lang === "it" ? "Bonifico" : "Bank transfer"}</span>
-                <span className="mt-1 block text-xs leading-relaxed">
-                  {lang === "it"
-                    ? "Mostra IBAN e causale obbligatoria. Il pagamento viene validato automaticamente quando arriva."
-                    : "Show IBAN and required reference. Payment is validated automatically when it arrives."}
-                </span>
-              </button>
-            </div>
-          </div>
         </section>
 
         <button
@@ -385,15 +347,20 @@ const ManageBookingParticipants = () => {
           className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:text-accent disabled:opacity-50"
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-          {paymentMethod === "bank_transfer"
-            ? lang === "it"
-              ? "Invia inviti e mostra bonifico"
-              : "Send invites & show transfer"
-            : lang === "it"
-              ? "Invia inviti e paga adesso"
-              : "Send invites & pay now"}
+          {lang === "it" ? "Invia inviti e scegli pagamento" : "Send invites & choose payment"}
         </button>
       </div>
+
+      <PaymentMethodDialog
+        open={paymentChoiceOpen}
+        onOpenChange={setPaymentChoiceOpen}
+        loading={paymentStarting}
+        onPayNow={() => void startOnlinePayment()}
+        onBankTransfer={() => {
+          setPaymentChoiceOpen(false);
+          setBankTransferOpen(true);
+        }}
+      />
 
       <BankTransferDialog
         open={bankTransferOpen}

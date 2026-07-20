@@ -16,8 +16,9 @@ import BookingSidebarPanel from "@/components/voyage/BookingSidebarPanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
-import BookingConfirmDialog, { type PaymentMethodChoice } from "@/components/booking/BookingConfirmDialog";
+import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
+import PaymentMethodDialog from "@/components/booking/PaymentMethodDialog";
 import {
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
   perPersonDepositEur,
@@ -113,6 +114,10 @@ const Journal = () => {
   const [bookingCandidateInfoTouched, setBookingCandidateInfoTouched] = useState(false);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
+  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+    null
+  );
+  const [paymentStarting, setPaymentStarting] = useState(false);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
     null
   );
@@ -590,7 +595,7 @@ const Journal = () => {
     setBookingRejectedLegIds((current) => current.filter((id) => id !== legId));
   }, [bookingLegsById, bookingPartySize, lang]);
 
-  const submitBookingFromLogbook = useCallback(async (paymentMethod: PaymentMethodChoice = "bunq_link") => {
+  const submitBookingFromLogbook = useCallback(async () => {
     if (!session?.user) {
       navigate("/login", { state: { from: `/${lang}/logbook` } });
       return;
@@ -668,35 +673,13 @@ const Journal = () => {
         return;
       }
 
-      // Solo booking: start the selected contribution payment method right away.
+      // Solo booking: ask explicitly how the user wants to pay before opening Bunq or bank details.
       if (bookingRequestId) {
-        if (paymentMethod === "bank_transfer") {
-          setBookingConfirmOpen(false);
-          setBankTransfer({ bookingRequestId });
-          clearBookingSelection();
-          void refetchBookingLegs();
-          return;
-        }
-
-        const payment = await startDepositPayment(bookingRequestId);
-        if (payment.ok && "shareUrl" in payment) {
-          window.location.href = payment.shareUrl;
-          return;
-        }
-        if (!payment.ok && "notConfigured" in payment) {
-          toast.info(
-            lang === "it"
-              ? "Adesione registrata. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
-              : "You're in! Contribution payment is not active yet: we'll send you the link shortly."
-          );
-        } else if (!payment.ok) {
-          toast.info(
-            lang === "it"
-              ? "Adesione registrata. Puoi completare il pagamento con bonifico."
-              : "You're in! You can complete the payment by bank transfer."
-          );
-          setBankTransfer({ bookingRequestId });
-        }
+        setBookingConfirmOpen(false);
+        setPaymentChoice({ bookingRequestId });
+        clearBookingSelection();
+        void refetchBookingLegs();
+        return;
       }
 
       setBookingConfirmOpen(false);
@@ -727,6 +710,35 @@ const Journal = () => {
     session?.user,
     voyages,
   ]);
+
+  const startOnlinePayment = useCallback(async () => {
+    if (!paymentChoice) return;
+    setPaymentStarting(true);
+    try {
+      const payment = await startDepositPayment(paymentChoice.bookingRequestId, paymentChoice.participantId);
+      if (payment.ok && "shareUrl" in payment) {
+        window.location.assign(payment.shareUrl);
+        return;
+      }
+      setPaymentChoice(null);
+      if (!payment.ok && "notConfigured" in payment) {
+        toast.info(
+          lang === "it"
+            ? "Il pagamento online non è ancora attivo: puoi completare con bonifico."
+            : "Online payment is not active yet: you can complete by bank transfer."
+        );
+      } else if (!payment.ok) {
+        toast.info(
+          lang === "it"
+            ? "Non sono riuscito ad aprire Bunq. Puoi completare con bonifico."
+            : "Could not open Bunq. You can complete by bank transfer."
+        );
+      }
+      setBankTransfer(paymentChoice);
+    } finally {
+      setPaymentStarting(false);
+    }
+  }, [lang, paymentChoice]);
 
   const handleProfilePreviewOpen = useCallback((profileId: string) => {
     setPanelProfileId(profileId);
@@ -1108,12 +1120,26 @@ const Journal = () => {
             partySize={bookingPartySize}
             message={bookingMessage}
             requiresPayment
-            showPaymentMethodChoice={bookingPartySize <= 1}
+            showPaymentMethodChoice={false}
             depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
             depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             submitting={bookingSubmitting}
-            onConfirm={(paymentMethod) => void submitBookingFromLogbook(paymentMethod)}
+            onConfirm={() => void submitBookingFromLogbook()}
+          />
+
+          <PaymentMethodDialog
+            open={paymentChoice !== null}
+            onOpenChange={(open) => {
+              if (!open) setPaymentChoice(null);
+            }}
+            loading={paymentStarting}
+            onPayNow={() => void startOnlinePayment()}
+            onBankTransfer={() => {
+              if (!paymentChoice) return;
+              setBankTransfer(paymentChoice);
+              setPaymentChoice(null);
+            }}
           />
 
           <BankTransferDialog

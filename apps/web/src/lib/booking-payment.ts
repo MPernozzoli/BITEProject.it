@@ -11,6 +11,14 @@ async function authToken(): Promise<string | null> {
   return sessionData.session?.access_token ?? null;
 }
 
+function normalizeExternalUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^(www\.)?bunq\.me\//i.test(trimmed)) return `https://${trimmed}`;
+  return null;
+}
+
 /**
  * Ask the backend to create a Bunq contribution payment request for a freshly-created booking.
  * On success returns the bunq.me share URL the caller should redirect the user to.
@@ -50,9 +58,11 @@ export async function startDepositPayment(
   }
   if (payload.alreadyPaid === true) return { ok: true, alreadyPaid: true };
   if (typeof payload.shareUrl === "string" && payload.shareUrl.length > 0) {
+    const shareUrl = normalizeExternalUrl(payload.shareUrl);
+    if (!shareUrl) return { ok: false, error: "invalid_share_url" };
     return {
       ok: true,
-      shareUrl: payload.shareUrl,
+      shareUrl,
       amountEur: Number(payload.amountEur ?? 0),
       perPersonEur: Number(payload.perPersonEur ?? 0),
     };

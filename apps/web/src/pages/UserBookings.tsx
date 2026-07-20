@@ -3,8 +3,9 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import BookingConfirmDialog, { type PaymentMethodChoice } from "@/components/booking/BookingConfirmDialog";
+import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
+import PaymentMethodDialog from "@/components/booking/PaymentMethodDialog";
 import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
 import VoyageLiveWidget from "@/components/voyage/VoyageLiveWidget";
 import {
@@ -131,6 +132,10 @@ const UserBookings = () => {
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
   const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+    null
+  );
+  const [paymentStarting, setPaymentStarting] = useState(false);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
   const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
   const [detailsRequestId, setDetailsRequestId] = useState<string | null>(null);
@@ -794,7 +799,7 @@ const UserBookings = () => {
     await loadData();
   };
 
-  const handleAcceptConfirm = async (paymentMethod: PaymentMethodChoice = "bunq_link") => {
+  const handleAcceptConfirm = async () => {
     if (!acceptTarget) return;
     if (acceptCandidateInfo.motivation.trim().length < 20) {
       toast.error(
@@ -807,42 +812,13 @@ const UserBookings = () => {
     setAcceptSubmitting(true);
     try {
       await acceptParticipation(acceptTarget.participant_id, acceptCandidateInfo);
-      // Guests paying their own share choose between the Bunq link and bank transfer.
+      // Guests paying their own share choose between the Bunq link and bank transfer after accepting.
       if (acceptTarget.requires_payment) {
-        if (paymentMethod === "bank_transfer") {
-          toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
-          setBankTransfer({
-            bookingRequestId: acceptTarget.booking_request_id,
-            participantId: acceptTarget.participant_id,
-          });
-          setAcceptTarget(null);
-          setAcceptCandidateInfo(candidateInfoPrefill);
-          await loadParticipations();
-          return;
-        }
-
-        const payment = await startDepositPayment(acceptTarget.booking_request_id, acceptTarget.participant_id);
-        if (payment.ok && "shareUrl" in payment) {
-          window.location.href = payment.shareUrl;
-          return;
-        }
-        if (!payment.ok && "notConfigured" in payment) {
-          toast.info(
-            lang === "it"
-              ? "Invito accettato. Il pagamento del contributo non è ancora attivo: ti invieremo il link a breve."
-              : "Invitation accepted. Contribution payment is not active yet: we'll send you the link shortly."
-          );
-        } else if (!payment.ok) {
-          toast.info(
-            lang === "it"
-              ? "Invito accettato. Puoi completare il pagamento con bonifico."
-              : "Invitation accepted. You can complete the payment by bank transfer."
-          );
-          setBankTransfer({
-            bookingRequestId: acceptTarget.booking_request_id,
-            participantId: acceptTarget.participant_id,
-          });
-        }
+        toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
+        setPaymentChoice({
+          bookingRequestId: acceptTarget.booking_request_id,
+          participantId: acceptTarget.participant_id,
+        });
       } else {
         toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
       }
@@ -853,6 +829,27 @@ const UserBookings = () => {
       toast.error(error instanceof Error ? error.message : "Error");
     } finally {
       setAcceptSubmitting(false);
+    }
+  };
+
+  const startOnlinePayment = async () => {
+    if (!paymentChoice) return;
+    setPaymentStarting(true);
+    try {
+      const payment = await startDepositPayment(paymentChoice.bookingRequestId, paymentChoice.participantId);
+      if (payment.ok && "shareUrl" in payment) {
+        window.location.assign(payment.shareUrl);
+        return;
+      }
+      setPaymentChoice(null);
+      toast.info(
+        lang === "it"
+          ? "Non sono riuscito ad aprire Bunq. Puoi completare con bonifico."
+          : "Could not open Bunq. You can complete by bank transfer."
+      );
+      setBankTransfer(paymentChoice);
+    } finally {
+      setPaymentStarting(false);
     }
   };
 
@@ -1000,8 +997,23 @@ const UserBookings = () => {
           candidateInfo={acceptCandidateInfo}
           onCandidateInfoChange={setAcceptCandidateInfo}
           requiresPayment={acceptTarget?.requires_payment ?? false}
+          showPaymentMethodChoice={false}
           submitting={acceptSubmitting}
-          onConfirm={(paymentMethod) => void handleAcceptConfirm(paymentMethod)}
+          onConfirm={() => void handleAcceptConfirm()}
+        />
+
+        <PaymentMethodDialog
+          open={paymentChoice !== null}
+          onOpenChange={(open) => {
+            if (!open) setPaymentChoice(null);
+          }}
+          loading={paymentStarting}
+          onPayNow={() => void startOnlinePayment()}
+          onBankTransfer={() => {
+            if (!paymentChoice) return;
+            setBankTransfer(paymentChoice);
+            setPaymentChoice(null);
+          }}
         />
 
         <BankTransferDialog

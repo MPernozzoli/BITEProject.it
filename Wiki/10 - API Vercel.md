@@ -17,6 +17,8 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 | `membership/request.ts` | POST | crea request-inquiry Bunq senza controparte email precompilata per un tier **BITE Crew**, ricalcola importo da `membership_tiers`, salva `membership_payments`, ritorna link `bunq.me` → [[23 - Community]] |
 | `membership/status.ts` | GET | polling del pagamento Crew Pass: se Bunq risulta pagato, marca `membership_payments.paid` e crea/aggiorna `membership_subscriptions` |
 
+La scelta tra pagamento online e bonifico avviene in `PaymentMethodDialog` dopo la creazione della richiesta booking; solo dopo la scelta il client chiama uno dei due endpoint pagamento.
+
 ## 🎥 Community / LiveKit (`apps/web/api/community/`) → [[23 - Community]]
 | Endpoint | Metodo | Scopo |
 |---|---|---|

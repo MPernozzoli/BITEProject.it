@@ -31,25 +31,26 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
 
 ## Flow
 
-1. User accepts the conditions in the confirmation modal and chooses either:
+1. User accepts the conditions in the confirmation modal.
+2. After the booking request exists, the payment-method dialog asks the user to choose either:
    - **pay now**: open the Bunq `bunq.me` link and pay with card / Apple Pay / Google Pay or
      the methods available on Bunq;
    - **bank transfer**: show IBAN, holder, amount and mandatory reference.
-2. The booking request is created via the existing `request_voyage_booking` RPC.
-3. The client calls either `POST /api/payments/bunq/request` or
+3. The booking request is created via the existing `request_voyage_booking` RPC.
+4. The client calls either `POST /api/payments/bunq/request` or
    `POST /api/payments/bunq/bank-transfer` with the new `bookingRequestId` and the user's
    Supabase access token.
-4. The function recomputes the amount and stores a row in `voyage_booking_deposits`.
+5. The function recomputes the amount and stores a row in `voyage_booking_deposits`.
    For `bunq_link`, it creates a Bunq **request-inquiry** without a prefilled counterparty
    and returns the shareable `bunq.me` link. This keeps payment pull-based from the payer's
    link instead of pushing a direct request to an email alias in the Bunq app. For
    `bank_transfer`, it returns the fixed bank details plus the unique reference used for
    automatic reconciliation.
-5. The booking's payment deadline is armed for 48 hours (`voyage_booking_requests.expires_at`).
+6. The booking's payment deadline is armed for 48 hours (`voyage_booking_requests.expires_at`).
    Bookings waiting only for admin approval do not expire.
-6. The user is redirected to Bunq to pay, or sees the bank-transfer dialog with the unique
+7. The user is redirected to Bunq to pay, or sees the bank-transfer dialog with the unique
    reference to include in the transfer.
-7. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
+8. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
    as a fallback, by `GET /api/payments/bunq/status?bookingRequestId=...`, which re-checks the
    live request-inquiry status. Either path flips the stored payment row to `paid` and clears the
    booking-level payment deadline once no pending deposits remain.

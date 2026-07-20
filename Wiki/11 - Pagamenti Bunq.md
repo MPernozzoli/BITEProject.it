@@ -28,13 +28,14 @@ Ricalcolato in `apps/web/src/lib/booking-deposit.ts`, **mai** fidato dal client:
 Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_amount_exceeds_single_transaction_limit` se l'importo supera €500 → il client instrada l'utente al **bonifico bancario** (`apps/web/api/payments/bunq/bank-transfer.ts`, migrazione `bank_transfer_deposits`).
 
 ## Flusso
-1. Utente accetta le condizioni nel modal e sceglie il metodo: **paga adesso** via link Bunq (`bunq.me`, carta/Apple Pay/Google Pay/metodi disponibili) oppure **bonifico** con IBAN e causale obbligatoria.
+1. Utente accetta le condizioni nel modal.
 2. Creazione richiesta via RPC `request_voyage_booking` → [[08 - Supabase]].
-3. Client chiama `POST /api/payments/bunq/request` oppure `POST /api/payments/bunq/bank-transfer` con `bookingRequestId` + access token Supabase.
-4. La function ricalcola l'importo e salva una riga in `voyage_booking_deposits`: per `bunq_link` crea una **request-inquiry** Bunq senza controparte email precompilata e ritorna il link `bunq.me`; per `bank_transfer` ritorna IBAN, intestatario, importo e causale univoca. Il pagamento online resta quindi guidato dal link aperto dall'utente, non da una richiesta diretta inviata a un alias email nell'app Bunq.
-5. Da quel momento parte la scadenza pagamento di **48 ore** (`voyage_booking_requests.expires_at`); le prenotazioni in sola attesa di approvazione admin non hanno scadenza.
-6. Redirect a Bunq per il pagamento online, oppure apertura della finestra bonifico.
-7. Liquidazione rilevata dal **webhook** (`POST /api/payments/bunq/webhook`) o, in fallback, da `GET /api/payments/bunq/status?bookingRequestId=...`; quando non restano depositi pendenti, la deadline viene azzerata.
+3. Dopo la creazione della richiesta, una dialog dedicata chiede il metodo: **paga adesso** via link Bunq (`bunq.me`, carta/Apple Pay/Google Pay/metodi disponibili) oppure **bonifico** con IBAN e causale obbligatoria.
+4. Client chiama `POST /api/payments/bunq/request` oppure `POST /api/payments/bunq/bank-transfer` con `bookingRequestId` + access token Supabase.
+5. La function ricalcola l'importo e salva una riga in `voyage_booking_deposits`: per `bunq_link` crea una **request-inquiry** Bunq senza controparte email precompilata e ritorna il link `bunq.me`; per `bank_transfer` ritorna IBAN, intestatario, importo e causale univoca. Il pagamento online resta quindi guidato dal link aperto dall'utente, non da una richiesta diretta inviata a un alias email nell'app Bunq.
+6. Da quel momento parte la scadenza pagamento di **48 ore** (`voyage_booking_requests.expires_at`); le prenotazioni in sola attesa di approvazione admin non hanno scadenza.
+7. Redirect a Bunq per il pagamento online, oppure apertura della finestra bonifico.
+8. Liquidazione rilevata dal **webhook** (`POST /api/payments/bunq/webhook`) o, in fallback, da `GET /api/payments/bunq/status?bookingRequestId=...`; quando non restano depositi pendenti, la deadline viene azzerata.
 
 ## Rimborsi automatici
 `apps/web/api/bookings/status.ts` applica la policy di rimborso prima di rendere terminale una prenotazione:
