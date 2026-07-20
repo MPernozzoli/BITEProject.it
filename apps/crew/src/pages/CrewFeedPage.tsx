@@ -14,6 +14,7 @@ import {
   CommunityPoll,
   CommunityPollOption,
   CommunityPost,
+  authorLabelFor,
   excerptFor,
   formatDateTime,
   isActiveSubscription,
@@ -22,7 +23,7 @@ import {
   titleFor,
 } from "@/lib/community";
 
-const postSelect = "*, profiles:public_profiles(name, avatar_url), membership_tiers(name, slug, tier_order), community_channels(*)";
+const postSelect = "*, profiles:public_profiles(name, avatar_url), community_post_authors(profile_id, author_order, profiles:public_profiles(name, avatar_url)), membership_tiers(name, slug, tier_order), community_channels(*)";
 
 const datetimeLocalValue = (date: Date) => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -267,7 +268,14 @@ const CrewFeedPage = () => {
     const postId = postRes.data.id;
     let surfaceError: { message?: string } | null = null;
 
-    if (postType === "poll") {
+    const authorRes = await supabase.from("community_post_authors").insert({
+      post_id: postId,
+      profile_id: profileId,
+      author_order: 0,
+    });
+    if (authorRes.error) surfaceError = authorRes.error;
+
+    if (!surfaceError && postType === "poll") {
       const pollRes = await supabase.from("community_polls").insert({
         post_id: postId,
         created_by: profileId,
@@ -293,7 +301,7 @@ const CrewFeedPage = () => {
       }
     }
 
-    if (postType === "live") {
+    if (!surfaceError && postType === "live") {
       const liveRes = await supabase.from("community_live_events").insert({
         post_id: postId,
         created_by: profileId,
@@ -533,7 +541,7 @@ const CrewFeedPage = () => {
               {post.cover_image && <img src={post.cover_image} alt="" className="h-72 w-full object-cover" loading="lazy" />}
               <div className="p-5">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span className="font-medium text-slate-700">{post.profiles?.name || "BITE Crew"}</span>
+                  <span className="font-medium text-slate-700">{authorLabelFor(post)}</span>
                   {post.community_channels?.name && <span>#{post.community_channels.name}</span>}
                   {post.published_at && <span>{formatDateTime(post.published_at)}</span>}
                 </div>

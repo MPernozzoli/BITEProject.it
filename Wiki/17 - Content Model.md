@@ -14,6 +14,8 @@ Campi chiave: `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{publi
 
 SEO generata da IA: `article_seo_optimizations` è una tabella one-to-one per articoli pubblicati. Contiene `title_*`, `description_*`, social title/description, `keywords_*`, alt cover, `structured_data`, `recommendations`, `model`, `source_hash`, stato (`pending/processing/ready/failed`) e timestamp. La pagina pubblica usa il record `ready` per i meta tag e arricchisce il JSON-LD, senza modificare il contenuto editoriale; l'admin usa i record `failed` come warning non bloccante e `source_hash` evita rigenerazioni automatiche su contenuto invariato.
 
+Sincronizzazione community: alla pubblicazione di un articolo, `sync-article-community-post` genera un post BITE Crew tramite IA. Il post mantiene `metadata.source_article_id` per idempotenza, salva il link all'articolo in `linked_resources` e replica tutti gli autori editoriali in `community_post_authors` con ordinamento.
+
 ### ⛵ Voyage / segmenti di rotta
 `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{start,end}`, `coordinates.{departure,arrival}`, `route_association.{waypoint_count, geometry_points, route_type, status, distance, geojson_url, semantic_url}`, `entities_involved`, `linked_media`, `related_articles`, `related_waypoints`, `canonical_url`.
 
@@ -51,7 +53,7 @@ Modello separato da quello editoriale: **normalizzato in scrittura, wide in lett
 ## Persistenza
 Tutto in Postgres su [[08 - Supabase]]; schema evoluto tramite le migrazioni in `apps/web/supabase/migrations/`.
 
-Per BITE Crew, `community_posts.linked_resources` e `community_comments.linked_resources` sono array JSONB denormalizzati. Ogni item contiene almeno `kind` (`article`, `story`, `voyage`, `leg`), `id`, `label` e `href`; opzionalmente `subtitle`, `coverImage` e `voyageId`. La scelta evita dipendenze RLS/FK tra la sub-app community e tutte le superfici editoriali, pur mantenendo link espliciti verso contenuti principali.
+Per BITE Crew, `community_posts.linked_resources` e `community_comments.linked_resources` sono array JSONB denormalizzati. Ogni item contiene almeno `kind` (`article`, `story`, `voyage`, `leg`), `id`, `label` e `href`; opzionalmente `subtitle`, `coverImage` e `voyageId`. La scelta evita dipendenze RLS/FK tra la sub-app community e tutte le superfici editoriali, pur mantenendo link espliciti verso contenuti principali. Gli autori dei post restano normalizzati in `community_post_authors`; `community_posts.author_profile_id` resta il primo autore per retrocompatibilità e ownership RLS.
 
 ## Collegamenti
 - [[15 - Semantic Layer (AI Agents)]] · [[08 - Supabase]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

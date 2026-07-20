@@ -1042,6 +1042,49 @@ export type Database = {
           },
         ]
       }
+      community_post_authors: {
+        Row: {
+          author_order: number
+          created_at: string
+          post_id: string
+          profile_id: string
+        }
+        Insert: {
+          author_order?: number
+          created_at?: string
+          post_id: string
+          profile_id: string
+        }
+        Update: {
+          author_order?: number
+          created_at?: string
+          post_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "community_post_authors_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_post_authors_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "community_post_authors_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       community_posts: {
         Row: {
           author_profile_id: string

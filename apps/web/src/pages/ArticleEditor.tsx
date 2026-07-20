@@ -1144,6 +1144,11 @@ const ArticleEditor = () => {
 
       if (finalStatus === "published" && articleId) {
         void runSeoOptimization(articleId, { accessToken: live.access_token, background: true, quiet: true });
+        void supabase.functions.invoke("sync-article-community-post", {
+          body: { articleId },
+        }).then(({ error }) => {
+          if (error) console.error("Failed to sync community post:", error);
+        });
 
         try {
           await supabase.functions.invoke("notify-article-publication", {

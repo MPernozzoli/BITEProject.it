@@ -155,6 +155,20 @@ Deno.serve(async (req) => {
       }
     })(), `optimize-article-seo ${row.id}`)
 
+    runInBackground((async () => {
+      const communityResponse = await fetch(`${supabaseUrl}/functions/v1/sync-article-community-post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ articleId: row.id }),
+      })
+      if (!communityResponse.ok) {
+        console.error('sync-article-community-post failed', row.id, await communityResponse.text())
+      }
+    })(), `sync-article-community-post ${row.id}`)
+
     try {
       const r1 = await fetch(`${supabaseUrl}/functions/v1/notify-article-publication`, {
         method: 'POST',

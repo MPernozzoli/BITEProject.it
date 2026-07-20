@@ -51,7 +51,7 @@ Sorgente: `apps/crew/src/components/`.
 
 - `CrewLayout.tsx` — shell separata della community, con navbar `BITE Crew`, link a vetrina, Feed, Live, Polls, Profilo main app, sito principale e accesso condizionale allo studio admin.
 - `CrewFeedPage.tsx` — feed protetto per membri attivi: composer unico in cima per testo/link/media URL/poll/live, post più recenti in alto, sidebar canali e subfeed `/feed/:channelSlug`.
-- `CommunityReferences.tsx` — picker e renderer card per referenziare contenuti dell'app principale nei post/commenti: articoli, stories, viaggi e tratte prenotabili.
+- `CommunityReferences.tsx` — picker e renderer card per referenziare contenuti dell'app principale nei post/commenti: articoli, stories, viaggi e tratte prenotabili. I riferimenti ad articoli aprono una modale interna con contenuto logbook e autori, oltre al link esterno al sito principale.
 - `CommunityPostSurface.tsx` — card condivisa per superfici community: preview link esterni, foto/video/audio da URL, poll inline con risultati e voto, live con stato e CTA a `/live?event=...`.
 - `CommunityComments.tsx` — commenti/reply/reaction realtime sui post community, modellati su `CommentSection.tsx` degli articoli, con moderazione admin (`is_hidden`) e riferimenti a contenuti principali.
 - `TiptapRenderer.tsx` — renderer minimale del JSON TipTap dei post community.

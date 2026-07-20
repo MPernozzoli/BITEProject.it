@@ -41,8 +41,16 @@ export type CommunityPost = {
   created_at: string;
   updated_at: string;
   profiles?: { name: string | null; avatar_url: string | null } | null;
+  community_post_authors?: CommunityPostAuthor[];
   membership_tiers?: { name: string; slug: string; tier_order: number } | null;
   community_channels?: CommunityChannel | null;
+};
+
+export type CommunityPostAuthor = {
+  post_id: string;
+  profile_id: string;
+  author_order: number;
+  profiles?: { name: string | null; avatar_url: string | null } | null;
 };
 
 export type CommunityReferenceKind = "article" | "story" | "voyage" | "leg";
@@ -228,6 +236,25 @@ export const titleFor = (post: Pick<CommunityPost, "title_it" | "title_en">) =>
 
 export const excerptFor = (post: Pick<CommunityPost, "excerpt_it" | "excerpt_en">) =>
   post.excerpt_it?.trim() || post.excerpt_en?.trim() || "";
+
+export const authorsFor = (post: Pick<CommunityPost, "profiles" | "community_post_authors">) => {
+  const authors = [...(post.community_post_authors ?? [])]
+    .sort((left, right) => left.author_order - right.author_order)
+    .map((author) => ({
+      id: author.profile_id,
+      name: author.profiles?.name || "BITE Crew",
+      avatar_url: author.profiles?.avatar_url || null,
+    }));
+  if (authors.length) return authors;
+  return [{
+    id: "",
+    name: post.profiles?.name || "BITE Crew",
+    avatar_url: post.profiles?.avatar_url || null,
+  }];
+};
+
+export const authorLabelFor = (post: Pick<CommunityPost, "profiles" | "community_post_authors">) =>
+  authorsFor(post).map((author) => author.name).join(", ");
 
 export const emptyDoc = () => ({
   type: "doc",

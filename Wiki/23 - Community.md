@@ -26,6 +26,8 @@ Implementazione iniziale completata e isolata:
 - canali/subfeed `community_channels` con accesso opzionalmente limitato per tier;
 - card complete nel feed e nel dettaglio post per link, media URL, poll e live collegati;
 - riferimenti nei post e nei commenti verso articoli, stories, viaggi e tratte dell'app principale, salvati in `linked_resources`;
+- riferimenti articolo apribili in modale interna alla community, con contenuto logbook e link esterno alla main app;
+- auto-post community quando viene pubblicato un articolo della main app: testo generato via IA, riferimento all'articolo e autori multipli replicati dagli autori editoriali;
 - CTA dai post live verso `/live?event=<id>` con stato derivato programmata/in corso/terminata;
 - gestione Crew Pass spostata nel profilo principale `/profile` (`/profilo` redirect), riusando `profiles`;
 - governance operativa in admin (`/admin?section=community`) per prezzi, ruoli moderator, canali, live modificabili, membership e pagamenti recenti;
@@ -55,6 +57,9 @@ Completato e verificato:
 - ruolo `moderator` in `user_roles` per moderare commenti/live messages;
 - post `link`, `media`, `poll` e `live` renderizzati come card dedicate nel feed e nel dettaglio;
 - post e commenti possono allegare riferimenti a contenuti principali tramite picker: articoli pubblicati, stories, viaggi pubblicati e tratte prenotabili;
+- i riferimenti articolo possono essere letti direttamente in modale nella community, seguendo il pattern di apertura contestuale del logbook;
+- gli articoli pubblicati dalla main app creano automaticamente un post community tramite `sync-article-community-post`, con testo bilingue generato dalla IA già configurata e link all'articolo in `linked_resources`;
+- i post supportano autori multipli tramite `community_post_authors`; per i post generati dagli articoli vengono copiati tutti gli autori editoriali, mentre `author_profile_id` resta il primo autore per retrocompatibilità;
 - poll votabili anche inline dai post collegati, riusando `community_poll_option_stats`;
 - post live collegati alla pagina `/live?event=<id>` con CTA e badge stato;
 - admin community con modifica rapida di live già create: titolo, inizio/fine, accesso, tier minimo, modalità LiveKit e archiviazione;
@@ -102,7 +107,10 @@ Supabase:
 - `apps/web/supabase/migrations/20260719190933_community_inline_composer_surfaces.sql`;
 - `apps/web/supabase/migrations/20260720045907_community_live_reminders.sql`;
 - `apps/web/supabase/migrations/20260720052234_community_content_references.sql`;
+- `apps/web/supabase/migrations/20260720054231_community_article_auto_posts.sql`;
+- `apps/web/supabase/migrations/20260720055619_community_post_authors_realtime.sql`;
 - `apps/web/supabase/functions/dispatch-community-live-notifications/index.ts`;
+- `apps/web/supabase/functions/sync-article-community-post/index.ts`;
 - `apps/web/supabase/config.toml`.
 
 ### Decisioni gia prese
@@ -249,6 +257,7 @@ Tabelle:
 | `membership_benefit_events` | audit dei benefit applicati, es. early access o riduzione minimo fisso |
 | `community_channels` | canali/subfeed stile Reddit con slug, ordine, stato attivo e accesso per tier |
 | `community_posts` | contenuti riservati, con visibilita per tier, tipo post e canale |
+| `community_post_authors` | autori multipli dei post community, inclusi quelli generati da articoli con più autori |
 | `community_comments` | thread/commenti sui post |
 | `community_reactions` | reaction semplici senza appesantire il modello |
 | `community_live_events` | finestre live, Q&A, aggiornamenti in tempo reale |
@@ -267,10 +276,12 @@ RLS:
 - commenti scrivibili solo da membri attivi;
 - membri attivi possono pubblicare post propri `members`/`tier` nei canali accessibili;
 - il composer del feed è il punto unico di creazione: testo, link, media URL, poll e live programmati vengono creati da `/feed`, non dalle pagine dedicate;
+- la pubblicazione di un articolo della main app invoca `sync-article-community-post`, che crea/aggiorna un post `members` idempotente con `metadata.source_article_id`, testo generato via IA e riferimento all'articolo;
+- `community_post_authors` replica tutti gli autori del post; per i post manuali viene inserito l'autore corrente, per quelli automatici vengono copiati gli autori di `article_authors`;
 - i reminder live sono leggibili/modificabili solo dal proprietario o dagli admin; la dispatch è service-role/postgres;
 - `admin` globale è anche admin community e può gestire tutto da `/admin?section=community`; `moderator` in `user_roles` può moderare commenti e live messages senza diventare admin globale;
 - nessuna decisione autorizzativa basata su `user_metadata`.
-- `community_channels`, `community_posts`, `community_comments`, `community_reactions`, `community_live_events`, `community_live_messages`, `community_polls`, `community_poll_options`, `community_poll_votes` e `community_poll_option_stats` sono nella publication Realtime.
+- `community_channels`, `community_posts`, `community_post_authors`, `community_comments`, `community_reactions`, `community_live_events`, `community_live_messages`, `community_polls`, `community_poll_options`, `community_poll_votes` e `community_poll_option_stats` sono nella publication Realtime.
 
 RPC admin:
 - `admin_list_community_roles()` elenca admin, moderator e membri con subscription attiva per la governance community;

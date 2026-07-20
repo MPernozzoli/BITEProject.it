@@ -13,6 +13,7 @@ import {
   CommunityPollOption,
   CommunityPost,
   CommunitySubscription,
+  authorLabelFor,
   excerptFor,
   formatDateTime,
   isActiveSubscription,
@@ -42,7 +43,7 @@ const CrewPostPage = () => {
     setProfileId(membership.session?.user.id ?? null);
     const { data } = await supabase
       .from("community_posts")
-      .select("*, profiles:public_profiles(name, avatar_url), membership_tiers(name, slug, tier_order), community_channels(*)")
+      .select("*, profiles:public_profiles(name, avatar_url), community_post_authors(profile_id, author_order, profiles:public_profiles(name, avatar_url)), membership_tiers(name, slug, tier_order), community_channels(*)")
       .eq("slug", slug)
       .maybeSingle();
     const nextPost = (data as CommunityPost | null) ?? null;
@@ -147,6 +148,7 @@ const CrewPostPage = () => {
       <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em] text-slate-500">
         {post.visibility !== "public" && <Lock size={13} />}
         <span>{post.visibility === "public" ? "Pubblico" : post.visibility === "members" ? "Membri" : post.membership_tiers?.name}</span>
+        <span>{authorLabelFor(post)}</span>
         {post.published_at && <span>{formatDateTime(post.published_at)}</span>}
       </div>
       <h1 className="mt-4 font-serif text-5xl leading-none text-slate-950 md:text-7xl">{titleFor(post)}</h1>

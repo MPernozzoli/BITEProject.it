@@ -82,6 +82,8 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._community_feed_channels.sql` — aggiunge `community_channels`, collega i post a un canale, introduce `post_type`/media/link metadata, seed `main`, `boat-tips`, `ricette`, RLS per subfeed tier-gated e policy per post creati da membri attivi.
 - `..._community_inline_composer_surfaces.sql` — abilita il composer unico del feed: `created_by` sui live event e policy per membri attivi che creano/aggiornano/eliminano poll, opzioni poll e live propri collegati ai post.
 - `..._community_live_reminders.sql` — aggiunge `community_live_event_reminders`, dispatch email pre-live/start, lista push due service-role-only e aggancio del cron email alla Edge Function `dispatch-community-live-notifications`.
+- `..._community_article_auto_posts.sql` — aggiunge `community_post_authors` per post multi-autore, backfill dall'autore primario, indice unico idempotente su `community_posts.metadata->>'source_article_id'` e policy RLS per leggere/scrivere gli autori dei post in base alla leggibilità/proprietà del post.
+- `..._community_post_authors_realtime.sql` — aggiunge `community_post_authors` alla publication `supabase_realtime`.
 
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
@@ -106,7 +108,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `editorial_plan_channels` / `editorial_plan_slots` / `editorial_publish_targets` / `editorial_post_insights` — modello calendario editoriale multicanale: slot sito/social, asset e target di pubblicazione, metadati provider dei post pubblicati e snapshot insight per reach/views/engagement e note post-pubblicazione → [[16 - Admin]]
 - `article_seo_optimizations` — output SEO generato da `optimize-article-seo`; la pagina articolo lo usa per meta title/description, keyword e arricchimento JSON-LD quando `status = ready`, mentre la dashboard admin segnala i record `failed` → [[17 - Content Model]]
 - `membership_tiers` / `membership_subscriptions` / `membership_payments` / `membership_benefit_events` — modello Crew Pass e pagamenti Bunq membership → [[23 - Community]]
-- `community_channels` / `community_posts` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — canali/subfeed, feed protetto, discussioni, reaction e live thread della sub-app `apps/crew`; post e commenti hanno `linked_resources` JSONB per snapshot/link a articoli, stories, viaggi e tratte dell'app principale → [[23 - Community]]
+- `community_channels` / `community_posts` / `community_post_authors` / `community_comments` / `community_reactions` / `community_live_events` / `community_live_messages` — canali/subfeed, feed protetto, autori multipli dei post, discussioni, reaction e live thread della sub-app `apps/crew`; post e commenti hanno `linked_resources` JSONB per snapshot/link a articoli, stories, viaggi e tratte dell'app principale → [[23 - Community]]
 - `community_live_event_reminders` — opt-in "Avvisami" sui live programmati, con campi `advance_*_sent_at` e `start_*_sent_at` per email e Web Push → [[23 - Community]]
 - `community_polls` / `community_poll_options` / `community_poll_votes` / `community_poll_option_stats` — poll della community, voti member-only e conteggi aggregati leggibili senza esporre i voti degli altri utenti → [[23 - Community]]
 - `has_community_moderation_role` — helper RLS per consentire moderazione a `admin` e `moderator` senza allargare i permessi admin.
