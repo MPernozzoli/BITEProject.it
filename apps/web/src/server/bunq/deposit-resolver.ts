@@ -48,7 +48,6 @@ export type ResolvedDeposit = {
   coveredPersons: number;
   perPersonEur: number;
   amountEur: number;
-  counterpartyEmail: string;
 };
 
 type BookingNotificationEvent =
@@ -125,8 +124,7 @@ export async function resolveDepositPayer(
   participantId: string | null,
 ): Promise<ResolvedDeposit> {
   const userEmail = (user.email ?? "").toLowerCase();
-  const counterpartyEmail = user.email;
-  if (!counterpartyEmail) throw new DepositHttpError(409, { error: "missing_user_email" });
+  if (!userEmail) throw new DepositHttpError(409, { error: "missing_user_email" });
 
   const { data: request, error: requestError } = await db
     .from("voyage_booking_requests")
@@ -240,7 +238,6 @@ export async function resolveDepositPayer(
     coveredPersons,
     perPersonEur,
     amountEur,
-    counterpartyEmail,
   };
 }
 

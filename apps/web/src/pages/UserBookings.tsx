@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import BookingConfirmDialog, { type PaymentMethodChoice } from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
 import VoyageLiveWidget from "@/components/voyage/VoyageLiveWidget";
@@ -794,7 +794,7 @@ const UserBookings = () => {
     await loadData();
   };
 
-  const handleAcceptConfirm = async () => {
+  const handleAcceptConfirm = async (paymentMethod: PaymentMethodChoice = "bunq_link") => {
     if (!acceptTarget) return;
     if (acceptCandidateInfo.motivation.trim().length < 20) {
       toast.error(
@@ -807,8 +807,20 @@ const UserBookings = () => {
     setAcceptSubmitting(true);
     try {
       await acceptParticipation(acceptTarget.participant_id, acceptCandidateInfo);
-      // Guests paying their own share are sent straight to Bunq.
+      // Guests paying their own share choose between the Bunq link and bank transfer.
       if (acceptTarget.requires_payment) {
+        if (paymentMethod === "bank_transfer") {
+          toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
+          setBankTransfer({
+            bookingRequestId: acceptTarget.booking_request_id,
+            participantId: acceptTarget.participant_id,
+          });
+          setAcceptTarget(null);
+          setAcceptCandidateInfo(candidateInfoPrefill);
+          await loadParticipations();
+          return;
+        }
+
         const payment = await startDepositPayment(acceptTarget.booking_request_id, acceptTarget.participant_id);
         if (payment.ok && "shareUrl" in payment) {
           window.location.href = payment.shareUrl;
@@ -989,7 +1001,7 @@ const UserBookings = () => {
           onCandidateInfoChange={setAcceptCandidateInfo}
           requiresPayment={acceptTarget?.requires_payment ?? false}
           submitting={acceptSubmitting}
-          onConfirm={() => void handleAcceptConfirm()}
+          onConfirm={(paymentMethod) => void handleAcceptConfirm(paymentMethod)}
         />
 
         <BankTransferDialog

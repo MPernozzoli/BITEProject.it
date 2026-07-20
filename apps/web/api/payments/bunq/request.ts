@@ -74,7 +74,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   try {
     const { db, user } = await resolveCaller(token);
     const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, counterpartyEmail } = resolved;
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
 
     // Idempotency: reuse an existing Bunq-link payment row for this exact payer.
     const existing = await findExistingDeposit(db, bookingRequestId, payerParticipantId, "bunq_link");
@@ -100,7 +100,6 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const created = await createBunqPaymentRequest({
       amountEur,
       description,
-      counterpartyEmail,
       redirectUrl: `${siteUrl()}/bookings?deposit=processing`,
     });
 

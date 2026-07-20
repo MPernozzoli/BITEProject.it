@@ -10,11 +10,11 @@ Endpoint serverless su Vercel (distinti dalle [[09 - Edge Functions]] Supabase).
 ## 💳 Pagamenti Bunq (`apps/web/api/payments/bunq/`) → [[11 - Pagamenti Bunq]]
 | Endpoint | Metodo | Scopo |
 |---|---|---|
-| `request.ts` | POST | crea request-inquiry Bunq, ricalcola importo, salva `voyage_booking_deposits`, arma la deadline pagamento 48h, accoda email `payment_pending`, ritorna link `bunq.me`. `409` se importo > €500 |
+| `request.ts` | POST | crea request-inquiry Bunq senza controparte email precompilata, ricalcola importo, salva `voyage_booking_deposits`, arma la deadline pagamento 48h, accoda email `payment_pending`, ritorna link `bunq.me`. `409` se importo > €500 |
 | `status.ts` | GET | fallback polling: ri-verifica lo stato del pagamento per `bookingRequestId`, azzera la deadline quando non restano pending e accoda `payment_received` |
 | `webhook.ts` | POST | riceve callback Bunq alla liquidazione, azzera la deadline quando non restano pending e accoda `payment_received` |
-| `bank-transfer.ts` | POST | flusso alternativo bonifico bancario (per importi oltre limite Bunq), con stessa deadline 48h ed email `payment_pending` |
-| `membership/request.ts` | POST | crea request-inquiry Bunq per un tier **BITE Crew**, ricalcola importo da `membership_tiers`, salva `membership_payments`, ritorna link `bunq.me` → [[23 - Community]] |
+| `bank-transfer.ts` | POST | flusso bonifico bancario selezionabile dall'utente o usato come fallback per importi oltre limite Bunq; ritorna IBAN/causale, salva `voyage_booking_deposits`, usa stessa deadline 48h ed email `payment_pending` |
+| `membership/request.ts` | POST | crea request-inquiry Bunq senza controparte email precompilata per un tier **BITE Crew**, ricalcola importo da `membership_tiers`, salva `membership_payments`, ritorna link `bunq.me` → [[23 - Community]] |
 | `membership/status.ts` | GET | polling del pagamento Crew Pass: se Bunq risulta pagato, marca `membership_payments.paid` e crea/aggiorna `membership_subscriptions` |
 
 ## 🎥 Community / LiveKit (`apps/web/api/community/`) → [[23 - Community]]

@@ -16,7 +16,7 @@ import BookingSidebarPanel from "@/components/voyage/BookingSidebarPanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
 import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
-import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
+import BookingConfirmDialog, { type PaymentMethodChoice } from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import {
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
@@ -590,7 +590,7 @@ const Journal = () => {
     setBookingRejectedLegIds((current) => current.filter((id) => id !== legId));
   }, [bookingLegsById, bookingPartySize, lang]);
 
-  const submitBookingFromLogbook = useCallback(async () => {
+  const submitBookingFromLogbook = useCallback(async (paymentMethod: PaymentMethodChoice = "bunq_link") => {
     if (!session?.user) {
       navigate("/login", { state: { from: `/${lang}/logbook` } });
       return;
@@ -668,8 +668,16 @@ const Journal = () => {
         return;
       }
 
-      // Solo booking: kick off the Bunq voyage-contribution payment right away.
+      // Solo booking: start the selected contribution payment method right away.
       if (bookingRequestId) {
+        if (paymentMethod === "bank_transfer") {
+          setBookingConfirmOpen(false);
+          setBankTransfer({ bookingRequestId });
+          clearBookingSelection();
+          void refetchBookingLegs();
+          return;
+        }
+
         const payment = await startDepositPayment(bookingRequestId);
         if (payment.ok && "shareUrl" in payment) {
           window.location.href = payment.shareUrl;
@@ -1100,11 +1108,12 @@ const Journal = () => {
             partySize={bookingPartySize}
             message={bookingMessage}
             requiresPayment
+            showPaymentMethodChoice={bookingPartySize <= 1}
             depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
             depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             submitting={bookingSubmitting}
-            onConfirm={() => void submitBookingFromLogbook()}
+            onConfirm={(paymentMethod) => void submitBookingFromLogbook(paymentMethod)}
           />
 
           <BankTransferDialog

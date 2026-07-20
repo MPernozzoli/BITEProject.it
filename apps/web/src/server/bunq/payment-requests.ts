@@ -27,7 +27,7 @@ export type BunqCounterpartyAlias = {
 export type CreatePaymentRequestInput = {
   amountEur: number;
   description: string;
-  counterpartyEmail: string;
+  counterpartyEmail?: string;
   redirectUrl?: string;
 };
 
@@ -44,11 +44,15 @@ export async function createBunqPaymentRequest(
           value: input.amountEur.toFixed(2),
           currency: "EUR",
         },
-        counterparty_alias: {
-          type: "EMAIL",
-          value: input.counterpartyEmail,
-          name: input.counterpartyEmail,
-        },
+        ...(input.counterpartyEmail
+          ? {
+              counterparty_alias: {
+                type: "EMAIL",
+                value: input.counterpartyEmail,
+                name: input.counterpartyEmail,
+              },
+            }
+          : {}),
         description: input.description,
         allow_bunqme: true,
         ...(input.redirectUrl ? { redirect_url: input.redirectUrl } : {}),

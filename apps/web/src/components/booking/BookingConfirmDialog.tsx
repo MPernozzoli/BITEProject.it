@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Info, Loader2, TicketCheck } from "lucide-react";
+import { AlertTriangle, CreditCard, Info, Landmark, Loader2, TicketCheck } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
   Dialog,
@@ -127,6 +127,8 @@ interface BookingConfirmDialogProps {
   message?: string;
   /** When true, shows the contribution conditions + payment box (Bunq flow). */
   requiresPayment?: boolean;
+  /** When false, payment conditions are shown but the actual method is chosen in a later step. */
+  showPaymentMethodChoice?: boolean;
   candidateInfo?: CandidateInfo;
   onCandidateInfoChange?: (candidateInfo: CandidateInfo) => void;
   /** Per-person contribution (EUR), shown when requiresPayment. */
@@ -137,8 +139,10 @@ interface BookingConfirmDialogProps {
   contributionPerNmEur?: number | null;
   mode?: "confirmation" | "application";
   submitting?: boolean;
-  onConfirm: () => void;
+  onConfirm: (paymentMethod: PaymentMethodChoice) => void;
 }
+
+export type PaymentMethodChoice = "bunq_link" | "bank_transfer";
 
 const BookingConfirmDialog = ({
   open,
@@ -150,6 +154,7 @@ const BookingConfirmDialog = ({
   partySize,
   message,
   requiresPayment = false,
+  showPaymentMethodChoice = requiresPayment,
   candidateInfo,
   onCandidateInfoChange,
   depositPerPersonEur,
@@ -185,11 +190,15 @@ const BookingConfirmDialog = ({
   );
 
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodChoice>("bunq_link");
 
   // Reset the acceptances whenever the dialog is (re)opened so a previous
   // session never carries over.
   useEffect(() => {
-    if (open) setAccepted({});
+    if (open) {
+      setAccepted({});
+      setPaymentMethod("bunq_link");
+    }
   }, [open]);
 
   const allAccepted = conditions.every(
@@ -340,6 +349,56 @@ const BookingConfirmDialog = ({
             </div>
           )}
 
+          {requiresPayment && showPaymentMethodChoice && (
+            <div className="mb-4 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {lang === "it" ? "Metodo di pagamento" : "Payment method"}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("bunq_link")}
+                  className={`min-h-24 rounded-lg border p-3 text-left transition-colors ${
+                    paymentMethod === "bunq_link"
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50 hover:text-foreground"
+                  }`}
+                  aria-pressed={paymentMethod === "bunq_link"}
+                >
+                  <CreditCard size={17} className="mb-2" />
+                  <span className="block text-sm font-semibold">
+                    {lang === "it" ? "Paga adesso" : "Pay now"}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed">
+                    {lang === "it"
+                      ? "Apri il link Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili."
+                      : "Open the Bunq link and pay by card, Apple Pay, Google Pay, or other available methods."}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("bank_transfer")}
+                  className={`min-h-24 rounded-lg border p-3 text-left transition-colors ${
+                    paymentMethod === "bank_transfer"
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50 hover:text-foreground"
+                  }`}
+                  aria-pressed={paymentMethod === "bank_transfer"}
+                >
+                  <Landmark size={17} className="mb-2" />
+                  <span className="block text-sm font-semibold">
+                    {lang === "it" ? "Bonifico" : "Bank transfer"}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed">
+                    {lang === "it"
+                      ? "Mostra IBAN e causale obbligatoria. Il pagamento viene validato automaticamente quando arriva."
+                      : "Show IBAN and required reference. Payment is validated automatically when it arrives."}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <ul className="space-y-3">
             {conditions.map((condition) => {
               const checked = Boolean(accepted[condition.id]);
@@ -378,15 +437,23 @@ const BookingConfirmDialog = ({
           </Button>
           <Button
             type="button"
-            onClick={onConfirm}
+            onClick={() => onConfirm(paymentMethod)}
             disabled={!allAccepted || submitting}
             className="gap-2"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <TicketCheck size={16} />}
             {requiresPayment
-              ? lang === "it"
-                ? "Conferma e versa il contributo"
-                : "Confirm & pay contribution"
+              ? showPaymentMethodChoice && paymentMethod === "bank_transfer"
+                ? lang === "it"
+                  ? "Conferma e mostra bonifico"
+                  : "Confirm & show transfer"
+                : showPaymentMethodChoice
+                  ? lang === "it"
+                    ? "Conferma e paga adesso"
+                    : "Confirm & pay now"
+                  : lang === "it"
+                    ? "Conferma e continua"
+                    : "Confirm & continue"
               : mode === "application"
                 ? lang === "it"
                   ? "Registra candidatura"
