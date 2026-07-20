@@ -30,7 +30,7 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 ## Flusso
 1. Utente accetta le condizioni nel modal.
 2. Creazione richiesta via RPC `request_voyage_booking` → [[08 - Supabase]].
-3. Dopo la creazione della richiesta, una dialog dedicata chiede il metodo: **paga adesso** via link Bunq (`bunq.me`, carta/Apple Pay/Google Pay/metodi disponibili) oppure **bonifico** con IBAN e causale obbligatoria.
+3. Dopo la creazione della richiesta, una dialog dedicata chiede il metodo: **paga adesso** via link Bunq (`bunq.me`, carta/Apple Pay/Google Pay/metodi disponibili; se il payer ha Bunq con la stessa email può accettare la richiesta anche dall'app) oppure **bonifico** con IBAN e causale obbligatoria.
 4. Client chiama `POST /api/payments/bunq/request` oppure `POST /api/payments/bunq/bank-transfer` con `bookingRequestId` + access token Supabase.
 5. La function ricalcola l'importo e salva una riga in `voyage_booking_deposits`: per `bunq_link` crea una **request-inquiry** Bunq con `counterparty_alias` impostato sull'email del payer autenticato e ritorna il link `bunq.me`; per `bank_transfer` ritorna IBAN, intestatario, importo e causale univoca. Bunq richiede una controparte anche quando `allow_bunqme` è attivo: non va usata l'email dell'account BITE, altrimenti la richiesta arriva a noi stessi.
 6. Da quel momento parte la scadenza pagamento di **48 ore** (`voyage_booking_requests.expires_at`); le prenotazioni in sola attesa di approvazione admin non hanno scadenza.

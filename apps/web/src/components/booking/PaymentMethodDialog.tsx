@@ -55,8 +55,8 @@ const PaymentMethodDialog = ({
             <span className="block text-sm font-semibold">{lang === "it" ? "Paga adesso" : "Pay now"}</span>
             <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
               {lang === "it"
-                ? "Apri Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili."
-                : "Open Bunq and pay by card, Apple Pay, Google Pay, or other available methods."}
+                ? "Apri Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili. Se hai Bunq con questa email, puoi accettare la richiesta anche dall'app."
+                : "Open Bunq and pay by card, Apple Pay, Google Pay, or other available methods. If you use Bunq with this email, you can also accept the request in the app."}
             </span>
           </button>
 

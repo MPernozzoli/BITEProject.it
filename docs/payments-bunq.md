@@ -34,18 +34,19 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
 1. User accepts the conditions in the confirmation modal.
 2. After the booking request exists, the payment-method dialog asks the user to choose either:
    - **pay now**: open the Bunq `bunq.me` link and pay with card / Apple Pay / Google Pay or
-     the methods available on Bunq;
+     the methods available on Bunq. If the payer has a Bunq account for the same email, they
+     may also receive/accept the request directly in the Bunq app;
    - **bank transfer**: show IBAN, holder, amount and mandatory reference.
 3. The booking request is created via the existing `request_voyage_booking` RPC.
 4. The client calls either `POST /api/payments/bunq/request` or
    `POST /api/payments/bunq/bank-transfer` with the new `bookingRequestId` and the user's
    Supabase access token.
 5. The function recomputes the amount and stores a row in `voyage_booking_deposits`.
-   For `bunq_link`, it creates a Bunq **request-inquiry** without a prefilled counterparty
-   and returns the shareable `bunq.me` link. This keeps payment pull-based from the payer's
-   link instead of pushing a direct request to an email alias in the Bunq app. For
-   `bank_transfer`, it returns the fixed bank details plus the unique reference used for
-   automatic reconciliation.
+   For `bunq_link`, it creates a Bunq **request-inquiry** with `counterparty_alias` set to the
+   authenticated payer email and returns the shareable `bunq.me` link. Bunq requires the
+   counterparty even when `allow_bunqme` is enabled: if the payer uses Bunq with that email,
+   the request can also appear in their Bunq app. For `bank_transfer`, it returns the fixed
+   bank details plus the unique reference used for automatic reconciliation.
 6. The booking's payment deadline is armed for 48 hours (`voyage_booking_requests.expires_at`).
    Bookings waiting only for admin approval do not expire.
 7. The user is redirected to Bunq to pay, or sees the bank-transfer dialog with the unique

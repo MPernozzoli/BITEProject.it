@@ -229,6 +229,9 @@ export function ProfileCrewPassPanel() {
               >
                 {busyTier === currentTier.id ? "Avvio..." : subscription?.tier_id === currentTier.id ? "Rinnova" : "Attiva"}
               </button>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Si apre Bunq per pagare online. Se usi Bunq con questa email, puoi accettare la richiesta anche dall'app.
+              </p>
             </div>
           );
         })}

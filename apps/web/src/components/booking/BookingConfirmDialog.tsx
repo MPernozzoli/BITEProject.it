@@ -371,8 +371,8 @@ const BookingConfirmDialog = ({
                   </span>
                   <span className="mt-1 block text-xs leading-relaxed">
                     {lang === "it"
-                      ? "Apri il link Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili."
-                      : "Open the Bunq link and pay by card, Apple Pay, Google Pay, or other available methods."}
+                      ? "Apri il link Bunq e paga con carta, Apple Pay, Google Pay o altri metodi disponibili. Se hai Bunq con questa email, puoi accettare la richiesta anche dall'app."
+                      : "Open the Bunq link and pay by card, Apple Pay, Google Pay, or other available methods. If you use Bunq with this email, you can also accept the request in the app."}
                   </span>
                 </button>
                 <button
