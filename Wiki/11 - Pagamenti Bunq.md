@@ -62,12 +62,15 @@ Interventi software ancora necessari:
 - Controllare Vercel logs per `/api/payments/bunq/request` quando l'utente segnala "non succede nulla": se non c'è chiamata il problema è UI/browser; se c'è `503` mancano env Bunq; se c'è `no_share_url`/`invalid_share_url` il problema è risposta Bunq.
 - Verificare che `createBunqPaymentRequest` ritorni sempre un URL assoluto `https://bunq.me/...` o normalizzabile dal client. Se Bunq ritorna `Missing required field "counterparty_alias"`, controllare che la call site passi l'email del payer autenticato e non l'email dell'account BITE.
 - Implementare un worker schedulato di riconciliazione bonifici `pending`: oggi il bonifico viene validato da webhook o polling `/status`, non da un job dedicato.
-- Rendere paginata la scansione movimenti Bunq per bonifico: `findIncomingPaymentDetailsByReference` legge solo gli ultimi 50 pagamenti, quindi un movimento valido può non essere trovato se il conto riceve molti movimenti.
-- Agganciare `voyage_booking_deposits` al pannello admin candidature: mostrare metodo, importo, causale, scadenza e stato; disabilitare `Approva` se esiste un deposito `pending`.
-- Aggiornare le email `payment_pending` utente e admin: per `bank_transfer` devono dire che la candidatura non verrà esaminata finché importo e causale non combaciano.
-- Portare `booking_request_id`, `event_type`, `payment_reference` e `payment_method` dentro `email_send_log.metadata`, così customer care e audit possono ricostruire cosa è stato inviato.
 - Definire una procedura admin per bonifici anomali: importo errato, causale mancante, doppio pagamento, arrivo dopo scadenza, pagamento parziale, rimborso o match manuale tracciato.
 - Rivalutare la deadline di 48 ore per bonifico SEPA: può essere troppo corta nei weekend o nei festivi.
+
+Interventi completati durante la correzione:
+
+- La scansione movimenti Bunq per bonifico ora usa paginazione: `findIncomingPaymentDetailsByReference` legge pagine da 200 movimenti e segue `Pagination.older_url` fino a 5 pagine, mantenendo match obbligatorio su causale e importo esatto.
+- `voyage_booking_deposits` e collegata al pannello admin candidature: l'admin vede metodo, importo, causale, data creazione/ricezione e stato, e `Approva` e disabilitato se esiste un deposito `pending`. La migrazione `20260720131602_admin_read_voyage_booking_deposits.sql` aggiunge anche la policy RLS di lettura admin sui depositi.
+- Le email `payment_pending` utente e admin distinguono `bank_transfer`: comunicano che la candidatura non verra esaminata finche Bunq non conferma importo corretto e causale.
+- `dispatch-voyage-booking-notifications` passa a `send-transactional-email` i metadata `notification_id`, `booking_request_id`, `event_type`, `payment_reference` e `payment_method`; `send-transactional-email` li salva in `email_send_log.metadata` e li inoltra al payload PGMQ.
 
 ## Sicurezza webhook
 `apps/web/api/payments/bunq/webhook.ts` richiede `BUNQ_WEBHOOK_SECRET`: la callback Bunq deve includerlo nella URL (`?secret=...`) oppure in header `x-bite-bunq-webhook-secret` se passa da un proxy. Senza secret valido l'endpoint risponde `401` e non tenta alcuna riconciliazione. Il polling `/status` resta il controllo live autorevole verso Bunq.
