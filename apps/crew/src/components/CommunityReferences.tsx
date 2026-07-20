@@ -1,5 +1,5 @@
 import * as React from "react";
-import { BookOpen, ExternalLink, Map, Route, X } from "lucide-react";
+import { AtSign, BookOpen, ExternalLink, Map, Route, X } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { CommunityLinkedResource, CommunityReferenceKind, linkedResourcesFrom, slugify } from "@/lib/community";
@@ -16,6 +16,8 @@ const kindLabels: Record<CommunityReferenceKind, string> = {
   leg: "Tratta",
 };
 
+const DEFAULT_REFERENCE_KINDS: CommunityReferenceKind[] = ["article", "story", "voyage", "leg"];
+
 const iconFor = (kind: CommunityReferenceKind) => {
   if (kind === "article" || kind === "story") return BookOpen;
   if (kind === "leg") return Route;
@@ -29,6 +31,43 @@ const voyagePath = (voyage: { id: string; name?: string | null; name_it?: string
   `/voyages/${voyage.id}--${slugify(voyage.name_en || voyage.name_it || voyage.name || "voyage")}`;
 
 const escapeLike = (value: string) => value.replace(/[%_]/g, (match) => `\\${match}`);
+
+export type CommunityMentionedProfile = {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+};
+
+type ComposerInputElement = HTMLTextAreaElement | HTMLInputElement;
+
+const activeComposerToken = (input: ComposerInputElement | null, text: string) => {
+  const caret = input?.selectionStart ?? text.length;
+  const beforeCaret = text.slice(0, caret);
+  const match = beforeCaret.match(/(^|\s)([#@])([^\s#@]*)$/);
+  if (!match || match.index === undefined) return null;
+  const prefix = match[1] ?? "";
+  return {
+    trigger: match[2] as "#" | "@",
+    query: match[3] ?? "",
+    start: match.index + prefix.length,
+    end: caret,
+  };
+};
+
+const replaceComposerToken = (
+  input: ComposerInputElement | null,
+  text: string,
+  token: NonNullable<ReturnType<typeof activeComposerToken>>,
+  replacement: string,
+) => {
+  const next = `${text.slice(0, token.start)}${replacement} ${text.slice(token.end)}`;
+  window.requestAnimationFrame(() => {
+    const caret = token.start + replacement.length + 1;
+    input?.focus();
+    input?.setSelectionRange(caret, caret);
+  });
+  return next;
+};
 
 export const CommunityReferenceCards = ({ resources }: { resources: unknown }) => {
   const items = linkedResourcesFrom(resources);
@@ -170,89 +209,283 @@ export const CommunityReferencePicker = ({
     onChange(value.filter((existing) => !(existing.kind === item.kind && existing.id === item.id)));
   };
 
-  const search = async (kind: CommunityReferenceKind, query: string): Promise<CommunityLinkedResource[]> => {
-    const clean = query.trim();
-    const like = `%${escapeLike(clean)}%`;
+  return <ReferencePickerInner value={value} onAdd={add} onRemove={remove} search={searchCommunityReferences} />;
+};
 
-    if (kind === "article") {
-      const request = crewSupabase
-        .from("logbook_articles")
-        .select("id,title_it,title_en,slug,slug_it,cover_image,location_name,published_at")
-        .eq("status", "published")
-        .order("published_at", { ascending: false })
-        .limit(8);
-      const { data } = clean ? await request.or(`title_it.ilike.${like},title_en.ilike.${like},slug.ilike.${like}`) : await request;
-      return (data ?? []).map((row: Record<string, unknown>) => ({
-        kind: "article" as const,
-        id: String(row.id),
-        label: localizedTitle(row, "Articolo"),
-        subtitle: row.location_name ? String(row.location_name) : null,
-        href: `/logbook/${String(row.slug_it || row.slug)}`,
-        coverImage: row.cover_image ? String(row.cover_image) : null,
-      }));
-    }
+export const searchCommunityReferences = async (kind: CommunityReferenceKind, query: string): Promise<CommunityLinkedResource[]> => {
+  const clean = query.trim();
+  const like = `%${escapeLike(clean)}%`;
 
-    if (kind === "story") {
-      const request = crewSupabase
-        .from("stories")
-        .select("id,title_it,title_en,slug,slug_it,cover_image")
-        .order("created_at", { ascending: false })
-        .limit(8);
-      const { data } = clean ? await request.or(`title_it.ilike.${like},title_en.ilike.${like},slug.ilike.${like}`) : await request;
-      return (data ?? []).map((row: Record<string, unknown>) => ({
-        kind: "story" as const,
-        id: String(row.id),
-        label: localizedTitle(row, "Storia"),
-        subtitle: "Arco narrativo",
-        href: `/logbook/story/${String(row.slug_it || row.slug)}`,
-        coverImage: row.cover_image ? String(row.cover_image) : null,
-      }));
-    }
+  if (kind === "article") {
+    const request = crewSupabase
+      .from("logbook_articles")
+      .select("id,title_it,title_en,slug,slug_it,cover_image,location_name,published_at")
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .limit(8);
+    const { data } = clean ? await request.or(`title_it.ilike.${like},title_en.ilike.${like},slug.ilike.${like}`) : await request;
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      kind: "article" as const,
+      id: String(row.id),
+      label: localizedTitle(row, "Articolo"),
+      subtitle: row.location_name ? String(row.location_name) : null,
+      href: `/logbook/${String(row.slug_it || row.slug)}`,
+      coverImage: row.cover_image ? String(row.cover_image) : null,
+    }));
+  }
 
-    if (kind === "voyage") {
-      const request = crewSupabase
-        .from("voyages")
-        .select("id,name,name_it,name_en,start_date,end_date")
-        .eq("is_published", true)
-        .order("sort_order", { ascending: true })
-        .limit(8);
-      const { data } = clean ? await request.or(`name.ilike.${like},name_it.ilike.${like},name_en.ilike.${like}`) : await request;
-      return (data ?? []).map((row: { id: string; name?: string | null; name_it?: string | null; name_en?: string | null; start_date?: string | null; end_date?: string | null }) => ({
-        kind: "voyage" as const,
-        id: row.id,
-        label: row.name_it || row.name_en || row.name || "Viaggio",
-        subtitle: [row.start_date, row.end_date].filter(Boolean).join(" - ") || null,
-        href: voyagePath(row),
-      }));
-    }
+  if (kind === "story") {
+    const request = crewSupabase
+      .from("stories")
+      .select("id,title_it,title_en,slug,slug_it,cover_image")
+      .order("created_at", { ascending: false })
+      .limit(8);
+    const { data } = clean ? await request.or(`title_it.ilike.${like},title_en.ilike.${like},slug.ilike.${like}`) : await request;
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      kind: "story" as const,
+      id: String(row.id),
+      label: localizedTitle(row, "Storia"),
+      subtitle: "Arco narrativo",
+      href: `/logbook/story/${String(row.slug_it || row.slug)}`,
+      coverImage: row.cover_image ? String(row.cover_image) : null,
+    }));
+  }
 
-    const { data } = await crewSupabase
-      .from("voyage_bookable_legs")
-      .select("id,sort_order,planned_nautical_miles,voyage_id,voyages(id,name,name_it,name_en),from:voyage_waypoints!voyage_bookable_legs_from_waypoint_id_fkey(name,name_it,name_en),to:voyage_waypoints!voyage_bookable_legs_to_waypoint_id_fkey(name,name_it,name_en)")
+  if (kind === "voyage") {
+    const request = crewSupabase
+      .from("voyages")
+      .select("id,name,name_it,name_en,start_date,end_date")
+      .eq("is_published", true)
       .order("sort_order", { ascending: true })
-      .limit(12);
+      .limit(8);
+    const { data } = clean ? await request.or(`name.ilike.${like},name_it.ilike.${like},name_en.ilike.${like}`) : await request;
+    return (data ?? []).map((row: { id: string; name?: string | null; name_it?: string | null; name_en?: string | null; start_date?: string | null; end_date?: string | null }) => ({
+      kind: "voyage" as const,
+      id: row.id,
+      label: row.name_it || row.name_en || row.name || "Viaggio",
+      subtitle: [row.start_date, row.end_date].filter(Boolean).join(" - ") || null,
+      href: voyagePath(row),
+    }));
+  }
 
-    return (data ?? [])
-      .map((row: any) => {
-        const voyage = Array.isArray(row.voyages) ? row.voyages[0] : row.voyages;
-        const from = Array.isArray(row.from) ? row.from[0] : row.from;
-        const to = Array.isArray(row.to) ? row.to[0] : row.to;
-        const label = `${localizedTitle(from || {}, "Partenza")} → ${localizedTitle(to || {}, "Arrivo")}`;
-        const voyageLabel = voyage?.name_it || voyage?.name_en || voyage?.name || "Viaggio";
-        return {
-          kind: "leg" as const,
-          id: String(row.id),
-          label,
-          subtitle: `${voyageLabel} · ${Number(row.planned_nautical_miles || 0).toFixed(1)} NM`,
-          href: `${voyagePath(voyage || { id: row.voyage_id, name: "voyage" })}?leg=${row.id}`,
-          voyageId: String(row.voyage_id),
-        };
-      })
-      .filter((item: CommunityLinkedResource) => !clean || `${item.label} ${item.subtitle || ""}`.toLowerCase().includes(clean.toLowerCase()))
-      .slice(0, 8);
+  const { data } = await crewSupabase
+    .from("voyage_bookable_legs")
+    .select("id,sort_order,planned_nautical_miles,voyage_id,voyages(id,name,name_it,name_en),from:voyage_waypoints!voyage_bookable_legs_from_waypoint_id_fkey(name,name_it,name_en),to:voyage_waypoints!voyage_bookable_legs_to_waypoint_id_fkey(name,name_it,name_en)")
+    .order("sort_order", { ascending: true })
+    .limit(12);
+
+  return (data ?? [])
+    .map((row: any) => {
+      const voyage = Array.isArray(row.voyages) ? row.voyages[0] : row.voyages;
+      const from = Array.isArray(row.from) ? row.from[0] : row.from;
+      const to = Array.isArray(row.to) ? row.to[0] : row.to;
+      const label = `${localizedTitle(from || {}, "Partenza")} → ${localizedTitle(to || {}, "Arrivo")}`;
+      const voyageLabel = voyage?.name_it || voyage?.name_en || voyage?.name || "Viaggio";
+      return {
+        kind: "leg" as const,
+        id: String(row.id),
+        label,
+        subtitle: `${voyageLabel} · ${Number(row.planned_nautical_miles || 0).toFixed(1)} NM`,
+        href: `${voyagePath(voyage || { id: row.voyage_id, name: "voyage" })}?leg=${row.id}`,
+        voyageId: String(row.voyage_id),
+      };
+    })
+    .filter((item: CommunityLinkedResource) => !clean || `${item.label} ${item.subtitle || ""}`.toLowerCase().includes(clean.toLowerCase()))
+    .slice(0, 8);
+};
+
+const searchMentionedProfiles = async (query: string): Promise<CommunityMentionedProfile[]> => {
+  const clean = query.trim();
+  const request = crewSupabase
+    .from("public_profiles")
+    .select("id,name,avatar_url")
+    .not("id", "is", null)
+    .order("name", { ascending: true })
+    .limit(8);
+  const { data } = clean ? await request.ilike("name", `%${escapeLike(clean)}%`) : await request;
+  return (data ?? [])
+    .filter((row: { id?: string | null; name?: string | null }) => row.id && row.name)
+    .map((row: { id: string; name: string; avatar_url?: string | null }) => ({
+      id: row.id,
+      name: row.name,
+      avatarUrl: row.avatar_url ?? null,
+    }));
+};
+
+export const CommunityComposerTools = ({
+  inputRef,
+  text,
+  onTextChange,
+  resources,
+  onResourcesChange,
+  mentionedProfiles = [],
+  onMentionedProfilesChange,
+  referenceKinds = DEFAULT_REFERENCE_KINDS,
+}: {
+  inputRef: React.RefObject<ComposerInputElement>;
+  text: string;
+  onTextChange: (next: string) => void;
+  resources: CommunityLinkedResource[];
+  onResourcesChange: (next: CommunityLinkedResource[]) => void;
+  mentionedProfiles?: CommunityMentionedProfile[];
+  onMentionedProfilesChange?: (next: CommunityMentionedProfile[]) => void;
+  referenceKinds?: CommunityReferenceKind[];
+}) => {
+  const token = activeComposerToken(inputRef.current, text);
+  const [kind, setKind] = React.useState<CommunityReferenceKind>(referenceKinds[0] ?? "article");
+  const [resourceResults, setResourceResults] = React.useState<CommunityLinkedResource[]>([]);
+  const [profileResults, setProfileResults] = React.useState<CommunityMentionedProfile[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!referenceKinds.includes(kind)) setKind(referenceKinds[0] ?? "article");
+  }, [kind, referenceKinds]);
+
+  React.useEffect(() => {
+    if (!token) {
+      setResourceResults([]);
+      setProfileResults([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    const timer = window.setTimeout(() => {
+      const request = token.trigger === "#"
+        ? searchCommunityReferences(kind, token.query).then((items) => {
+            if (!cancelled) setResourceResults(items);
+          })
+        : searchMentionedProfiles(token.query).then((items) => {
+            if (!cancelled) setProfileResults(items);
+          });
+      void request.finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [kind, text, token?.trigger, token?.query, token?.start, referenceKinds]);
+
+  const addResource = (item: CommunityLinkedResource) => {
+    if (!token) return;
+    const exists = resources.some((existing) => existing.kind === item.kind && existing.id === item.id);
+    if (!exists) onResourcesChange([...resources, item].slice(0, 8));
+    onTextChange(replaceComposerToken(inputRef.current, text, token, `#${item.label.replace(/\s+/g, "_")}`));
   };
 
-  return <ReferencePickerInner value={value} onAdd={add} onRemove={remove} search={search} />;
+  const removeResource = (item: CommunityLinkedResource) => {
+    onResourcesChange(resources.filter((existing) => !(existing.kind === item.kind && existing.id === item.id)));
+  };
+
+  const addProfile = (profile: CommunityMentionedProfile) => {
+    if (!token) return;
+    const exists = mentionedProfiles.some((existing) => existing.id === profile.id);
+    if (!exists) onMentionedProfilesChange?.([...mentionedProfiles, profile].slice(0, 12));
+    onTextChange(replaceComposerToken(inputRef.current, text, token, `@${profile.name.replace(/\s+/g, "_")}`));
+  };
+
+  const removeProfile = (profile: CommunityMentionedProfile) => {
+    onMentionedProfilesChange?.(mentionedProfiles.filter((existing) => existing.id !== profile.id));
+  };
+
+  const showResourceMenu = token?.trigger === "#";
+  const showProfileMenu = token?.trigger === "@";
+
+  if (!showResourceMenu && !showProfileMenu && resources.length === 0 && mentionedProfiles.length === 0) return null;
+
+  return (
+    <div className="mt-2">
+      {(resources.length > 0 || mentionedProfiles.length > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {resources.map((item) => (
+            <button
+              key={`${item.kind}-${item.id}`}
+              type="button"
+              onClick={() => removeResource(item)}
+              className="inline-flex max-w-full items-center gap-2 rounded-full bg-slate-950 px-3 py-1.5 text-xs text-white"
+            >
+              <span className="truncate">#{item.label}</span>
+              <X size={12} />
+            </button>
+          ))}
+          {mentionedProfiles.map((profile) => (
+            <button
+              key={profile.id}
+              type="button"
+              onClick={() => removeProfile(profile)}
+              className="inline-flex max-w-full items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs text-slate-700"
+            >
+              <span className="truncate">@{profile.name}</span>
+              <X size={12} />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(showResourceMenu || showProfileMenu) && (
+        <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+          {showResourceMenu && (
+            <div className="border-b border-slate-100 p-2">
+              <div className="flex flex-wrap gap-1.5">
+                {referenceKinds.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setKind(item)}
+                    className={`rounded-full px-3 py-1.5 text-xs ${kind === item ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}
+                  >
+                    {kindLabels[item]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="max-h-72 overflow-y-auto p-2">
+            {loading ? (
+              <p className="px-2 py-3 text-xs text-slate-500">Cerco...</p>
+            ) : showResourceMenu && resourceResults.length ? (
+              resourceResults.map((item) => (
+                <button
+                  key={`${item.kind}-${item.id}`}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => addResource(item)}
+                  className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-slate-950">{item.label}</span>
+                    {item.subtitle && <span className="block truncate text-xs text-slate-500">{item.subtitle}</span>}
+                  </span>
+                  <span className="text-xs text-slate-400">{kindLabels[item.kind]}</span>
+                </button>
+              ))
+            ) : showProfileMenu && profileResults.length ? (
+              profileResults.map((profile) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => addProfile(profile)}
+                  className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-slate-500">
+                    {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" /> : <AtSign size={15} />}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-slate-950">{profile.name}</span>
+                </button>
+              ))
+            ) : (
+              <p className="px-2 py-3 text-xs text-slate-500">Nessun risultato.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const ReferencePickerInner = ({

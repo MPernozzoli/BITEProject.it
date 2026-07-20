@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Heart, Reply, Send } from "lucide-react";
+import { CommunityComposerTools, CommunityMentionedProfile } from "@/components/CommunityReferences";
 import { supabase } from "@/integrations/supabase/client";
 import { redirectToLogin } from "@/lib/auth-redirect";
-import { formatDateTime } from "@/lib/community";
+import { CommunityLinkedResource, formatDateTime } from "@/lib/community";
 import { toast } from "sonner";
 
 type ArticleCommentRow = {
@@ -22,10 +23,16 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
   const [comments, setComments] = useState<ArticleCommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
+  const [linkedResources, setLinkedResources] = useState<CommunityLinkedResource[]>([]);
+  const [mentionedProfiles, setMentionedProfiles] = useState<CommunityMentionedProfile[]>([]);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [replyLinkedResources, setReplyLinkedResources] = useState<CommunityLinkedResource[]>([]);
+  const [replyMentionedProfiles, setReplyMentionedProfiles] = useState<CommunityMentionedProfile[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
+  const replyInputRef = useRef<HTMLInputElement>(null);
 
   const flatComments = useMemo(() => {
     const flatten = (rows: ArticleCommentRow[]): ArticleCommentRow[] => rows.flatMap((row) => [row, ...flatten(row.replies ?? [])]);
@@ -98,7 +105,12 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
     };
   }, [articleId]);
 
-  const submit = async (parentId: string | null, value: string) => {
+  const submit = async (
+    parentId: string | null,
+    value: string,
+    resources: CommunityLinkedResource[] = [],
+    profiles: CommunityMentionedProfile[] = [],
+  ) => {
     const content = value.trim();
     if (!content) return;
     const { data: { session } } = await supabase.auth.getSession();
@@ -108,17 +120,37 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
     }
 
     setBusy(true);
-    const { error } = await supabase.from("article_comments").insert({
+    const { data: insertedComment, error } = await supabase.from("article_comments").insert({
       article_id: articleId,
       profile_id: session.user.id,
       parent_id: parentId,
       content,
-    });
+    }).select("id").single();
     setBusy(false);
 
-    if (error) {
+    if (error || !insertedComment?.id) {
       toast.error("Commento non inviato.");
       return;
+    }
+
+    const mentionRows = [
+      ...resources
+        .filter((resource) => resource.kind === "article")
+        .map((resource) => ({
+          comment_id: insertedComment.id,
+          mentioned_article_id: resource.id,
+          mentioned_profile_id: null,
+        })),
+      ...profiles.map((profile) => ({
+        comment_id: insertedComment.id,
+        mentioned_article_id: null,
+        mentioned_profile_id: profile.id,
+      })),
+    ];
+
+    if (mentionRows.length) {
+      const { error: mentionError } = await supabase.from("comment_mentions").insert(mentionRows);
+      if (mentionError) toast.error("Commento pubblicato, ma alcune menzioni non sono state salvate.");
     }
 
     void supabase.functions.invoke("dispatch-engagement-notifications", {
@@ -126,14 +158,18 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
     });
 
     setText("");
+    setLinkedResources([]);
+    setMentionedProfiles([]);
     setReplyText("");
+    setReplyLinkedResources([]);
+    setReplyMentionedProfiles([]);
     setReplyTo(null);
     await load();
   };
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    void submit(null, text);
+    void submit(null, text, linkedResources, mentionedProfiles);
   };
 
   const toggleLike = async (comment: ArticleCommentRow) => {
@@ -178,14 +214,24 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
               </button>
             </div>
             {replyTo === comment.id && (
-              <form className="mt-3" onSubmit={(event) => { event.preventDefault(); void submit(comment.id, replyText); }}>
+              <form className="mt-3" onSubmit={(event) => { event.preventDefault(); void submit(comment.id, replyText, replyLinkedResources, replyMentionedProfiles); }}>
                 <label className="sr-only" htmlFor={`article-reply-${comment.id}`}>Risposta</label>
                 <div className="flex gap-2">
-                  <input id={`article-reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" />
+                  <input ref={replyInputRef} id={`article-reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" />
                   <button type="submit" disabled={busy || !replyText.trim()} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-white disabled:opacity-50">
                     <Send size={15} />
                   </button>
                 </div>
+                <CommunityComposerTools
+                  inputRef={replyInputRef}
+                  text={replyText}
+                  onTextChange={setReplyText}
+                  resources={replyLinkedResources}
+                  onResourcesChange={setReplyLinkedResources}
+                  mentionedProfiles={replyMentionedProfiles}
+                  onMentionedProfilesChange={setReplyMentionedProfiles}
+                  referenceKinds={["article"]}
+                />
               </form>
             )}
           </div>
@@ -212,12 +258,23 @@ const ArticleThreadComments = ({ articleId, articleHref }: { articleId: string; 
       <form className="crew-panel mt-6 rounded-3xl p-4" onSubmit={onSubmit}>
         <label className="crew-label" htmlFor="article-thread-comment">Scrivi nel thread pubblico</label>
         <textarea
+          ref={commentInputRef}
           id="article-thread-comment"
           name="comment"
           value={text}
           onChange={(event) => setText(event.target.value)}
           className="crew-field mt-2 min-h-28"
           maxLength={4000}
+        />
+        <CommunityComposerTools
+          inputRef={commentInputRef}
+          text={text}
+          onTextChange={setText}
+          resources={linkedResources}
+          onResourcesChange={setLinkedResources}
+          mentionedProfiles={mentionedProfiles}
+          onMentionedProfilesChange={setMentionedProfiles}
+          referenceKinds={["article"]}
         />
         {!userId && <p className="mt-2 text-xs text-slate-500">Accedi per pubblicare. La discussione resta visibile anche senza Crew Pass.</p>}
         <div className="mt-3 flex justify-end">

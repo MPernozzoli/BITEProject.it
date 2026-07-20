@@ -192,6 +192,19 @@ Article source JSON:
 ${source}`
 }
 
+function fallbackPostPayload(article: ArticleRow): CommunityPostPayload {
+  const title = titleFor(article)
+  const introIt = article.excerpt_it?.trim() || article.excerpt_en?.trim() || title
+  const introEn = article.excerpt_en?.trim() || article.excerpt_it?.trim() || article.title_en || title
+
+  return {
+    title_it: `Dal logbook: ${title}`,
+    title_en: `From the logbook: ${article.title_en?.trim() || title}`,
+    body_it: `${introIt}\n\nIl nuovo articolo e aperto sul logbook: lo trovi nel link collegato qui sotto.`,
+    body_en: `${introEn}\n\nThe new article is live in the logbook: open it from the linked resource below.`,
+  }
+}
+
 function extractOpenAiOutputText(json: unknown): string | null {
   if (isRecord(json) && typeof json.output_text === 'string') return json.output_text
   if (!isRecord(json) || !Array.isArray(json.output)) return null
@@ -317,7 +330,24 @@ Deno.serve(async (req) => {
 
   try {
     const source = buildSource(articleRow, authorNames)
-    const { parsed, raw, model } = await callOpenAiPost(source)
+    let parsed: CommunityPostPayload
+    let raw: unknown = null
+    let model = 'fallback'
+    let generationStatus: 'openai' | 'fallback' = 'openai'
+    let generationError: string | null = null
+
+    try {
+      const generated = await callOpenAiPost(source)
+      parsed = generated.parsed
+      raw = generated.raw
+      model = generated.model
+    } catch (error) {
+      generationStatus = 'fallback'
+      generationError = error instanceof Error ? error.message : 'OpenAI generation failed'
+      console.error('sync-article-community-post generation fallback', articleId, error)
+      parsed = fallbackPostPayload(articleRow)
+    }
+
     const fallbackTitle = `Dal logbook: ${titleFor(articleRow)}`
     const bodyIt = cleanString(parsed.body_it, articleRow.excerpt_it || articleRow.excerpt_en || fallbackTitle, 900)
     const bodyEn = cleanString(parsed.body_en, articleRow.excerpt_en || articleRow.excerpt_it || fallbackTitle, 900)
@@ -352,6 +382,8 @@ Deno.serve(async (req) => {
       metadata: {
         source: 'logbook_article_publication',
         source_article_id: articleRow.id,
+        generation_status: generationStatus,
+        generation_error: generationError,
         openai_model: model,
         openai_raw_response: raw,
       },

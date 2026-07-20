@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Heart, Reply, Send } from "lucide-react";
-import { CommunityReferenceCards, CommunityReferencePicker } from "@/components/CommunityReferences";
+import { CommunityComposerTools, CommunityReferenceCards } from "@/components/CommunityReferences";
 import { supabase } from "@/integrations/supabase/client";
 import { redirectToLogin } from "@/lib/auth-redirect";
 import { CommunityLinkedResource, formatDateTime } from "@/lib/community";
@@ -31,6 +31,8 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
   const [replyLinkedResources, setReplyLinkedResources] = useState<CommunityLinkedResource[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
+  const replyInputRef = useRef<HTMLInputElement>(null);
 
   const flatComments = useMemo(() => {
     const flatten = (rows: CommentRow[]): CommentRow[] => rows.flatMap((row) => [row, ...flatten(row.replies ?? [])]);
@@ -187,12 +189,18 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
               <form className="mt-3" onSubmit={(event) => { event.preventDefault(); void submit(comment.id, replyText, replyLinkedResources); }}>
                 <label className="sr-only" htmlFor={`reply-${comment.id}`}>Risposta</label>
                 <div className="flex gap-2">
-                  <input id={`reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" />
+                  <input ref={replyInputRef} id={`reply-${comment.id}`} name="reply" value={replyText} onChange={(event) => setReplyText(event.target.value)} className="crew-field min-h-12 flex-1 py-2 text-sm" />
                   <button type="submit" disabled={busy} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 text-white disabled:opacity-50">
                     <Send size={15} />
                   </button>
                 </div>
-                <CommunityReferencePicker value={replyLinkedResources} onChange={setReplyLinkedResources} />
+                <CommunityComposerTools
+                  inputRef={replyInputRef}
+                  text={replyText}
+                  onTextChange={setReplyText}
+                  resources={replyLinkedResources}
+                  onResourcesChange={setReplyLinkedResources}
+                />
               </form>
             )}
           </div>
@@ -210,6 +218,7 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
         <form className="crew-panel mt-6 rounded-3xl p-4" onSubmit={onSubmit}>
           <label className="crew-label" htmlFor="community-comment">Scrivi un commento</label>
           <textarea
+            ref={commentInputRef}
             id="community-comment"
             name="comment"
             value={text}
@@ -217,7 +226,13 @@ const CommunityComments = ({ postId, canComment, isAdmin = false }: { postId: st
             className="crew-field mt-2 min-h-28"
             maxLength={4000}
           />
-          <CommunityReferencePicker value={linkedResources} onChange={setLinkedResources} />
+          <CommunityComposerTools
+            inputRef={commentInputRef}
+            text={text}
+            onTextChange={setText}
+            resources={linkedResources}
+            onResourcesChange={setLinkedResources}
+          />
           <div className="mt-3 flex justify-end">
             <button type="submit" disabled={busy} className="inline-flex min-h-12 items-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-medium text-white disabled:opacity-50">
               <Send size={15} />

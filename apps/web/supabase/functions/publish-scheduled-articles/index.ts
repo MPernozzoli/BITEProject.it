@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
       }
     })(), `optimize-article-seo ${row.id}`)
 
-    runInBackground((async () => {
+    try {
       const communityResponse = await fetch(`${supabaseUrl}/functions/v1/sync-article-community-post`, {
         method: 'POST',
         headers: {
@@ -165,9 +165,15 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ articleId: row.id }),
       })
       if (!communityResponse.ok) {
-        console.error('sync-article-community-post failed', row.id, await communityResponse.text())
+        const message = await communityResponse.text()
+        errors.push({ id: row.id, message: `sync-article-community-post failed: ${message.slice(0, 400)}` })
+        console.error('sync-article-community-post failed', row.id, message)
       }
-    })(), `sync-article-community-post ${row.id}`)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'sync-article-community-post failed'
+      errors.push({ id: row.id, message })
+      console.error('sync-article-community-post', row.id, e)
+    }
 
     try {
       const r1 = await fetch(`${supabaseUrl}/functions/v1/notify-article-publication`, {

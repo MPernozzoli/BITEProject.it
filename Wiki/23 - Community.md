@@ -25,7 +25,8 @@ Implementazione iniziale completata e isolata:
 - home `/` come vetrina per utenti anonimi/non abbonati e feed reale protetto su `/feed`;
 - canali/subfeed `community_channels` con accesso opzionalmente limitato per tier;
 - card complete nel feed e nel dettaglio post per link, media URL, poll e live collegati;
-- riferimenti nei post e nei commenti verso articoli, stories, viaggi e tratte dell'app principale, salvati in `linked_resources`;
+- riferimenti nei post e nei commenti verso articoli, stories, viaggi e tratte dell'app principale, attivati digitando `#` nel composer e salvati in `linked_resources`;
+- tag utenti nei composer con `@`; nei thread articolo le menzioni `@utente` e `#articolo` vengono salvate in `comment_mentions`;
 - riferimenti articolo apribili in modale interna alla community, con contenuto logbook e link esterno alla main app;
 - auto-post community pubblico quando viene pubblicato un articolo della main app: testo generato via IA, riferimento all'articolo, autori multipli replicati dagli autori editoriali e thread commenti condiviso con il logbook;
 - CTA dai post live verso `/live?event=<id>` con stato derivato programmata/in corso/terminata;
@@ -56,9 +57,9 @@ Completato e verificato:
 - governance community in admin su `/admin?section=community`;
 - ruolo `moderator` in `user_roles` per moderare commenti/live messages;
 - post `link`, `media`, `poll` e `live` renderizzati come card dedicate nel feed e nel dettaglio;
-- post e commenti possono allegare riferimenti a contenuti principali tramite picker: articoli pubblicati, stories, viaggi pubblicati e tratte prenotabili;
+- post e commenti possono allegare riferimenti a contenuti principali da menu inline: `#` cerca articoli pubblicati, stories, viaggi pubblicati e tratte prenotabili, mentre `@` cerca profili utente;
 - i riferimenti articolo possono essere letti direttamente in modale nella community, seguendo il pattern di apertura contestuale del logbook;
-- gli articoli pubblicati dalla main app creano automaticamente un post community tramite `sync-article-community-post`, con testo bilingue generato dalla IA già configurata e link all'articolo in `linked_resources`;
+- gli articoli pubblicati dalla main app creano automaticamente un post community tramite `sync-article-community-post`, con testo bilingue generato dalla IA già configurata e link all'articolo in `linked_resources`; se la generazione IA fallisce, viene comunque creato un fallback da titolo/excerpt articolo;
 - i post automatici degli articoli sono pubblici e renderizzano lo stesso thread `article_comments` della pagina logbook; i post nativi Crew continuano invece a usare `community_comments` e restano protetti dal Crew Pass;
 - i post supportano autori multipli tramite `community_post_authors`; per i post generati dagli articoli vengono copiati tutti gli autori editoriali, mentre `author_profile_id` resta il primo autore per retrocompatibilità;
 - poll votabili anche inline dai post collegati, riusando `community_poll_option_stats`;
@@ -85,7 +86,7 @@ Frontend Crew:
 - `apps/crew/src/pages/CrewPostPage.tsx` — dettaglio post con contenuto TipTap, card allegati/poll/live e discussione;
 - `apps/crew/src/pages/CrewLivePage.tsx` — live programmati, stato derivato, room LiveKit, chat e reminder;
 - `apps/crew/src/pages/CrewPollsPage.tsx` — voting/risultati, senza creazione separata;
-- `apps/crew/src/components/CommunityReferences.tsx` — picker e card per riferimenti a logbook, stories, viaggi e tratte;
+- `apps/crew/src/components/CommunityReferences.tsx` — menu inline `#`/`@`, ricerca riferimenti/profili e card per logbook, stories, viaggi e tratte;
 - `apps/crew/src/components/ArticleThreadComments.tsx` — thread pubblico condiviso per i post Crew generati da articoli: legge/scrive `article_comments` e `comment_likes`, quindi la conversazione è unica tra logbook e Crew;
 - `apps/crew/src/components/CommunityPostSurface.tsx` — card condivisa per link, media URL, poll inline e CTA live;
 - `apps/crew/src/components/LivekitRoomPanel.tsx` — layout LiveKit admin/viewer;
@@ -279,7 +280,7 @@ RLS:
 - i post automatici legati ad articoli usano `article_comments`: thread pubblico leggibile da tutti e scrivibile dagli utenti autenticati secondo le policy del logbook;
 - membri attivi possono pubblicare post propri `members`/`tier` nei canali accessibili;
 - il composer del feed è il punto unico di creazione: testo, link, media URL, poll e live programmati vengono creati da `/feed`, non dalle pagine dedicate;
-- la pubblicazione di un articolo della main app invoca `sync-article-community-post`, che crea/aggiorna un post `public` idempotente con `metadata.source_article_id`, testo generato via IA, riferimento all'articolo e thread condiviso con `article_comments`;
+- la pubblicazione di un articolo della main app invoca `sync-article-community-post`, che crea/aggiorna un post `public` idempotente con `metadata.source_article_id`, testo generato via IA o fallback editoriale, riferimento all'articolo e thread condiviso con `article_comments`;
 - `community_post_authors` replica tutti gli autori del post; per i post manuali viene inserito l'autore corrente, per quelli automatici vengono copiati gli autori di `article_authors`;
 - i reminder live sono leggibili/modificabili solo dal proprietario o dagli admin; la dispatch è service-role/postgres;
 - `admin` globale è anche admin community e può gestire tutto da `/admin?section=community`; `moderator` in `user_roles` può moderare commenti e live messages senza diventare admin globale;

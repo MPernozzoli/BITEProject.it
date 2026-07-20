@@ -1,9 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Image, Link as LinkIcon, Loader2, Lock, Mic, PlayCircle, Send, Vote } from "lucide-react";
 import { toast } from "sonner";
 
-import { CommunityReferenceCards, CommunityReferencePicker } from "@/components/CommunityReferences";
+import { CommunityComposerTools, CommunityReferenceCards } from "@/components/CommunityReferences";
 import CommunityPostSurface from "@/components/CommunityPostSurface";
 import { supabase } from "@/integrations/supabase/client";
 import { redirectToLogin } from "@/lib/auth-redirect";
@@ -61,6 +61,7 @@ const CrewFeedPage = () => {
   const [liveTitle, setLiveTitle] = useState("");
   const [liveMode, setLiveMode] = useState<"video" | "audio" | "stage">("video");
   const [liveStartsAt, setLiveStartsAt] = useState(defaultLiveStartsAt);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedChannel = useMemo(
     () => channels.find((channel) => channel.slug === channelSlug) ?? channels.find((channel) => channel.slug === "main") ?? null,
@@ -426,9 +427,10 @@ const CrewFeedPage = () => {
           </div>
           <form onSubmit={submitPost} className="rounded-3xl border border-slate-200/80 bg-white/70 p-4">
             <textarea
+              ref={composerInputRef}
               value={body}
               onChange={(event) => setBody(event.target.value)}
-              placeholder="Scrivi qualcosa per la crew..."
+              placeholder="Scrivi qualcosa per la crew... Usa # per riferimenti e @ per persone"
               rows={3}
               className="min-h-24 w-full resize-none bg-transparent text-sm leading-6 text-slate-950 outline-none placeholder:text-slate-400"
             />
@@ -513,7 +515,13 @@ const CrewFeedPage = () => {
                 </select>
               </div>
             )}
-            <CommunityReferencePicker value={linkedResources} onChange={setLinkedResources} />
+            <CommunityComposerTools
+              inputRef={composerInputRef}
+              text={body}
+              onTextChange={setBody}
+              resources={linkedResources}
+              onResourcesChange={setLinkedResources}
+            />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
               <div className="flex flex-wrap gap-1.5">
                 <button type="button" onClick={() => setPostType("text")} className={`rounded-full px-3 py-2 text-xs ${postType === "text" ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>Testo</button>
