@@ -25,7 +25,12 @@ type BunqNotificationPayload = {
   NotificationUrl?: {
     event_type?: string;
     object?: {
-      Payment?: { id?: number; description?: string };
+      Payment?: {
+        id?: number;
+        description?: string;
+        amount?: { value?: string; currency?: string };
+        counterparty_alias?: Record<string, unknown> | null;
+      };
       RequestInquiry?: { id?: number };
       RequestResponse?: { id?: number };
     };
@@ -95,12 +100,21 @@ async function markPaidByBunqRequestId(requestId: number): Promise<boolean> {
   return true;
 }
 
-async function markPaidByReference(reference: string): Promise<boolean> {
+function amountMatchesExpected(paymentAmountValue: string | undefined, expectedAmountCents: number): boolean {
+  const amountCents = Math.round(Number(paymentAmountValue ?? 0) * 100);
+  return Math.abs(amountCents - expectedAmountCents) <= 1;
+}
+
+async function markPaidByReference(params: {
+  reference: string;
+  paymentAmountValue?: string;
+  payerAlias?: Record<string, unknown> | null;
+}): Promise<boolean> {
   const db = createServiceClient();
   const { data } = await db
     .from("voyage_booking_deposits")
     .select("id, booking_request_id, participant_id, amount_cents, payment_method, reference")
-    .eq("reference", reference.toUpperCase())
+    .eq("reference", params.reference.toUpperCase())
     .eq("status", "pending")
     .maybeSingle();
   if (!data) return false;
@@ -112,9 +126,22 @@ async function markPaidByReference(reference: string): Promise<boolean> {
     payment_method: string | null;
     reference: string | null;
   };
+  if (!amountMatchesExpected(params.paymentAmountValue, row.amount_cents)) {
+    console.warn("[bunq/webhook] reference matched but amount did not", {
+      reference: row.reference,
+      expectedAmountCents: row.amount_cents,
+      paymentAmountValue: params.paymentAmountValue ?? null,
+    });
+    return false;
+  }
   await db
     .from("voyage_booking_deposits")
-    .update({ status: "paid", paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      status: "paid",
+      paid_at: new Date().toISOString(),
+      payer_alias: params.payerAlias ?? null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", row.id)
     .eq("status", "pending");
   try {
@@ -192,20 +219,30 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     // Incoming payment → match by the reference embedded in the description.
     if (object.Payment) {
       let description = object.Payment.description;
+      let amountValue = object.Payment.amount?.value;
+      let payerAlias = object.Payment.counterparty_alias ?? null;
       // Some events carry only the id; fetch the payment to read its description.
-      if (!description && object.Payment.id && bunqConfigured()) {
+      if ((!description || !amountValue) && object.Payment.id && bunqConfigured()) {
         try {
-          const payments = await bunqRequest<Array<{ Payment: { description: string } }>>(
+          const payments = await bunqRequest<Array<{
+            Payment: {
+              description?: string;
+              amount?: { value?: string; currency?: string };
+              counterparty_alias?: Record<string, unknown> | null;
+            };
+          }>>(
             `${accountPath()}/payment/${object.Payment.id}`,
           );
-          description = payments[0]?.Payment?.description;
+          description = description ?? payments[0]?.Payment?.description;
+          amountValue = amountValue ?? payments[0]?.Payment?.amount?.value;
+          payerAlias = payerAlias ?? payments[0]?.Payment?.counterparty_alias ?? null;
         } catch (error) {
           console.error("[bunq/webhook] payment fetch failed", error);
         }
       }
       const reference = extractReference(description);
       if (reference) {
-        const matched = await markPaidByReference(reference);
+        const matched = await markPaidByReference({ reference, paymentAmountValue: amountValue, payerAlias });
         if (matched) {
           sendJson(res, 200, { matched: true });
           return;

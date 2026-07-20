@@ -113,14 +113,14 @@ type BunqPaymentListResponse = Array<{
  */
 export async function findIncomingPaymentByReference(
   reference: string,
-  minAmountEur: number,
+  expectedAmountEur: number,
 ): Promise<boolean> {
-  return Boolean(await findIncomingPaymentDetailsByReference(reference, minAmountEur));
+  return Boolean(await findIncomingPaymentDetailsByReference(reference, expectedAmountEur));
 }
 
 export async function findIncomingPaymentDetailsByReference(
   reference: string,
-  minAmountEur: number,
+  expectedAmountEur: number,
 ): Promise<{
   id: number;
   amountValue: string;
@@ -128,11 +128,13 @@ export async function findIncomingPaymentDetailsByReference(
 } | null> {
   const result = await bunqRequest<BunqPaymentListResponse>(`${accountPath()}/payment?count=50`);
   const target = reference.toUpperCase();
+  const expectedCents = Math.round(expectedAmountEur * 100);
   const matched = result.find(({ Payment: payment }) => {
     if (!payment?.description?.toUpperCase().includes(target)) return false;
-    const amount = Number(payment.amount?.value ?? 0);
-    // Incoming transfers post as a positive amount; require it to cover the expected share.
-    return amount >= minAmountEur - 0.01;
+    // Incoming transfers post as a positive amount. Match the exact expected amount,
+    // allowing only the unavoidable 1-cent floating/formatting tolerance.
+    const amountCents = Math.round(Number(payment.amount?.value ?? 0) * 100);
+    return Math.abs(amountCents - expectedCents) <= 1;
   });
   if (!matched?.Payment) return null;
   return {

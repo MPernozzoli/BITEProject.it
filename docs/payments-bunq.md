@@ -49,11 +49,14 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
 6. The booking's payment deadline is armed for 48 hours (`voyage_booking_requests.expires_at`).
    Bookings waiting only for admin approval do not expire.
 7. The user is redirected to Bunq to pay, or sees the bank-transfer dialog with the unique
-   reference to include in the transfer.
+   reference to include in the transfer. Bank-transfer applications explicitly remain on hold
+   and are not reviewed until the incoming payment matches both the expected amount and the
+   reference.
 8. Settlement is detected either by the Bunq **webhook** (`POST /api/payments/bunq/webhook`) or,
    as a fallback, by `GET /api/payments/bunq/status?bookingRequestId=...`, which re-checks the
-   live request-inquiry status. Either path flips the stored payment row to `paid` and clears the
-   booking-level payment deadline once no pending deposits remain.
+   live request-inquiry status or scans incoming account payments by exact amount + reference.
+   Either path flips the stored payment row to `paid` and clears the booking-level payment
+   deadline once no pending deposits remain.
 
 If Bunq env vars are missing, `/request` returns `503 not_configured`, the booking is still
 created, and the user sees a "contribution link to follow" message — nothing breaks.
@@ -75,6 +78,9 @@ Migration `supabase/migrations/20260710120500_bunq_deposits.sql`:
 - `expire_pending_voyage_booking_payments()` — service-role RPC scheduled hourly with `pg_cron`;
   cancels active bookings with pending contribution payments older than 48 hours and marks their
   pending deposit rows as `cancelled`.
+- `admin_set_voyage_booking_status()` refuses `admin_approved` / `user_confirmed` transitions
+  while a `voyage_booking_deposits.status = 'pending'` row exists for the request, so bank-transfer
+  applications cannot be reviewed/approved before reconciliation.
 
 ## Required environment variables (Vercel)
 

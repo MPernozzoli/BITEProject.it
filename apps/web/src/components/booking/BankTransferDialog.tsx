@@ -132,8 +132,8 @@ const BankTransferDialog = ({
           <DialogTitle>{lang === "it" ? "Paga con bonifico" : "Pay by bank transfer"}</DialogTitle>
           <DialogDescription>
             {lang === "it"
-              ? "Usa questi dati per inviare il bonifico. Indica sempre la causale: verificheremo automaticamente l'arrivo del pagamento."
-              : "Use these details to send the transfer. Always include the reference: we'll automatically detect when it arrives."}
+              ? "Usa questi dati per inviare il bonifico. La candidatura non verrà esaminata finché non riceviamo l'importo corretto con la causale indicata."
+              : "Use these details to send the transfer. Your application will not be reviewed until we receive the correct amount with the reference shown here."}
           </DialogDescription>
         </DialogHeader>
 
@@ -171,11 +171,17 @@ const BankTransferDialog = ({
             <CopyRow label={lang === "it" ? "Intestatario" : "Account holder"} value={state.details.holder} />
             <CopyRow label={lang === "it" ? "Causale (obbligatoria)" : "Reference (required)"} value={state.details.reference} />
 
+            <div className="rounded-md border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
+              {lang === "it"
+                ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale. Se la causale manca o l'importo è diverso, la richiesta resterà in attesa."
+                : "For automatic validation, both the amount and the reference must match. If the reference is missing or the amount differs, the request will stay pending."}
+            </div>
+
             <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 size={14} className="animate-spin shrink-0" />
               {lang === "it"
-                ? "In attesa del bonifico: questa finestra si aggiorna automaticamente appena lo ricevi."
-                : "Waiting for the transfer: this window updates automatically as soon as we receive it."}
+                ? "In attesa del bonifico: controlleremo via API Bunq i movimenti in entrata e sbloccheremo la richiesta solo quando importo e causale coincidono."
+                : "Waiting for the transfer: we'll check incoming Bunq account movements via API and unlock the request only when amount and reference match."}
             </div>
           </div>
         )}

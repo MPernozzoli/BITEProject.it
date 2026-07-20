@@ -34,8 +34,10 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 4. Client chiama `POST /api/payments/bunq/request` oppure `POST /api/payments/bunq/bank-transfer` con `bookingRequestId` + access token Supabase.
 5. La function ricalcola l'importo e salva una riga in `voyage_booking_deposits`: per `bunq_link` crea una **request-inquiry** Bunq senza controparte email precompilata e ritorna il link `bunq.me`; per `bank_transfer` ritorna IBAN, intestatario, importo e causale univoca. Il pagamento online resta quindi guidato dal link aperto dall'utente, non da una richiesta diretta inviata a un alias email nell'app Bunq.
 6. Da quel momento parte la scadenza pagamento di **48 ore** (`voyage_booking_requests.expires_at`); le prenotazioni in sola attesa di approvazione admin non hanno scadenza.
-7. Redirect a Bunq per il pagamento online, oppure apertura della finestra bonifico.
-8. Liquidazione rilevata dal **webhook** (`POST /api/payments/bunq/webhook`) o, in fallback, da `GET /api/payments/bunq/status?bookingRequestId=...`; quando non restano depositi pendenti, la deadline viene azzerata.
+7. Redirect a Bunq per il pagamento online, oppure apertura della finestra bonifico. Nel caso bonifico, la UI avvisa che la candidatura non viene esaminata finché non arriva l'importo corretto con la causale indicata.
+8. Liquidazione rilevata dal **webhook** (`POST /api/payments/bunq/webhook`) o, in fallback, da `GET /api/payments/bunq/status?bookingRequestId=...`; per bonifico il match richiede **causale e importo esatto** sul movimento in entrata. Quando non restano depositi pendenti, la deadline viene azzerata.
+
+`admin_set_voyage_booking_status` blocca `admin_approved`/`user_confirmed` se esiste un deposito `pending` sulla richiesta: le candidature con bonifico restano quindi sospese finché la riconciliazione Bunq non marca il deposito come `paid`.
 
 ## Rimborsi automatici
 `apps/web/api/bookings/status.ts` applica la policy di rimborso prima di rendere terminale una prenotazione:
