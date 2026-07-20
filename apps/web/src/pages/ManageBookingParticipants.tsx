@@ -360,7 +360,7 @@ const ManageBookingParticipants = () => {
         open={paymentChoiceOpen}
         onOpenChange={setPaymentChoiceOpen}
         loading={paymentStarting}
-        onPayNow={() => void startOnlinePayment()}
+        onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
         onBankTransfer={() => {
           setPaymentChoiceOpen(false);
           setBankTransferOpen(true);

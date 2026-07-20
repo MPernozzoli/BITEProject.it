@@ -1276,7 +1276,7 @@ const Journal = () => {
               if (!open) setPaymentChoice(null);
             }}
             loading={paymentStarting}
-            onPayNow={() => void startOnlinePayment()}
+            onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
             onBankTransfer={() => {
               if (!paymentChoice) return;
               setBankTransfer(paymentChoice);
