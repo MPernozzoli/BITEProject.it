@@ -59,7 +59,7 @@ interface BookingGanttTableProps {
   /** Persist a request's leg range after a drag-resize; nextLegIds is the full new set. */
   onResize: (requestId: string, nextLegIds: string[]) => Promise<void>;
   /** Create brand-new single-leg bookings from a column's "+" pill. */
-  onAddPeople: (legId: string, profileIds: string[], inviteEmails: string[]) => Promise<void>;
+  onAddPeople: (legId: string, profileIds: string[], inviteEmails: string[], isComped: boolean) => Promise<void>;
 }
 
 /** A contiguous run of leg-column indices a booking occupies. */
@@ -158,6 +158,9 @@ const BookingGanttTable = ({
   dragRef.current = drag;
   const [addPersonLegId, setAddPersonLegId] = useState<string | null>(null);
   const [addPersonProfileIds, setAddPersonProfileIds] = useState<string[]>([]);
+  // "Omaggio": the invited person is exempt from the contribution payment gate. Off by
+  // default so the exemption is always a deliberate act, never an accident.
+  const [addPersonComped, setAddPersonComped] = useState(false);
   const [addPersonInviteEmail, setAddPersonInviteEmail] = useState("");
   const [addPersonBusy, setAddPersonBusy] = useState(false);
   const [addPersonPickerOpen, setAddPersonPickerOpen] = useState(false);
@@ -316,10 +319,11 @@ const BookingGanttTable = ({
     const inviteEmails = emailValid(inviteEmail) ? [inviteEmail] : [];
     if (!addPersonLegId || (addPersonProfileIds.length === 0 && inviteEmails.length === 0)) return;
     setAddPersonBusy(true);
-    await onAddPeople(addPersonLegId, addPersonProfileIds, inviteEmails);
+    await onAddPeople(addPersonLegId, addPersonProfileIds, inviteEmails, addPersonComped);
     setAddPersonBusy(false);
     setAddPersonLegId(null);
     setAddPersonInviteEmail("");
+    setAddPersonComped(false);
     setAddPersonPickerOpen(false);
   };
 
@@ -442,6 +446,19 @@ const BookingGanttTable = ({
             <p className="mt-1 text-[10px] text-amber-700">Inserisci una email valida.</p>
           )}
         </div>
+        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border/70 bg-background/70 p-2">
+          <input
+            type="checkbox"
+            checked={addPersonComped}
+            onChange={(event) => setAddPersonComped(event.target.checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="text-[11px] leading-relaxed text-muted-foreground">
+            <span className="block font-semibold text-foreground">Omaggio</span>
+            Esenta dal contributo: la persona non dovra pagare nulla e la candidatura puo essere
+            approvata senza pagamento. Lasciando deselezionato, dovra versare la quota come tutti.
+          </span>
+        </label>
         <DialogFooter>
           <button
             type="button"

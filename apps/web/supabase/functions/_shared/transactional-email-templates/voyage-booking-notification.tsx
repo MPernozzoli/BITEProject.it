@@ -28,6 +28,7 @@ type BookingEvent =
   | 'payment_received'
   | 'payment_failed'
   | 'payment_expired'
+  | 'payment_reminder'
   | 'plan_change_pending'
   | 'plan_change_auto_accepted'
 
@@ -80,6 +81,7 @@ const COPY = {
       payment_received: 'Pagamento ricevuto.',
       payment_failed: 'Pagamento non riuscito.',
       payment_expired: 'Pagamento scaduto.',
+      payment_reminder: 'Bonifico ancora da ricevere.',
       plan_change_pending: 'La pianificazione del viaggio e cambiata.',
       plan_change_auto_accepted: 'Pianificazione aggiornata.',
       schedule_delayed: 'Il viaggio sta procedendo in ritardo.',
@@ -98,6 +100,7 @@ const COPY = {
       if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto il pagamento per ${voyageName}.`
       if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
       if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
+      if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Ricorda di indicare la causale esatta: senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
       if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
@@ -141,6 +144,7 @@ const COPY = {
       promoted_from_waitlist: 'Posto disponibile',
       manual_added: 'Aggiunto da admin',
       payment_pending: 'Pagamento in sospeso',
+      payment_reminder: 'Bonifico da completare',
       payment_received: 'Pagamento ricevuto',
       payment_failed: 'Pagamento non riuscito',
       payment_expired: 'Pagamento scaduto',
@@ -163,6 +167,7 @@ const COPY = {
       promoted_from_waitlist: 'A berth became available.',
       manual_added: 'You were added to a booking.',
       payment_pending: 'Payment pending.',
+      payment_reminder: 'Bank transfer still outstanding.',
       payment_received: 'Payment received.',
       payment_failed: 'Payment failed.',
       payment_expired: 'Payment expired.',
@@ -184,6 +189,7 @@ const COPY = {
       if (eventType === 'payment_received') return `${prefix}we received your payment for ${voyageName}.`
       if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
       if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
+      if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. Remember to use the exact reference: without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`
       if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
       return `${prefix}we received your berth request for ${voyageName}.`
@@ -227,6 +233,7 @@ const COPY = {
       promoted_from_waitlist: 'Berth available',
       manual_added: 'Added by admin',
       payment_pending: 'Payment pending',
+      payment_reminder: 'Bank transfer to complete',
       payment_received: 'Payment received',
       payment_failed: 'Payment failed',
       payment_expired: 'Payment expired',
@@ -252,6 +259,7 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'payment_received',
     'payment_failed',
     'payment_expired',
+    'payment_reminder',
     'plan_change_pending',
     'plan_change_auto_accepted',
   ]

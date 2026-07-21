@@ -807,7 +807,7 @@ const AdminVoyageBookings = () => {
   };
 
   /** Sends the proposal once the admin has picked a reason in the dialog. */
-  const submitPlanChangeProposal = async ({ reason, note }: PlanChangeProposal) => {
+  const submitPlanChangeProposal = async ({ reason, note, requireSettlement }: PlanChangeProposal) => {
     if (!pendingProposal) return;
     const { requestId, legIds } = pendingProposal;
     const request = requests.find((item) => item.id === requestId);
@@ -818,6 +818,7 @@ const AdminVoyageBookings = () => {
       _proposed_leg_ids: legIds,
       _admin_note: note,
       _change_reason: reason,
+      _require_settlement: requireSettlement,
     });
     setSaving(false);
     if (error) {
@@ -853,7 +854,12 @@ const AdminVoyageBookings = () => {
   };
 
   /** Creates brand-new single-leg bookings/invites from the Gantt table's "+" column pill. */
-  const addPeopleToLeg = async (legId: string, profileIds: string[], inviteEmails: string[] = []) => {
+  const addPeopleToLeg = async (
+    legId: string,
+    profileIds: string[],
+    inviteEmails: string[] = [],
+    isComped = false,
+  ) => {
     const uniqueProfileIds = [...new Set(profileIds)];
     const uniqueInviteEmails = [...new Set(inviteEmails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
     if (uniqueProfileIds.length === 0 && uniqueInviteEmails.length === 0) return;
@@ -909,6 +915,7 @@ const AdminVoyageBookings = () => {
           _party_size: 1,
           _status: "admin_approved",
           _allow_over_capacity: false,
+          _is_comped: isComped,
         })
       )
     );
@@ -921,6 +928,7 @@ const AdminVoyageBookings = () => {
           _status: "admin_approved",
           _admin_notes: "Invito creato manualmente da admin.",
           _allow_over_capacity: false,
+          _is_comped: isComped,
         })
       )
     );

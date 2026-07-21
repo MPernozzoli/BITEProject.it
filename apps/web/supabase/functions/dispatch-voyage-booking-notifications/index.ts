@@ -316,6 +316,9 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'payment_pending') {
       return { title: 'Payment pending', body: `Payment is pending for ${voyageName}${legs}.` }
     }
+    if (params.eventType === 'payment_reminder') {
+      return { title: 'Bank transfer outstanding', body: `We have not received your transfer for ${voyageName}${legs} yet.` }
+    }
     if (params.eventType === 'payment_received') {
       return { title: 'Payment received', body: `Payment was received for ${voyageName}${legs}.` }
     }
@@ -357,6 +360,9 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'payment_pending') {
     return { title: 'Pagamento in attesa', body: `Pagamento in attesa per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'payment_reminder') {
+    return { title: 'Bonifico da completare', body: `Non abbiamo ancora ricevuto il bonifico per ${voyageName}${legs}.` }
   }
   if (params.eventType === 'payment_received') {
     return { title: 'Pagamento ricevuto', body: `Pagamento ricevuto per ${voyageName}${legs}.` }

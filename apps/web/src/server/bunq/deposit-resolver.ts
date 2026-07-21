@@ -14,8 +14,25 @@ import {
   type PaymentMode,
 } from "../../lib/booking-deposit.js";
 
-const ACTIVE_STATUSES = ["requested", "waitlisted", "admin_approved", "user_confirmed"];
-const PAYMENT_PENDING_DEADLINE_HOURS = 48;
+/**
+ * Statuses a booking may be in while a contribution payment is legitimately collectable.
+ * `pending_payment` heads the list on purpose: that is the state a fresh application is born
+ * in, and refusing to serve it here would make the contribution impossible to ever pay.
+ */
+const ACTIVE_STATUSES = ["pending_payment", "requested", "waitlisted", "admin_approved", "user_confirmed"];
+/** Statuses that count as an existing booking when deciding to waive the fixed minimum. */
+const PRIOR_BOOKING_STATUSES = ["requested", "waitlisted", "admin_approved", "user_confirmed"];
+export type PaymentMethod = "bunq_link" | "bank_transfer";
+
+/**
+ * How long an armed payment may stay unsettled, by method. A Bunq link is paid in the same
+ * session or not at all; a bank transfer needs a banking day. Mirrors
+ * public.voyage_booking_payment_deadline_hours — keep both in sync.
+ */
+export const PAYMENT_DEADLINE_HOURS: Record<PaymentMethod, number> = {
+  bunq_link: 1,
+  bank_transfer: 24,
+};
 
 export type ParticipantRow = {
   id: string;
@@ -58,8 +75,8 @@ type BookingNotificationEvent =
   | "admin_payment_pending"
   | "admin_payment_received";
 
-function paymentDeadlineIso(base = new Date()): string {
-  return new Date(base.getTime() + PAYMENT_PENDING_DEADLINE_HOURS * 60 * 60 * 1000).toISOString();
+function paymentDeadlineHours(paymentMethod: PaymentMethod): number {
+  return PAYMENT_DEADLINE_HOURS[paymentMethod] ?? PAYMENT_DEADLINE_HOURS.bunq_link;
 }
 
 async function hasPriorActiveVoyageBookingForPayer(
@@ -76,7 +93,7 @@ async function hasPriorActiveVoyageBookingForPayer(
     .select("id, profile_id")
     .eq("voyage_id", params.voyageId)
     .neq("id", params.currentBookingRequestId)
-    .in("status", [...ACTIVE_STATUSES]);
+    .in("status", [...PRIOR_BOOKING_STATUSES]);
   if (requestError) throw new Error(requestError.message);
 
   const requestRows = (priorRequests ?? []) as Array<{ id: string; profile_id: string | null }>;
@@ -100,6 +117,33 @@ async function hasPriorActiveVoyageBookingForPayer(
     .maybeSingle();
   if (participantError) throw new Error(participantError.message);
   return Boolean(participant);
+}
+
+/**
+ * Total already settled by one payer on a booking. Deposits are per-payer, so a guest paying
+ * their own share never sees the lead's payment counted against their own balance.
+ */
+async function paidDepositTotalEur(
+  db: SupabaseClient,
+  bookingRequestId: string,
+  payerParticipantId: string | null,
+): Promise<number> {
+  let query = db
+    .from("voyage_booking_deposits")
+    .select("amount_cents")
+    .eq("booking_request_id", bookingRequestId)
+    .eq("status", "paid");
+  query = payerParticipantId
+    ? query.eq("participant_id", payerParticipantId)
+    : query.is("participant_id", null);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  const cents = (data ?? []).reduce(
+    (acc, row) => acc + Number((row as { amount_cents?: number }).amount_cents ?? 0),
+    0,
+  );
+  return cents / 100;
 }
 
 /** Verifies the bearer token and returns the caller + a service-role db client. */
@@ -216,8 +260,26 @@ export async function resolveDepositPayer(
     fixedMinimumEur: payerAlreadyHasVoyageBooking ? 0 : undefined,
   };
   const perPersonEur = perPersonDepositEur(legs, contributionOpts);
-  const amountEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
-  if (amountEur <= 0) throw new DepositHttpError(409, { error: "zero_deposit" });
+  const dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
+
+  // Charge only what is still outstanding. This is what makes an accepted route change with
+  // settlement collect the *difference* rather than the whole contribution a second time: the
+  // amount above is recomputed from the current legs, so subtracting what this payer already
+  // settled leaves exactly the delta. It also makes retries idempotent in value.
+  const alreadyPaidEur = await paidDepositTotalEur(db, bookingRequestId, payerParticipantId);
+  const amountEur = Math.round((dueEur - alreadyPaidEur + Number.EPSILON) * 100) / 100;
+
+  // Nothing left to collect: either fully settled, or the new route costs less than what was
+  // already paid. The overpayment is not auto-refunded here — the money has already left the
+  // payer's account, so it goes through the admin refund flow instead.
+  if (amountEur <= 0) {
+    throw new DepositHttpError(409, {
+      error: alreadyPaidEur > 0 ? "already_settled" : "zero_deposit",
+      dueEur,
+      alreadyPaidEur,
+      overpaidEur: alreadyPaidEur > dueEur ? Math.round((alreadyPaidEur - dueEur) * 100) / 100 : 0,
+    });
+  }
   if (amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR) {
     throw new DepositHttpError(409, {
       error: "bunq_amount_exceeds_single_transaction_limit",
@@ -245,24 +307,40 @@ export async function resolveDepositPayer(
  * Starts the 48h payment window when a new pending payment is created. Existing deadlines are
  * kept as-is so polling or retrying the same payment cannot extend the booking hold forever.
  */
-export async function armBookingPaymentDeadline(db: SupabaseClient, bookingRequestId: string): Promise<string | null> {
-  const now = new Date().toISOString();
-  const nextExpiresAt = paymentDeadlineIso();
-  const { error } = await db
-    .from("voyage_booking_requests")
-    .update({ expires_at: nextExpiresAt, updated_at: now })
-    .eq("id", bookingRequestId)
-    .in("status", ACTIVE_STATUSES)
-    .is("expires_at", null);
-  if (error) throw new Error(error.message);
+export async function armBookingPaymentDeadline(
+  db: SupabaseClient,
+  bookingRequestId: string,
+  paymentMethod: PaymentMethod = "bunq_link",
+): Promise<string | null> {
+  const now = new Date();
+  const target = new Date(now.getTime() + paymentDeadlineHours(paymentMethod) * 60 * 60 * 1000);
 
-  const { data, error: readError } = await db
+  const { data: current, error: readError } = await db
     .from("voyage_booking_requests")
-    .select("expires_at")
+    .select("expires_at, status")
     .eq("id", bookingRequestId)
     .maybeSingle();
   if (readError) throw new Error(readError.message);
-  return (data as { expires_at?: string | null } | null)?.expires_at ?? null;
+  const row = current as { expires_at?: string | null; status?: string } | null;
+  if (!row || !ACTIVE_STATUSES.includes(row.status ?? "")) return row?.expires_at ?? null;
+
+  // Only ever move the deadline forward. A fresh application already carries the short
+  // pending_payment grace window, and choosing bank transfer must widen it to a banking day —
+  // but re-polling or retrying the same payment must never keep pushing it out, so the caller
+  // is expected to arm once per newly created deposit.
+  const currentExpiresAt = row.expires_at ? new Date(row.expires_at) : null;
+  if (currentExpiresAt && currentExpiresAt.getTime() >= target.getTime()) {
+    return row.expires_at ?? null;
+  }
+
+  const nextExpiresAt = target.toISOString();
+  const { error } = await db
+    .from("voyage_booking_requests")
+    .update({ expires_at: nextExpiresAt, updated_at: now.toISOString() })
+    .eq("id", bookingRequestId)
+    .in("status", ACTIVE_STATUSES);
+  if (error) throw new Error(error.message);
+  return nextExpiresAt;
 }
 
 /**
@@ -285,6 +363,26 @@ export async function clearBookingPaymentDeadlineIfSettled(
     .from("voyage_booking_requests")
     .update({ expires_at: null, updated_at: new Date().toISOString() })
     .eq("id", bookingRequestId);
+  if (error) throw new Error(error.message);
+
+  // Single choke point for "the money landed": every path that marks a deposit paid (both
+  // webhook matchers and the status poller) ends up here, so this is where an application
+  // stops being 'pending_payment' and finally becomes a candidature the admins can see.
+  await settleBookingPayment(db, bookingRequestId);
+}
+
+/**
+ * Promotes a fully-paid application out of 'pending_payment' and fires the "new candidature"
+ * notifications. A no-op for bookings already past that state, so it is safe to call on every
+ * settlement — including the delta payment of an accepted route change.
+ */
+export async function settleBookingPayment(
+  db: SupabaseClient,
+  bookingRequestId: string,
+): Promise<void> {
+  const { error } = await db.rpc("settle_voyage_booking_payment", {
+    _booking_request_id: bookingRequestId,
+  });
   if (error) throw new Error(error.message);
 }
 

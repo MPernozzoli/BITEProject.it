@@ -97,7 +97,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       reference,
     });
     if (insertError) throw new Error(insertError.message);
-    const expiresAt = await armBookingPaymentDeadline(db, bookingRequestId);
+    const expiresAt = await armBookingPaymentDeadline(db, bookingRequestId, "bank_transfer");
     try {
       await enqueuePaymentPendingNotifications(resolved, {
         paymentMethod: "bank_transfer",

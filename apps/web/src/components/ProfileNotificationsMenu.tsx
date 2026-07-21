@@ -16,12 +16,25 @@ type PendingRefundNotif = {
   voyage_name_it: string | null;
   voyage_name_en: string | null;
   amount_cents: number | null;
+  /** Details already given: the payout is being processed, nothing is asked of the user. */
+  payout_queued: boolean | null;
 };
 
 const formatEur = (cents: number | null | undefined) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(
     Math.max(0, Number(cents ?? 0) || 0) / 100,
   );
+
+type PendingPaymentNotif = {
+  booking_request_id: string;
+  voyage_name: string | null;
+  voyage_name_it: string | null;
+  voyage_name_en: string | null;
+  booking_status: string;
+  payment_method: "bunq_link" | "bank_transfer" | null;
+  amount_cents: number | null;
+  expires_at: string | null;
+};
 
 type NotificationRow = {
   id: string;
@@ -99,6 +112,7 @@ const ProfileNotificationsMenu = ({
 }: ProfileNotificationsMenuProps) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [pendingRefunds, setPendingRefunds] = useState<PendingRefundNotif[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<PendingPaymentNotif[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadNotifications = useCallback(async () => {
@@ -112,6 +126,16 @@ const ProfileNotificationsMenu = ({
         return;
       }
       setPendingRefunds((data as PendingRefundNotif[]) ?? []);
+    });
+
+    // Same shape of derived notification as the refunds above: an unpaid contribution is
+    // state on the booking, and it must stay visible until it is settled or auto-cancelled.
+    void rpcSupabase.rpc("list_my_pending_payments").then(({ data, error }) => {
+      if (error) {
+        console.error("Pending payments load error:", error.message);
+        return;
+      }
+      setPendingPayments((data as PendingPaymentNotif[]) ?? []);
     });
 
     const { data, error } = await supabase
@@ -200,9 +224,36 @@ const ProfileNotificationsMenu = ({
   }, [loadNotifications, sessionUserId]);
 
   const unreadCount = useMemo(
-    () => notifications.length + pendingRefunds.length,
-    [notifications, pendingRefunds],
+    () => notifications.length + pendingRefunds.length + pendingPayments.length,
+    [notifications, pendingRefunds, pendingPayments],
   );
+
+  const paymentVoyageLabel = (row: PendingPaymentNotif) =>
+    (lang === "en"
+      ? row.voyage_name_en || row.voyage_name || row.voyage_name_it
+      : row.voyage_name_it || row.voyage_name || row.voyage_name_en) ||
+    (lang === "en" ? "your voyage" : "il tuo viaggio");
+
+  /** Says what actually happens if they ignore it, not just that something is pending. */
+  const pendingPaymentHint = (row: PendingPaymentNotif) => {
+    if (!row.expires_at) {
+      return lang === "en" ? "complete it to send your application" : "completalo per inviare la candidatura";
+    }
+    const remainingMs = new Date(row.expires_at).getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return lang === "en" ? "the deadline has passed" : "la scadenza e passata";
+    }
+    const hours = Math.floor(remainingMs / 3_600_000);
+    const left =
+      hours >= 1
+        ? lang === "en" ? `${hours}h left` : `mancano ${hours}h`
+        : lang === "en"
+          ? `${Math.max(1, Math.round(remainingMs / 60_000))} min left`
+          : `mancano ${Math.max(1, Math.round(remainingMs / 60_000))} min`;
+    return lang === "en"
+      ? `${left}, then it is cancelled automatically`
+      : `${left}, poi viene annullata in automatico`;
+  };
 
   const refundVoyageLabel = (row: PendingRefundNotif) =>
     (lang === "en"
@@ -313,12 +364,38 @@ const ProfileNotificationsMenu = ({
         </div>
       </div>
 
-      {loading && notifications.length === 0 && pendingRefunds.length === 0 ? (
+      {loading && notifications.length === 0 && pendingRefunds.length === 0 && pendingPayments.length === 0 ? (
         <p className="px-3 py-4 text-sm text-muted-foreground">{loadingLabel}</p>
-      ) : notifications.length === 0 && pendingRefunds.length === 0 ? (
+      ) : notifications.length === 0 && pendingRefunds.length === 0 && pendingPayments.length === 0 ? (
         <p className="px-3 py-4 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
         <div className="max-h-[24rem] space-y-1 overflow-y-auto px-1 pb-1">
+          {pendingPayments.map((payment) => (
+            <div
+              key={`payment-${payment.booking_request_id}`}
+              className="rounded-[1.25rem] border border-orange-500/30 bg-orange-500/5 px-3 py-3 transition-colors"
+            >
+              <Link
+                to="/bookings"
+                onClick={() => onNavigate?.()}
+                className="flex gap-3 rounded-xl outline-none transition-colors hover:text-accent focus:text-accent"
+              >
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-white/80 text-orange-600">
+                  <Wallet size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium leading-snug text-foreground">
+                    {lang === "en"
+                      ? `Contribution to pay${payment.amount_cents ? ` — ${formatEur(payment.amount_cents)}` : ""}`
+                      : `Contributo da pagare${payment.amount_cents ? ` — ${formatEur(payment.amount_cents)}` : ""}`}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {paymentVoyageLabel(payment)} — {pendingPaymentHint(payment)}
+                  </p>
+                </div>
+              </Link>
+            </div>
+          ))}
           {pendingRefunds.map((refund) => (
             <div
               key={`refund-${refund.deposit_id}`}
@@ -334,14 +411,22 @@ const ProfileNotificationsMenu = ({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-snug text-foreground">
-                    {lang === "en"
-                      ? `You have a refund of ${formatEur(refund.amount_cents)} to collect`
-                      : `Hai un rimborso di ${formatEur(refund.amount_cents)} da ricevere`}
+                    {refund.payout_queued
+                      ? lang === "en"
+                        ? `Your refund of ${formatEur(refund.amount_cents)} is being processed`
+                        : `Il tuo rimborso di ${formatEur(refund.amount_cents)} è in lavorazione`
+                      : lang === "en"
+                        ? `You have a refund of ${formatEur(refund.amount_cents)} to collect`
+                        : `Hai un rimborso di ${formatEur(refund.amount_cents)} da ricevere`}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {lang === "en"
-                      ? `${refundVoyageLabel(refund)} — enter your IBAN to receive it`
-                      : `${refundVoyageLabel(refund)} — inserisci l'IBAN per riceverlo`}
+                    {refund.payout_queued
+                      ? lang === "en"
+                        ? `${refundVoyageLabel(refund)} — you will receive it shortly`
+                        : `${refundVoyageLabel(refund)} — riceverai l'accredito a breve`
+                      : lang === "en"
+                        ? `${refundVoyageLabel(refund)} — enter your IBAN to receive it`
+                        : `${refundVoyageLabel(refund)} — inserisci l'IBAN per riceverlo`}
                   </p>
                 </div>
               </Link>

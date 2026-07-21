@@ -2,6 +2,8 @@ import type { Language } from "./language.js";
 import { getDangerReasonLabels } from "./danger-reasons.js";
 
 export type VoyageBookingStatus =
+  /** Application submitted but the contribution has not been paid: invisible to admin review. */
+  | "pending_payment"
   | "requested"
   | "waitlisted"
   | "admin_approved"
@@ -173,6 +175,7 @@ export interface BookingTaskCompletion {
 }
 
 const statusClassMap: Record<VoyageBookingStatus, string> = {
+  pending_payment: "border-orange-300/70 bg-orange-100/75 text-orange-800",
   requested: "border-amber-300/70 bg-amber-100/70 text-amber-800",
   waitlisted: "border-sky-300/70 bg-sky-100/75 text-sky-800",
   admin_approved: "border-yellow-300/70 bg-yellow-100/75 text-yellow-800",
@@ -190,6 +193,7 @@ export const capacityBlockingStatuses = new Set<VoyageBookingStatus>([
 export function getBookingStatusLabel(status: VoyageBookingStatus, lang: Language | "it" | "en" = "it") {
   const italian = lang === "it";
   const labels: Record<VoyageBookingStatus, string> = {
+    pending_payment: italian ? "Pagamento da completare" : "Payment pending",
     requested: italian ? "Richiesta inviata" : "Requested",
     waitlisted: italian ? "Waiting list" : "Waitlisted",
     admin_approved: italian ? "Da confermare" : "Ready to confirm",
@@ -207,6 +211,7 @@ export function getBookingStatusClass(status: VoyageBookingStatus) {
 
 export function getBookingStatusShortLabel(status: VoyageBookingStatus) {
   const labels: Record<VoyageBookingStatus, string> = {
+    pending_payment: "PAY",
     requested: "REQ",
     waitlisted: "WAIT",
     admin_approved: "OK?",

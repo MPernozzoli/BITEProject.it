@@ -654,15 +654,15 @@ const UserBookings = () => {
       return;
     }
     const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
-    toast.success(
+    toast.info(
       lang === "it"
-        ? "Candidatura registrata: verra esaminata al piu presto."
-        : "Application registered: it will be reviewed as soon as possible."
+        ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
+        : "One last step: pay the contribution to submit your application."
     );
 
     const bookingRequestId = result?.booking_request_id;
 
-    // Multi-person applications still need participant details, but they do not hold seats yet.
+    // Multi-person applications still need participant details, and payment is chosen there.
     if (bookingRequestId && parsedPartySize > 1) {
       setSaving(false);
       setConfirmOpen(false);
@@ -680,6 +680,12 @@ const UserBookings = () => {
       console.error("Failed to clear booking draft", error);
     });
     setCandidateInfo(candidateInfoPrefill);
+
+    // Solo applications must complete the contribution payment now: the request stays
+    // unreviewable until it's paid, and a refund is issued automatically if later rejected.
+    if (bookingRequestId) {
+      setPaymentChoice({ bookingRequestId });
+    }
     await loadData();
   };
 
@@ -1097,6 +1103,42 @@ const UserBookings = () => {
                         onOpenOwnRequest={(request) => setDetailsRequestId(request.id)}
                       />
                     )}
+                    {ownRequestForSelectedVoyage?.status === "pending_payment" && (
+                      <div className="rounded-[22px] border border-orange-300/60 bg-orange-50/70 p-4 text-sm text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+                        <p className="font-medium">
+                          {lang === "it"
+                            ? "Candidatura non ancora inviata"
+                            : "Application not submitted yet"}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed opacity-85">
+                          {lang === "it"
+                            ? "Manca solo il pagamento del contributo: finché non arriva, la candidatura non viene inviata all'organizzatore."
+                            : "Only the contribution payment is missing: until it arrives the application is not sent to the organiser."}
+                        </p>
+                        <p className="mt-2 rounded-xl border border-orange-400/40 bg-white/50 px-3 py-2 text-xs leading-relaxed dark:bg-white/5">
+                          {lang === "it"
+                            ? "Se non completi il pagamento in tempo la richiesta viene annullata in automatico: 1 ora per carta e link di pagamento, 24 ore per bonifico."
+                            : "If you don't complete the payment in time the request is cancelled automatically: 1 hour for card and payment link, 24 hours for bank transfer."}
+                          {ownRequestForSelectedVoyage.expires_at && (
+                            <span className="mt-1 block font-semibold">
+                              {lang === "it" ? "Scade il " : "Expires on "}
+                              {formatBookingDate(ownRequestForSelectedVoyage.expires_at, locale)}
+                            </span>
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPaymentChoice({ bookingRequestId: ownRequestForSelectedVoyage.id })
+                          }
+                          className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                        >
+                          <Wallet size={14} />
+                          {lang === "it" ? "Completa il pagamento" : "Complete the payment"}
+                        </button>
+                      </div>
+                    )}
+
                     {selectedFullLegIds.length > 0 && !ownRequestForSelectedVoyage && (
                       <div className="rounded-[22px] border border-amber-300/50 bg-amber-50/60 p-4 text-sm text-amber-950 dark:bg-amber-400/10 dark:text-amber-100/90">
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1211,7 +1253,8 @@ const UserBookings = () => {
               legs={selectedLegIds.map((id) => legsById[id]).filter(Boolean)}
               partySize={Math.max(1, Number.parseInt(partySize, 10) || 1)}
               message={message}
-              requiresPayment={false}
+              requiresPayment
+              showPaymentMethodChoice={false}
               mode="application"
               depositPerPersonEur={perPersonDepositEur(
                 selectedLegIds.map((id) => legsById[id]).filter(Boolean),

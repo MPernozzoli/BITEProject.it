@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Check, Clock, Loader2, ShieldCheck, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,13 @@ type PendingRefund = {
   voyage_name_en: string | null;
   amount_cents: number | null;
   reference: string | null;
+  /** Bank details already accepted; the payout itself is still being processed. */
+  payout_queued: boolean | null;
 };
 
 type FormState = { holder: string; iban: string; bic: string };
-type RowState = { submitting: boolean; done: { amountEur: number; reference: string } | null; error: string | null };
+type DoneState = { amountEur: number; reference: string; queued: boolean };
+type RowState = { submitting: boolean; done: DoneState | null; error: string | null };
 
 const ERROR_LABELS: Record<string, string> = {
   invalid_iban: "L'IBAN inserito non è valido. Controlla e riprova.",
@@ -137,7 +140,11 @@ export default function BookingRefund() {
       ...current,
       [row.deposit_id]: {
         submitting: false,
-        done: { amountEur: Number(payload.amountEur ?? 0), reference: String(payload.reference ?? "") },
+        done: {
+          amountEur: Number(payload.amountEur ?? 0),
+          reference: String(payload.reference ?? ""),
+          queued: payload.queued === true,
+        },
         error: null,
       },
     }));
@@ -194,17 +201,33 @@ export default function BookingRefund() {
                   </div>
                 </div>
 
-                {state.done ? (
-                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-8 text-center">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/20">
-                      <Check className="text-emerald-500" size={22} />
+                {state.done || row.payout_queued ? (
+                  // Either we just paid it, or the payout is still being processed on our
+                  // side. The traveller never sees why — only that it is handled.
+                  state.done && !state.done.queued ? (
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-8 text-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/20">
+                        <Check className="text-emerald-500" size={22} />
+                      </div>
+                      <p className="font-semibold">Rimborso avviato</p>
+                      <p className="text-sm text-muted-foreground">
+                        Abbiamo avviato il bonifico di {eur(Math.round(state.done.amountEur * 100))} verso l'IBAN
+                        indicato. Riceverai l'accredito a breve. Riferimento:{" "}
+                        <span className="font-mono">{state.done.reference}</span>.
+                      </p>
                     </div>
-                    <p className="font-semibold">Rimborso avviato</p>
-                    <p className="text-sm text-muted-foreground">
-                      Abbiamo avviato il bonifico di {eur(Math.round(state.done.amountEur * 100))} verso l'IBAN indicato.
-                      Riceverai l'accredito a breve. Riferimento: <span className="font-mono">{state.done.reference}</span>.
-                    </p>
-                  </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-8 text-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-500/20">
+                        <Clock className="text-sky-500" size={22} />
+                      </div>
+                      <p className="font-semibold">Richiesta presa in carico</p>
+                      <p className="text-sm text-muted-foreground">
+                        Abbiamo registrato le tue coordinate bancarie. Il rimborso è in lavorazione e riceverai
+                        l'accredito a breve. Non serve fare altro.
+                      </p>
+                    </div>
+                  )
                 ) : (
                   <form
                     onSubmit={(event) => {

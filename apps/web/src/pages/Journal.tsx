@@ -786,10 +786,10 @@ const Journal = () => {
         throw error;
       }
       const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
-      toast.success(
-        result?.booking_status === "waitlisted"
-          ? (lang === "it" ? "Richiesta inviata in lista d'attesa." : "Request sent to the waiting list.")
-          : (lang === "it" ? "Richiesta di partecipazione inviata." : "Request to join sent.")
+      toast.info(
+        lang === "it"
+          ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
+          : "One last step: pay the contribution to submit your application."
       );
 
       const bookingRequestId = result?.booking_request_id;

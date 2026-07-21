@@ -7,7 +7,8 @@ alter table public.voyage_booking_deposits
   add column if not exists refund_pending boolean not null default false,
   add column if not exists refund_pending_amount_cents integer not null default 0
     check (refund_pending_amount_cents >= 0),
-  add column if not exists refund_pending_reason text;
+  add column if not exists refund_pending_reason text,
+  add column if not exists refund_payout_queued boolean not null default false;
 
 create index if not exists voyage_booking_deposits_refund_pending_idx
   on public.voyage_booking_deposits(refund_pending)
@@ -15,6 +16,13 @@ create index if not exists voyage_booking_deposits_refund_pending_idx
 
 comment on column public.voyage_booking_deposits.refund_pending is
   'A refund is owed but could not be paid automatically (no IBAN / payer is not a Bunq user). Settle manually once the traveller provides an IBAN.';
+
+-- Splits the two very different "still owed" states:
+--   refund_pending and not refund_payout_queued -> we are waiting on the traveller's IBAN
+--   refund_pending and refund_payout_queued     -> we have the IBAN, the payout itself failed
+--                                                  (e.g. insufficient balance) and needs a retry
+comment on column public.voyage_booking_deposits.refund_payout_queued is
+  'Bank details are on file and accepted; the outgoing payment failed for a reason the traveller cannot fix (insufficient balance, transient Bunq error). An admin retries it.';
 
 -- Admin listing of refunds still owed, joined with the traveller + voyage so the
 -- operator knows who to expect an IBAN from and how much is due.
@@ -33,6 +41,9 @@ returns table (
   reason text,
   environment text,
   reference text,
+  payout_queued boolean,
+  account_holder text,
+  account_iban text,
   updated_at timestamptz
 )
 language plpgsql
@@ -59,6 +70,9 @@ begin
     d.refund_pending_reason,
     d.environment,
     d.reference,
+    d.refund_payout_queued,
+    nullif(d.payer_alias ->> 'name', ''),
+    nullif(d.payer_alias ->> 'iban', ''),
     d.updated_at
   from public.voyage_booking_deposits d
   join public.voyage_booking_requests req on req.id = d.booking_request_id
@@ -106,7 +120,8 @@ returns table (
   voyage_name_it text,
   voyage_name_en text,
   amount_cents integer,
-  reference text
+  reference text,
+  payout_queued boolean
 )
 language plpgsql
 security definer
@@ -126,7 +141,8 @@ begin
     v.name_it,
     v.name_en,
     d.refund_pending_amount_cents,
-    d.reference
+    d.reference,
+    d.refund_payout_queued
   from public.voyage_booking_deposits d
   join public.voyage_booking_requests req on req.id = d.booking_request_id
   left join public.voyages v on v.id = req.voyage_id

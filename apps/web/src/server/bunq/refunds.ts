@@ -70,6 +70,21 @@ function isUnroutableRefundError(error: unknown): boolean {
   return /no monetary account found for alias/i.test(error.message);
 }
 
+/**
+ * Splits payout failures into the only two things that matter to the traveller:
+ * "your bank details are wrong, fix them" versus "our side could not pay right now".
+ * Anything we do not positively recognise as a bad destination is treated as ours —
+ * we never dump a technical Bunq message on the traveller, and nothing is lost because
+ * the deposit stays queued for an admin retry.
+ */
+function isBadDestinationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message === "bunq_counterparty_alias_not_refundable") return true;
+  return /no monetary account found for alias|invalid iban|iban is invalid|invalid counterparty|account does not exist/i.test(
+    error.message,
+  );
+}
+
 async function markDepositRefundPending(
   db: SupabaseClient,
   deposit: DepositRefundRow,
@@ -81,6 +96,8 @@ async function markDepositRefundPending(
     .from("voyage_booking_deposits")
     .update({
       refund_pending: true,
+      // "Needs IBAN", not "needs a retry" — the traveller has not given us details yet.
+      refund_payout_queued: false,
       refund_pending_amount_cents: pendingCents,
       refund_pending_reason: reason,
       refund_policy: trigger,
@@ -380,6 +397,8 @@ type ManualRefundInput = {
 export type ManualRefundResult = {
   amountEur: number;
   reference: string;
+  /** True when the payout could not run yet and is waiting for an admin retry. */
+  queued: boolean;
 };
 
 type PendingDepositRow = {
@@ -446,7 +465,7 @@ export async function submitManualRefund(
   // Claim the pending refund so a concurrent submit cannot also reach Bunq.
   const { data: claimed, error: claimError } = await db
     .from("voyage_booking_deposits")
-    .update({ refund_pending: false, updated_at: new Date().toISOString() })
+    .update({ refund_pending: false, refund_payout_queued: false, updated_at: new Date().toISOString() })
     .eq("id", deposit.id)
     .eq("refund_pending", true)
     .select("id")
@@ -465,13 +484,33 @@ export async function submitManualRefund(
       description: `Rimborso BITE ${reference}`,
     });
   } catch (error) {
-    // Re-arm the pending flag so the traveller can correct the details and retry.
+    const badDestination = isBadDestinationError(error);
     await db
       .from("voyage_booking_deposits")
-      .update({ refund_pending: true, updated_at: new Date().toISOString() })
+      .update({
+        refund_pending: true,
+        // Bad details go back to "needs IBAN" so the traveller can correct them; our own
+        // failures keep the details and queue the payout for an admin retry.
+        refund_payout_queued: !badDestination,
+        ...(badDestination
+          ? {}
+          : {
+              payer_alias: { ...payerAlias, bic: bic || undefined },
+              refund_pending_reason: "payout_failed",
+            }),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", deposit.id);
-    const message = error instanceof Error ? error.message : "bunq_refund_failed";
-    throw Object.assign(new Error(message), { status: 422, refundRejected: true });
+
+    if (badDestination) {
+      const message = error instanceof Error ? error.message : "bunq_refund_failed";
+      throw Object.assign(new Error(message), { status: 422, refundRejected: true });
+    }
+
+    // Not the traveller's problem (insufficient balance, transient Bunq error): accept the
+    // request, stay quiet about the cause, and let an admin retry it.
+    console.error("[bookings/refund] payout queued after failure", error);
+    return { amountEur: centsToEur(refundCents), reference, queued: true };
   }
 
   const nextRefundedCents = alreadyRefundedCents + refundCents;
@@ -485,6 +524,7 @@ export async function submitManualRefund(
       refund_payment_id: payment.id,
       payer_alias: { ...payerAlias, bic: bic || undefined },
       refund_pending: false,
+      refund_payout_queued: false,
       refund_pending_amount_cents: 0,
       refund_pending_reason: null,
       updated_at: new Date().toISOString(),
@@ -492,7 +532,96 @@ export async function submitManualRefund(
     .eq("id", deposit.id);
   if (finalizeError) throw new Error(finalizeError.message);
 
-  return { amountEur: centsToEur(refundCents), reference };
+  return { amountEur: centsToEur(refundCents), reference, queued: false };
+}
+
+/**
+ * Admin retry for a queued payout: reuses the bank details the traveller already gave us,
+ * so nothing is asked of them a second time. Same claim-then-pay guard as the self-service
+ * path, and a failure simply re-queues the deposit for another attempt.
+ */
+export async function retryQueuedRefund(
+  db: SupabaseClient,
+  user: User,
+  depositId: string,
+): Promise<ManualRefundResult> {
+  if (!(await isAdmin(db, user))) {
+    throw Object.assign(new Error("admin_required"), { status: 403 });
+  }
+  if (!bunqConfigured()) {
+    throw Object.assign(new Error("bunq_not_configured"), { status: 503 });
+  }
+
+  const { data: depositRow, error: depositError } = await db
+    .from("voyage_booking_deposits")
+    .select("id, booking_request_id, environment, amount_cents, refund_amount_cents, refund_pending_amount_cents, reference, payer_alias")
+    .eq("id", depositId)
+    .eq("refund_pending", true)
+    .eq("refund_payout_queued", true)
+    .maybeSingle();
+  if (depositError) throw new Error(depositError.message);
+  const deposit = depositRow as (PendingDepositRow & { payer_alias: BunqCounterpartyAlias | null }) | null;
+  if (!deposit) throw Object.assign(new Error("refund_not_found"), { status: 404 });
+  if (deposit.environment !== environment()) {
+    throw Object.assign(new Error("refund_environment_mismatch"), { status: 409 });
+  }
+
+  const payerAlias = deposit.payer_alias;
+  if (!isRefundableAlias(payerAlias)) {
+    throw Object.assign(new Error("refund_counterparty_missing"), { status: 409 });
+  }
+
+  const alreadyRefundedCents = Math.max(0, Number(deposit.refund_amount_cents ?? 0) || 0);
+  const owedCents = Math.max(0, Number(deposit.refund_pending_amount_cents ?? 0) || 0);
+  const refundCents = Math.min(owedCents, Math.max(0, deposit.amount_cents - alreadyRefundedCents));
+  if (refundCents <= 0) throw Object.assign(new Error("nothing_to_refund"), { status: 409 });
+
+  const { data: claimed, error: claimError } = await db
+    .from("voyage_booking_deposits")
+    .update({ refund_pending: false, refund_payout_queued: false, updated_at: new Date().toISOString() })
+    .eq("id", deposit.id)
+    .eq("refund_pending", true)
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error(claimError.message);
+  if (!claimed) throw Object.assign(new Error("refund_already_processing"), { status: 409 });
+
+  const reference = `REF-${deposit.booking_request_id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+  let payment: { id: number };
+  try {
+    payment = await createBunqOutgoingPayment({
+      amountEur: centsToEur(refundCents),
+      counterpartyAlias: payerAlias,
+      description: `Rimborso BITE ${reference}`,
+    });
+  } catch (error) {
+    await db
+      .from("voyage_booking_deposits")
+      .update({ refund_pending: true, refund_payout_queued: true, updated_at: new Date().toISOString() })
+      .eq("id", deposit.id);
+    const message = error instanceof Error ? error.message : "bunq_refund_failed";
+    throw Object.assign(new Error(message), { status: 422 });
+  }
+
+  const nextRefundedCents = alreadyRefundedCents + refundCents;
+  const { error: finalizeError } = await db
+    .from("voyage_booking_deposits")
+    .update({
+      status: nextRefundedCents >= deposit.amount_cents ? "refunded" : "partially_refunded",
+      refunded_at: new Date().toISOString(),
+      refund_amount_cents: nextRefundedCents,
+      refund_reference: reference,
+      refund_payment_id: payment.id,
+      refund_pending: false,
+      refund_payout_queued: false,
+      refund_pending_amount_cents: 0,
+      refund_pending_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deposit.id);
+  if (finalizeError) throw new Error(finalizeError.message);
+
+  return { amountEur: centsToEur(refundCents), reference, queued: false };
 }
 
 export async function markBookingCancelledAfterRefund(

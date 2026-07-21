@@ -205,9 +205,16 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   }, [candidates.length, onCountChange]);
 
   const setStatus = async (request: BookingRequest, status: VoyageBookingStatus) => {
-    if (status === "admin_approved" && (depositsByRequest[request.id] || []).some((deposit) => deposit.status === "pending")) {
-      toast.error("Pagamento contributo ancora in sospeso: la candidatura resta bloccata finche Bunq non conferma il pagamento.");
-      return;
+    if (status === "admin_approved") {
+      const requestDeposits = depositsByRequest[request.id] || [];
+      if (requestDeposits.some((deposit) => deposit.status === "pending")) {
+        toast.error("Pagamento contributo ancora in sospeso: la candidatura resta bloccata finche Bunq non conferma il pagamento.");
+        return;
+      }
+      if (!requestDeposits.some((deposit) => deposit.status === "paid")) {
+        toast.error("Nessun contributo risulta pagato per questa candidatura: non puoi approvarla finche il pagamento non e stato ricevuto.");
+        return;
+      }
     }
     const adminMessage = decisionMessages[request.id]?.trim() || null;
     setSavingId(request.id);

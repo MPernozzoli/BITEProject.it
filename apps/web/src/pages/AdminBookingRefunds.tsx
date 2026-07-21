@@ -24,12 +24,16 @@ type PendingRefundRow = {
   reason: string | null;
   environment: string | null;
   reference: string | null;
+  payout_queued: boolean | null;
+  account_holder: string | null;
+  account_iban: string | null;
   updated_at: string | null;
 };
 
 const REASON_LABELS: Record<string, string> = {
   no_payer_alias: "Nessun conto/IBAN registrato per il pagatore",
   no_monetary_account: "IBAN non collegato a un conto Bunq",
+  payout_failed: "Bonifico non riuscito (es. fondi insufficienti) — da rieseguire",
 };
 
 function formatEur(cents: number | null | undefined): string {
@@ -72,6 +76,45 @@ export default function AdminBookingRefunds() {
     () => rows.reduce((sum, row) => sum + (Number(row.pending_amount_cents ?? 0) || 0), 0),
     [rows],
   );
+
+  const retryPayout = async (row: PendingRefundRow) => {
+    setResolvingId(row.deposit_id);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      setResolvingId(null);
+      toast.error("Sessione scaduta: accedi di nuovo.");
+      return;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch("/api/bookings/refund-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ depositId: row.deposit_id }),
+      });
+    } catch {
+      setResolvingId(null);
+      toast.error("Rete non raggiungibile. Riprova.");
+      return;
+    }
+
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = (await response.json()) as Record<string, unknown>;
+    } catch {
+      /* ignore malformed body */
+    }
+    setResolvingId(null);
+
+    if (!response.ok || payload.ok !== true) {
+      toast.error(`Rimborso non riuscito: ${String(payload.error ?? `http_${response.status}`)}`);
+      return;
+    }
+    toast.success(`Rimborso eseguito: ${formatEur(Math.round(Number(payload.amountEur ?? 0) * 100))}.`);
+    setRows((current) => current.filter((item) => item.deposit_id !== row.deposit_id));
+  };
 
   const resolve = async (row: PendingRefundRow) => {
     if (!confirm(`Confermi di aver rimborsato manualmente ${formatEur(row.pending_amount_cents)} a ${row.traveller_name || row.traveller_email || "questo utente"}?`)) {
@@ -142,6 +185,15 @@ export default function AdminBookingRefunds() {
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{row.traveller_name || "Senza nome"}</span>
+                      <span
+                        className={
+                          row.payout_queued
+                            ? "rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-medium text-sky-600"
+                            : "rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600"
+                        }
+                      >
+                        {row.payout_queued ? "Da rieseguire" : "Attende IBAN"}
+                      </span>
                       {row.environment && row.environment !== "production" ? (
                         <span className="glass-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
                           {row.environment}
@@ -161,24 +213,47 @@ export default function AdminBookingRefunds() {
                     <p className="text-sm text-muted-foreground">
                       {voyageLabel(row)} · {REASON_LABELS[row.reason ?? ""] || row.reason || "Motivo non specificato"}
                     </p>
+                    {row.account_iban ? (
+                      <p className="text-sm text-muted-foreground">
+                        Coordinate fornite: <span className="font-medium text-foreground/80">{row.account_holder || "—"}</span>{" "}
+                        · <span className="font-mono">{row.account_iban}</span>
+                      </p>
+                    ) : null}
                     <p className="text-xs text-muted-foreground/80">
                       Causale pagamento: <span className="font-mono">{row.reference || "—"}</span> · aggiornato {formatDate(row.updated_at)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4 md:flex-col md:items-end">
                     <span className="text-lg font-semibold">{formatEur(row.pending_amount_cents)}</span>
-                    <Button
-                      size="sm"
-                      onClick={() => void resolve(row)}
-                      disabled={resolvingId === row.deposit_id}
-                    >
-                      {resolvingId === row.deposit_id ? (
-                        <Loader2 className="animate-spin" size={14} />
-                      ) : (
-                        <Check size={14} />
-                      )}
-                      <span className="ml-2">Segna rimborsato</span>
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {row.payout_queued ? (
+                        <Button
+                          size="sm"
+                          onClick={() => void retryPayout(row)}
+                          disabled={resolvingId === row.deposit_id}
+                        >
+                          {resolvingId === row.deposit_id ? (
+                            <Loader2 className="animate-spin" size={14} />
+                          ) : (
+                            <RefreshCw size={14} />
+                          )}
+                          <span className="ml-2">Riesegui rimborso</span>
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant={row.payout_queued ? "outline" : "default"}
+                        onClick={() => void resolve(row)}
+                        disabled={resolvingId === row.deposit_id}
+                      >
+                        {resolvingId === row.deposit_id ? (
+                          <Loader2 className="animate-spin" size={14} />
+                        ) : (
+                          <Check size={14} />
+                        )}
+                        <span className="ml-2">Segna rimborsato</span>
+                      </Button>
+                    </div>
                   </div>
                 </li>
               ))}

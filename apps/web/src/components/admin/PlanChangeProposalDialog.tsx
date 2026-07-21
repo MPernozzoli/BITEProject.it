@@ -29,6 +29,8 @@ const DEFAULT_NOTE =
 export type PlanChangeProposal = {
   reason: PlanChangeReason;
   note: string | null;
+  /** When true, accepting the proposal leaves the difference in contribution to settle. */
+  requireSettlement: boolean;
 };
 
 interface PlanChangeProposalDialogProps {
@@ -52,11 +54,13 @@ const PlanChangeProposalDialog = ({
 }: PlanChangeProposalDialogProps) => {
   const [reason, setReason] = useState<PlanChangeReason | "">("");
   const [note, setNote] = useState(DEFAULT_NOTE);
+  const [requireSettlement, setRequireSettlement] = useState(false);
 
   useEffect(() => {
     if (open) {
       setReason("");
       setNote(DEFAULT_NOTE);
+      setRequireSettlement(false);
     }
   }, [open]);
 
@@ -99,6 +103,46 @@ const PlanChangeProposalDialog = ({
           </div>
 
           <div className="space-y-2">
+            <Label>Conguaglio del contributo</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setRequireSettlement(false)}
+                aria-pressed={!requireSettlement}
+                className={`rounded-lg border p-3 text-left text-xs leading-relaxed transition-colors ${
+                  !requireSettlement
+                    ? "border-accent bg-accent/10 text-foreground"
+                    : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50"
+                }`}
+              >
+                <span className="block text-sm font-semibold">Senza conguaglio</span>
+                Accettando, le tratte cambiano e non viene chiesto nessun altro pagamento.
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequireSettlement(true)}
+                aria-pressed={requireSettlement}
+                className={`rounded-lg border p-3 text-left text-xs leading-relaxed transition-colors ${
+                  requireSettlement
+                    ? "border-accent bg-accent/10 text-foreground"
+                    : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50"
+                }`}
+              >
+                <span className="block text-sm font-semibold">Con conguaglio</span>
+                Accettando, resta da versare la differenza fra il nuovo contributo e quanto già pagato.
+              </button>
+            </div>
+            {requireSettlement && (
+              <p className="text-xs text-muted-foreground">
+                Se la candidatura non è ancora approvata, torna in attesa di pagamento finché la
+                differenza non arriva. Se il posto è già confermato non viene revocato: la differenza
+                resta come importo dovuto. Se la nuova tratta costa meno, l'eccedenza va rimborsata
+                manualmente dalla sezione rimborsi.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="plan-change-note">Messaggio per il viaggiatore</Label>
             <Textarea
               id="plan-change-note"
@@ -117,7 +161,7 @@ const PlanChangeProposalDialog = ({
             disabled={!reason}
             onClick={() => {
               if (!reason) return;
-              onConfirm({ reason, note: note.trim() || null });
+              onConfirm({ reason, note: note.trim() || null, requireSettlement });
             }}
           >
             Invia proposta
