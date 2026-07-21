@@ -21,8 +21,34 @@ export type BunqCounterpartyAlias = {
   name?: string;
   type?: string;
   value?: string;
-  label_user?: { display_name?: string | null } | null;
+  label_user?: { display_name?: string | null; public_nick_name?: string | null } | null;
 };
+
+const EMAIL_POINTER_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * A Bunq-to-Bunq payer often surfaces only as an email in `label_user` (no IBAN, no
+ * top-level pointer). Recover a routable EMAIL pointer from those fields so we can still
+ * refund them — EMAIL is the same pointer type used when creating the request.
+ */
+export function aliasEmailPointer(alias: BunqCounterpartyAlias | null | undefined): string | null {
+  if (!alias) return null;
+  const candidates = [
+    alias.type?.toUpperCase() === "EMAIL" ? alias.value : null,
+    alias.label_user?.public_nick_name,
+    alias.label_user?.display_name,
+  ];
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim();
+    if (trimmed && EMAIL_POINTER_RE.test(trimmed)) return trimmed;
+  }
+  return null;
+}
+
+/** A Bunq alias can receive a refund only if it carries an IBAN, a pointer, or a payer email. */
+export function isRefundableAlias(alias: BunqCounterpartyAlias | null | undefined): alias is BunqCounterpartyAlias {
+  return Boolean(alias && (alias.iban || (alias.type && alias.value) || aliasEmailPointer(alias)));
+}
 
 export type CreatePaymentRequestInput = {
   amountEur: number;
@@ -212,6 +238,10 @@ function normalizeCounterpartyAlias(alias: BunqCounterpartyAlias): Record<string
   }
   if (alias.type && alias.value) {
     return { type: alias.type, value: alias.value, name: displayName };
+  }
+  const email = aliasEmailPointer(alias);
+  if (email) {
+    return { type: "EMAIL", value: email, name: displayName };
   }
   throw new Error("bunq_counterparty_alias_not_refundable");
 }

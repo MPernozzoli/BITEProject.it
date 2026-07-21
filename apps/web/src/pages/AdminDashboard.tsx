@@ -360,10 +360,12 @@ const AdminDashboard = () => {
                                 to={item.to}
                                 className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
                               >
-                                <span className="glass-chip relative inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
-                                  <Icon size={16} />
+                                <span className="relative shrink-0">
+                                  <span className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground group-hover:text-accent">
+                                    <Icon size={16} />
+                                  </span>
                                   {item.badge > 0 && (
-                                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
+                                    <span className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
                                       {item.badge}
                                     </span>
                                   )}

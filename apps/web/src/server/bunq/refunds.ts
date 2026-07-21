@@ -6,6 +6,7 @@ import {
   findIncomingPaymentDetailsByReference,
   getBunqPaymentRequest,
   isPaidStatus,
+  isRefundableAlias,
   type BunqCounterpartyAlias,
 } from "./payment-requests.js";
 
@@ -147,26 +148,32 @@ export async function refundPolicyPercent(
 }
 
 async function resolvePayerAlias(db: SupabaseClient, deposit: DepositRefundRow): Promise<BunqCounterpartyAlias | null> {
-  if (deposit.payer_alias) return deposit.payer_alias;
+  // A stored alias is only trustworthy if it can actually receive a payment.
+  if (isRefundableAlias(deposit.payer_alias)) return deposit.payer_alias;
+  if (!bunqConfigured()) return null;
 
-  if (deposit.payment_method === "bunq_link" && deposit.bunq_request_id && bunqConfigured()) {
+  let alias: BunqCounterpartyAlias | null = null;
+
+  // For bunq_link the request-inquiry's counterparty alias is the address the request was
+  // *sent to* and frequently lacks the payer's IBAN, so only use it when it is refundable.
+  if (deposit.payment_method === "bunq_link" && deposit.bunq_request_id) {
     const request = await getBunqPaymentRequest(deposit.bunq_request_id);
     if (!isPaidStatus(request.status)) return null;
-    if (request.counterpartyAlias) {
-      await db.from("voyage_booking_deposits").update({ payer_alias: request.counterpartyAlias }).eq("id", deposit.id);
-    }
-    return request.counterpartyAlias;
+    if (isRefundableAlias(request.counterpartyAlias)) alias = request.counterpartyAlias;
   }
 
-  if (deposit.payment_method === "bank_transfer" && bunqConfigured()) {
+  // Fallback (and primary path for bank_transfer): recover the payer's real bank details from
+  // the actual incoming payment, matched by the deposit reference — that payment carries the
+  // payer IBAN, so it is refundable.
+  if (!alias) {
     const payment = await findIncomingPaymentDetailsByReference(deposit.reference, deposit.amount_cents / 100);
-    if (payment?.counterpartyAlias) {
-      await db.from("voyage_booking_deposits").update({ payer_alias: payment.counterpartyAlias }).eq("id", deposit.id);
-    }
-    return payment?.counterpartyAlias ?? null;
+    if (payment && isRefundableAlias(payment.counterpartyAlias)) alias = payment.counterpartyAlias;
   }
 
-  return null;
+  if (alias) {
+    await db.from("voyage_booking_deposits").update({ payer_alias: alias }).eq("id", deposit.id);
+  }
+  return alias;
 }
 
 export async function refundBookingDeposits(
