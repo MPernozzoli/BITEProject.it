@@ -139,7 +139,7 @@ const AUTH_COPY = {
       rememberHint: "Disattivalo se stai usando un computer condiviso o pubblico.",
       newsletterLabel: "Iscrivimi anche alla newsletter",
       newsletterHint:
-        "Default attivo. Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
+        "Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
       divider: "oppure",
       google: "Continua con Google",
       passkey: "Accedi con passkey",

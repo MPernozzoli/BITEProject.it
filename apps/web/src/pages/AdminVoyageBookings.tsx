@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import BookingGanttTable from "@/components/admin/BookingGanttTable";
 import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
+import PlanChangeProposalDialog, { type PlanChangeProposal } from "@/components/admin/PlanChangeProposalDialog";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -298,6 +299,8 @@ const AdminVoyageBookings = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [activeTab, setActiveTab] = useState<BookingTabKey>("overview");
   const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
+  /** Drag-resized legs awaiting a reason before they are sent to the traveller. */
+  const [pendingProposal, setPendingProposal] = useState<{ requestId: string; legIds: string[] } | null>(null);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
 
@@ -786,9 +789,12 @@ const AdminVoyageBookings = () => {
   const approveRequest = (requestId: string) => updateRequestStatus(requestId, "admin_approved");
   const rejectRequest = (requestId: string) => updateRequestStatus(requestId, "rejected");
 
-  /** Converts a Gantt-bar drag-resize into a traveller-facing route proposal. */
+  /**
+   * Converts a Gantt-bar drag-resize into a traveller-facing route proposal. The reason is
+   * collected in a dialog rather than a prompt because it decides the refund owed if the
+   * traveller declines (force majeure follows the withdrawal tiers, anything else refunds fully).
+   */
   const resizeBookingLegs = async (requestId: string, nextLegIds: string[]) => {
-    const request = requests.find((item) => item.id === requestId);
     const currentLegIds = requestLegs
       .filter((link) => link.booking_request_id === requestId)
       .map((link) => link.bookable_leg_id)
@@ -797,19 +803,21 @@ const AdminVoyageBookings = () => {
     if (currentLegIds.length === proposedLegIds.length && currentLegIds.every((id, index) => id === proposedLegIds[index])) {
       return;
     }
-    const adminNote = window.prompt(
-      "Messaggio per il viaggiatore sulla modifica proposta",
-      "Ti proponiamo una modifica alle tratte per incastrare meglio equipaggio, meteo e disponibilità."
-    );
-    if (adminNote === null) {
-      await loadVoyageDetails(selectedVoyageId);
-      return;
-    }
+    setPendingProposal({ requestId, legIds: nextLegIds });
+  };
+
+  /** Sends the proposal once the admin has picked a reason in the dialog. */
+  const submitPlanChangeProposal = async ({ reason, note }: PlanChangeProposal) => {
+    if (!pendingProposal) return;
+    const { requestId, legIds } = pendingProposal;
+    const request = requests.find((item) => item.id === requestId);
+    setPendingProposal(null);
     setSaving(true);
     const { error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
       _booking_request_id: requestId,
-      _proposed_leg_ids: nextLegIds,
-      _admin_note: adminNote.trim() || null,
+      _proposed_leg_ids: legIds,
+      _admin_note: note,
+      _change_reason: reason,
     });
     setSaving(false);
     if (error) {
@@ -818,6 +826,12 @@ const AdminVoyageBookings = () => {
       return;
     }
     toast.success(request?.is_crew ? "Proposta registrata." : "Proposta inviata al viaggiatore.");
+    await loadVoyageDetails(selectedVoyageId);
+  };
+
+  /** Discards the drag so the Gantt bar snaps back to the stored legs. */
+  const cancelPlanChangeProposal = async () => {
+    setPendingProposal(null);
     await loadVoyageDetails(selectedVoyageId);
   };
 
@@ -2209,6 +2223,21 @@ const AdminVoyageBookings = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PlanChangeProposalDialog
+        open={pendingProposal !== null}
+        onOpenChange={(open) => {
+          if (!open) void cancelPlanChangeProposal();
+        }}
+        onConfirm={(proposal) => void submitPlanChangeProposal(proposal)}
+        travellerName={
+          pendingProposal
+            ? profilesById[
+                requests.find((item) => item.id === pendingProposal.requestId)?.profile_id ?? ""
+              ]?.name ?? null
+            : null
+        }
+      />
     </div>
   );
 };

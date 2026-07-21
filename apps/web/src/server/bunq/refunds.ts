@@ -169,20 +169,76 @@ async function departureForBooking(db: SupabaseClient, booking: BookingRefundCon
   return row?.departure_window_start ?? row?.start_date ?? null;
 }
 
-export async function refundPolicyPercent(
-  db: SupabaseClient,
-  booking: BookingRefundContext,
-  trigger: RefundTrigger,
-): Promise<number> {
-  if (trigger === "admin_cancelled" || trigger === "admin_rejected" || trigger === "admin_plan_change_declined") {
-    return 100;
-  }
-
+/** Tiers published in the Terms: refund shrinks as departure approaches. */
+async function withdrawalPercent(db: SupabaseClient, booking: BookingRefundContext): Promise<number> {
   const days = daysUntil(await departureForBooking(db, booking));
   if (days === null) return 0;
   if (days > 30) return 100;
   if (days >= 15) return 50;
   return 0;
+}
+
+/**
+ * True when the plan change the traveller is declining was proposed for a force-majeure reason
+ * (weather, safety, ...). Stored by `admin_propose_voyage_booking_legs`; absent on changes created
+ * before that column existed, which we deliberately treat as NOT force majeure so an unknown
+ * reason never silently reduces someone's refund.
+ */
+async function declinedChangeWasForceMajeure(
+  db: SupabaseClient,
+  booking: BookingRefundContext,
+): Promise<boolean> {
+  // Scoped to the change actually awaiting the traveller's answer — a proposal they started
+  // themselves sits in 'pending_admin_approval' and must not be read here. The row is still
+  // pending at this point: status.ts only marks it cancelled after the refund is computed.
+  const { data, error } = await db
+    .from("voyage_booking_plan_changes")
+    .select("metadata")
+    .eq("booking_request_id", booking.id)
+    .eq("status", "pending_user_approval")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const metadata = (data as { metadata?: Record<string, unknown> } | null)?.metadata;
+  return metadata?.force_majeure === true;
+}
+
+export async function refundPolicyPercent(
+  db: SupabaseClient,
+  booking: BookingRefundContext,
+  trigger: RefundTrigger,
+): Promise<number> {
+  // We cancelled or rejected: the traveller keeps none of the risk, so always refund in full.
+  if (trigger === "admin_cancelled" || trigger === "admin_rejected") {
+    return 100;
+  }
+
+  // A declined plan change refunds in full when the change was on us (organisational), but follows
+  // the withdrawal tiers when it was forced on us by weather, safety, or similar.
+  if (trigger === "admin_plan_change_declined") {
+    if (!(await declinedChangeWasForceMajeure(db, booking))) return 100;
+    return await withdrawalPercent(db, booking);
+  }
+
+  return withdrawalPercent(db, booking);
+}
+
+/**
+ * The percentage actually refunded: the policy result, raised to `overridePercent` when an admin
+ * chose to be more generous. An override below policy is ignored rather than rejected, so a stale
+ * or malformed value can never pay out less than the Terms promise.
+ */
+export async function resolveRefundPercent(
+  db: SupabaseClient,
+  booking: BookingRefundContext,
+  trigger: RefundTrigger,
+  overridePercent?: number | null,
+): Promise<number> {
+  const policyPercent = await refundPolicyPercent(db, booking, trigger);
+  if (overridePercent === null || overridePercent === undefined) return policyPercent;
+  if (!Number.isFinite(overridePercent)) return policyPercent;
+  return Math.max(policyPercent, Math.min(100, Math.round(overridePercent)));
 }
 
 async function resolvePayerAlias(db: SupabaseClient, deposit: DepositRefundRow): Promise<BunqCounterpartyAlias | null> {
@@ -218,8 +274,14 @@ export async function refundBookingDeposits(
   db: SupabaseClient,
   booking: BookingRefundContext,
   trigger: RefundTrigger,
+  /**
+   * Lets an admin be more generous than the policy in a specific case (e.g. refunding in full a
+   * force-majeure change declined inside 15 days). It can only raise the percentage: lowering what
+   * the published Terms promise is never allowed from the UI.
+   */
+  overridePercent?: number | null,
 ): Promise<RefundSummary> {
-  const policyPercent = await refundPolicyPercent(db, booking, trigger);
+  const policyPercent = await resolveRefundPercent(db, booking, trigger, overridePercent);
   if (policyPercent <= 0) {
     return { refundable: false, policyPercent, totalRefundCents: 0, refundedDepositIds: [] };
   }

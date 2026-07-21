@@ -36,6 +36,8 @@ tags: [frontend, lib, hooks, logica]
 - `booking-application-draft.ts` — serializzazione bozza candidatura: `localStorage` per utenti anonimi e sincronizzazione Supabase su `voyage_booking_drafts` per utenti loggati.
 - `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts` — helper booking e soste waypoint condivisi tra `/admin/bookings` e gestione rotte.
+- `booking-refunds.ts` — client di `POST /api/bookings/status` per le transizioni terminali con rimborso; accetta `refundPercentOverride` (può solo alzare la percentuale di policy).
+- `plan-change-reasons.ts` — catalogo motivazioni delle proposte di modifica piano e mapping forza maggiore. **Solo label per la UI**: il flag `force_majeure` autoritativo è derivato server-side in SQL, i due elenchi vanno tenuti allineati → [[24 - Termini e Condizioni]]
 - `danger-reasons.ts` — modificatori navigazione pericolosa
 - `waypoint-form.ts` — trasformazione pura dello stato inspector WPT in patch persistibili; preserva anche l'orario di ripartenza delle soste brevi per non disallineare `/routes` da `/bookings`.
 - `voyage-schedule.ts` — regole di fase viaggio/tratta (`getLegPhase`, `getVoyagePhase`, `isLegBookableNow`, `getPendingActual`, `isLegDelayed`, `shouldShowLiveWidget`). Mirror TS delle funzioni SQL omonime: vanno cambiati insieme → [[21 - Tracking Real-Time Viaggi]]

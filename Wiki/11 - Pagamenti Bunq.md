@@ -44,7 +44,12 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 
 - cancellazione o rifiuto da admin: **100%** dei depositi pagati;
 - cancellazione utente: **100%** se mancano più di 30 giorni alla partenza, **50%** tra 30 e 15 giorni, **0%** sotto i 15 giorni;
-- proposta di modifica admin rifiutata dall'utente con annullamento viaggio: **100%** a prescindere dalle date.
+- proposta di modifica admin rifiutata dall'utente, **per ragioni diverse dalla forza maggiore** (es. organizzative): **100%** a prescindere dalle date;
+- proposta di modifica admin rifiutata dall'utente, **per forza maggiore** (meteo, sicurezza, guasto, autorità, emergenza sanitaria): **stesse fasce della cancellazione utente**. Il flag `force_majeure` è derivato dalla motivazione scelta dall'admin e salvato in `voyage_booking_plan_changes.metadata`; se manca vale come *non* forza maggiore (100%) → [[24 - Termini e Condizioni]].
+
+Un admin può passare `refundPercentOverride` per essere **più generoso** della policy: l'override può solo alzare la percentuale, mai abbassarla sotto quanto promesso dai Termini. La capacità è cablata e testata ma **non ha ancora una UI** → [[24 - Termini e Condizioni]].
+
+Regressione coperta da `apps/web/src/test/booking-refund-policy.test.ts`.
 
 La API Bunq non espone un refund dedicato per `request-inquiry`: il rimborso viene eseguito creando un `Payment` in uscita verso il `counterparty_alias` del pagamento ricevuto. `voyage_booking_deposits` conserva `payer_alias`, `refund_amount_cents`, `refund_policy`, `refund_reference` e `refund_payment_id`; lo stato può diventare `partially_refunded` per i rimborsi al 50% o `refunded` per quelli completi. Se Bunq non è configurato o manca l'alias pagatore, la prenotazione non viene annullata/rifiutata: l'operazione fallisce prima del cambio stato.
 

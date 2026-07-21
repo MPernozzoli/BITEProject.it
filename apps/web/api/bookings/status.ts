@@ -21,6 +21,8 @@ type Body = {
   status?: string;
   trigger?: RefundTrigger;
   adminNotes?: string | null;
+  /** Admin-chosen refund percentage; can only raise the policy result, never lower it. */
+  refundPercentOverride?: number | null;
 };
 
 function isRefundTrigger(value: string): value is RefundTrigger {
@@ -71,7 +73,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   try {
     const { db, user } = await resolveCaller(token);
     const booking = await assertRefundActionAllowed(db, user, bookingRequestId, trigger);
-    const refund = await refundBookingDeposits(db, booking, trigger);
+    const override =
+      typeof body.refundPercentOverride === "number" ? body.refundPercentOverride : null;
+    const refund = await refundBookingDeposits(db, booking, trigger, override);
     await markBookingCancelledAfterRefund(db, booking, eventFor(trigger), {
       refund_policy: trigger,
       refund_percent: refund.policyPercent,

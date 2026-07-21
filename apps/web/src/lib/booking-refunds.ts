@@ -34,6 +34,8 @@ export async function updateBookingStatusWithRefund(params: {
   status: "cancelled" | "rejected";
   trigger: BookingRefundTrigger;
   adminNotes?: string | null;
+  /** Raises the refund above the policy result; ignored when lower than what the policy owes. */
+  refundPercentOverride?: number | null;
 }): Promise<BookingRefundResult> {
   const token = await authToken();
   if (!token) return { ok: false, error: "unauthenticated" };

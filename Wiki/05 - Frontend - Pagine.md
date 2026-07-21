@@ -49,6 +49,7 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `Unsubscribe.tsx` | `/unsubscribe` | gestione disiscrizione/preferenze email |
 | `PrivacyPolicy.tsx` | `/privacy-policy` | informativa aggiornata per community, newsletter, contact form, partecipazione viaggi, inviti partecipanti, contributi spese, Bunq/bonifico e Web Push |
 | `CookiePolicy.tsx` | `/cookie-policy` | cookie/local storage tecnici per lingua, sessione, community, booking, pagamenti, UI e notifiche push |
+| `Terms.tsx` | `/terms` | Termini d'uso: natura non commerciale, registrazione, community, partecipazione viaggi, contributo spese, modifiche per meteo/sicurezza, rimborsi, consenso immagini → [[24 - Termini e Condizioni]] (bozza non validata legalmente) |
 
 ## Admin → [[16 - Admin]]
 | Pagina | Rotta |

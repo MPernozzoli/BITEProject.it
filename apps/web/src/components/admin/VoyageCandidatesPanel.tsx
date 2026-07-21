@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, ExternalLink, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { PLAN_CHANGE_REASONS, planChangeReasonOption } from "@/lib/plan-change-reasons";
 import {
   type BookableLeg,
   type BookingProfile,
@@ -92,6 +93,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   const [deposits, setDeposits] = useState<BookingDeposit[]>([]);
   const [proposalLegIds, setProposalLegIds] = useState<Record<string, string[]>>({});
   const [proposalNotes, setProposalNotes] = useState<Record<string, string>>({});
+  /** Why each proposal is being made — decides the refund if the candidate declines it. */
+  const [proposalReasons, setProposalReasons] = useState<Record<string, string>>({});
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -279,11 +282,17 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
       toast.error("Seleziona almeno una tratta da proporre.");
       return;
     }
+    const reason = proposalReasons[request.id];
+    if (!reason) {
+      toast.error("Seleziona la motivazione della modifica.");
+      return;
+    }
     setSavingId(request.id);
     const { error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
       _booking_request_id: request.id,
       _proposed_leg_ids: legIds,
       _admin_note: proposalNotes[request.id] || null,
+      _change_reason: reason,
     });
     setSavingId(null);
     if (error) {
@@ -560,6 +569,27 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         onToggleProposalLeg={(legId) => toggleProposalLeg(request.id, legId)}
                         onSetProposalRange={(legId) => setProposalRange(request.id, voyageLegs, legId)}
                       />
+                      <select
+                        value={proposalReasons[request.id] || ""}
+                        onChange={(event) =>
+                          setProposalReasons((current) => ({ ...current, [request.id]: event.target.value }))
+                        }
+                        className="mt-3 w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                      >
+                        <option value="">Motivazione della modifica...</option>
+                        {PLAN_CHANGE_REASONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {planChangeReasonOption(proposalReasons[request.id]) && (
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          {planChangeReasonOption(proposalReasons[request.id])?.forceMajeure
+                            ? "Forza maggiore: se rifiuta, il rimborso segue le fasce della rinuncia (100% oltre 30gg, 50% tra 15 e 30, 0% sotto i 15)."
+                            : "Non forza maggiore: se rifiuta, il rimborso e sempre del 100%."}
+                        </p>
+                      )}
                       <textarea
                         value={proposalNotes[request.id] || ""}
                         onChange={(event) => setProposalNotes((current) => ({ ...current, [request.id]: event.target.value }))}
