@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, X } from "lucide-react";
+import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";

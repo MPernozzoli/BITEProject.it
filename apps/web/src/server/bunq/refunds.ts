@@ -300,7 +300,16 @@ export async function refundBookingDeposits(
 ): Promise<RefundSummary> {
   const policyPercent = await resolveRefundPercent(db, booking, trigger, overridePercent);
   if (policyPercent <= 0) {
-    return { refundable: false, policyPercent, totalRefundCents: 0, refundedDepositIds: [] };
+    // Nothing is owed at all, so nothing can be pending either.
+    return {
+      refundable: false,
+      policyPercent,
+      totalRefundCents: 0,
+      refundedDepositIds: [],
+      refundPending: false,
+      pendingRefundCents: 0,
+      pendingDepositIds: [],
+    };
   }
   if (!bunqConfigured()) {
     throw Object.assign(new Error("bunq_not_configured"), { status: 503 });
