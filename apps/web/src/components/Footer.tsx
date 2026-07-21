@@ -101,6 +101,9 @@ const Footer = () => {
             <Link to="/cookie-policy" className="hover:text-foreground transition-colors">
               {lang === "it" ? "Cookie Policy" : "Cookie Policy"}
             </Link>
+            <Link to="/terms" className="hover:text-foreground transition-colors">
+              {lang === "it" ? "Termini e Condizioni" : "Terms and Conditions"}
+            </Link>
           </div>
           <p className="text-[11px] text-muted-foreground/70">
             {lang === "it" ? "Realizzato da" : "Made by"}{" "}

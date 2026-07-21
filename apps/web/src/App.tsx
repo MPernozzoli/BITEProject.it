@@ -67,11 +67,13 @@ const AdminLogbookPoints = lazy(() => import("./pages/AdminLogbookPoints"));
 const AdminPackGallery = lazy(() => import("./pages/AdminPackGallery"));
 const AdminMail = lazy(() => import("./pages/AdminMail"));
 const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
+const AdminBookingRefunds = lazy(() => import("./pages/AdminBookingRefunds"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
 const CompleteProfile = lazy(() => import("./pages/CompleteProfile"));
 const UserBookings = lazy(() => import("./pages/UserBookings"));
+const BookingRefund = lazy(() => import("./pages/BookingRefund"));
 const ManageBookingParticipants = lazy(() => import("./pages/ManageBookingParticipants"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 const StoryPage = lazy(() => import("./pages/StoryPage"));
@@ -83,6 +85,7 @@ const NewsletterConfirm = lazy(() => import("./pages/NewsletterConfirm"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+const Terms = lazy(() => import("./pages/Terms"));
 
 const RouteFallback = () => (
   <div className="min-h-screen bg-background" aria-hidden="true" />
@@ -211,11 +214,13 @@ const App = () => {
 
                       <Route path="/profile/:id" element={<PublicProfile />} />
                       <Route path="/bookings" element={<UserBookings />} />
+                      <Route path="/bookings/rimborso" element={<BookingRefund />} />
                     <Route path="/bookings/:id/participants" element={<ManageBookingParticipants />} />
                       <Route path="/unsubscribe" element={<Unsubscribe />} />
                       <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
                       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                       <Route path="/cookie-policy" element={<CookiePolicy />} />
+                      <Route path="/terms" element={<Terms />} />
                       <Route path="*" element={<NotFound />} />
                     </Route>
 
@@ -254,6 +259,8 @@ const App = () => {
                     <Route path="/admin/newsletter" element={<AdminRoute><AdminNewsletterPage /></AdminRoute>} />
                     <Route path="/admin/badges" element={<AdminRoute><AdminBadgesPage /></AdminRoute>} />
                     <Route path="/admin/bookings" element={<AdminRoute><AdminVoyageBookings /></AdminRoute>} />
+                    <Route path="/admin/bookings/rimborsi" element={<AdminRoute><AdminBookingRefunds /></AdminRoute>} />
+                    <Route path="/admin/bookings/candidati/rimborsi" element={<Navigate to="/admin/bookings/rimborsi" replace />} />
                     <Route path="/admin/candidates" element={<Navigate to="/admin/bookings" replace />} />
                     <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
                     <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />

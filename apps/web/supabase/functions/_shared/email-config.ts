@@ -5,7 +5,7 @@ export const PUBLIC_SITE_URL = 'https://biteproject.it'
 
 export function buildFromAddress(fromName?: string | null): string {
   const senderName = fromName?.trim() || SITE_NAME
-  return `${senderName} <noreply@${SENDER_DOMAIN}>`
+  return `${senderName} <support@${SENDER_DOMAIN}>`
 }
 
 /** Supported public-site languages. Mirrors src/lib/seo.ts. */

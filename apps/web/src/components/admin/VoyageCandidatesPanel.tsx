@@ -233,6 +233,13 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
       toast.error(result.error.message);
       return;
     }
+    if ("ok" in result && result.ok === true && result.refundPending) {
+      toast.warning(
+        `Candidatura scartata. Rimborso da gestire manualmente (EUR ${result.refundPendingAmountEur.toFixed(2)}): nessun IBAN disponibile, all'utente e stato chiesto via email di comunicarlo.`,
+      );
+      await load();
+      return;
+    }
     toast.success(status === "admin_approved" ? "Candidatura approvata." : "Candidatura scartata.");
     await load();
   };

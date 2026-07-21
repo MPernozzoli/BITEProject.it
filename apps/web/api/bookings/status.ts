@@ -76,6 +76,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       refund_policy: trigger,
       refund_percent: refund.policyPercent,
       refund_amount_eur: refund.totalRefundCents / 100,
+      refund_pending: refund.refundPending,
+      refund_pending_amount_eur: refund.pendingRefundCents / 100,
       admin_message: body.adminNotes || null,
     });
 
@@ -101,6 +103,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       refundPercent: refund.policyPercent,
       refundAmountEur: refund.totalRefundCents / 100,
       refunded: refund.refundable,
+      refundPending: refund.refundPending,
+      refundPendingAmountEur: refund.pendingRefundCents / 100,
     });
   } catch (error) {
     if (error instanceof DepositHttpError) {

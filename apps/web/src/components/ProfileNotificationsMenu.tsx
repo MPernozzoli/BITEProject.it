@@ -1,9 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Heart, MessageCircle } from "lucide-react";
+import { Bell, Heart, MessageCircle, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { cn } from "@/lib/utils";
+
+type RpcClient = {
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+};
+const rpcSupabase = supabase as unknown as RpcClient;
+
+type PendingRefundNotif = {
+  deposit_id: string;
+  voyage_name: string | null;
+  voyage_name_it: string | null;
+  voyage_name_en: string | null;
+  amount_cents: number | null;
+};
+
+const formatEur = (cents: number | null | undefined) =>
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(
+    Math.max(0, Number(cents ?? 0) || 0) / 100,
+  );
 
 type NotificationRow = {
   id: string;
@@ -80,10 +98,21 @@ const ProfileNotificationsMenu = ({
   onUnreadChange,
 }: ProfileNotificationsMenuProps) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [pendingRefunds, setPendingRefunds] = useState<PendingRefundNotif[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
+
+    // A pending refund is persistent state on the deposit, not a row in the engagement
+    // feed — surface it as a derived notification so it stays until the refund is settled.
+    void rpcSupabase.rpc("list_my_pending_refunds").then(({ data, error }) => {
+      if (error) {
+        console.error("Pending refunds load error:", error.message);
+        return;
+      }
+      setPendingRefunds((data as PendingRefundNotif[]) ?? []);
+    });
 
     const { data, error } = await supabase
       .from("engagement_notifications")
@@ -171,9 +200,15 @@ const ProfileNotificationsMenu = ({
   }, [loadNotifications, sessionUserId]);
 
   const unreadCount = useMemo(
-    () => notifications.length,
-    [notifications],
+    () => notifications.length + pendingRefunds.length,
+    [notifications, pendingRefunds],
   );
+
+  const refundVoyageLabel = (row: PendingRefundNotif) =>
+    (lang === "en"
+      ? row.voyage_name_en || row.voyage_name || row.voyage_name_it
+      : row.voyage_name_it || row.voyage_name || row.voyage_name_en) ||
+    (lang === "en" ? "your voyage" : "il tuo viaggio");
 
   useEffect(() => {
     onUnreadChange?.(unreadCount);
@@ -278,12 +313,40 @@ const ProfileNotificationsMenu = ({
         </div>
       </div>
 
-      {loading ? (
+      {loading && notifications.length === 0 && pendingRefunds.length === 0 ? (
         <p className="px-3 py-4 text-sm text-muted-foreground">{loadingLabel}</p>
-      ) : notifications.length === 0 ? (
+      ) : notifications.length === 0 && pendingRefunds.length === 0 ? (
         <p className="px-3 py-4 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
         <div className="max-h-[24rem] space-y-1 overflow-y-auto px-1 pb-1">
+          {pendingRefunds.map((refund) => (
+            <div
+              key={`refund-${refund.deposit_id}`}
+              className="rounded-[1.25rem] border border-amber-500/25 bg-amber-500/5 px-3 py-3 transition-colors"
+            >
+              <Link
+                to="/bookings/rimborso"
+                onClick={() => onNavigate?.()}
+                className="flex gap-3 rounded-xl outline-none transition-colors hover:text-accent focus:text-accent"
+              >
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-white/80 text-amber-600">
+                  <Wallet size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium leading-snug text-foreground">
+                    {lang === "en"
+                      ? `You have a refund of ${formatEur(refund.amount_cents)} to collect`
+                      : `Hai un rimborso di ${formatEur(refund.amount_cents)} da ricevere`}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {lang === "en"
+                      ? `${refundVoyageLabel(refund)} — enter your IBAN to receive it`
+                      : `${refundVoyageLabel(refund)} — inserisci l'IBAN per riceverlo`}
+                  </p>
+                </div>
+              </Link>
+            </div>
+          ))}
           {notifications.map((notification) => {
             const actorName =
               notification.actor?.name?.trim() || (lang === "en" ? "Someone" : "Qualcuno");

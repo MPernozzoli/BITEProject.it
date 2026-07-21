@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, Users, X, type LucideIcon } from "lucide-react";
+import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, Users, Wallet, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -751,7 +751,11 @@ const AdminVoyageBookings = () => {
         toast.error(result.error);
         return;
       }
-      if (result.refundAmountEur > 0) {
+      if (result.refundPending) {
+        toast.warning(
+          `Booking aggiornato. Rimborso da gestire manualmente (EUR ${result.refundPendingAmountEur.toFixed(2)}): nessun IBAN disponibile, all'utente e stato chiesto via email di comunicarlo.`,
+        );
+      } else if (result.refundAmountEur > 0) {
         toast.success(`Booking aggiornato. Rimborso automatico: EUR ${result.refundAmountEur.toFixed(2)}.`);
       }
       await loadVoyageDetails(selectedVoyageId);
@@ -1952,6 +1956,14 @@ const AdminVoyageBookings = () => {
 
         {activeTab === "candidature" && (
         <section className="glass-panel rounded-[34px] p-5 md:p-6">
+          <div className="mb-4 flex justify-end">
+            <Link
+              to="/admin/bookings/rimborsi"
+              className="glass-chip inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <Wallet size={14} /> Rimborsi da eseguire
+            </Link>
+          </div>
           <VoyageCandidatesPanel voyageId={selectedVoyageId} />
         </section>
         )}

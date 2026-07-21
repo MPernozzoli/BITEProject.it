@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const publicKey = Deno.env.get('WEB_PUSH_VAPID_PUBLIC_KEY') ?? Deno.env.get('VITE_WEB_PUSH_PUBLIC_KEY')
   const privateKey = Deno.env.get('WEB_PUSH_VAPID_PRIVATE_KEY')
-  const vapidSubject = Deno.env.get('WEB_PUSH_VAPID_SUBJECT') ?? 'mailto:noreply@mail.biteproject.it'
+  const vapidSubject = Deno.env.get('WEB_PUSH_VAPID_SUBJECT') ?? 'mailto:hello@biteproject.it'
 
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)

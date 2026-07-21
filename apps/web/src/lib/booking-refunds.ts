@@ -12,7 +12,16 @@ export type BookingRefundTrigger =
  * explicit comparison.
  */
 export type BookingRefundResult =
-  | { ok: true; status: "cancelled" | "rejected"; refundPercent: number; refundAmountEur: number; refunded: boolean }
+  | {
+      ok: true;
+      status: "cancelled" | "rejected";
+      refundPercent: number;
+      refundAmountEur: number;
+      refunded: boolean;
+      /** A refund is owed but could not be paid automatically (no IBAN on file). */
+      refundPending: boolean;
+      refundPendingAmountEur: number;
+    }
   | { ok: false; error: string };
 
 async function authToken(): Promise<string | null> {
@@ -60,5 +69,7 @@ export async function updateBookingStatusWithRefund(params: {
     refundPercent: Number(payload.refundPercent ?? 0),
     refundAmountEur: Number(payload.refundAmountEur ?? 0),
     refunded: payload.refunded === true,
+    refundPending: payload.refundPending === true,
+    refundPendingAmountEur: Number(payload.refundPendingAmountEur ?? 0),
   };
 }

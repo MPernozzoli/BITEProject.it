@@ -93,6 +93,9 @@ function metadataNumber(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
+function metadataBool(metadata: Record<string, unknown>, key: string) {
+  return metadata[key] === true
+}
 
 function jsonResponse(data: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -663,6 +666,7 @@ Deno.serve(async (req) => {
                 baselineDepartureBy: metadataString(metadata, 'baseline_departure_window_end'),
                 oldLegs,
                 proposedLegs,
+                refundPending: metadataBool(metadata, 'refund_pending'),
               },
           metadata: emailMetadata,
         })

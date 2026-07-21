@@ -58,6 +58,8 @@ interface VoyageBookingNotificationProps {
   baselineDepartureBy?: string | null
   oldLegs?: string[] | null
   proposedLegs?: string[] | null
+  /** The refund could not be paid automatically: ask the traveller for an IBAN by email. */
+  refundPending?: boolean | null
   unsubscribeUrl?: string | null
 }
 
@@ -109,6 +111,10 @@ const COPY = {
     newDeparture: 'Nuova partenza',
     plannedDeparture: 'Era prevista entro',
     messageTitle: 'Messaggio',
+    refundPendingTitle: 'Rimborso della quota',
+    refundPendingBody:
+      'Ti spetta il rimborso della quota di partecipazione, ma non siamo riusciti ad accreditarlo automaticamente. Premi il pulsante qui sotto, accedi al tuo account e inserisci le coordinate bancarie: l’importo e gia impostato e il bonifico parte subito dopo la conferma.',
+    refundCta: 'Comunica IBAN per il rimborso',
     legsTitle: 'Tratte',
     oldLegsTitle: 'Prima',
     proposedLegsTitle: 'Proposta',
@@ -191,6 +197,10 @@ const COPY = {
     newDeparture: 'New departure',
     plannedDeparture: 'Was planned by',
     messageTitle: 'Message',
+    refundPendingTitle: 'Refund of your deposit',
+    refundPendingBody:
+      'You are entitled to a refund of your participation fee, but we could not send it automatically. Tap the button below, sign in to your account and enter your bank details: the amount is already set and the transfer starts as soon as you confirm.',
+    refundCta: 'Send your IBAN for the refund',
     legsTitle: 'Legs',
     oldLegsTitle: 'Before',
     proposedLegsTitle: 'Proposed',
@@ -283,6 +293,7 @@ const VoyageBookingNotificationEmail = ({
   baselineDepartureBy,
   oldLegs,
   proposedLegs,
+  refundPending,
   unsubscribeUrl,
 }: VoyageBookingNotificationProps) => {
   const lang = resolveEmailLanguage(language)
@@ -313,6 +324,11 @@ const VoyageBookingNotificationEmail = ({
     variant === 'payment_pending' && paymentMethod === 'bank_transfer'
       ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName)
       : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)
+  // When a refund is owed, the whole point of the email is to collect an IBAN, so the
+  // primary button leads straight to the self-service refund form.
+  const primaryCta = refundPending
+    ? { label: copy.refundCta, url: `${PUBLIC_SITE_URL}/bookings/rimborso` }
+    : { label: copy.cta, url: resolvedBookingUrl }
 
   return (
     <EditorialEmailShell
@@ -325,7 +341,7 @@ const VoyageBookingNotificationEmail = ({
           {introText}
         </EmailBodyText>
       }
-      primaryCta={{ label: copy.cta, url: resolvedBookingUrl }}
+      primaryCta={primaryCta}
       footerReason={copy.footerReason}
       unsubscribeUrl={unsubscribeUrl}
     >
@@ -346,6 +362,12 @@ const VoyageBookingNotificationEmail = ({
         <EmailRouteBox label={copy.legsTitle} routes={safeLegs} />
         {message?.trim() ? <EmailCallout>{message.trim()}</EmailCallout> : null}
       </EmailCard>
+      {refundPending ? (
+        <EmailCard>
+          <EmailSectionLabel>{copy.refundPendingTitle}</EmailSectionLabel>
+          <EmailCallout>{copy.refundPendingBody}</EmailCallout>
+        </EmailCard>
+      ) : null}
       {amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
         <EmailCard>
           <EmailSectionLabel>{copy.paymentTitle}</EmailSectionLabel>

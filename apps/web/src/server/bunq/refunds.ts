@@ -1,6 +1,7 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { bunqConfigured, environment } from "./client.js";
+import { isValidBic, isValidIban, normalizeBic, normalizeIban } from "../../lib/iban.js";
 import {
   createBunqOutgoingPayment,
   findIncomingPaymentDetailsByReference,
@@ -21,6 +22,11 @@ export type RefundSummary = {
   policyPercent: number;
   totalRefundCents: number;
   refundedDepositIds: string[];
+  /** True when at least one deposit is owed a refund we could not route automatically. */
+  refundPending: boolean;
+  /** Total amount still owed manually because no IBAN / Bunq account was found. */
+  pendingRefundCents: number;
+  pendingDepositIds: string[];
 };
 
 type BookingRefundContext = {
@@ -49,6 +55,38 @@ const ACTIVE_BOOKING_STATUSES = ["requested", "waitlisted", "admin_approved", "u
 
 function centsToEur(cents: number): number {
   return Math.round(cents) / 100;
+}
+
+/**
+ * True when a refund cannot be delivered because we have no routable destination:
+ * the payer is not a Bunq user and we hold no IBAN, so Bunq answers "No monetary
+ * account found for alias ...". These must not block the rejection/cancellation —
+ * we settle them manually once the traveller replies with an IBAN. Genuine failures
+ * (auth, network, insufficient balance) still propagate.
+ */
+function isUnroutableRefundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.message === "bunq_counterparty_alias_not_refundable") return true;
+  return /no monetary account found for alias/i.test(error.message);
+}
+
+async function markDepositRefundPending(
+  db: SupabaseClient,
+  deposit: DepositRefundRow,
+  trigger: RefundTrigger,
+  pendingCents: number,
+  reason: string,
+): Promise<void> {
+  await db
+    .from("voyage_booking_deposits")
+    .update({
+      refund_pending: true,
+      refund_pending_amount_cents: pendingCents,
+      refund_pending_reason: reason,
+      refund_policy: trigger,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deposit.id);
 }
 
 function daysUntil(departure: string | null): number | null {
@@ -199,7 +237,9 @@ export async function refundBookingDeposits(
 
   const deposits = (data ?? []) as DepositRefundRow[];
   const refundedDepositIds: string[] = [];
+  const pendingDepositIds: string[] = [];
   let totalRefundCents = 0;
+  let pendingRefundCents = 0;
 
   for (const deposit of deposits) {
     const alreadyRefundedCents = Math.max(0, Number(deposit.refund_amount_cents ?? 0) || 0);
@@ -209,15 +249,31 @@ export async function refundBookingDeposits(
 
     const payerAlias = await resolvePayerAlias(db, deposit);
     if (!payerAlias) {
-      throw Object.assign(new Error("refund_counterparty_missing"), { status: 409 });
+      // No routable destination: don't block the decision — flag it for a manual
+      // refund and let the traveller send an IBAN via the notification email.
+      await markDepositRefundPending(db, deposit, trigger, refundCents, "no_payer_alias");
+      pendingDepositIds.push(deposit.id);
+      pendingRefundCents += refundCents;
+      continue;
     }
 
     const reference = `REF-${booking.id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
-    const payment = await createBunqOutgoingPayment({
-      amountEur: centsToEur(refundCents),
-      counterpartyAlias: payerAlias,
-      description: `Rimborso BITE ${reference}`,
-    });
+    let payment: { id: number };
+    try {
+      payment = await createBunqOutgoingPayment({
+        amountEur: centsToEur(refundCents),
+        counterpartyAlias: payerAlias,
+        description: `Rimborso BITE ${reference}`,
+      });
+    } catch (error) {
+      if (isUnroutableRefundError(error)) {
+        await markDepositRefundPending(db, deposit, trigger, refundCents, "no_monetary_account");
+        pendingDepositIds.push(deposit.id);
+        pendingRefundCents += refundCents;
+        continue;
+      }
+      throw error;
+    }
 
     const nextRefundedCents = alreadyRefundedCents + refundCents;
     const { error: updateError } = await db
@@ -229,6 +285,9 @@ export async function refundBookingDeposits(
         refund_policy: trigger,
         refund_reference: reference,
         refund_payment_id: payment.id,
+        refund_pending: false,
+        refund_pending_amount_cents: 0,
+        refund_pending_reason: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", deposit.id);
@@ -243,7 +302,135 @@ export async function refundBookingDeposits(
     policyPercent,
     totalRefundCents,
     refundedDepositIds,
+    refundPending: pendingRefundCents > 0,
+    pendingRefundCents,
+    pendingDepositIds,
   };
+}
+
+type ManualRefundInput = {
+  depositId: string;
+  accountHolder: string;
+  iban: string;
+  bic?: string | null;
+};
+
+export type ManualRefundResult = {
+  amountEur: number;
+  reference: string;
+};
+
+type PendingDepositRow = {
+  id: string;
+  booking_request_id: string;
+  environment: string;
+  amount_cents: number;
+  refund_amount_cents: number | null;
+  refund_pending_amount_cents: number | null;
+  reference: string;
+};
+
+/**
+ * Self-service refund: the traveller supplies the IBAN we could not resolve automatically,
+ * and we pay the amount WE already decided (never trusted from the client). The pending flag
+ * is claimed optimistically before touching Bunq so a double submit cannot pay twice; a Bunq
+ * failure re-arms the flag and surfaces a readable error the traveller can act on.
+ */
+export async function submitManualRefund(
+  db: SupabaseClient,
+  user: User,
+  input: ManualRefundInput,
+): Promise<ManualRefundResult> {
+  if (!bunqConfigured()) {
+    throw Object.assign(new Error("bunq_not_configured"), { status: 503 });
+  }
+
+  const holder = input.accountHolder.trim();
+  const iban = normalizeIban(input.iban);
+  const bic = input.bic ? normalizeBic(input.bic) : "";
+  if (!holder) throw Object.assign(new Error("account_holder_required"), { status: 400 });
+  if (!isValidIban(iban)) throw Object.assign(new Error("invalid_iban"), { status: 400 });
+  if (!isValidBic(bic)) throw Object.assign(new Error("invalid_bic"), { status: 400 });
+
+  // Ownership: the deposit must hang off a booking request owned by the caller.
+  const { data: depositRow, error: depositError } = await db
+    .from("voyage_booking_deposits")
+    .select("id, booking_request_id, environment, amount_cents, refund_amount_cents, refund_pending_amount_cents, reference")
+    .eq("id", input.depositId)
+    .eq("refund_pending", true)
+    .maybeSingle();
+  if (depositError) throw new Error(depositError.message);
+  const deposit = depositRow as PendingDepositRow | null;
+  if (!deposit) throw Object.assign(new Error("refund_not_found"), { status: 404 });
+  if (deposit.environment !== environment()) {
+    throw Object.assign(new Error("refund_environment_mismatch"), { status: 409 });
+  }
+
+  const { data: booking, error: bookingError } = await db
+    .from("voyage_booking_requests")
+    .select("profile_id")
+    .eq("id", deposit.booking_request_id)
+    .maybeSingle();
+  if (bookingError) throw new Error(bookingError.message);
+  if (!booking || (booking as { profile_id: string }).profile_id !== user.id) {
+    throw Object.assign(new Error("refund_not_found"), { status: 404 });
+  }
+
+  const alreadyRefundedCents = Math.max(0, Number(deposit.refund_amount_cents ?? 0) || 0);
+  const owedCents = Math.max(0, Number(deposit.refund_pending_amount_cents ?? 0) || 0);
+  const refundCents = Math.min(owedCents, Math.max(0, deposit.amount_cents - alreadyRefundedCents));
+  if (refundCents <= 0) throw Object.assign(new Error("nothing_to_refund"), { status: 409 });
+
+  // Claim the pending refund so a concurrent submit cannot also reach Bunq.
+  const { data: claimed, error: claimError } = await db
+    .from("voyage_booking_deposits")
+    .update({ refund_pending: false, updated_at: new Date().toISOString() })
+    .eq("id", deposit.id)
+    .eq("refund_pending", true)
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error(claimError.message);
+  if (!claimed) throw Object.assign(new Error("refund_already_processing"), { status: 409 });
+
+  const reference = `REF-${deposit.booking_request_id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+  const payerAlias: BunqCounterpartyAlias = { iban, name: holder, display_name: holder };
+
+  let payment: { id: number };
+  try {
+    payment = await createBunqOutgoingPayment({
+      amountEur: centsToEur(refundCents),
+      counterpartyAlias: payerAlias,
+      description: `Rimborso BITE ${reference}`,
+    });
+  } catch (error) {
+    // Re-arm the pending flag so the traveller can correct the details and retry.
+    await db
+      .from("voyage_booking_deposits")
+      .update({ refund_pending: true, updated_at: new Date().toISOString() })
+      .eq("id", deposit.id);
+    const message = error instanceof Error ? error.message : "bunq_refund_failed";
+    throw Object.assign(new Error(message), { status: 422, refundRejected: true });
+  }
+
+  const nextRefundedCents = alreadyRefundedCents + refundCents;
+  const { error: finalizeError } = await db
+    .from("voyage_booking_deposits")
+    .update({
+      status: nextRefundedCents >= deposit.amount_cents ? "refunded" : "partially_refunded",
+      refunded_at: new Date().toISOString(),
+      refund_amount_cents: nextRefundedCents,
+      refund_reference: reference,
+      refund_payment_id: payment.id,
+      payer_alias: { ...payerAlias, bic: bic || undefined },
+      refund_pending: false,
+      refund_pending_amount_cents: 0,
+      refund_pending_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deposit.id);
+  if (finalizeError) throw new Error(finalizeError.message);
+
+  return { amountEur: centsToEur(refundCents), reference };
 }
 
 export async function markBookingCancelledAfterRefund(
