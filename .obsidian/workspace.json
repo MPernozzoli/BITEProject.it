@@ -178,17 +178,18 @@
   },
   "active": "62e870696e5b08ca",
   "lastOpenFiles": [
+    "apps/web/supabase/migrations/20260721150000_pending_payment_reminders.sql",
+    "apps/web/api/bookings/refund-retry.ts",
+    "apps/web/supabase/migrations/20260721140300_participants_allow_pending_payment.sql",
+    "apps/web/supabase/migrations/20260721140200_plan_change_settlement.sql",
+    "apps/web/supabase/migrations/20260721140100_booking_require_payment_before_review.sql",
+    "apps/web/supabase/migrations/20260721140000_booking_pending_payment_enum.sql",
     "Wiki/24 - Termini e Condizioni.md",
     "apps/web/src/test/booking-refund-policy.test.ts",
     "apps/web/src/components/admin/PlanChangeProposalDialog.tsx",
     "apps/web/supabase/migrations/20260721120000_plan_change_reason.sql",
     "apps/web/src/lib/plan-change-reasons.ts",
     "apps/web/src/pages/BookingRefund.tsx",
-    "apps/web/api/bookings/refund.ts",
-    "apps/web/src/lib/iban.ts",
-    "apps/web/src/pages/AdminBookingRefunds.tsx",
-    "apps/web/src/pages/Terms.tsx",
-    "apps/web/supabase/migrations/20260721090000_booking_refund_pending.sql",
     "dist/og-image 3.jpeg",
     "dist/apple-touch-icon 3.png",
     "dist/placeholder 3.svg",
@@ -222,7 +223,6 @@
     "node_modules/events/security.md",
     "node_modules/events/Readme.md",
     "node_modules/events/History.md",
-    "node_modules/livekit-client/node_modules/loglevel/README.md",
-    "node_modules/livekit-client/node_modules/loglevel/CONTRIBUTING.md"
+    "node_modules/livekit-client/node_modules/loglevel/README.md"
   ]
 }
