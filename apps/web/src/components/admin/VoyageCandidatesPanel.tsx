@@ -95,6 +95,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   const [proposalNotes, setProposalNotes] = useState<Record<string, string>>({});
   /** Why each proposal is being made — decides the refund if the candidate declines it. */
   const [proposalReasons, setProposalReasons] = useState<Record<string, string>>({});
+  /** Whether accepting each proposal also requires settling the difference in contribution. */
+  const [proposalSettlement, setProposalSettlement] = useState<Record<string, boolean>>({});
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
@@ -300,6 +302,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
       _proposed_leg_ids: legIds,
       _admin_note: proposalNotes[request.id] || null,
       _change_reason: reason,
+      _require_settlement: proposalSettlement[request.id] ?? false,
     });
     setSavingId(null);
     if (error) {
@@ -604,6 +607,42 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         className="mt-3 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
                         placeholder="Nota per la proposta (es. meglio imbarco dopo, tratta piu breve, aggiungere tappa...)"
                       />
+                      <div className="mt-3">
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Conguaglio del contributo</p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => setProposalSettlement((current) => ({ ...current, [request.id]: false }))}
+                            aria-pressed={!(proposalSettlement[request.id] ?? false)}
+                            className={`rounded-2xl border p-3 text-left text-[11px] leading-relaxed transition-colors ${
+                              !(proposalSettlement[request.id] ?? false)
+                                ? "border-accent bg-accent/10 text-foreground"
+                                : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50"
+                            }`}
+                          >
+                            <span className="block text-xs font-semibold">Senza conguaglio</span>
+                            Accettando, le tratte cambiano e non viene chiesto nessun altro pagamento.
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setProposalSettlement((current) => ({ ...current, [request.id]: true }))}
+                            aria-pressed={proposalSettlement[request.id] ?? false}
+                            className={`rounded-2xl border p-3 text-left text-[11px] leading-relaxed transition-colors ${
+                              proposalSettlement[request.id] ?? false
+                                ? "border-accent bg-accent/10 text-foreground"
+                                : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50"
+                            }`}
+                          >
+                            <span className="block text-xs font-semibold">Con conguaglio</span>
+                            Accettando, resta da versare la differenza fra il nuovo contributo e quanto gia pagato.
+                          </button>
+                        </div>
+                        {(proposalSettlement[request.id] ?? false) && (
+                          <p className="mt-1.5 text-[11px] text-muted-foreground">
+                            Se la candidatura non e ancora approvata, torna in attesa di pagamento finche la differenza non arriva. Se il posto e gia confermato non viene revocato: la differenza resta dovuta. Se la nuova tratta costa meno, l'eccedenza va rimborsata manualmente.
+                          </p>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => void proposeLegs(request)}
