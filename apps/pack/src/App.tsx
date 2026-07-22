@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { currentLanguage } from "@/data/site";
 
 const Index = lazy(() => import("./pages/Index.tsx"));
@@ -38,15 +39,17 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Suspense fallback={<Loading />}>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<LoginRedirect />} />
-            <Route path="/signup" element={<LoginRedirect mode="signup" />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
+        <AppErrorBoundary>
+          <Suspense fallback={<Loading />}>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<LoginRedirect />} />
+              <Route path="/signup" element={<LoginRedirect mode="signup" />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </AppErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

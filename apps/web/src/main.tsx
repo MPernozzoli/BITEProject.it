@@ -1,6 +1,15 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import { registerServiceWorker } from "./lib/pwa";
+import { reloadForStaleChunk } from "./lib/stale-chunk-reload";
+
+// A tab left open across a deploy will eventually try to fetch a lazy-loaded
+// chunk whose content hash no longer exists on the CDN. Vite dispatches this
+// event for that case — reload to pick up the current deploy instead of
+// letting the import rejection surface as a render error.
+window.addEventListener("vite:preloadError", () => {
+  reloadForStaleChunk();
+});
 
 async function bootstrap() {
   const { default: App } = await import("./App.tsx");

@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import DataLayout from "@/components/DataLayout";
 
 const queryClient = new QueryClient();
@@ -43,30 +44,32 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <DataLayout>
-          <Suspense fallback={<Loading />}>
-            <Routes>
-              {/* The data is the homepage: a data portal opens on its data. */}
-              <Route path="/" element={<MapPage />} />
-              <Route path="/methodology" element={<MethodologyPage />} />
-              <Route path="/sensors" element={<SensorsPage />} />
-              <Route path="/downloads" element={<DownloadsPage />} />
-              <Route path="/collaborate" element={<CollaboratePage />} />
-              <Route path="/contact" element={<ContactRedirect />} />
-              <Route path="/login" element={<LoginRedirect />} />
-              <Route path="/signup" element={<LoginRedirect mode="signup" />} />
+        <AppErrorBoundary>
+          <DataLayout>
+            <Suspense fallback={<Loading />}>
+              <Routes>
+                {/* The data is the homepage: a data portal opens on its data. */}
+                <Route path="/" element={<MapPage />} />
+                <Route path="/methodology" element={<MethodologyPage />} />
+                <Route path="/sensors" element={<SensorsPage />} />
+                <Route path="/downloads" element={<DownloadsPage />} />
+                <Route path="/collaborate" element={<CollaboratePage />} />
+                <Route path="/contact" element={<ContactRedirect />} />
+                <Route path="/login" element={<LoginRedirect />} />
+                <Route path="/signup" element={<LoginRedirect mode="signup" />} />
 
-              {/* Retired routes. A dataset URL a researcher saved has to keep resolving,
-                  so these redirect rather than 404. */}
-              <Route path="/map" element={<Navigate to="/" replace />} />
-              <Route path="/data" element={<Navigate to="/" replace />} />
-              <Route path="/missions" element={<Navigate to="/" replace />} />
-              <Route path="/about" element={<Navigate to="/methodology" replace />} />
+                {/* Retired routes. A dataset URL a researcher saved has to keep resolving,
+                    so these redirect rather than 404. */}
+                <Route path="/map" element={<Navigate to="/" replace />} />
+                <Route path="/data" element={<Navigate to="/" replace />} />
+                <Route path="/missions" element={<Navigate to="/" replace />} />
+                <Route path="/about" element={<Navigate to="/methodology" replace />} />
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </DataLayout>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </DataLayout>
+        </AppErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
