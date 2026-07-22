@@ -62,6 +62,12 @@ interface BookingGanttTableProps {
   onAddPeople: (legId: string, profileIds: string[], inviteEmails: string[], isComped: boolean) => Promise<void>;
 }
 
+/** Pulls proposed_leg_ids out of a request's plan-change metadata bag. */
+const readProposedLegIds = (meta: Record<string, unknown> | null | undefined): string[] => {
+  const value = meta?.proposed_leg_ids;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+};
+
 /** A contiguous run of leg-column indices a booking occupies. */
 type Segment = { startIdx: number; endIdx: number };
 
@@ -264,6 +270,11 @@ const BookingGanttTable = ({
 
   const trackWidth = legs.length * COLUMN_WIDTH;
   const gridTemplateColumns = `${PERSON_COL_WIDTH}px repeat(${legs.length}, ${COLUMN_WIDTH}px) ${ACTIONS_COL_WIDTH}px`;
+  const anyPendingProposal = requests.some(
+    (request) =>
+      request.plan_change_status === "pending_user_approval" &&
+      readProposedLegIds(request.plan_change_metadata).length > 0,
+  );
   const activeAddLeg = addPersonLegId ? legs.find((leg) => leg.id === addPersonLegId) ?? null : null;
   const activeAddOccupied = activeAddLeg ? legCapacity[activeAddLeg.id] || 0 : 0;
   const activeAddRemainingSeats = activeAddLeg ? Math.max(0, maxGuests - activeAddOccupied) : 0;
@@ -600,6 +611,16 @@ const BookingGanttTable = ({
           const allIndices = legIndicesByRequest.get(request.id) || [];
           const segments = computeSegments(allIndices);
           const statusClass = getBookingStatusClass(request.status);
+          // An outstanding (sent, not-yet-answered) route change is shown as a dashed "Proposta"
+          // bar under the current one, so it's visible here too — not only in the candidate tab.
+          const proposedIndices =
+            request.plan_change_status === "pending_user_approval"
+              ? readProposedLegIds(request.plan_change_metadata)
+                  .map((id) => legIndexById.get(id))
+                  .filter((idx): idx is number => idx != null)
+              : [];
+          const proposedSegments = computeSegments(proposedIndices);
+          const hasProposal = proposedSegments.length > 0;
           return (
             <div key={request.id} className="grid border-b border-border/60" style={{ gridTemplateColumns }}>
               <div className="sticky left-0 z-10 min-w-0 bg-background/95 p-3 align-top">
@@ -621,7 +642,7 @@ const BookingGanttTable = ({
 
               <div
                 className="relative border-l border-border/60"
-                style={{ gridColumn: `2 / span ${legs.length}`, height: ROW_HEIGHT }}
+                style={{ gridColumn: `2 / span ${legs.length}`, height: hasProposal ? ROW_HEIGHT * 2 : ROW_HEIGHT }}
               >
                 {legs.map((_, colIndex) => (
                   <div
@@ -637,15 +658,22 @@ const BookingGanttTable = ({
                   return (
                     <div
                       key={segIndex}
-                      className={`absolute top-2 bottom-2 flex items-center rounded-full border px-3 text-[11px] font-medium shadow-sm ${statusClass}`}
-                      style={{ left: start * COLUMN_WIDTH + 4, width: (end - start + 1) * COLUMN_WIDTH - 8 }}
+                      className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${statusClass}`}
+                      style={{
+                        top: 8,
+                        height: ROW_HEIGHT - 16,
+                        left: start * COLUMN_WIDTH + 4,
+                        width: (end - start + 1) * COLUMN_WIDTH - 8,
+                      }}
                     >
                       <span
                         onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "start")}
                         className="absolute left-0 top-0 h-full w-3 cursor-ew-resize"
                         title="Trascina per estendere/ridurre"
                       />
-                      <span className="truncate">{getBookingStatusLabel(request.status, "it")}</span>
+                      <span className="truncate">
+                        {hasProposal ? "Adesso" : getBookingStatusLabel(request.status, "it")}
+                      </span>
                       <span
                         onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
                         className="absolute right-0 top-0 h-full w-3 cursor-ew-resize"
@@ -654,6 +682,21 @@ const BookingGanttTable = ({
                     </div>
                   );
                 })}
+                {hasProposal &&
+                  proposedSegments.map((segment, segIndex) => (
+                    <div
+                      key={`proposed-${segIndex}`}
+                      className="absolute flex items-center gap-1.5 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 px-3 text-[12px] font-semibold text-sky-900"
+                      style={{
+                        top: ROW_HEIGHT + 8,
+                        height: ROW_HEIGHT - 16,
+                        left: segment.startIdx * COLUMN_WIDTH + 4,
+                        width: (segment.endIdx - segment.startIdx + 1) * COLUMN_WIDTH - 8,
+                      }}
+                    >
+                      <span className="truncate">Proposta</span>
+                    </div>
+                  ))}
               </div>
 
               <div className="border-l border-border/60 p-3 align-top">
@@ -700,6 +743,16 @@ const BookingGanttTable = ({
         })}
         {requests.length === 0 && (
           <p className="p-6 text-sm text-muted-foreground">Nessuna richiesta per i filtri selezionati.</p>
+        )}
+        {anyPendingProposal && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/60 px-3 py-2.5 text-[12px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-6 rounded-full border border-emerald-300/75 bg-emerald-100/80" /> Adesso (tratte attuali)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70" /> Proposta (non ancora confermata)
+            </span>
+          </div>
         )}
       </div>
     </div>
