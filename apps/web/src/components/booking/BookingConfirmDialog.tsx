@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
 import {
   getComplexityLabel,
@@ -370,13 +371,9 @@ const BookingConfirmDialog = ({
                     ? "Per completare la candidatura dovrai versare il contributo subito dopo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."
                     : "To complete your application you must pay the contribution right after. Without payment the booking is not finalised and you cannot take part in the voyage."}
                 </p>
-                <p className="mt-1">
-                  {lang === "it" ? "Perché e come funziona: leggi i " : "Why and how it works: read the "}
-                  <a href="/terms" target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">
-                    {lang === "it" ? "Termini e Condizioni" : "Terms & Conditions"}
-                  </a>
-                  .
-                </p>
+                <div className="mt-1">
+                  <ContributionTrustNote lang={lang} variant="plain" />
+                </div>
               </div>
             </div>
           )}

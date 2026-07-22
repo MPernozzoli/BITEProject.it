@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { formatDepositEur } from "@/lib/booking-deposit";
+import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import {
   checkDepositStatus,
   startBankTransferDeposit,
@@ -183,13 +184,7 @@ const BankTransferDialog = ({
                 : "For automatic validation, both the amount and the reference must match. Until we receive the correct amount with the exact reference, the booking is not finalised and you cannot take part in the voyage."}
             </div>
 
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              {lang === "it" ? "Perché e come funziona il contributo: leggi i " : "Why and how the contribution works: read the "}
-              <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-accent underline underline-offset-2">
-                {lang === "it" ? "Termini e Condizioni" : "Terms & Conditions"}
-              </a>
-              .
-            </p>
+            <ContributionTrustNote lang={lang} variant="plain" />
 
             <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 size={14} className="animate-spin shrink-0" />

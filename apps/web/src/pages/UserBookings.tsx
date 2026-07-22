@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import PaymentMethodDialog from "@/components/booking/PaymentMethodDialog";
+import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import UserBookingMatrix from "@/components/booking/UserBookingMatrix";
 import VoyageLiveWidget from "@/components/voyage/VoyageLiveWidget";
 import {
@@ -1414,6 +1415,9 @@ const UserBookings = () => {
                                 ? "Senza pagamento la modifica non si conclude e non potrai partecipare al viaggio."
                                 : "Without payment the change is not finalised and you cannot take part in the voyage."}
                             </p>
+                            <div className="mt-2">
+                              <ContributionTrustNote lang={lang} variant="plain" />
+                            </div>
                           </div>
                         )}
                         <textarea

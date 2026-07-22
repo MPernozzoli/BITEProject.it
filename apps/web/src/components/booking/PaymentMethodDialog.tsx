@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { BUNQ_SINGLE_TRANSACTION_LIMIT_EUR, formatDepositEur } from "@/lib/booking-deposit";
+import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 
 interface PaymentMethodDialogProps {
   open: boolean;
@@ -116,13 +117,7 @@ const PaymentMethodDialog = ({
           </button>
         </div>
 
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          {it ? "Perché e come funziona il contributo: leggi i " : "Why and how the contribution works: read the "}
-          <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-accent underline underline-offset-2">
-            {it ? "Termini e Condizioni" : "Terms & Conditions"}
-          </a>
-          .
-        </p>
+        <ContributionTrustNote lang={lang} />
 
         <div className="flex justify-end">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
