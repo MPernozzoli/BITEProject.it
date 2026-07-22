@@ -171,11 +171,25 @@ const BankTransferDialog = ({
             <CopyRow label={lang === "it" ? "Intestatario" : "Account holder"} value={state.details.holder} />
             <CopyRow label={lang === "it" ? "Causale (obbligatoria)" : "Reference (required)"} value={state.details.reference} />
 
+            <div className="rounded-md border border-red-300/70 bg-red-50/80 px-3 py-2 text-xs font-semibold leading-relaxed text-red-900 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100/90">
+              {lang === "it"
+                ? "Hai 24 ore per completare il bonifico. Se il pagamento non perviene entro 24 ore, la candidatura decade automaticamente."
+                : "You have 24 hours to complete the transfer. If payment does not arrive within 24 hours, the application lapses automatically."}
+            </div>
+
             <div className="rounded-md border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
               {lang === "it"
-                ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale. Se la causale manca o l'importo è diverso, la richiesta resterà in attesa."
-                : "For automatic validation, both the amount and the reference must match. If the reference is missing or the amount differs, the request will stay pending."}
+                ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale. Finché non riceviamo l'importo con la causale esatta, la prenotazione non è conclusa e non potrai partecipare al viaggio."
+                : "For automatic validation, both the amount and the reference must match. Until we receive the correct amount with the exact reference, the booking is not finalised and you cannot take part in the voyage."}
             </div>
+
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {lang === "it" ? "Perché e come funziona il contributo: leggi i " : "Why and how the contribution works: read the "}
+              <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-accent underline underline-offset-2">
+                {lang === "it" ? "Termini e Condizioni" : "Terms & Conditions"}
+              </a>
+              .
+            </p>
 
             <div className="flex items-center gap-2 rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 size={14} className="animate-spin shrink-0" />

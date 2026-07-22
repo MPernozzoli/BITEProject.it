@@ -178,6 +178,7 @@
   },
   "active": "62e870696e5b08ca",
   "lastOpenFiles": [
+    "apps/web/supabase/migrations/20260722150000_schedule_delay_admin_autoaccept_and_ack.sql",
     "apps/web/dist/assets/useBeforeUnloadPrompt-C8cJ54QK.js",
     "apps/web/dist/assets/useAuth-B110gben.js",
     "apps/web/dist/assets/useArticleReads-C6b5awiO.js",
@@ -188,7 +189,6 @@
     "apps/web/dist/assets/LazyVoyageMap-Dkimn7ZT.js",
     "apps/web/dist/assets/Journal-Cg4VH9zi.js",
     "apps/web/dist/assets/Index-CSaBx_xH.js",
-    "apps/web/dist/assets/CompleteProfile-__CqsUDc.js",
     "Wiki/24 - Termini e Condizioni.md",
     "dist/og-image 3.jpeg",
     "dist/apple-touch-icon 3.png",

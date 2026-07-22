@@ -14,6 +14,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { bunqConfigured, environment } from "../../../src/server/bunq/client.js";
+import { BUNQ_SINGLE_TRANSACTION_LIMIT_EUR } from "../../../src/lib/booking-deposit.js";
 import { createBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import {
   armBookingPaymentDeadline,
@@ -75,6 +76,19 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     const { db, user } = await resolveCaller(token);
     const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
     const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
+
+    // The bunq.me payment link caps a single request at €500. This limit applies ONLY to the
+    // online link — a bank transfer (api/payments/bunq/bank-transfer.ts) has no such cap — so
+    // the check lives here rather than in the shared resolver. The client falls back to bank
+    // transfer on this error.
+    if (amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR) {
+      sendJson(res, 409, {
+        error: "bunq_amount_exceeds_single_transaction_limit",
+        amountEur,
+        maxSingleTransactionEur: BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
+      });
+      return;
+    }
 
     // Idempotency: reuse an existing Bunq-link payment row for this exact payer.
     const existing = await findExistingDeposit(db, bookingRequestId, payerParticipantId, "bunq_link");

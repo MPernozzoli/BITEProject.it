@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, BellOff, CalendarCheck, Check, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
+import { Bell, BellOff, CalendarCheck, Check, Hourglass, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
@@ -31,7 +31,7 @@ import {
   saveCloudBookingApplicationDraft,
   saveLocalBookingApplicationDraft,
 } from "@/lib/booking-application-draft";
-import { perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
+import { formatDepositEur, perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import { getBookingBriefingContent } from "@/lib/booking-briefings";
@@ -79,7 +79,8 @@ type PlanChangeAction =
   | "accept_proposed_change"
   | "request_different_route"
   | "reject_proposed_change"
-  | "cancel_with_full_refund";
+  | "cancel_with_full_refund"
+  | "acknowledge_delay";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -106,6 +107,11 @@ const stringArrayFromMetadata = (metadata: Record<string, unknown> | null | unde
 const stringFromMetadata = (metadata: Record<string, unknown> | null | undefined, key: string) => {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+};
+
+const boolFromMetadata = (metadata: Record<string, unknown> | null | undefined, key: string) => {
+  const value = metadata?.[key];
+  return value === true || value === "true";
 };
 
 const UserBookings = () => {
@@ -137,9 +143,11 @@ const UserBookings = () => {
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
   const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
-  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string } | null>(
-    null
-  );
+  const [paymentChoice, setPaymentChoice] = useState<{
+    bookingRequestId: string;
+    participantId?: string;
+    amountEur?: number;
+  } | null>(null);
   const [paymentStarting, setPaymentStarting] = useState(false);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
   const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
@@ -517,15 +525,31 @@ const UserBookings = () => {
         .filter(Boolean)
         .map((leg) => getLegLabel(leg, waypointsById, lang))
     : [];
-  const detailsProposedLegLabels = detailsRequest
+  const detailsProposedLegs = detailsRequest
     ? stringArrayFromMetadata(detailsRequest.plan_change_metadata, "proposed_leg_ids")
         .map((legId) => legsById[legId])
         .filter(Boolean)
-        .map((leg) => getLegLabel(leg, waypointsById, lang))
     : [];
+  const detailsProposedLegLabels = detailsProposedLegs.map((leg) => getLegLabel(leg, waypointsById, lang));
+  // A route change the organiser flagged as chargeable: accepting it sends the traveller to pay
+  // the difference (here the whole amount, since nothing has been paid yet). Comped bookings skip it.
+  const detailsRequiresSettlement =
+    Boolean(detailsRequest) &&
+    !detailsRequest?.is_comped &&
+    (boolFromMetadata(detailsRequest?.plan_change_metadata, "require_settlement") ||
+      boolFromMetadata(detailsRequest?.plan_change_metadata, "settlement_due"));
+  const detailsProposedAmountEur = detailsRequest
+    ? totalDepositEur(detailsProposedLegs, Math.max(1, detailsRequest.party_size), {
+        contributionPerNmEur: detailsVoyage?.booking_contribution_per_nm_eur,
+        fixedMinimumEur: shouldApplyContributionFixedMinimum(requests, detailsRequest.voyage_id, detailsRequest.id)
+          ? undefined
+          : 0,
+      })
+    : 0;
   const detailsPlanChangeUserAction = detailsRequest
     ? stringFromMetadata(detailsRequest.plan_change_metadata, "user_response_action")
     : null;
+  const detailsPlanChangeKind = detailsRequest ? stringFromMetadata(detailsRequest.plan_change_metadata, "change_kind") : null;
   const detailsShowPendingPlanChange =
     detailsRequest?.plan_change_status === "pending_user_approval" &&
     !detailsPlanChangeUserAction &&
@@ -533,6 +557,21 @@ const UserBookings = () => {
   const detailsShowCounterWaiting =
     detailsRequest?.plan_change_status === "pending_user_approval" && detailsPlanChangeUserAction === "request_different_route";
   const detailsShowAwaitingAdminApproval = detailsRequest?.plan_change_status === "pending_admin_approval";
+  // A delay notice keeps the same legs (only the dates move), so it gets its own panel
+  // instead of the route-change one, which would have nothing to show.
+  const detailsShowScheduleDelay =
+    detailsRequest?.plan_change_status === "pending_user_approval" &&
+    !detailsPlanChangeUserAction &&
+    detailsPlanChangeKind === "schedule_delayed";
+  const detailsDelayedLegLabels = detailsRequest
+    ? stringArrayFromMetadata(detailsRequest.plan_change_metadata, "delayed_leg_ids")
+        .map((legId) => legsById[legId])
+        .filter(Boolean)
+        .map((leg) => getLegLabel(leg, waypointsById, lang))
+    : [];
+  const detailsDelayNewDeparture = detailsRequest
+    ? stringFromMetadata(detailsRequest.plan_change_metadata, "new_departure_at")
+    : null;
   const detailsAdminPlanMessage = detailsRequest
     ? stringFromMetadata(detailsRequest.plan_change_metadata, "admin_message") ||
       stringFromMetadata(detailsRequest.plan_change_metadata, "admin_note")
@@ -670,6 +709,14 @@ const UserBookings = () => {
       return;
     }
 
+    // Capture the contribution before the selection is cleared below, so the payment dialog can
+    // show the amount and pick card-vs-transfer (bank transfer only above the €500 card cap).
+    const soloAmountEur = totalDepositEur(
+      selectedLegIds.map((id) => legsById[id]).filter(Boolean),
+      1,
+      selectedContributionOptions,
+    );
+
     setSaving(false);
     setConfirmOpen(false);
     setSelectedLegIds([]);
@@ -785,6 +832,11 @@ const UserBookings = () => {
       return;
     }
 
+    // Accepting a chargeable route change sends the traveller straight to pay the difference
+    // (captured before loadData() recomputes the details view).
+    const goToPaymentAfterAccept = action === "accept_proposed_change" && detailsRequiresSettlement;
+    const settlementAmountEur = detailsProposedAmountEur;
+
     setSaving(true);
     const { error } = await typedSupabase.rpc("respond_voyage_booking_plan_change", {
       _booking_request_id: requestId,
@@ -796,14 +848,28 @@ const UserBookings = () => {
       toast.error(error.message);
       return;
     }
+    setPlanChangeMessages((current) => ({ ...current, [requestId]: "" }));
+
+    if (goToPaymentAfterAccept) {
+      toast.info(
+        lang === "it"
+          ? "Modifica accettata: completa il pagamento del contributo per confermarla."
+          : "Change accepted: complete the contribution payment to confirm it."
+      );
+      setDetailsRequestId(null);
+      setPaymentChoice({ bookingRequestId: requestId, amountEur: settlementAmountEur });
+      await loadData();
+      return;
+    }
+
     const successMessage: Record<PlanChangeAction, string> = {
       accept_proposed_change: lang === "it" ? "Proposta accettata." : "Proposal accepted.",
       request_different_route: lang === "it" ? "Controproposta inviata." : "Counterproposal sent.",
       reject_proposed_change: lang === "it" ? "Proposta rifiutata." : "Proposal declined.",
       cancel_with_full_refund: lang === "it" ? "Richiesta annullata." : "Booking cancelled.",
+      acknowledge_delay: lang === "it" ? "Ritardo confermato." : "Delay acknowledged.",
     };
     toast.success(successMessage[action]);
-    setPlanChangeMessages((current) => ({ ...current, [requestId]: "" }));
     await loadData();
   };
 
@@ -1018,6 +1084,7 @@ const UserBookings = () => {
             if (!open) setPaymentChoice(null);
           }}
           loading={paymentStarting}
+          amountEur={paymentChoice?.amountEur}
           onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
           onBankTransfer={() => {
             if (!paymentChoice) return;
@@ -1335,6 +1402,20 @@ const UserBookings = () => {
                             </span>
                           ))}
                         </div>
+                        {detailsRequiresSettlement && (
+                          <div className="mt-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                            <p className="font-semibold">
+                              {lang === "it"
+                                ? `Accettando dovrai versare il contributo del nuovo percorso: ${formatDepositEur(detailsProposedAmountEur, "it")}.`
+                                : `By accepting you will need to pay the new route's contribution: ${formatDepositEur(detailsProposedAmountEur, "en")}.`}
+                            </p>
+                            <p className="mt-1">
+                              {lang === "it"
+                                ? "Senza pagamento la modifica non si conclude e non potrai partecipare al viaggio."
+                                : "Without payment the change is not finalised and you cannot take part in the voyage."}
+                            </p>
+                          </div>
+                        )}
                         <textarea
                           value={planChangeMessages[detailsRequest.id] || ""}
                           onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))}
@@ -1349,7 +1430,9 @@ const UserBookings = () => {
                             disabled={saving}
                             className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
                           >
-                            {lang === "it" ? "Accetta" : "Accept"}
+                            {detailsRequiresSettlement
+                              ? lang === "it" ? "Accetta e paga" : "Accept & pay"
+                              : lang === "it" ? "Accetta" : "Accept"}
                           </button>
                           <button
                             type="button"
@@ -1374,6 +1457,54 @@ const UserBookings = () => {
                             className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
                           >
                             {lang === "it" ? "Annulla" : "Cancel"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {detailsShowScheduleDelay && (
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                        <div className="flex items-start gap-2">
+                          <Hourglass className="mt-0.5 shrink-0 text-amber-700" size={16} />
+                          <div>
+                            <p className="font-semibold">{lang === "it" ? "Il viaggio è in ritardo" : "The voyage is running late"}</p>
+                            <p className="mt-1 text-amber-900/80">
+                              {lang === "it"
+                                ? "Le tue tratte restano le stesse, solo le date si spostano."
+                                : "Your legs stay the same, only the dates shift."}
+                            </p>
+                          </div>
+                        </div>
+                        {detailsDelayedLegLabels.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {detailsDelayedLegLabels.map((label) => (
+                              <span key={label} className="rounded-full border border-amber-300/70 bg-white/65 px-3 py-1 text-xs text-amber-900">
+                                {label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {detailsDelayNewDeparture && (
+                          <p className="mt-2 text-amber-900/80">
+                            {lang === "it" ? "Nuova partenza prevista: " : "New expected departure: "}
+                            {formatBookingDate(detailsDelayNewDeparture, locale)}
+                          </p>
+                        )}
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "acknowledge_delay")}
+                            disabled={saving}
+                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Ho capito" : "Got it"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respondToPlanChange(detailsRequest.id, "cancel_with_full_refund")}
+                            disabled={saving}
+                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Annulla con rimborso" : "Cancel with refund"}
                           </button>
                         </div>
                       </div>

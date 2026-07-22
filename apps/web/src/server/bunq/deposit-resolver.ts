@@ -7,7 +7,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createAuthClient, createServiceClient } from "./supabase.js";
 import {
-  BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
   perPersonDepositEur,
   depositForPayerEur,
   type DepositLeg,
@@ -280,13 +279,10 @@ export async function resolveDepositPayer(
       overpaidEur: alreadyPaidEur > dueEur ? Math.round((alreadyPaidEur - dueEur) * 100) / 100 : 0,
     });
   }
-  if (amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR) {
-    throw new DepositHttpError(409, {
-      error: "bunq_amount_exceeds_single_transaction_limit",
-      amountEur,
-      maxSingleTransactionEur: BUNQ_SINGLE_TRANSACTION_LIMIT_EUR,
-    });
-  }
+  // NB: the €500 Bunq single-transaction cap is enforced only by the Bunq-link endpoint
+  // (api/payments/bunq/request.ts), NOT here — a bank transfer has no such limit, and this
+  // resolver is shared by both methods. Blocking it here would make large contributions
+  // (e.g. a long multi-leg reroute) impossible to pay by any method.
 
   const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
   return {

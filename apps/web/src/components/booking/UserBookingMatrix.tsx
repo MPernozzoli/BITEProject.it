@@ -61,6 +61,12 @@ const readLegIdArray = (meta: Record<string, unknown> | null | undefined, key: s
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 };
 
+/** Reads a plain string out of the plan-change metadata bag (change_kind etc.). */
+const readMetadataString = (meta: Record<string, unknown> | null | undefined, key: string): string | null => {
+  const value = meta?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+};
+
 const legIdsToRange = (legIds: string[], legIndexById: Map<string, number>) => {
   const indices = legIds.map((id) => legIndexById.get(id)).filter((idx): idx is number => idx != null);
   if (indices.length === 0) return null;
@@ -100,13 +106,16 @@ const UserBookingMatrix = ({
   const draftRange = useMemo(() => legIdsToRange(draftLegIds, legIndexById), [draftLegIds, legIndexById]);
   const hasOwnRequest = Boolean(ownRequest && ownRange);
   const ownPlanChangePending = ownRequest?.plan_change_status && ownRequest.plan_change_status !== "none";
+  const ownPlanChangeKind = readMetadataString(ownRequest?.plan_change_metadata, "change_kind");
+  /** A delay notice keeps the same legs (only the dates move), so there is nothing to preview. */
+  const ownPlanChangeIsScheduleDelay = ownPlanChangeKind === "schedule_delayed";
   // When the organiser has proposed different legs, surface them as a dashed "proposal" bar
   // right next to the current one, so the traveller sees the change instead of just reading
   // "a change is pending".
   const proposedRange = useMemo(() => {
-    if (ownRequest?.plan_change_status !== "pending_user_approval") return null;
+    if (ownRequest?.plan_change_status !== "pending_user_approval" || ownPlanChangeIsScheduleDelay) return null;
     return legIdsToRange(readLegIdArray(ownRequest.plan_change_metadata, "proposed_leg_ids"), legIndexById);
-  }, [ownRequest?.plan_change_status, ownRequest?.plan_change_metadata, legIndexById]);
+  }, [ownRequest?.plan_change_status, ownRequest?.plan_change_metadata, ownPlanChangeIsScheduleDelay, legIndexById]);
   const showProposalPreview = Boolean(proposedRange);
 
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -441,7 +450,24 @@ const UserBookingMatrix = ({
                 </span>
               </button>
             )}
-            {ownPlanChangePending && !showProposalPreview && (
+            {ownPlanChangePending && !showProposalPreview && ownPlanChangeIsScheduleDelay && (
+              <button
+                type="button"
+                onClick={() => ownRequest && onOpenOwnRequest(ownRequest)}
+                className="w-full rounded-2xl border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-left transition-colors hover:border-amber-400 dark:bg-amber-400/10"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  <Hourglass size={15} className="shrink-0" />
+                  {it ? "Il viaggio è in ritardo" : "The voyage is running late"}
+                </span>
+                <span className="mt-1 block text-[13px] leading-relaxed text-amber-900/80 dark:text-amber-100/80">
+                  {it
+                    ? "Le tue tratte non cambiano, solo le date si spostano. Tocca qui per i dettagli e per confermare o annullare con rimborso completo."
+                    : "Your legs do not change, only the dates shift. Tap here for details, to acknowledge, or to cancel with a full refund."}
+                </span>
+              </button>
+            )}
+            {ownPlanChangePending && !showProposalPreview && !ownPlanChangeIsScheduleDelay && (
               <span className="text-[13px] text-muted-foreground">
                 {it ? "Modifica in attesa di risposta." : "Change pending a response."}
               </span>
