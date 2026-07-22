@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { AlertTriangle, CreditCard, Info, Landmark, Loader2, TicketCheck } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import {
@@ -39,76 +40,94 @@ type ConfirmDialogLeg = Pick<
 
 /**
  * Booking conditions the user must explicitly accept before a request is sent.
+ * Kept deliberately short and grouped: each checkbox links to the full legal
+ * text on the Terms and Conditions page rather than restating it inline.
  * `paymentOnly` conditions are shown only when a contribution / Bunq payment flow is
  * part of the booking (pass `requiresPayment` to the dialog).
  */
 interface BookingCondition {
   id: string;
-  it: string;
-  en: string;
+  it: ReactNode;
+  en: ReactNode;
   paymentOnly?: boolean;
   /** Optional (non-blocking) consent — does not gate the confirm button. */
   optional?: boolean;
 }
 
+const TermsLink = ({ children }: { children: ReactNode }) => (
+  <Link
+    to="/terms"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="font-medium text-foreground underline underline-offset-2 hover:text-accent"
+    onClick={(event) => event.stopPropagation()}
+  >
+    {children}
+  </Link>
+);
+
 const BOOKING_CONDITIONS: BookingCondition[] = [
   {
-    id: "indicative-dates",
-    it: "Accetto che le date mostrate al momento dell'adesione siano indicative e possano variare per esigenze tecniche, organizzative o meteorologiche: verranno confermate appena possibile.",
-    en: "I accept that the dates shown when I join are indicative and may vary for technical, organisational or weather reasons, and will be confirmed as soon as possible.",
+    id: "voyage-terms",
+    it: (
+      <>
+        Ho letto e accetto i <TermsLink>Termini e Condizioni</TermsLink> di BITE: viaggio
+        condiviso e non commerciale con date, rotta e programma sempre indicativi e
+        modificabili per motivi tecnici, meteo o di sicurezza. Partecipo attivamente in
+        equipaggio — manovre, timoneria, pulizie, turni di guardia anche notturni —
+        consapevole dei rischi della navigazione, dichiarando la mia idoneità
+        psico-fisica, l'impegno a seguire le indicazioni del comandante e la mia
+        responsabilità per assicurazione e beni personali a bordo.
+      </>
+    ),
+    en: (
+      <>
+        I have read and accept BITE's <TermsLink>Terms and Conditions</TermsLink>: a
+        shared, non-commercial voyage with dates, route and schedule that are always
+        indicative and may change for technical, weather or safety reasons. I take an
+        active part in the crew — manoeuvres, helming, cleaning, watch shifts including
+        at night — aware of the risks of sailing, declaring my psychophysical fitness,
+        my commitment to follow the captain's guidance, and my own responsibility for
+        insurance and personal belongings on board.
+      </>
+    ),
   },
   {
-    id: "risks-liability",
-    it: "Sono consapevole che la navigazione in mare comporta rischi per la salute, la vita e i beni personali. Scelgo di partecipare assumendomene la responsabilità e sollevo organizzatori ed equipaggio da pretese o rivalse legali connesse a tali rischi.",
-    en: "I understand that sailing at sea carries risks to health, life and personal property. I choose to take part, accepting responsibility for these risks and releasing the organisers and crew from related claims or legal recourse.",
-  },
-  {
-    id: "route-changes",
-    it: "Accetto che la rotta possa variare e richiedere spostamenti aggiuntivi, a mia cura e spese, rispetto a quelli previsti per raggiungere o lasciare l'imbarcazione.",
-    en: "I accept that the route may change and require additional travel, at my own care and expense, beyond what was planned to reach or leave the boat.",
-  },
-  {
-    id: "active-crew",
-    it: "So che questo è un viaggio in equipaggio, in cui si naviga insieme e non si è ospiti: partecipo attivamente alla conduzione dell'imbarcazione — manovre, timoneria, regolazione delle vele, pulizie e turni di guardia, anche notturni.",
-    en: "I know this is a crewed voyage, where we sail together rather than being guests: I take an active part in running the boat — manoeuvres, helming, sail trimming, cleaning and watch shifts, including at night.",
-  },
-  {
-    id: "private-cost-sharing",
+    id: "cost-sharing-terms",
     paymentOnly: true,
-    it: "So che BITE è un viaggio privato che l'equipaggio compie comunque, aperto a chi desidera unirsi condividendo in modo equo una parte delle spese vive. Non è un charter, un'attività turistica o un servizio commerciale.",
-    en: "I know BITE is a private voyage the crew is making anyway, open to those who wish to join by fairly sharing part of the out-of-pocket costs. It is not a charter, a tourism business or a commercial service.",
-  },
-  {
-    id: "deposit-nature",
-    paymentOnly: true,
-    it: "So che l'importo richiesto è la mia quota equa di contributo alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Non comprende le spese alimentari, che gestiremo insieme a bordo durante il viaggio.",
-    en: "I know the requested amount is my fair share of the navigation and vessel operating costs during the crossing. It does not include food, which we manage together on board during the voyage.",
-  },
-  {
-    id: "cancellation-policy",
-    paymentOnly: true,
-    it: "So che il contributo potrà essere versato tramite link di pagamento o bonifico, secondo le modalità indicate dopo la conferma.",
-    en: "I know the contribution can be paid by payment link or bank transfer, according to the instructions provided after confirmation.",
-  },
-  {
-    id: "physical-fitness",
-    it: "Dichiaro di essere in condizioni psico-fisiche idonee alla navigazione e mi impegno a comunicare per tempo all'equipaggio eventuali patologie o condizioni mediche rilevanti.",
-    en: "I declare that I am in a psychophysical condition suitable for sailing and undertake to inform the crew in good time of any relevant illness or medical condition.",
-  },
-  {
-    id: "captain-authority",
-    it: "Mi impegno a seguire le indicazioni del comandante e dell'equipaggio in materia di sicurezza e di condotta a bordo per tutta la durata del viaggio.",
-    en: "I undertake to follow the guidance of the captain and crew regarding safety and conduct on board for the entire duration of the voyage.",
-  },
-  {
-    id: "insurance-belongings",
-    it: "So che l'eventuale copertura assicurativa per infortuni e beni personali è a mio carico e che gli organizzatori non rispondono di smarrimenti o danni ai miei effetti personali.",
-    en: "I know that any insurance cover for injuries and personal belongings is my own responsibility, and that the organisers are not liable for loss of or damage to my personal effects.",
+    it: (
+      <>
+        Ho letto e accetto le condizioni sul contributo alle spese vive descritte nei{" "}
+        <TermsLink>Termini e Condizioni</TermsLink>: non è il prezzo di un servizio ma la
+        mia quota equa delle spese di navigazione, da versare con le modalità indicate
+        dopo la conferma.
+      </>
+    ),
+    en: (
+      <>
+        I have read and accept the shared-cost contribution terms described in the{" "}
+        <TermsLink>Terms and Conditions</TermsLink>: it is not a price for a service but
+        my fair share of the sailing costs, to be paid using the method provided after
+        confirmation.
+      </>
+    ),
   },
   {
     id: "media-consent",
-    it: "Partecipando al viaggio accetto di essere ripreso in foto e video durante la traversata e di essere incluso nelle produzioni editoriali e nella comunicazione del progetto BITE.",
-    en: "By taking part in the voyage, I accept to be filmed and photographed during the crossing and to be included in BITE's editorial productions and communications.",
+    it: (
+      <>
+        Accetto, come previsto dai <TermsLink>Termini e Condizioni</TermsLink>, di essere
+        fotografato e ripreso durante il viaggio e incluso nelle produzioni editoriali e
+        nella comunicazione del progetto BITE.
+      </>
+    ),
+    en: (
+      <>
+        As set out in the <TermsLink>Terms and Conditions</TermsLink>, I accept to be
+        photographed and filmed during the voyage and included in BITE's editorial
+        productions and communications.
+      </>
+    ),
   },
 ];
 

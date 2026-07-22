@@ -14,6 +14,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import BookingGanttTable from "@/components/admin/BookingGanttTable";
 import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
 import PlanChangeProposalDialog, { type PlanChangeProposal } from "@/components/admin/PlanChangeProposalDialog";
@@ -103,6 +109,10 @@ const statusOptions: VoyageBookingStatus[] = [
   "rejected",
   "expired",
 ];
+
+// Rifiutato/annullato/scaduto are "negative" outcomes: excluded from the overview's default
+// status filter so the Gantt opens showing only bookings still relevant to follow up on.
+const negativeBookingStatuses = new Set<VoyageBookingStatus>(["rejected", "cancelled", "expired"]);
 
 const duplicateBookingStatuses = new Set<VoyageBookingStatus>([
   ...capacityBlockingStatuses,
@@ -288,7 +298,9 @@ const AdminVoyageBookings = () => {
   const [availableProfiles, setAvailableProfiles] = useState<BookingProfile[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | VoyageBookingStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<Set<VoyageBookingStatus>>(
+    () => new Set(statusOptions.filter((status) => !negativeBookingStatuses.has(status)))
+  );
   const [voyageSearchQuery, setVoyageSearchQuery] = useState("");
   const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | "water" | "land">("all");
   // Completed voyages can't act on their bookings anymore, so they're hidden by default;
@@ -498,7 +510,12 @@ const AdminVoyageBookings = () => {
     [combinedProfiles]
   );
   const visibleRequests = useMemo(
-    () => requests.filter((request) => statusFilter === "all" || request.status === statusFilter),
+    () =>
+      requests
+        .filter((request) => statusFilter.has(request.status))
+        // Crew rows pinned to the top of the Gantt, everyone else keeps the existing order below.
+        .slice()
+        .sort((a, b) => Number(b.is_crew) - Number(a.is_crew)),
     [requests, statusFilter]
   );
   // Candidature "in revisione" for this voyage — drives the tab badge. Mirrors the panel's
@@ -1304,18 +1321,39 @@ const AdminVoyageBookings = () => {
                 {selectedVoyage ? getLocalizedBookingVoyageName(selectedVoyage, "it") : "Booking"}
               </h2>
             </div>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
-              className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-            >
-              <option value="all">Tutti gli stati</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {getBookingStatusLabel(status, "it")}
-                </option>
-              ))}
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                >
+                  {statusFilter.size === statusOptions.length
+                    ? "Tutti gli stati"
+                    : statusFilter.size === 0
+                      ? "Nessuno stato"
+                      : `${statusFilter.size} stati selezionati`}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {statusOptions.map((status) => (
+                  <DropdownMenuCheckboxItem
+                    key={status}
+                    checked={statusFilter.has(status)}
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={(checked) =>
+                      setStatusFilter((current) => {
+                        const next = new Set(current);
+                        if (checked) next.add(status);
+                        else next.delete(status);
+                        return next;
+                      })
+                    }
+                  >
+                    {getBookingStatusLabel(status, "it")}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {(() => {
