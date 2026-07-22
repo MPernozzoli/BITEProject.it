@@ -364,6 +364,20 @@ const BookingConfirmDialog = ({
                   ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico."
                   : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility."}
               </p>
+              <div className="mt-3 rounded-xl border border-amber-400/60 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
+                <p className="font-semibold">
+                  {lang === "it"
+                    ? "Per completare la candidatura dovrai versare il contributo subito dopo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."
+                    : "To complete your application you must pay the contribution right after. Without payment the booking is not finalised and you cannot take part in the voyage."}
+                </p>
+                <p className="mt-1">
+                  {lang === "it" ? "Perché e come funziona: leggi i " : "Why and how it works: read the "}
+                  <a href="/terms" target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">
+                    {lang === "it" ? "Termini e Condizioni" : "Terms & Conditions"}
+                  </a>
+                  .
+                </p>
+              </div>
             </div>
           )}
 
@@ -469,9 +483,13 @@ const BookingConfirmDialog = ({
                   ? lang === "it"
                     ? "Conferma e paga adesso"
                     : "Confirm & pay now"
-                  : lang === "it"
-                    ? "Conferma e continua"
-                    : "Confirm & continue"
+                  : mode === "application"
+                    ? lang === "it"
+                      ? "Prosegui al pagamento"
+                      : "Continue to payment"
+                    : lang === "it"
+                      ? "Conferma e continua"
+                      : "Confirm & continue"
               : mode === "application"
                 ? lang === "it"
                   ? "Registra candidatura"

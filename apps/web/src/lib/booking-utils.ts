@@ -109,6 +109,8 @@ export interface BookingRequest {
   plan_change_resolved_at?: string | null;
   /** True for the two fixed crew members auto-booked when a voyage's booking goes live. */
   is_crew?: boolean;
+  /** Admin-granted "omaggio": the booking is exempt from the contribution payment gate. */
+  is_comped?: boolean;
 }
 
 export interface BookingRequestLeg {

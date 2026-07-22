@@ -731,7 +731,7 @@ const UserBookings = () => {
     // Solo applications must complete the contribution payment now: the request stays
     // unreviewable until it's paid, and a refund is issued automatically if later rejected.
     if (bookingRequestId) {
-      setPaymentChoice({ bookingRequestId });
+      setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
     }
     await loadData();
   };

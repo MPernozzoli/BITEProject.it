@@ -130,7 +130,7 @@ const Journal = () => {
   const [bookingSidebarResetKey, setBookingSidebarResetKey] = useState("initial");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingConfirmOpen, setBookingConfirmOpen] = useState(false);
-  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string } | null>(
+  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; participantId?: string; amountEur?: number } | null>(
     null
   );
   const [paymentStarting, setPaymentStarting] = useState(false);
@@ -811,8 +811,9 @@ const Journal = () => {
 
       // Solo booking: ask explicitly how the user wants to pay before opening Bunq or bank details.
       if (bookingRequestId) {
+        const soloAmountEur = totalDepositEur(selectedBookingLegs, Math.max(1, bookingPartySize), bookingContributionOptions);
         setBookingConfirmOpen(false);
-        setPaymentChoice({ bookingRequestId });
+        setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
         clearBookingSelection();
         void refetchBookingLegs();
         return;
@@ -1276,6 +1277,7 @@ const Journal = () => {
               if (!open) setPaymentChoice(null);
             }}
             loading={paymentStarting}
+            amountEur={paymentChoice?.amountEur}
             onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
             onBankTransfer={() => {
               if (!paymentChoice) return;
