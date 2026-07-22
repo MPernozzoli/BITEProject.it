@@ -194,13 +194,13 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
               {lang === "it" ? option.it : option.en}
             </button>
           ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
           {navigationRangeOptions.map((option) => (
             <button
               key={option.value}
               type="button"
-              onClick={() => update("navigationRange", option.value)}
+              onClick={() =>
+                update("navigationRange", normalizedValue.navigationRange === option.value ? "" : option.value)
+              }
               className={chipClass(normalizedValue.navigationRange === option.value)}
             >
               {lang === "it" ? option.it : option.en}

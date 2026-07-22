@@ -168,16 +168,6 @@ export function getCandidateInfoValidationError(
   const hasKnownLanguage = candidateInfo.languages.length > 0;
   const hasOtherLanguage = candidateInfo.otherLanguages.trim().length > 0;
 
-  if (candidateInfo.sailingKinds.length === 0) {
-    return lang === "it"
-      ? "Seleziona almeno un tipo di esperienza nautica."
-      : "Select at least one type of sailing experience.";
-  }
-  if (!candidateInfo.navigationRange) {
-    return lang === "it"
-      ? "Indica il tipo di navigazione che conosci."
-      : "Select the navigation range you know.";
-  }
   if (!candidateInfo.ageRange) {
     return lang === "it" ? "Seleziona la tua fascia d'eta." : "Select your age range.";
   }

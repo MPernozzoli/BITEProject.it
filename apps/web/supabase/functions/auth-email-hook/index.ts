@@ -1,6 +1,7 @@
 import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { Webhook } from 'npm:standardwebhooks@1.0.0'
 import { SignupEmail } from '../_shared/email-templates/signup.tsx'
 import { InviteEmail } from '../_shared/email-templates/invite.tsx'
 import { MagicLinkEmail } from '../_shared/email-templates/magic-link.tsx'
@@ -178,68 +179,91 @@ function normalizeAuthEmailPayload(raw: unknown): { run_id: string; data: Record
   return { run_id, data, version }
 }
 
-// Webhook handler - receives Supabase Auth email events and queues the rendered email.
-async function handleWebhook(req: Request): Promise<Response> {
-  const authorizationError = authorizeHookCaller(req)
-  if (authorizationError) {
-    return authorizationError
-  }
+type EmailJob = {
+  runId: string
+  emailType: string
+  recipientEmail: string
+  templateProps: Record<string, unknown>
+}
 
-  let payload: { run_id: string; data: Record<string, unknown>; version: string } | null
-  try {
-    payload = normalizeAuthEmailPayload(await req.json())
-  } catch {
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+// Native payload shape sent by Supabase Auth's built-in "Send Email" hook,
+// signed per the Standard Webhooks spec (webhook-id/webhook-timestamp/webhook-signature).
+// See https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook
+type NativeHookPayload = {
+  user: { email: string }
+  email_data: {
+    token: string
+    token_hash: string
+    redirect_to: string
+    email_action_type: string
+    site_url: string
+    token_new?: string
+    email_new?: string
   }
+}
 
-  if (!payload) {
-    return new Response(
-      JSON.stringify({ error: 'Invalid webhook payload' }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+function parseNativeHook(rawBody: string, headers: Headers): EmailJob {
+  const hookSecret = Deno.env.get('AUTH_EMAIL_HOOK_SECRET')
+  if (!hookSecret) {
+    throw new Error('AUTH_EMAIL_HOOK_SECRET is not configured')
   }
+  const wh = new Webhook(hookSecret.replace('v1,whsec_', ''))
+  const { user, email_data } = wh.verify(rawBody, Object.fromEntries(headers)) as NativeHookPayload
 
-  if (payload.version !== '1') {
-    console.error('Unsupported payload version', { version: payload.version, run_id: payload.run_id })
-    return new Response(
-      JSON.stringify({ error: `Unsupported payload version: ${payload.version}` }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
+  const confirmationUrl = `${email_data.site_url}/auth/v1/verify?token=${email_data.token_hash}&type=${email_data.email_action_type}&redirect_to=${encodeURIComponent(email_data.redirect_to)}`
+
+  return {
+    runId: crypto.randomUUID(),
+    emailType: email_data.email_action_type,
+    recipientEmail: user.email,
+    templateProps: {
+      siteName: SITE_NAME,
+      siteUrl: `https://${ROOT_DOMAIN}`,
+      recipient: user.email,
+      confirmationUrl,
+      token: email_data.token,
+      email: user.email,
+      newEmail: email_data.email_new,
+    },
   }
+}
 
-  // The email action type is in payload.data.action_type (e.g., "signup", "recovery")
-  // payload.type is the hook event type ("auth")
+function parseLegacyEnvelope(rawBody: string): EmailJob {
+  const payload = normalizeAuthEmailPayload(JSON.parse(rawBody))
+  if (!payload) throw new Error('Invalid webhook payload')
+  if (payload.version !== '1') throw new Error(`Unsupported payload version: ${payload.version}`)
+
   const emailType = String(payload.data.action_type ?? payload.data.type ?? '')
   const recipientEmail = String(payload.data.email ?? payload.data.recipient ?? '')
-  console.log('Received auth event', { emailType, email: recipientEmail, run_id: payload.run_id })
+
+  return {
+    runId: payload.run_id,
+    emailType,
+    recipientEmail,
+    templateProps: {
+      siteName: SITE_NAME,
+      siteUrl: `https://${ROOT_DOMAIN}`,
+      recipient: recipientEmail,
+      confirmationUrl: payload.data.url,
+      token: payload.data.token,
+      email: recipientEmail,
+      newEmail: payload.data.new_email,
+    },
+  }
+}
+
+// Renders the templated email and enqueues it for delivery via the Resend dispatcher.
+async function sendTemplatedEmail(job: EmailJob): Promise<Response> {
+  const { runId, emailType, recipientEmail, templateProps } = job
+  console.log('Received auth event', { emailType, email: recipientEmail, run_id: runId })
 
   const EmailTemplate = EMAIL_TEMPLATES[emailType]
   if (!EmailTemplate) {
-    console.error('Unknown email type', { emailType, run_id: payload.run_id })
+    console.error('Unknown email type', { emailType, run_id: runId })
     return new Response(
       JSON.stringify({ error: `Unknown email type: ${emailType}` }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
-  }
-
-  // Build template props from payload.data (HookData structure)
-  const templateProps = {
-    siteName: SITE_NAME,
-    siteUrl: `https://${ROOT_DOMAIN}`,
-    recipient: recipientEmail,
-    confirmationUrl: payload.data.url,
-    token: payload.data.token,
-    email: recipientEmail,
-    newEmail: payload.data.new_email,
   }
 
   // Render React Email to HTML and plain text
@@ -267,7 +291,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   const { error: enqueueError } = await supabase.rpc('enqueue_email', {
     queue_name: 'auth_emails',
     payload: {
-      run_id: payload.run_id,
+      run_id: runId,
       message_id: messageId,
       to: recipientEmail,
       from: `${SITE_NAME} <support@${FROM_DOMAIN}>`,
@@ -282,7 +306,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   })
 
   if (enqueueError) {
-    console.error('Failed to enqueue auth email', { error: enqueueError, run_id: payload.run_id, emailType })
+    console.error('Failed to enqueue auth email', { error: enqueueError, run_id: runId, emailType })
     await supabase.from('email_send_log').insert({
       message_id: messageId,
       template_name: emailType,
@@ -296,12 +320,44 @@ async function handleWebhook(req: Request): Promise<Response> {
     })
   }
 
-  console.log('Auth email enqueued', { emailType, email: recipientEmail, run_id: payload.run_id })
+  console.log('Auth email enqueued', { emailType, email: recipientEmail, run_id: runId })
 
   return new Response(
     JSON.stringify({ success: true, queued: true }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
+}
+
+// Webhook handler - receives Supabase Auth email events and queues the rendered email.
+// Supports two callers:
+//  1. Supabase Auth's native "Send Email" hook (HTTPS type) - Standard Webhooks signed,
+//     carries the real {user, email_data} shape.
+//  2. Internal callers (e.g. the app backend) authenticated with the service role key or
+//     the static AUTH_EMAIL_HOOK_SECRET, carrying the {run_id, data, version} envelope.
+async function handleWebhook(req: Request): Promise<Response> {
+  const rawBody = await req.text()
+  const isNativeHookCall = req.headers.has('webhook-signature')
+
+  let job: EmailJob
+  try {
+    if (isNativeHookCall) {
+      job = parseNativeHook(rawBody, req.headers)
+    } else {
+      const authorizationError = authorizeHookCaller(req)
+      if (authorizationError) return authorizationError
+      job = parseLegacyEnvelope(rawBody)
+    }
+  } catch (error) {
+    console.error('Failed to authenticate/parse webhook payload', error)
+    const status = isNativeHookCall ? 401 : 400
+    const message = error instanceof Error ? error.message : 'Invalid webhook payload'
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  return sendTemplatedEmail(job)
 }
 
 Deno.serve(async (req) => {
