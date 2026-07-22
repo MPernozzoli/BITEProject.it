@@ -702,6 +702,12 @@ const InfoLine = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
+/** Pulls proposed_leg_ids out of a request's plan-change metadata bag. */
+const readProposedLegIds = (meta: Record<string, unknown> | null | undefined): string[] => {
+  const value = meta?.proposed_leg_ids;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+};
+
 type CandidateReviewGanttProps = {
   request: BookingRequest;
   requests: BookingRequest[];
@@ -800,7 +806,16 @@ const CandidateReviewGantt = ({
           const isCandidate = row.id === request.id;
           const profile = profilesById[row.profile_id];
           const activeLegs = new Set(requestLegIds[row.id] || []);
-          const proposedLegs = new Set(selectedProposalLegIds);
+          // While composing, show the live selection; once a proposal has been sent (and the
+          // composition cleared on reload) keep the pending proposal visible so the admin still
+          // sees the outstanding change instead of just the current legs.
+          const persistedProposedLegIds =
+            isCandidate && row.plan_change_status === "pending_user_approval"
+              ? readProposedLegIds(row.plan_change_metadata)
+              : [];
+          const proposedLegs = new Set(
+            selectedProposalLegIds.length > 0 ? selectedProposalLegIds : persistedProposedLegIds,
+          );
           return (
             <div key={row.id} className="grid min-h-[54px] border-b border-border/50 last:border-b-0" style={columnStyle}>
               <div className="flex min-w-0 items-center gap-2 border-r border-border/70 px-3 py-2">
@@ -832,14 +847,14 @@ const CandidateReviewGantt = ({
                       "relative flex items-center justify-center border-r border-border/40 px-1 py-2 text-[10px] last:border-r-0 disabled:cursor-default",
                       isCandidate ? "hover:bg-accent/10" : "",
                       currentlySelected ? "bg-accent/15" : "",
-                      proposed ? "bg-sky-200/70 text-sky-900" : "",
+                      proposed ? "bg-sky-100/60 text-sky-900" : "",
                       emptyCandidateCell ? "text-muted-foreground/55" : "text-foreground",
                     ].join(" ")}
                   >
                     {currentlySelected || proposed ? (
                       <span className={[
-                        "h-5 w-full rounded-full border",
-                        proposed ? "border-sky-400 bg-sky-300/80" : "border-accent/40 bg-accent/30",
+                        "h-5 w-full rounded-full",
+                        proposed ? "border-2 border-dashed border-sky-500/80 bg-sky-100/70" : "border border-accent/40 bg-accent/30",
                       ].join(" ")} />
                     ) : (
                       <span className="h-2 w-2 rounded-full bg-border" />
@@ -851,9 +866,9 @@ const CandidateReviewGantt = ({
           );
         })}
       </div>
-      <div className="flex flex-wrap gap-3 border-t border-border/70 px-3 py-2 text-[11px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-5 rounded-full bg-accent/30" /> Tratte attuali</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-5 rounded-full bg-sky-300/80" /> Proposta in composizione</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/70 px-3 py-2.5 text-[12px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded-full border border-accent/40 bg-accent/30" /> Tratte attuali</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70" /> Proposta (non ancora confermata)</span>
         <span>Le tratte prenotate o proposte mostrano percorso, distanza, durata e date.</span>
         <span>Maiuscolo+click seleziona un intervallo.</span>
       </div>
