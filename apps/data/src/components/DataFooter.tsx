@@ -55,7 +55,7 @@ const DataFooter = () => (
         <p className="text-[11px] text-muted-foreground/70">
           Made by{" "}
           <a
-            href="https://www.pynkstudio.it"
+            href="https://www.pynkstudio.eu"
             target="_blank"
             rel="noopener noreferrer"
             className="text-foreground hover:text-accent transition-colors font-medium"

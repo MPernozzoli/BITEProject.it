@@ -469,7 +469,7 @@ const UserLogin = () => {
       email: normalizedEmail,
       options: {
         shouldCreateUser: mode === "signup",
-        data: mode === "signup" ? { name: trimmedName } : undefined,
+        data: mode === "signup" ? { name: trimmedName, lang } : undefined,
       },
     });
 

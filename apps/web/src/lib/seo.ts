@@ -26,7 +26,7 @@ const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 
 /**
  * Public routes that exist under both /it and /en prefixes.
- * Admin, auth, profile and legal routes live outside the lang prefix
+ * Admin, auth and profile routes live outside the lang prefix
  * and don't need bilingual indexing.
  */
 export const LOCALIZED_ROUTES = [
@@ -38,6 +38,9 @@ export const LOCALIZED_ROUTES = [
   "links",
   "collaborations",
   "contact",
+  "privacy-policy",
+  "cookie-policy",
+  "terms",
 ] as const;
 
 const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;

@@ -16,51 +16,85 @@ import {
   Text,
 } from 'npm:@react-email/components@0.0.22'
 
+type Locale = 'it' | 'en'
+
+const COPY = {
+  it: {
+    preview: 'Sei stato invitato su BITE',
+    eyebrow: 'Invito',
+    heading: 'Sei stato invitato',
+    button: 'Accetta Invito',
+    footer: 'Se non ti aspettavi questo invito, puoi ignorare questa email.',
+    intro: (siteUrl: string) => (
+      <>
+        Sei stato invitato a unirti a{' '}
+        <Link href={siteUrl} style={link}>
+          <strong>BITE</strong>
+        </Link>
+        . Clicca il pulsante qui sotto per accettare l'invito e creare il tuo account.
+      </>
+    ),
+  },
+  en: {
+    preview: "You've been invited to BITE",
+    eyebrow: 'Invitation',
+    heading: "You've been invited",
+    button: 'Accept Invite',
+    footer: "If you weren't expecting this invitation, you can safely ignore this email.",
+    intro: (siteUrl: string) => (
+      <>
+        You've been invited to join{' '}
+        <Link href={siteUrl} style={link}>
+          <strong>BITE</strong>
+        </Link>
+        . Click the button below to accept the invitation and create your account.
+      </>
+    ),
+  },
+} as const
+
 interface InviteEmailProps {
   siteName: string
   siteUrl: string
   confirmationUrl: string
+  locale?: Locale
 }
 
 export const InviteEmail = ({
   siteName,
   siteUrl,
   confirmationUrl,
-}: InviteEmailProps) => (
-  <Html lang="it" dir="ltr">
-    <Head>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-    </Head>
-    <Preview>Sei stato invitato su BITE</Preview>
-    <Body style={main}>
-      <Container style={container}>
-        <Section style={frame}>
-          <Text style={brand}>BITE</Text>
-          <Text style={eyebrow}>Invito</Text>
-          <Heading style={h1}>Sei stato invitato</Heading>
-          <Text style={text}>
-            Sei stato invitato a unirti a{' '}
-            <Link href={siteUrl} style={link}>
-              <strong>BITE</strong>
-            </Link>
-            . Clicca il pulsante qui sotto per accettare l'invito e creare il tuo account.
-          </Text>
-          <Section style={ctaRow}>
-            <Button style={button} href={confirmationUrl}>
-              Accetta Invito
-            </Button>
+  locale = 'it',
+}: InviteEmailProps) => {
+  const t = COPY[locale] ?? COPY.it
+  return (
+    <Html lang={locale} dir="ltr">
+      <Head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+      </Head>
+      <Preview>{t.preview}</Preview>
+      <Body style={main}>
+        <Container style={container}>
+          <Section style={frame}>
+            <Text style={brand}>BITE</Text>
+            <Text style={eyebrow}>{t.eyebrow}</Text>
+            <Heading style={h1}>{t.heading}</Heading>
+            <Text style={text}>{t.intro(siteUrl)}</Text>
+            <Section style={ctaRow}>
+              <Button style={button} href={confirmationUrl}>
+                {t.button}
+              </Button>
+            </Section>
+            <Hr style={divider} />
+            <Text style={footer}>{t.footer}</Text>
           </Section>
-          <Hr style={divider} />
-          <Text style={footer}>
-            Se non ti aspettavi questo invito, puoi ignorare questa email.
-          </Text>
-        </Section>
-      </Container>
-    </Body>
-  </Html>
-)
+        </Container>
+      </Body>
+    </Html>
+  )
+}
 
 export default InviteEmail
 

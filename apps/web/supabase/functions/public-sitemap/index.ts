@@ -12,12 +12,9 @@ const LOCALIZED_ROUTES = [
   '/collaborations',
   '/contact',
   '/links',
-]
-
-/** Single-language routes (legal, profile). No hreflang alternates. */
-const SINGLE_ROUTES = [
   '/privacy-policy',
   '/cookie-policy',
+  '/terms',
 ]
 
 const LANGS = ['it', 'en'] as const
@@ -150,12 +147,6 @@ Deno.serve(async () => {
     bilingual: true,
   }))
 
-  const singleEntries: SitemapEntry[] = SINGLE_ROUTES.map((path) => ({
-    path,
-    lastmod: null,
-    bilingual: false,
-  }))
-
   const articlePathFor = (row: any, l: Lang) => {
     const own = l === 'it' ? row.slug_it : row.slug_en
     const other = l === 'it' ? row.slug_en : row.slug_it
@@ -209,7 +200,6 @@ Deno.serve(async () => {
       ...voyageEntries,
       ...storyEntries,
       ...articleEntries,
-      ...singleEntries,
       ...profileEntries,
     ]),
     {

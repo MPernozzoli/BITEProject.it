@@ -56,10 +56,22 @@ interface BookingGanttTableProps {
   onApprove: (requestId: string) => void;
   onReject: (requestId: string) => void;
   onStatusChange: (requestId: string, status: VoyageBookingStatus) => void;
-  /** Persist a request's leg range after a drag-resize; nextLegIds is the full new set. */
-  onResize: (requestId: string, nextLegIds: string[]) => Promise<void>;
-  /** Create brand-new single-leg bookings from a column's "+" pill. */
-  onAddPeople: (legId: string, profileIds: string[], inviteEmails: string[], isComped: boolean) => Promise<void>;
+  /** A locally-staged (not yet sent) leg range for a booking, awaiting Annulla/Proponi modifica. */
+  stagedResize: { requestId: string; legIds: string[] } | null;
+  /** Booking ids whose only participant is still an unaccepted email invite — for these, a
+   * staged resize applies directly (no traveller to await approval from) instead of going
+   * through the propose-and-wait dialog. */
+  pendingInviteRequestIds: Set<string>;
+  /** Stage a request's leg range after a drag-resize; nextLegIds is the full new set. Does not call any RPC. */
+  onStageResize: (requestId: string, nextLegIds: string[]) => void;
+  /** Discard the staged resize for the row currently being edited. */
+  onCancelStagedResize: () => void;
+  /** Open the reason dialog to actually send the staged resize as a plan-change proposal. */
+  onOpenProposalDialog: () => void;
+  /** Applies the staged resize directly for a not-yet-accepted invite (no proposal needed). */
+  onApplyPendingInviteResize: () => void;
+  /** Create brand-new bookings (possibly spanning several contiguous legs) from a column's "+" pill. */
+  onAddPeople: (legIds: string[], profileIds: string[], inviteEmails: string[], isComped: boolean) => Promise<void>;
 }
 
 /** Pulls proposed_leg_ids out of a request's plan-change metadata bag. */
@@ -137,7 +149,12 @@ const BookingGanttTable = ({
   onApprove,
   onReject,
   onStatusChange,
-  onResize,
+  stagedResize,
+  pendingInviteRequestIds,
+  onStageResize,
+  onCancelStagedResize,
+  onOpenProposalDialog,
+  onApplyPendingInviteResize,
   onAddPeople,
 }: BookingGanttTableProps) => {
   const navigate = useNavigate();
@@ -162,7 +179,8 @@ const BookingGanttTable = ({
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
-  const [addPersonLegId, setAddPersonLegId] = useState<string | null>(null);
+  /** Ordered, contiguous leg ids the "Aggiungi persona" dialog currently targets. */
+  const [addPersonLegIds, setAddPersonLegIds] = useState<string[]>([]);
   const [addPersonProfileIds, setAddPersonProfileIds] = useState<string[]>([]);
   // "Omaggio": the invited person is exempt from the contribution payment gate. Off by
   // default so the exemption is always a deliberate act, never an accident.
@@ -234,7 +252,7 @@ const BookingGanttTable = ({
         .map((idx) => legs[idx]?.id)
         .filter((id): id is string => Boolean(id));
       if (nextLegIds.length === 0) return;
-      void onResize(current.requestId, nextLegIds);
+      onStageResize(current.requestId, nextLegIds);
     };
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
@@ -242,7 +260,7 @@ const BookingGanttTable = ({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [drag, legs, onResize]);
+  }, [drag, legs, onStageResize]);
 
   const startDrag = (
     event: React.PointerEvent,
@@ -275,13 +293,26 @@ const BookingGanttTable = ({
       request.plan_change_status === "pending_user_approval" &&
       readProposedLegIds(request.plan_change_metadata).length > 0,
   );
-  const activeAddLeg = addPersonLegId ? legs.find((leg) => leg.id === addPersonLegId) ?? null : null;
-  const activeAddOccupied = activeAddLeg ? legCapacity[activeAddLeg.id] || 0 : 0;
-  const activeAddRemainingSeats = activeAddLeg ? Math.max(0, maxGuests - activeAddOccupied) : 0;
-  const activeAddAlreadyOnLeg = activeAddLeg ? activeProfileIdsByLeg.get(activeAddLeg.id) || new Set<string>() : new Set<string>();
-  const activeAddSelectableProfiles = activeAddLeg
+  // Ordered by voyage leg sequence (not selection order), so extend/remove always act on the ends.
+  const activeAddLegIndices = addPersonLegIds
+    .map((id) => legIndexById.get(id))
+    .filter((idx): idx is number => idx != null)
+    .sort((a, b) => a - b);
+  const activeAddLegs = activeAddLegIndices.map((idx) => legs[idx]).filter((leg): leg is BookableLeg => Boolean(leg));
+  const activeAddRemainingSeats =
+    activeAddLegs.length > 0
+      ? Math.min(...activeAddLegs.map((leg) => Math.max(0, maxGuests - (legCapacity[leg.id] || 0))))
+      : 0;
+  const activeAddAlreadyOnLeg = activeAddLegs.reduce((acc, leg) => {
+    for (const profileId of activeProfileIdsByLeg.get(leg.id) || []) acc.add(profileId);
+    return acc;
+  }, new Set<string>());
+  const activeAddSelectableProfiles = activeAddLegs.length > 0
     ? uniqueAvailableProfiles.filter((profile) => !activeAddAlreadyOnLeg.has(profile.id))
     : [];
+  const canExtendAddBefore = activeAddLegIndices.length > 0 && activeAddLegIndices[0] > 0;
+  const canExtendAddAfter =
+    activeAddLegIndices.length > 0 && activeAddLegIndices[activeAddLegIndices.length - 1] < legs.length - 1;
   const activeAddSelectedProfiles = activeAddSelectableProfiles.filter((profile) =>
     addPersonProfileIds.includes(profile.id)
   );
@@ -295,16 +326,33 @@ const BookingGanttTable = ({
   const selectedProfile = selectedProfileRequest ? profilesById[selectedProfileRequest.profile_id] : null;
 
   const openAddPerson = (legId: string) => {
-    setAddPersonLegId(legId);
+    setAddPersonLegIds([legId]);
     setAddPersonProfileIds([]);
     setAddPersonInviteEmail("");
     setAddPersonPickerOpen(false);
   };
 
   const closeAddPerson = () => {
-    setAddPersonLegId(null);
+    setAddPersonLegIds([]);
     setAddPersonInviteEmail("");
     setAddPersonPickerOpen(false);
+  };
+
+  /** Extends the contiguous "Aggiungi persona" range to the previous/next tratta. */
+  const extendAddPersonRange = (direction: "before" | "after") => {
+    if (activeAddLegIndices.length === 0) return;
+    const targetIdx =
+      direction === "before" ? activeAddLegIndices[0] - 1 : activeAddLegIndices[activeAddLegIndices.length - 1] + 1;
+    const targetLeg = legs[targetIdx];
+    if (!targetLeg) return;
+    setAddPersonLegIds((current) => [...current, targetLeg.id]);
+  };
+
+  /** Shrinks the range by dropping one of its two ends (keeps it contiguous). */
+  const removeAddPersonEnd = (end: "before" | "after") => {
+    if (activeAddLegIndices.length <= 1) return;
+    const dropIdx = end === "before" ? activeAddLegIndices[0] : activeAddLegIndices[activeAddLegIndices.length - 1];
+    setAddPersonLegIds((current) => current.filter((id) => legIndexById.get(id) !== dropIdx));
   };
 
   const toggleAddProfile = (profileId: string) => {
@@ -328,11 +376,11 @@ const BookingGanttTable = ({
   const submitAddPerson = async () => {
     const inviteEmail = addPersonInviteEmail.trim().toLowerCase();
     const inviteEmails = emailValid(inviteEmail) ? [inviteEmail] : [];
-    if (!addPersonLegId || (addPersonProfileIds.length === 0 && inviteEmails.length === 0)) return;
+    if (addPersonLegIds.length === 0 || (addPersonProfileIds.length === 0 && inviteEmails.length === 0)) return;
     setAddPersonBusy(true);
-    await onAddPeople(addPersonLegId, addPersonProfileIds, inviteEmails, addPersonComped);
+    await onAddPeople(addPersonLegIds, addPersonProfileIds, inviteEmails, addPersonComped);
     setAddPersonBusy(false);
-    setAddPersonLegId(null);
+    setAddPersonLegIds([]);
     setAddPersonInviteEmail("");
     setAddPersonComped(false);
     setAddPersonPickerOpen(false);
@@ -341,7 +389,7 @@ const BookingGanttTable = ({
   return (
     <>
     <Dialog
-      open={Boolean(addPersonLegId)}
+      open={activeAddLegs.length > 0}
       onOpenChange={(open) => {
         if (!open) closeAddPerson();
       }}
@@ -349,16 +397,67 @@ const BookingGanttTable = ({
       <DialogContent className="max-w-md rounded-[24px] border-border bg-background p-5">
         <DialogHeader>
           <DialogTitle className="text-base">
-            {activeAddLeg ? `Aggiungi su ${getLegLabel(activeAddLeg, waypointsById, "it")}` : "Aggiungi persona"}
+            {activeAddLegs.length > 0
+              ? activeAddLegs.length === 1
+                ? `Aggiungi su ${getLegLabel(activeAddLegs[0], waypointsById, "it")}`
+                : `Aggiungi su ${activeAddLegs.length} tratte`
+              : "Aggiungi persona"}
           </DialogTitle>
           <DialogDescription>
-            {activeAddLeg
+            {activeAddLegs.length > 0
               ? activeAddRemainingSeats > 0
-                ? `${activeAddRemainingSeats} posti disponibili`
-                : "Tratta al completo"
+                ? `${activeAddRemainingSeats} posti disponibili su tutte le tratte selezionate`
+                : "Almeno una tratta selezionata e al completo"
               : ""}
           </DialogDescription>
         </DialogHeader>
+        <div className="rounded-xl border border-border/70 bg-background/70 p-2">
+          <label className="mb-1.5 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            Tratte
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => extendAddPersonRange("before")}
+              disabled={!canExtendAddBefore}
+              title="Aggiungi la tratta precedente"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-accent hover:text-accent disabled:opacity-30"
+            >
+              ◀
+            </button>
+            {activeAddLegs.map((leg, index) => {
+              const isEnd = index === 0 || index === activeAddLegs.length - 1;
+              const canRemove = activeAddLegs.length > 1 && isEnd;
+              return (
+                <span
+                  key={leg.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-accent/50 bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent"
+                >
+                  {getLegLabel(leg, waypointsById, "it")}
+                  {canRemove && (
+                    <button
+                      type="button"
+                      onClick={() => removeAddPersonEnd(index === 0 ? "before" : "after")}
+                      title="Rimuovi questa tratta dalla selezione"
+                      className="ml-0.5 rounded-full hover:text-destructive"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => extendAddPersonRange("after")}
+              disabled={!canExtendAddAfter}
+              title="Aggiungi la tratta successiva"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-accent hover:text-accent disabled:opacity-30"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
         <Popover open={addPersonPickerOpen} onOpenChange={setAddPersonPickerOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -608,7 +707,14 @@ const BookingGanttTable = ({
         {/* Person rows */}
         {requests.map((request) => {
           const profile = profilesById[request.profile_id];
-          const allIndices = legIndicesByRequest.get(request.id) || [];
+          const isStagedRow = stagedResize?.requestId === request.id;
+          // While a resize is staged (not yet sent), the bar shows the draft range instead of
+          // the saved one, so a second drag on either edge keeps extending the same draft.
+          const allIndices = isStagedRow
+            ? stagedResize!.legIds
+                .map((id) => legIndexById.get(id))
+                .filter((idx): idx is number => idx != null)
+            : legIndicesByRequest.get(request.id) || [];
           const segments = computeSegments(allIndices);
           const statusClass = getBookingStatusClass(request.status);
           // An outstanding (sent, not-yet-answered) route change is shown as a dashed "Proposta"
@@ -658,7 +764,9 @@ const BookingGanttTable = ({
                   return (
                     <div
                       key={segIndex}
-                      className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${statusClass}`}
+                      className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${
+                        isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 text-amber-900" : statusClass
+                      }`}
                       style={{
                         top: 8,
                         height: ROW_HEIGHT - 16,
@@ -672,7 +780,7 @@ const BookingGanttTable = ({
                         title="Trascina per estendere/ridurre"
                       />
                       <span className="truncate">
-                        {hasProposal ? "Adesso" : getBookingStatusLabel(request.status, "it")}
+                        {isStagedRow ? "Bozza" : hasProposal ? "Adesso" : getBookingStatusLabel(request.status, "it")}
                       </span>
                       <span
                         onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
@@ -700,6 +808,34 @@ const BookingGanttTable = ({
               </div>
 
               <div className="border-l border-border/60 p-3 align-top">
+                {isStagedRow && (() => {
+                  const isPendingInvite = pendingInviteRequestIds.has(request.id);
+                  return (
+                    <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-2">
+                      <p className="w-full text-[11px] font-medium text-amber-900">
+                        Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
+                        {allIndices.length === 1 ? "a" : "e"}.
+                        {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onCancelStagedResize}
+                        disabled={saving}
+                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
+                      >
+                        <X size={12} /> Annulla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog}
+                        disabled={saving}
+                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                      >
+                        <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
+                      </button>
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-wrap gap-2">
                   {request.status === "requested" || request.status === "waitlisted" ? (
                     <button

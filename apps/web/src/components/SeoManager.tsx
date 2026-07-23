@@ -147,6 +147,13 @@ const STATIC_ROUTE_SEO: Record<string, SeoConfig> = {
       it: "Cookie policy e informazioni tecniche per biteproject.it.",
     },
   },
+  "/terms": {
+    title: { en: "Terms and Conditions | BITE", it: "Termini e Condizioni | BITE" },
+    description: {
+      en: "Terms of use governing biteproject.it, account registration, and participation in BITE's shared voyages.",
+      it: "Termini d'uso di biteproject.it, la registrazione di un account e la partecipazione ai viaggi condivisi BITE.",
+    },
+  },
   "/login": {
     title: { en: "Login | BITE", it: "Accedi | BITE" },
     description: {

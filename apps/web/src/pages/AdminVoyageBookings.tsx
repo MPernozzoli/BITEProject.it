@@ -59,7 +59,7 @@ import {
 } from "@/lib/booking-utils";
 import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
 import { DEFAULT_BOOKING_BRIEFINGS } from "@/lib/booking-briefings";
-import { sendBookingInvites } from "@/lib/booking-participants";
+import { sendBookingInvites, type BookingParticipant } from "@/lib/booking-participants";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import { useI18n } from "@/lib/i18n";
 import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
@@ -294,6 +294,7 @@ const AdminVoyageBookings = () => {
   const [legs, setLegs] = useState<BookableLeg[]>([]);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
+  const [participants, setParticipants] = useState<BookingParticipant[]>([]);
   const [profiles, setProfiles] = useState<BookingProfile[]>([]);
   const [availableProfiles, setAvailableProfiles] = useState<BookingProfile[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
@@ -311,8 +312,11 @@ const AdminVoyageBookings = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [activeTab, setActiveTab] = useState<BookingTabKey>("overview");
   const [editableLegIds, setEditableLegIds] = useState<Set<string>>(() => new Set());
-  /** Drag-resized legs awaiting a reason before they are sent to the traveller. */
+  /** Drag-resized legs staged locally, awaiting Annulla or Proponi modifica. */
   const [pendingProposal, setPendingProposal] = useState<{ requestId: string; legIds: string[] } | null>(null);
+  /** Controls the reason dialog separately from the staged draft, so multiple drags can
+   * accumulate into pendingProposal before the admin opts to actually send it. */
+  const [proposalDialogOpen, setProposalDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
 
@@ -437,7 +441,7 @@ const AdminVoyageBookings = () => {
     const requestIds = loadedRequests.map((request) => request.id);
     const profileIds = [...new Set(loadedRequests.map((request) => request.profile_id))];
 
-    const [requestLegsRes, profilesRes] = await Promise.all([
+    const [requestLegsRes, profilesRes, participantsRes] = await Promise.all([
       requestIds.length
         ? typedSupabase
             .from("voyage_booking_request_legs")
@@ -450,10 +454,18 @@ const AdminVoyageBookings = () => {
             .select("id,name,email,avatar_url")
             .in("id", profileIds)
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_participants")
+            .select("id,booking_request_id,profile_id,email,first_name,last_name,is_lead,status,invite_sent_at,accepted_at,expires_at")
+            .in("booking_request_id", requestIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (requestLegsRes.error || profilesRes.error) {
-      toast.error(requestLegsRes.error?.message || profilesRes.error?.message || "Unable to load booking people");
+    if (requestLegsRes.error || profilesRes.error || participantsRes.error) {
+      toast.error(
+        requestLegsRes.error?.message || profilesRes.error?.message || participantsRes.error?.message || "Unable to load booking people"
+      );
       setLoading(false);
       return;
     }
@@ -471,6 +483,7 @@ const AdminVoyageBookings = () => {
     setRequests(loadedRequests);
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
     setProfiles(((profilesRes.data as BookingProfile[] | null) || []));
+    setParticipants(((participantsRes.data as BookingParticipant[] | null) || []));
     setBookingSettings(loadedSettings);
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
 
@@ -519,18 +532,35 @@ const AdminVoyageBookings = () => {
     [requests, statusFilter]
   );
   // Candidature "in revisione" for this voyage — drives the tab badge. Mirrors the panel's
-  // own filter (non-crew requests still awaiting a decision or with a pending plan change).
+  // own filter (non-crew requests still awaiting a decision). Deliberately does NOT include
+  // plan_change_status === "pending_user_approval": that means an ADMIN-sent proposal is
+  // awaiting the TRAVELLER, the opposite direction from "needs admin review" — counting it here
+  // made a change the admin proposed look like a candidacy the guest had requested. Traveller-
+  // initiated changes awaiting the admin ("pending_admin_approval") already have their own
+  // Accetta/Rifiuta section further down this tab.
   const candidatesInReview = useMemo(
     () =>
       requests.filter(
         (request) =>
           !request.is_crew &&
-          (request.status === "requested" ||
-            request.status === "waitlisted" ||
-            request.plan_change_status === "pending_user_approval")
+          (request.status === "requested" || request.status === "waitlisted")
       ).length,
     [requests]
   );
+
+  /** Bookings whose only participant is still an unaccepted email invite — nobody has agreed
+   * to anything yet, so leg changes on these should apply directly instead of going through the
+   * traveller-approval proposal flow (see admin_apply_pending_invite_legs). */
+  const pendingInviteRequestIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const participant of participants) {
+      if (participant.status === "pending") ids.add(participant.booking_request_id);
+    }
+    for (const participant of participants) {
+      if (participant.status === "accepted") ids.delete(participant.booking_request_id);
+    }
+    return ids;
+  }, [participants]);
 
   const legCapacity = useMemo(() => {
     const map: Record<string, number> = {};
@@ -807,28 +837,33 @@ const AdminVoyageBookings = () => {
   const rejectRequest = (requestId: string) => updateRequestStatus(requestId, "rejected");
 
   /**
-   * Converts a Gantt-bar drag-resize into a traveller-facing route proposal. The reason is
-   * collected in a dialog rather than a prompt because it decides the refund owed if the
-   * traveller declines (force majeure follows the withdrawal tiers, anything else refunds fully).
+   * Stages a Gantt-bar drag-resize locally (no RPC call yet). Repeated drags on the same
+   * request — either edge, any number of times — keep updating this same draft, since
+   * BookingGanttTable renders the bar from pendingProposal once one is staged for that row.
+   * The reason dialog (which decides the refund owed on decline: force majeure follows the
+   * withdrawal tiers, anything else refunds fully) only opens when the admin explicitly clicks
+   * "Proponi modifica", not on every drag.
    */
-  const resizeBookingLegs = async (requestId: string, nextLegIds: string[]) => {
+  const stageResize = (requestId: string, nextLegIds: string[]) => {
     const currentLegIds = requestLegs
       .filter((link) => link.booking_request_id === requestId)
       .map((link) => link.bookable_leg_id)
       .sort();
     const proposedLegIds = [...nextLegIds].sort();
     if (currentLegIds.length === proposedLegIds.length && currentLegIds.every((id, index) => id === proposedLegIds[index])) {
+      setPendingProposal(null);
       return;
     }
     setPendingProposal({ requestId, legIds: nextLegIds });
   };
 
-  /** Sends the proposal once the admin has picked a reason in the dialog. */
+  /** Sends the staged resize once the admin has picked a reason in the dialog. */
   const submitPlanChangeProposal = async ({ reason, note, requireSettlement }: PlanChangeProposal) => {
     if (!pendingProposal) return;
     const { requestId, legIds } = pendingProposal;
     const request = requests.find((item) => item.id === requestId);
     setPendingProposal(null);
+    setProposalDialogOpen(false);
     setSaving(true);
     const { error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
       _booking_request_id: requestId,
@@ -847,9 +882,33 @@ const AdminVoyageBookings = () => {
     await loadVoyageDetails(selectedVoyageId);
   };
 
-  /** Discards the drag so the Gantt bar snaps back to the stored legs. */
+  /** Discards the staged draft so the Gantt bar snaps back to the stored legs. */
   const cancelPlanChangeProposal = async () => {
     setPendingProposal(null);
+    setProposalDialogOpen(false);
+    await loadVoyageDetails(selectedVoyageId);
+  };
+
+  /** Applies a staged resize directly for a not-yet-accepted invite — no traveller approval to
+   * wait for, since nobody has agreed to a plan yet. */
+  const applyPendingInviteResize = async () => {
+    if (!pendingProposal) return;
+    const { requestId, legIds } = pendingProposal;
+    setPendingProposal(null);
+    setSaving(true);
+    const { data, error } = await typedSupabase.rpc("admin_apply_pending_invite_legs", {
+      _booking_request_id: requestId,
+      _leg_ids: legIds,
+      _allow_over_capacity: false,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      await loadVoyageDetails(selectedVoyageId);
+      return;
+    }
+    const result = Array.isArray(data) ? (data[0] as { over_capacity?: boolean } | undefined) : undefined;
+    toast.success(result?.over_capacity ? "Tratte aggiornate oltre capienza." : "Tratte aggiornate.");
     await loadVoyageDetails(selectedVoyageId);
   };
 
@@ -870,20 +929,25 @@ const AdminVoyageBookings = () => {
     await loadVoyageDetails(selectedVoyageId);
   };
 
-  /** Creates brand-new single-leg bookings/invites from the Gantt table's "+" column pill. */
-  const addPeopleToLeg = async (
-    legId: string,
+  /** Creates brand-new bookings/invites, possibly spanning several contiguous legs, from the
+   * Gantt table's "+" column pill. */
+  const addPeopleToLegs = async (
+    legIds: string[],
     profileIds: string[],
     inviteEmails: string[] = [],
     isComped = false,
   ) => {
+    const uniqueLegIds = [...new Set(legIds)];
     const uniqueProfileIds = [...new Set(profileIds)];
     const uniqueInviteEmails = [...new Set(inviteEmails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
-    if (uniqueProfileIds.length === 0 && uniqueInviteEmails.length === 0) return;
+    if (uniqueLegIds.length === 0 || (uniqueProfileIds.length === 0 && uniqueInviteEmails.length === 0)) return;
 
-    const remainingSeats = Math.max(0, (selectedVoyage?.booking_max_guests || 4) - (legCapacity[legId] || 0));
+    // The binding constraint is whichever selected leg has the least free capacity.
+    const remainingSeats = Math.min(
+      ...uniqueLegIds.map((legId) => Math.max(0, (selectedVoyage?.booking_max_guests || 4) - (legCapacity[legId] || 0)))
+    );
     if (uniqueProfileIds.length + uniqueInviteEmails.length > remainingSeats) {
-      toast.error("Hai selezionato più persone dei posti disponibili su questa tratta.");
+      toast.error("Hai selezionato più persone dei posti disponibili su una delle tratte scelte.");
       return;
     }
     const selectedProfileEmail = uniqueProfileIds
@@ -898,12 +962,12 @@ const AdminVoyageBookings = () => {
       requests.some((request) => {
         if (request.profile_id !== profileId || !duplicateBookingStatuses.has(request.status)) return false;
         return requestLegs.some(
-          (link) => link.booking_request_id === request.id && link.bookable_leg_id === legId
+          (link) => link.booking_request_id === request.id && uniqueLegIds.includes(link.bookable_leg_id)
         );
       })
     );
     if (duplicateProfileId) {
-      toast.error("Una delle persone selezionate è già presente su questa tratta.");
+      toast.error("Una delle persone selezionate è già presente su una delle tratte scelte.");
       return;
     }
 
@@ -913,12 +977,12 @@ const AdminVoyageBookings = () => {
         const profile = profilesById[request.profile_id];
         if (profile?.email?.trim().toLowerCase() !== email) return false;
         return requestLegs.some(
-          (link) => link.booking_request_id === request.id && link.bookable_leg_id === legId
+          (link) => link.booking_request_id === request.id && uniqueLegIds.includes(link.bookable_leg_id)
         );
       })
     );
     if (duplicateInviteEmail) {
-      toast.error(`${duplicateInviteEmail} è già presente su questa tratta.`);
+      toast.error(`${duplicateInviteEmail} è già presente su una delle tratte scelte.`);
       return;
     }
 
@@ -928,7 +992,7 @@ const AdminVoyageBookings = () => {
         typedSupabase.rpc("admin_create_voyage_booking", {
           _voyage_id: selectedVoyageId,
           _profile_id: profileId,
-          _leg_ids: [legId],
+          _leg_ids: uniqueLegIds,
           _party_size: 1,
           _status: "admin_approved",
           _allow_over_capacity: false,
@@ -941,7 +1005,7 @@ const AdminVoyageBookings = () => {
         typedSupabase.rpc("admin_create_voyage_booking_invite_by_email", {
           _voyage_id: selectedVoyageId,
           _email: email,
-          _leg_ids: [legId],
+          _leg_ids: uniqueLegIds,
           _status: "admin_approved",
           _admin_notes: "Invito creato manualmente da admin.",
           _allow_over_capacity: false,
@@ -1430,8 +1494,13 @@ const AdminVoyageBookings = () => {
               onApprove={(requestId) => void approveRequest(requestId)}
               onReject={(requestId) => void rejectRequest(requestId)}
               onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
-              onResize={resizeBookingLegs}
-              onAddPeople={addPeopleToLeg}
+              stagedResize={pendingProposal}
+              pendingInviteRequestIds={pendingInviteRequestIds}
+              onStageResize={stageResize}
+              onCancelStagedResize={() => void cancelPlanChangeProposal()}
+              onOpenProposalDialog={() => setProposalDialogOpen(true)}
+              onApplyPendingInviteResize={() => void applyPendingInviteResize()}
+              onAddPeople={addPeopleToLegs}
             />
           )}
         </section>
@@ -2271,8 +2340,9 @@ const AdminVoyageBookings = () => {
       </AlertDialog>
 
       <PlanChangeProposalDialog
-        open={pendingProposal !== null}
+        open={proposalDialogOpen && pendingProposal !== null}
         onOpenChange={(open) => {
+          setProposalDialogOpen(open);
           if (!open) void cancelPlanChangeProposal();
         }}
         onConfirm={(proposal) => void submitPlanChangeProposal(proposal)}

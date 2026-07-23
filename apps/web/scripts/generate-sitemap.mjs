@@ -21,10 +21,10 @@ const LOCALIZED_ROUTES = [
   "/links",
   "/collaborations",
   "/contact",
+  "/privacy-policy",
+  "/cookie-policy",
+  "/terms",
 ];
-
-/** Single-language routes (legal). No hreflang alternates. */
-const SINGLE_ROUTES = ["/privacy-policy", "/cookie-policy"];
 
 const LANGS = ["it", "en"];
 const DEFAULT_LANG = "it";
@@ -182,10 +182,6 @@ const expandBilingual = (path, lastmod, images = [], localizedPaths) => {
 
 const generateSitemap = async () => {
   const staticUrls = LOCALIZED_ROUTES.flatMap((route) => expandBilingual(route, null));
-  const singleUrls = SINGLE_ROUTES.map((route) => ({
-    loc: `${SITE_URL}${route}`,
-    lastmod: null,
-  }));
 
   let articleUrls = [];
   let storyUrls = [];
@@ -309,13 +305,12 @@ const generateSitemap = async () => {
     ...voyageUrls,
     ...storyUrls,
     ...articleUrls,
-    ...singleUrls,
   ]);
   await mkdir(publicDir, { recursive: true });
   await writeFile(outputPath, sitemapXml, "utf8");
 
   console.log(
-    `[sitemap] Wrote ${staticUrls.length + voyageUrls.length + storyUrls.length + articleUrls.length + singleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
+    `[sitemap] Wrote ${staticUrls.length + voyageUrls.length + storyUrls.length + articleUrls.length} URLs to ${path.relative(projectRoot, outputPath)}`
   );
 };
 

@@ -22,7 +22,7 @@ export function normalizeSiteLang(value?: string | null): SiteLang {
 
 /**
  * Build a full localized public URL. Path may or may not start with "/".
- * Routes that are not bilingual (e.g. /unsubscribe, /profile/:id, /privacy-policy)
+ * Routes that are not bilingual (e.g. /unsubscribe, /profile/:id)
  * should not be passed through here — use PUBLIC_SITE_URL directly.
  */
 export function localizedUrl(lang: string | null | undefined, path: string): string {

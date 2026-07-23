@@ -15,13 +15,27 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-const EMAIL_SUBJECTS: Record<string, string> = {
-  signup: 'Conferma la tua email',
-  invite: 'Sei stato invitato su BITE',
-  magiclink: 'Il tuo codice di accesso',
-  recovery: 'Reimposta la tua password',
-  email_change: 'Conferma il cambio email',
-  reauthentication: 'Il tuo codice di verifica',
+type Locale = 'it' | 'en'
+
+// Fallback locale when nothing else tells us the recipient's language, matching the
+// public site's default (see Wiki/03 - Routing e i18n.md: "fallback pubblico è italiano").
+const DEFAULT_LOCALE: Locale = 'it'
+
+function normalizeLocale(value: unknown): Locale | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized.startsWith('en')) return 'en'
+  if (normalized.startsWith('it')) return 'it'
+  return null
+}
+
+const EMAIL_SUBJECTS: Record<string, Record<Locale, string>> = {
+  signup: { it: 'Conferma la tua email', en: 'Confirm your email' },
+  invite: { it: 'Sei stato invitato su BITE', en: "You've been invited to BITE" },
+  magiclink: { it: 'Il tuo codice di accesso', en: 'Your sign-in code' },
+  recovery: { it: 'Reimposta la tua password', en: 'Reset your password' },
+  email_change: { it: 'Conferma il cambio email', en: 'Confirm your email change' },
+  reauthentication: { it: 'Il tuo codice di verifica', en: 'Your verification code' },
 }
 
 // Template mapping
@@ -99,9 +113,11 @@ async function handlePreview(req: Request): Promise<Response> {
   }
 
   let type: string
+  let locale: Locale
   try {
     const body = await req.json()
     type = body.type
+    locale = normalizeLocale(body.locale) || DEFAULT_LOCALE
   } catch (error) {
     return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
       status: 400,
@@ -118,7 +134,7 @@ async function handlePreview(req: Request): Promise<Response> {
     })
   }
 
-  const sampleData = SAMPLE_DATA[type] || {}
+  const sampleData = { ...(SAMPLE_DATA[type] || {}), locale }
   const html = await renderAsync(React.createElement(EmailTemplate, sampleData))
 
   return new Response(html, {
@@ -184,13 +200,14 @@ type EmailJob = {
   emailType: string
   recipientEmail: string
   templateProps: Record<string, unknown>
+  locale: Locale
 }
 
 // Native payload shape sent by Supabase Auth's built-in "Send Email" hook,
 // signed per the Standard Webhooks spec (webhook-id/webhook-timestamp/webhook-signature).
 // See https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook
 type NativeHookPayload = {
-  user: { email: string }
+  user: { id: string; email: string; user_metadata?: Record<string, unknown> }
   email_data: {
     token: string
     token_hash: string
@@ -202,7 +219,36 @@ type NativeHookPayload = {
   }
 }
 
-function parseNativeHook(rawBody: string, headers: Headers): EmailJob {
+// Resolves the recipient's email locale: explicit `lang` set in user_metadata at signup
+// (see apps/web/src/pages/UserLogin.tsx) wins, then profiles.preferred_language for users
+// created before that existed, then DEFAULT_LOCALE — mirrors the site's own fallback order
+// (see Wiki/03 - Routing e i18n.md).
+async function resolveLocale(userId: string | undefined, metadataLocale: unknown): Promise<Locale> {
+  const fromMetadata = normalizeLocale(metadataLocale)
+  if (fromMetadata) return fromMetadata
+
+  if (userId) {
+    try {
+      const supabase = createClient<any>(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+      const { data } = await supabase
+        .from('profiles')
+        .select('preferred_language')
+        .eq('id', userId)
+        .maybeSingle()
+      const fromProfile = normalizeLocale(data?.preferred_language)
+      if (fromProfile) return fromProfile
+    } catch (error) {
+      console.error('Failed to resolve profile locale for auth email', { error, userId })
+    }
+  }
+
+  return DEFAULT_LOCALE
+}
+
+async function parseNativeHook(rawBody: string, headers: Headers): Promise<EmailJob> {
   const hookSecret = Deno.env.get('AUTH_EMAIL_HOOK_SECRET')
   if (!hookSecret) {
     throw new Error('AUTH_EMAIL_HOOK_SECRET is not configured')
@@ -216,10 +262,13 @@ function parseNativeHook(rawBody: string, headers: Headers): EmailJob {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
   const confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${email_data.token_hash}&type=${email_data.email_action_type}&redirect_to=${encodeURIComponent(email_data.redirect_to)}&apikey=${anonKey}`
 
+  const locale = await resolveLocale(user.id, user.user_metadata?.lang)
+
   return {
     runId: crypto.randomUUID(),
     emailType: email_data.email_action_type,
     recipientEmail: user.email,
+    locale,
     templateProps: {
       siteName: SITE_NAME,
       siteUrl: `https://${ROOT_DOMAIN}`,
@@ -228,22 +277,26 @@ function parseNativeHook(rawBody: string, headers: Headers): EmailJob {
       token: email_data.token,
       email: user.email,
       newEmail: email_data.email_new,
+      locale,
     },
   }
 }
 
-function parseLegacyEnvelope(rawBody: string): EmailJob {
+async function parseLegacyEnvelope(rawBody: string): Promise<EmailJob> {
   const payload = normalizeAuthEmailPayload(JSON.parse(rawBody))
   if (!payload) throw new Error('Invalid webhook payload')
   if (payload.version !== '1') throw new Error(`Unsupported payload version: ${payload.version}`)
 
   const emailType = String(payload.data.action_type ?? payload.data.type ?? '')
   const recipientEmail = String(payload.data.email ?? payload.data.recipient ?? '')
+  const userId = typeof payload.data.user_id === 'string' ? payload.data.user_id : undefined
+  const locale = await resolveLocale(userId, payload.data.lang)
 
   return {
     runId: payload.run_id,
     emailType,
     recipientEmail,
+    locale,
     templateProps: {
       siteName: SITE_NAME,
       siteUrl: `https://${ROOT_DOMAIN}`,
@@ -252,14 +305,15 @@ function parseLegacyEnvelope(rawBody: string): EmailJob {
       token: payload.data.token,
       email: recipientEmail,
       newEmail: payload.data.new_email,
+      locale,
     },
   }
 }
 
 // Renders the templated email and enqueues it for delivery via the Resend dispatcher.
 async function sendTemplatedEmail(job: EmailJob): Promise<Response> {
-  const { runId, emailType, recipientEmail, templateProps } = job
-  console.log('Received auth event', { emailType, email: recipientEmail, run_id: runId })
+  const { runId, emailType, recipientEmail, templateProps, locale } = job
+  console.log('Received auth event', { emailType, email: recipientEmail, locale, run_id: runId })
 
   const EmailTemplate = EMAIL_TEMPLATES[emailType]
   if (!EmailTemplate) {
@@ -300,7 +354,7 @@ async function sendTemplatedEmail(job: EmailJob): Promise<Response> {
       to: recipientEmail,
       from: `${SITE_NAME} <support@${FROM_DOMAIN}>`,
       sender_domain: SENDER_DOMAIN,
-      subject: EMAIL_SUBJECTS[emailType] || 'Notification',
+      subject: EMAIL_SUBJECTS[emailType]?.[locale] || EMAIL_SUBJECTS[emailType]?.[DEFAULT_LOCALE] || 'Notification',
       html,
       text,
       purpose: 'transactional',
@@ -345,11 +399,11 @@ async function handleWebhook(req: Request): Promise<Response> {
   let job: EmailJob
   try {
     if (isNativeHookCall) {
-      job = parseNativeHook(rawBody, req.headers)
+      job = await parseNativeHook(rawBody, req.headers)
     } else {
       const authorizationError = authorizeHookCaller(req)
       if (authorizationError) return authorizationError
-      job = parseLegacyEnvelope(rawBody)
+      job = await parseLegacyEnvelope(rawBody)
     }
   } catch (error) {
     console.error('Failed to authenticate/parse webhook payload', error)

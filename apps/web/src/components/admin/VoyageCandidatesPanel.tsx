@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ExternalLink, Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PLAN_CHANGE_REASONS, planChangeReasonOption } from "@/lib/plan-change-reasons";
@@ -41,6 +41,9 @@ const typedSupabase = supabase as unknown as UntypedSupabase;
 
 const reviewStatuses = new Set<VoyageBookingStatus>(["requested", "waitlisted"]);
 const blockingStatuses = new Set<VoyageBookingStatus>(["admin_approved", "user_confirmed"]);
+// Rejected/cancelled/expired candidatures never need further action: they're kept out of the
+// main review list and surfaced in a separate, collapsed "archiviate" section instead.
+const archivedStatuses = new Set<VoyageBookingStatus>(["rejected", "cancelled", "expired"]);
 
 const isCandidateInfo = (value: unknown): value is CandidateInfo =>
   typeof value === "object" && value !== null && "sailingExperienceLevel" in value;
@@ -98,6 +101,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   /** Whether accepting each proposal also requires settling the difference in contribution. */
   const [proposalSettlement, setProposalSettlement] = useState<Record<string, boolean>>({});
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,8 +201,19 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     return map;
   }, [deposits]);
 
+  // Deliberately does NOT include plan_change_status === "pending_user_approval": that means an
+  // ADMIN-sent proposal is awaiting the TRAVELLER, not something for the admin to review here —
+  // counting it made a change the admin proposed look like a candidacy the guest had requested.
   const candidates = useMemo(
-    () => requests.filter((request) => reviewStatuses.has(request.status) || request.plan_change_status === "pending_user_approval"),
+    () => requests.filter((request) => reviewStatuses.has(request.status)),
+    [requests],
+  );
+
+  const archivedCandidates = useMemo(
+    () =>
+      requests
+        .filter((request) => archivedStatuses.has(request.status))
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
     [requests],
   );
 
@@ -226,7 +241,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             bookingRequestId: request.id,
             status: "rejected",
             trigger: "admin_rejected",
-            adminNotes: adminMessage || "Candidatura scartata da /admin/bookings.",
+            adminNotes: adminMessage,
           })
         : await typedSupabase.rpc("admin_set_voyage_booking_status", {
             _booking_request_id: request.id,
@@ -689,6 +704,70 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
               </article>
             );
           })}
+        </div>
+      )}
+
+      {!loading && archivedCandidates.length > 0 && (
+        <div className="rounded-[24px] border border-border/70">
+          <button
+            type="button"
+            onClick={() => setShowArchived((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+          >
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Candidature archiviate</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {archivedCandidates.length} scartate, scadute o annullate per questo viaggio.
+              </p>
+            </div>
+            {showArchived ? (
+              <ChevronUp size={18} className="shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronDown size={18} className="shrink-0 text-muted-foreground" />
+            )}
+          </button>
+          {showArchived && (
+            <ul className="space-y-2 border-t border-border/70 px-5 pb-5 pt-4">
+              {archivedCandidates.map((request) => {
+                const profile = profilesById[request.profile_id];
+                const voyage = voyagesById[request.voyage_id];
+                const currentLegIds = legIdsByRequest[request.id] || [];
+                const currentLegs = currentLegIds.map((id) => legsById[id]).filter(Boolean);
+                return (
+                  <li
+                    key={request.id}
+                    className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{profile?.name || profile?.email || "Candidato"}</span>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[11px] ${getBookingStatusClass(request.status)}`}>
+                          {getBookingStatusLabel(request.status, "it")}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {profile?.email || "No email"} · {getLocalizedBookingVoyageName(voyage, "it") || request.voyage_id} ·{" "}
+                        {currentLegs.length > 0 ? currentLegs.map((leg) => getLegLabel(leg, waypointsById, "it")).join(", ") : "Nessuna tratta"} ·{" "}
+                        {request.party_size} pax
+                      </p>
+                      {request.admin_notes && (
+                        <p className="mt-1 text-xs text-muted-foreground/90">{request.admin_notes}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                      <span>{formatBookingDate(request.updated_at, "it-IT")}</span>
+                      <Link
+                        to={`/profile/${request.profile_id}`}
+                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink size={12} /> Profilo
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
     </div>

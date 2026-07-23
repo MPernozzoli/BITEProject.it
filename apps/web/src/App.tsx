@@ -167,6 +167,9 @@ const LocalizedRoutes = () => (
     <Route path="contact" element={<Contact />} />
     <Route path="logbook/story/:slug" element={<StoryPage />} />
     <Route path="logbook/:slug" element={<ArticlePage />} />
+    <Route path="privacy-policy" element={<PrivacyPolicy />} />
+    <Route path="cookie-policy" element={<CookiePolicy />} />
+    <Route path="terms" element={<Terms />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
@@ -218,9 +221,9 @@ const App = () => {
                     <Route path="/bookings/:id/participants" element={<ManageBookingParticipants />} />
                       <Route path="/unsubscribe" element={<Unsubscribe />} />
                       <Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
-                      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                      <Route path="/cookie-policy" element={<CookiePolicy />} />
-                      <Route path="/terms" element={<Terms />} />
+                      <Route path="/privacy-policy" element={<LegacyLangRedirect to="/privacy-policy" />} />
+                      <Route path="/cookie-policy" element={<LegacyLangRedirect to="/cookie-policy" />} />
+                      <Route path="/terms" element={<LegacyLangRedirect to="/terms" />} />
                       <Route path="*" element={<NotFound />} />
                     </Route>
 

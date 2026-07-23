@@ -150,6 +150,7 @@ const UserBookings = () => {
     amountEur?: number;
   } | null>(null);
   const [paymentStarting, setPaymentStarting] = useState(false);
+  const [reactivatingRequestId, setReactivatingRequestId] = useState<string | null>(null);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
   const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
   const [detailsRequestId, setDetailsRequestId] = useState<string | null>(null);
@@ -414,6 +415,15 @@ const UserBookings = () => {
       requests
         .filter((request) => request.voyage_id === selectedVoyageId && !["cancelled", "rejected", "expired"].includes(request.status))
         .sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime())[0] || null,
+    [requests, selectedVoyageId]
+  );
+  // Expired applications are otherwise invisible on this page; surfaced separately so the
+  // traveller can retrieve payment info or re-propose them (see reactivateExpiredBooking).
+  const expiredRequestsForSelectedVoyage = useMemo(
+    () =>
+      requests
+        .filter((request) => request.voyage_id === selectedVoyageId && request.status === "expired")
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()),
     [requests, selectedVoyageId]
   );
   const ownRequestLegIdsForSelectedVoyage = useMemo(
@@ -734,6 +744,50 @@ const UserBookings = () => {
     if (bookingRequestId) {
       setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
     }
+    await loadData();
+  };
+
+  /**
+   * Re-proposes an expired application: resets only the payment timer on the same
+   * voyage_booking_requests row (legs, party size, candidate info untouched). The server
+   * re-checks the original legs are still bookable and not already filled before allowing it.
+   */
+  const reactivateExpiredBooking = async (request: BookingRequest) => {
+    setReactivatingRequestId(request.id);
+    const { error } = await typedSupabase.rpc("reactivate_expired_voyage_booking", {
+      _booking_request_id: request.id,
+    });
+    setReactivatingRequestId(null);
+    if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "BK002") {
+        toast.error(
+          lang === "it"
+            ? "Una o più tratte non sono più disponibili: questa candidatura non può essere riproposta."
+            : "One or more legs are no longer available: this application cannot be re-proposed."
+        );
+      } else if (code === "BK001") {
+        toast.error(
+          lang === "it"
+            ? "Hai già un'altra candidatura attiva su una di queste tratte."
+            : "You already have another active application on one of these legs."
+        );
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+    const legsForRequest = requestLegs
+      .filter((link) => link.booking_request_id === request.id)
+      .map((link) => legsById[link.bookable_leg_id])
+      .filter(Boolean);
+    const amountEur = totalDepositEur(legsForRequest, request.party_size, selectedContributionOptions);
+    toast.info(
+      lang === "it"
+        ? "Candidatura riproposta: completa il pagamento del contributo per inviarla."
+        : "Application re-proposed: complete the contribution payment to submit it."
+    );
+    setPaymentChoice({ bookingRequestId: request.id, amountEur });
     await loadData();
   };
 
@@ -1206,6 +1260,54 @@ const UserBookings = () => {
                         </button>
                       </div>
                     )}
+
+                    {expiredRequestsForSelectedVoyage.map((request) => {
+                      const requestLegLabels = requestLegs
+                        .filter((link) => link.booking_request_id === request.id)
+                        .map((link) => legsById[link.bookable_leg_id])
+                        .filter(Boolean)
+                        .map((leg) => getLegLabel(leg, waypointsById, lang));
+                      return (
+                        <div
+                          key={request.id}
+                          className="rounded-[22px] border border-stone-300/60 bg-stone-50/70 p-4 text-sm text-stone-800 dark:bg-stone-400/10 dark:text-stone-100/90"
+                        >
+                          <p className="font-medium">
+                            {lang === "it" ? "Candidatura scaduta" : "Expired application"}
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed opacity-85">
+                            {lang === "it"
+                              ? "Il pagamento del contributo non è arrivato in tempo e la candidatura è stata annullata automaticamente. Puoi riproporla con le stesse tratte e gli stessi dati: verrà rinnovato solo il termine per il pagamento, se le tratte sono ancora disponibili."
+                              : "The contribution payment did not arrive in time and the application was automatically cancelled. You can re-propose it with the same legs and details: only the payment deadline is renewed, provided the legs are still available."}
+                          </p>
+                          {requestLegLabels.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {requestLegLabels.map((label) => (
+                                <span
+                                  key={label}
+                                  className="rounded-full border border-stone-300/70 bg-white/60 px-2.5 py-1 text-[11px] text-stone-800"
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => void reactivateExpiredBooking(request)}
+                            disabled={reactivatingRequestId === request.id}
+                            className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                          >
+                            {reactivatingRequestId === request.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Wallet size={14} />
+                            )}
+                            {lang === "it" ? "Riproponi candidatura" : "Re-propose application"}
+                          </button>
+                        </div>
+                      );
+                    })}
 
                     {selectedFullLegIds.length > 0 && !ownRequestForSelectedVoyage && (
                       <div className="rounded-[22px] border border-amber-300/50 bg-amber-50/60 p-4 text-sm text-amber-950 dark:bg-amber-400/10 dark:text-amber-100/90">

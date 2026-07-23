@@ -16,11 +16,57 @@ import {
   Text,
 } from 'npm:@react-email/components@0.0.22'
 
+type Locale = 'it' | 'en'
+
+const COPY = {
+  it: {
+    preview: 'Conferma la tua email per BITE',
+    eyebrow: 'Registrazione',
+    heading: 'Conferma la tua email',
+    button: 'Verifica Email',
+    footer: 'Se non hai creato un account, puoi ignorare questa email.',
+    intro: (siteUrl: string, recipient: string) => (
+      <>
+        Grazie per esserti registrato su{' '}
+        <Link href={siteUrl} style={link}>
+          <strong>BITE</strong>
+        </Link>
+        ! Conferma il tuo indirizzo email ({' '}
+        <Link href={`mailto:${recipient}`} style={link}>
+          {recipient}
+        </Link>
+        {' '}) cliccando il pulsante qui sotto.
+      </>
+    ),
+  },
+  en: {
+    preview: 'Confirm your email for BITE',
+    eyebrow: 'Sign up',
+    heading: 'Confirm your email',
+    button: 'Verify Email',
+    footer: "If you didn't create an account, you can safely ignore this email.",
+    intro: (siteUrl: string, recipient: string) => (
+      <>
+        Thanks for signing up to{' '}
+        <Link href={siteUrl} style={link}>
+          <strong>BITE</strong>
+        </Link>
+        ! Confirm your email address ({' '}
+        <Link href={`mailto:${recipient}`} style={link}>
+          {recipient}
+        </Link>
+        {' '}) by clicking the button below.
+      </>
+    ),
+  },
+} as const
+
 interface SignupEmailProps {
   siteName: string
   siteUrl: string
   recipient: string
   confirmationUrl: string
+  locale?: Locale
 }
 
 export const SignupEmail = ({
@@ -28,45 +74,37 @@ export const SignupEmail = ({
   siteUrl,
   recipient,
   confirmationUrl,
-}: SignupEmailProps) => (
-  <Html lang="it" dir="ltr">
-    <Head>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-    </Head>
-    <Preview>Conferma la tua email per BITE</Preview>
-    <Body style={main}>
-      <Container style={container}>
-        <Section style={frame}>
-          <Text style={brand}>BITE</Text>
-          <Text style={eyebrow}>Registrazione</Text>
-          <Heading style={h1}>Conferma la tua email</Heading>
-          <Text style={text}>
-            Grazie per esserti registrato su{' '}
-            <Link href={siteUrl} style={link}>
-              <strong>BITE</strong>
-            </Link>
-            ! Conferma il tuo indirizzo email ({' '}
-            <Link href={`mailto:${recipient}`} style={link}>
-              {recipient}
-            </Link>
-            {' '}) cliccando il pulsante qui sotto.
-          </Text>
-          <Section style={ctaRow}>
-            <Button style={button} href={confirmationUrl}>
-              Verifica Email
-            </Button>
+  locale = 'it',
+}: SignupEmailProps) => {
+  const t = COPY[locale] ?? COPY.it
+  return (
+    <Html lang={locale} dir="ltr">
+      <Head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+      </Head>
+      <Preview>{t.preview}</Preview>
+      <Body style={main}>
+        <Container style={container}>
+          <Section style={frame}>
+            <Text style={brand}>BITE</Text>
+            <Text style={eyebrow}>{t.eyebrow}</Text>
+            <Heading style={h1}>{t.heading}</Heading>
+            <Text style={text}>{t.intro(siteUrl, recipient)}</Text>
+            <Section style={ctaRow}>
+              <Button style={button} href={confirmationUrl}>
+                {t.button}
+              </Button>
+            </Section>
+            <Hr style={divider} />
+            <Text style={footer}>{t.footer}</Text>
           </Section>
-          <Hr style={divider} />
-          <Text style={footer}>
-            Se non hai creato un account, puoi ignorare questa email.
-          </Text>
-        </Section>
-      </Container>
-    </Body>
-  </Html>
-)
+        </Container>
+      </Body>
+    </Html>
+  )
+}
 
 export default SignupEmail
 
