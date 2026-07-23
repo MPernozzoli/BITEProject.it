@@ -295,6 +295,7 @@ const AdminVoyageBookings = () => {
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
+  const [paidDepositRequestIds, setPaidDepositRequestIds] = useState<Set<string>>(() => new Set());
   const [profiles, setProfiles] = useState<BookingProfile[]>([]);
   const [availableProfiles, setAvailableProfiles] = useState<BookingProfile[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
@@ -441,7 +442,7 @@ const AdminVoyageBookings = () => {
     const requestIds = loadedRequests.map((request) => request.id);
     const profileIds = [...new Set(loadedRequests.map((request) => request.profile_id))];
 
-    const [requestLegsRes, profilesRes, participantsRes] = await Promise.all([
+    const [requestLegsRes, profilesRes, participantsRes, depositsRes] = await Promise.all([
       requestIds.length
         ? typedSupabase
             .from("voyage_booking_request_legs")
@@ -460,11 +461,22 @@ const AdminVoyageBookings = () => {
             .select("id,booking_request_id,profile_id,email,first_name,last_name,is_lead,status,invite_sent_at,accepted_at,expires_at")
             .in("booking_request_id", requestIds)
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_deposits")
+            .select("booking_request_id,status")
+            .in("booking_request_id", requestIds)
+            .eq("status", "paid")
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (requestLegsRes.error || profilesRes.error || participantsRes.error) {
+    if (requestLegsRes.error || profilesRes.error || participantsRes.error || depositsRes.error) {
       toast.error(
-        requestLegsRes.error?.message || profilesRes.error?.message || participantsRes.error?.message || "Unable to load booking people"
+        requestLegsRes.error?.message ||
+          profilesRes.error?.message ||
+          participantsRes.error?.message ||
+          depositsRes.error?.message ||
+          "Unable to load booking people"
       );
       setLoading(false);
       return;
@@ -484,6 +496,13 @@ const AdminVoyageBookings = () => {
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
     setProfiles(((profilesRes.data as BookingProfile[] | null) || []));
     setParticipants(((participantsRes.data as BookingParticipant[] | null) || []));
+    setPaidDepositRequestIds(
+      new Set(
+        (((depositsRes.data as { booking_request_id: string }[] | null) || []).map(
+          (deposit) => deposit.booking_request_id
+        ))
+      )
+    );
     setBookingSettings(loadedSettings);
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
 
@@ -561,6 +580,24 @@ const AdminVoyageBookings = () => {
     }
     return ids;
   }, [participants]);
+
+  /** Accepted email invites still owing their contribution (payment_mode each_pays_own, not
+   * comped, no paid deposit yet) — settle_voyage_booking_payment promotes these to
+   * user_confirmed automatically once the deposit is marked paid. */
+  const awaitingPaymentRequestIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const request of requests) {
+      if (
+        request.status === "admin_approved" &&
+        request.payment_mode === "each_pays_own" &&
+        !request.is_comped &&
+        !paidDepositRequestIds.has(request.id)
+      ) {
+        ids.add(request.id);
+      }
+    }
+    return ids;
+  }, [requests, paidDepositRequestIds]);
 
   const legCapacity = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1496,6 +1533,7 @@ const AdminVoyageBookings = () => {
               onStatusChange={(requestId, status) => void updateRequestStatus(requestId, status)}
               stagedResize={pendingProposal}
               pendingInviteRequestIds={pendingInviteRequestIds}
+              awaitingPaymentRequestIds={awaitingPaymentRequestIds}
               onStageResize={stageResize}
               onCancelStagedResize={() => void cancelPlanChangeProposal()}
               onOpenProposalDialog={() => setProposalDialogOpen(true)}

@@ -62,6 +62,9 @@ interface BookingGanttTableProps {
    * staged resize applies directly (no traveller to await approval from) instead of going
    * through the propose-and-wait dialog. */
   pendingInviteRequestIds: Set<string>;
+  /** Accepted invites still owing their contribution — shown with a small "in attesa di
+   * pagamento" badge; settle_voyage_booking_payment confirms them automatically once paid. */
+  awaitingPaymentRequestIds: Set<string>;
   /** Stage a request's leg range after a drag-resize; nextLegIds is the full new set. Does not call any RPC. */
   onStageResize: (requestId: string, nextLegIds: string[]) => void;
   /** Discard the staged resize for the row currently being edited. */
@@ -151,6 +154,7 @@ const BookingGanttTable = ({
   onStatusChange,
   stagedResize,
   pendingInviteRequestIds,
+  awaitingPaymentRequestIds,
   onStageResize,
   onCancelStagedResize,
   onOpenProposalDialog,
@@ -741,6 +745,14 @@ const BookingGanttTable = ({
                   {request.is_crew && (
                     <span className="rounded-full border border-indigo-300/70 bg-indigo-100/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-800">
                       Equipaggio
+                    </span>
+                  )}
+                  {awaitingPaymentRequestIds.has(request.id) && (
+                    <span
+                      title="Il posto è riservato; diventa confermata automaticamente una volta pagato il contributo."
+                      className="rounded-full border border-orange-300/70 bg-orange-100/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-orange-800"
+                    >
+                      In attesa di pagamento
                     </span>
                   )}
                 </div>

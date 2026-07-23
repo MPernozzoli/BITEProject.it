@@ -111,6 +111,7 @@ export interface BookingRequest {
   is_crew?: boolean;
   /** Admin-granted "omaggio": the booking is exempt from the contribution payment gate. */
   is_comped?: boolean;
+  payment_mode?: "lead_pays_all" | "each_pays_own";
 }
 
 export interface BookingRequestLeg {

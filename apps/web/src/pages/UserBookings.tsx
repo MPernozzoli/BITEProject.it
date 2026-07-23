@@ -129,6 +129,7 @@ const UserBookings = () => {
   const [legs, setLegs] = useState<BookableLeg[]>([]);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
+  const [paidDepositRequestIds, setPaidDepositRequestIds] = useState<Set<string>>(() => new Set());
   const [bookingSettings, setBookingSettings] = useState<BookingSettings[]>([]);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
   const [taskCompletions, setTaskCompletions] = useState<BookingTaskCompletion[]>([]);
@@ -226,7 +227,7 @@ const UserBookings = () => {
     const voyageIds = [...new Set([...loadedVoyages.map((v) => v.id), ...requestedVoyageIds])];
     const requestIds = loadedRequests.map((request) => request.id);
 
-    const [legsRes, waypointsRes, requestLegsRes, settingsRes, tasksRes, completionsRes] = await Promise.all([
+    const [legsRes, waypointsRes, requestLegsRes, settingsRes, tasksRes, completionsRes, depositsRes] = await Promise.all([
       voyageIds.length
         ? typedSupabase
             .from("voyage_bookable_legs")
@@ -270,9 +271,16 @@ const UserBookings = () => {
             .select("*")
             .in("booking_request_id", requestIds)
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_deposits")
+            .select("booking_request_id,status")
+            .in("booking_request_id", requestIds)
+            .eq("status", "paid")
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (legsRes.error || waypointsRes.error || requestLegsRes.error || settingsRes.error || tasksRes.error || completionsRes.error) {
+    if (legsRes.error || waypointsRes.error || requestLegsRes.error || settingsRes.error || tasksRes.error || completionsRes.error || depositsRes.error) {
       toast.error(
         legsRes.error?.message ||
           waypointsRes.error?.message ||
@@ -280,6 +288,7 @@ const UserBookings = () => {
           settingsRes.error?.message ||
           tasksRes.error?.message ||
           completionsRes.error?.message ||
+          depositsRes.error?.message ||
           "Unable to load booking details"
       );
       setBusy(false);
@@ -291,6 +300,13 @@ const UserBookings = () => {
     setLegs(((legsRes.data as BookableLeg[] | null) || []));
     setWaypoints(((waypointsRes.data as BookingWaypoint[] | null) || []));
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
+    setPaidDepositRequestIds(
+      new Set(
+        (((depositsRes.data as { booking_request_id: string }[] | null) || []).map(
+          (deposit) => deposit.booking_request_id
+        ))
+      )
+    );
     setBookingSettings(((settingsRes.data as BookingSettings[] | null) || []));
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
     setTaskCompletions(((completionsRes.data as BookingTaskCompletion[] | null) || []));
@@ -417,6 +433,20 @@ const UserBookings = () => {
         .sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime())[0] || null,
     [requests, selectedVoyageId]
   );
+  /** admin_approved but the traveller's own contribution isn't paid yet: the seat is reserved,
+   * but settle_voyage_booking_payment hasn't promoted it to user_confirmed yet. */
+  const isAwaitingContributionPayment = useCallback(
+    (request: BookingRequest | null) =>
+      Boolean(
+        request &&
+          request.status === "admin_approved" &&
+          request.payment_mode === "each_pays_own" &&
+          !request.is_comped &&
+          !paidDepositRequestIds.has(request.id)
+      ),
+    [paidDepositRequestIds]
+  );
+  const ownRequestAwaitingPayment = isAwaitingContributionPayment(ownRequestForSelectedVoyage);
   // Expired applications are otherwise invisible on this page; surfaced separately so the
   // traveller can retrieve payment info or re-propose them (see reactivateExpiredBooking).
   const expiredRequestsForSelectedVoyage = useMemo(
@@ -1217,6 +1247,7 @@ const UserBookings = () => {
                         saving={saving}
                         ownRequest={ownRequestForSelectedVoyage}
                         ownRequestLegIds={ownRequestLegIdsForSelectedVoyage}
+                        ownRequestAwaitingPayment={ownRequestAwaitingPayment}
                         companions={companionRows}
                         draftLegIds={selectedLegIds}
                         onDraftLegIdsChange={setSelectedLegIds}
@@ -1260,6 +1291,31 @@ const UserBookings = () => {
                         </button>
                       </div>
                     )}
+                    {ownRequestForSelectedVoyage?.status === "admin_approved" &&
+                      ownRequestForSelectedVoyage.payment_mode === "each_pays_own" &&
+                      !ownRequestForSelectedVoyage.is_comped &&
+                      !paidDepositRequestIds.has(ownRequestForSelectedVoyage.id) && (
+                        <div className="rounded-[22px] border border-orange-300/60 bg-orange-50/70 p-4 text-sm text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+                          <p className="font-medium">
+                            {lang === "it" ? "In attesa di pagamento" : "Awaiting payment"}
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed opacity-85">
+                            {lang === "it"
+                              ? "Il tuo posto è riservato. Manca solo il pagamento della tua quota di contributo per confermare definitivamente la partecipazione."
+                              : "Your seat is reserved. Only your contribution payment is missing to fully confirm your participation."}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPaymentChoice({ bookingRequestId: ownRequestForSelectedVoyage.id })
+                            }
+                            className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                          >
+                            <Wallet size={14} />
+                            {lang === "it" ? "Completa il pagamento" : "Complete the payment"}
+                          </button>
+                        </div>
+                      )}
 
                     {expiredRequestsForSelectedVoyage.map((request) => {
                       const requestLegLabels = requestLegs
@@ -1460,12 +1516,22 @@ const UserBookings = () => {
                             {lang === "it" ? "Equipaggio" : "Crew"}
                           </span>
                         )}
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${getBookingStatusClass(detailsRequest.status)}`}>
+                        <span
+                          className={`inline-flex rounded-full border px-3 py-1 text-xs ${
+                            isAwaitingContributionPayment(detailsRequest)
+                              ? "border-orange-300/70 bg-orange-100/70 text-orange-900"
+                              : getBookingStatusClass(detailsRequest.status)
+                          }`}
+                        >
                           {["requested", "waitlisted"].includes(detailsRequest.status)
                             ? lang === "it"
                               ? "In attesa di approvazione"
                               : "Pending approval"
-                            : getBookingStatusLabel(detailsRequest.status, lang)}
+                            : isAwaitingContributionPayment(detailsRequest)
+                              ? lang === "it"
+                                ? "In attesa di pagamento"
+                                : "Awaiting payment"
+                              : getBookingStatusLabel(detailsRequest.status, lang)}
                         </span>
                       </DialogDescription>
                     </DialogHeader>
@@ -1711,7 +1777,7 @@ const UserBookings = () => {
                       </div>
                     )}
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {detailsRequest.status === "admin_approved" && (
+                      {detailsRequest.status === "admin_approved" && !isAwaitingContributionPayment(detailsRequest) && (
                         <button
                           type="button"
                           onClick={() => void confirmBooking(detailsRequest.id)}

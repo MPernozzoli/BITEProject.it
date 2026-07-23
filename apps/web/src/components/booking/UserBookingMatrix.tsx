@@ -28,6 +28,9 @@ interface UserBookingMatrixProps {
   /** The traveller's own active (non cancelled/rejected/expired) request for this voyage, if any. */
   ownRequest: BookingRequest | null;
   ownRequestLegIds: string[];
+  /** True when ownRequest is admin_approved but the traveller's own contribution is still
+   * unpaid — the seat is reserved but not yet fully confirmed (see settle_voyage_booking_payment). */
+  ownRequestAwaitingPayment?: boolean;
   /** Anonymized occupancy of other bookers, already scoped to this voyage. */
   companions: VoyageBookingOccupancyRow[];
   /** Draft, not-yet-submitted leg selection — controlled by the parent (existing submit flow). */
@@ -88,6 +91,7 @@ const UserBookingMatrix = ({
   saving,
   ownRequest,
   ownRequestLegIds,
+  ownRequestAwaitingPayment = false,
   companions,
   draftLegIds,
   onDraftLegIdsChange,
@@ -297,9 +301,11 @@ const UserBookingMatrix = ({
                 <div
                   className={[
                     "absolute flex items-center justify-center rounded-full border px-3 text-[13px] font-semibold shadow-sm",
-                    showProposalPreview
-                      ? "border-emerald-300/70 bg-emerald-100/70 text-emerald-800"
-                      : "border-emerald-300/75 bg-emerald-100/80 text-emerald-800",
+                    ownRequestAwaitingPayment
+                      ? "border-orange-300/75 bg-orange-100/80 text-orange-900"
+                      : showProposalPreview
+                        ? "border-emerald-300/70 bg-emerald-100/70 text-emerald-800"
+                        : "border-emerald-300/75 bg-emerald-100/80 text-emerald-800",
                   ].join(" ")}
                   style={{
                     top: 8,
@@ -325,12 +331,18 @@ const UserBookingMatrix = ({
                       <>{it ? "Adesso" : "Now"}</>
                     ) : (
                       <>
-                        {pendingApprovalStatuses.has(ownRequest.status) && <Hourglass size={13} className="shrink-0" />}
-                        {pendingApprovalStatuses.has(ownRequest.status)
+                        {(pendingApprovalStatuses.has(ownRequest.status) || ownRequestAwaitingPayment) && (
+                          <Hourglass size={13} className="shrink-0" />
+                        )}
+                        {ownRequestAwaitingPayment
                           ? it
-                            ? "In attesa di approvazione"
-                            : "Pending approval"
-                          : getBookingStatusLabel(ownRequest.status, lang)}
+                            ? "In attesa di pagamento"
+                            : "Awaiting payment"
+                          : pendingApprovalStatuses.has(ownRequest.status)
+                            ? it
+                              ? "In attesa di approvazione"
+                              : "Pending approval"
+                            : getBookingStatusLabel(ownRequest.status, lang)}
                       </>
                     )}
                   </span>
