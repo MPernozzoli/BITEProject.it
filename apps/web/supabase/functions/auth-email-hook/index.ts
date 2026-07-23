@@ -210,7 +210,11 @@ function parseNativeHook(rawBody: string, headers: Headers): EmailJob {
   const wh = new Webhook(hookSecret.replace('v1,whsec_', ''))
   const { user, email_data } = wh.verify(rawBody, Object.fromEntries(headers)) as NativeHookPayload
 
-  const confirmationUrl = `${email_data.site_url}/auth/v1/verify?token=${email_data.token_hash}&type=${email_data.email_action_type}&redirect_to=${encodeURIComponent(email_data.redirect_to)}`
+  // Must hit the Supabase project's own API URL (Kong), not the app's site_url, and
+  // must carry an apikey or the gateway rejects it with "No API key found in request".
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  const confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${email_data.token_hash}&type=${email_data.email_action_type}&redirect_to=${encodeURIComponent(email_data.redirect_to)}&apikey=${anonKey}`
 
   return {
     runId: crypto.randomUUID(),
