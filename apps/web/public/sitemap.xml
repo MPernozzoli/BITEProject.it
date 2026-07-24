@@ -85,6 +85,42 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/contact" />
   </url>
   <url>
+    <loc>https://biteproject.it/it/privacy-policy</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/privacy-policy" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/privacy-policy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/privacy-policy" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/privacy-policy</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/privacy-policy" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/privacy-policy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/privacy-policy" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/it/cookie-policy</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/cookie-policy" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/cookie-policy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/cookie-policy" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/cookie-policy</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/cookie-policy" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/cookie-policy" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/cookie-policy" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/it/terms</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/terms" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/terms" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/terms" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/terms</loc>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/terms" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/terms" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/terms" />
+  </url>
+  <url>
     <loc>https://biteproject.it/it/voyages/faa1ec46-0574-49b1-ad42-8c84d8f12d14--first-time-sailors</loc>
     <lastmod>2026-07-12T01:41:26.206Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/faa1ec46-0574-49b1-ad42-8c84d8f12d14--first-time-sailors" />
@@ -296,14 +332,14 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound</loc>
-    <lastmod>2026-07-17T18:27:36.868Z</lastmod>
+    <lastmod>2026-07-23T22:46:49.530Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
   </url>
   <url>
     <loc>https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound</loc>
-    <lastmod>2026-07-17T18:27:36.868Z</lastmod>
+    <lastmod>2026-07-23T22:46:49.530Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
@@ -338,7 +374,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/spritz-cambia-mare</loc>
-    <lastmod>2026-07-20T07:37:00.869Z</lastmod>
+    <lastmod>2026-07-22T20:28:29.196Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
@@ -350,7 +386,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/spritz-is-changing-seas</loc>
-    <lastmod>2026-07-20T07:37:00.869Z</lastmod>
+    <lastmod>2026-07-22T20:28:29.196Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
@@ -362,7 +398,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca</loc>
-    <lastmod>2026-07-19T13:19:19.567Z</lastmod>
+    <lastmod>2026-07-22T00:47:33.935Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
@@ -374,7 +410,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard</loc>
-    <lastmod>2026-07-19T13:19:19.567Z</lastmod>
+    <lastmod>2026-07-22T00:47:33.935Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
@@ -386,7 +422,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo</loc>
-    <lastmod>2026-07-17T12:35:22.917Z</lastmod>
+    <lastmod>2026-07-22T00:43:15.310Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
@@ -398,7 +434,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong</loc>
-    <lastmod>2026-07-17T12:35:22.917Z</lastmod>
+    <lastmod>2026-07-22T00:43:15.310Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
@@ -410,7 +446,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/vivere-in-barca-con-due-cani-dalla-citta-al-mare</loc>
-    <lastmod>2026-07-19T17:45:00.785Z</lastmod>
+    <lastmod>2026-07-20T18:47:50.892Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/vivere-in-barca-con-due-cani-dalla-citta-al-mare" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/vivere-in-barca-con-due-cani-dalla-citta-al-mare" />
@@ -422,7 +458,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea</loc>
-    <lastmod>2026-07-19T17:45:00.785Z</lastmod>
+    <lastmod>2026-07-20T18:47:50.892Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/vivere-in-barca-con-due-cani-dalla-citta-al-mare" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/living-on-a-boat-with-dogs-our-journey-from-city-life-to-the-sea" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/vivere-in-barca-con-due-cani-dalla-citta-al-mare" />
@@ -431,11 +467,5 @@
       <image:caption>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:caption>
       <image:title>Living on a Boat with Dogs: Our Journey from City Life to the Sea</image:title>
     </image:image>
-  </url>
-  <url>
-    <loc>https://biteproject.it/privacy-policy</loc>
-  </url>
-  <url>
-    <loc>https://biteproject.it/cookie-policy</loc>
   </url>
 </urlset>
