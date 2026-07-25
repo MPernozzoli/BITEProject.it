@@ -11,7 +11,11 @@
 // using a length-safe constant-time comparison. Keep the existing JWT-role check
 // alongside it so external service_role JWT callers keep working.
 
-function timingSafeEqual(a: string, b: string): boolean {
+/**
+ * Confronto a tempo costante fra due stringhe di segreti. Esportato perché
+ * serve anche ai confronti di cron secret, non solo alla service-role key.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let mismatch = 0
   for (let i = 0; i < a.length; i++) {

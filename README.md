@@ -10,3 +10,5 @@ BITE Project è una piattaforma editoriale e operativa per viaggi in barca a vel
 
 ## Nota storica
 Il progetto è nato su Lovable Cloud ed è poi stato migrato fuori da Lovable. Lovable non è più un servizio operativo dello stack.
+
+La migrazione ha lasciato dietro di sé il progetto Supabase creato da Lovable, ref `vdflrzcmlipvtardannd`. **Non è più il backend.** L'unico progetto attivo è `ekwloweuicrqjjgabfdp` (BITEProject.it). Il ref legacy compare ancora solo in URL storici di storage dentro `apps/web/public/sitemap.xml` e `backups/*.json`: sono dati vecchi, non configurazione.

@@ -7,6 +7,11 @@ tags: [backend, supabase, database, auth]
 
 Supabase è il **backend unico** del progetto.
 
+> ⚠️ **Un solo progetto attivo: `ekwloweuicrqjjgabfdp` (BITEProject.it).**
+> Il progetto è nato su **Lovable Cloud**, che aveva creato un proprio progetto Supabase con ref `vdflrzcmlipvtardannd`. Quel progetto è **legacy**: non è più il backend e non va usato per niente.
+> Fino al 2026-07-25 `apps/web/supabase/config.toml` conteneva ancora il ref legacy, mentre la CLI era collegata a quello corretto — con l'effetto che i comandi CLI e le query MCP fallivano con "permission denied" senza una causa evidente. Ora il file è allineato.
+> Il ref legacy sopravvive solo dentro **URL storici di storage** in `apps/web/public/sitemap.xml` e in `backups/*.json`: sono dati vecchi, non configurazione. Se trovi `vdflrzcmlipvtardannd` in un file di configurazione o in codice nuovo, è un errore.
+
 - **Project ID:** `ekwloweuicrqjjgabfdp` (in `apps/web/supabase/config.toml`)
 - **Client:** `apps/web/src/integrations/supabase/client.ts` (URL/key da env — vedi [[18 - Deploy e Configurazione]])
 - **Tipi:** `apps/web/src/integrations/supabase/types.ts` (generati dallo schema). **Rigenerali quando cambi lo schema:** erano rimasti indietro al punto di non conoscere le tabelle `voyage_booking_*`, e il codice li aggirava con cast a client non tipizzato (`typedSupabase`, `rpc(... as never)`). Il build Vite non fa typecheck, quindi la deriva non si nota: il controllo vero è `npx tsc --noEmit -p tsconfig.app.json` da `apps/web` (il `tsconfig.json` radice ha `files: []` e non controlla nulla).

@@ -31,11 +31,13 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 - `my-newsletter-subscription` → stato/preferenze utente
 - `handle-email-unsubscribe` → pagina `/unsubscribe`
 - `handle-email-suppression` → gestione interna bounce/soppressioni; i webhook pubblici Resend della mail app passano da Vercel (`/api/webhooks/email/inbound`)
+- Protezione di `newsletter-subscribe`: honeypot, consenso obbligatorio, cooldown per indirizzo (`resend_cooldown_minutes`) e rate limit per IP (10 richieste/ora) tramite `consume_rate_limit()` — il cooldown per indirizzo da solo non impediva di iterare su indirizzi diversi usando il dominio per spedire conferme non richieste. La ricerca del subscriber usa due query separate invece di un `.or()` costruito per concatenazione, perché i valori interpolati nei filtri PostgREST non sono parametrizzati.
 - Lib client: `apps/web/src/lib/newsletter.ts`, `apps/web/src/lib/email-notification-preferences.ts`
 
 ## Invio & digest
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
-- `send-newsletter-digest` — digest periodico
+- Cron `newsletter-dispatch` ogni 5 minuti via `invoke_newsletter_dispatch()` (migrazione `20260725100000`). Senza questo job nulla invocava la funzione a parte il bottone "Invia ora" dell'admin: campagne schedulate, automazioni su iscrizione/disiscrizione e digest settimanale non partivano mai da soli. La funzione accetta l'header `x-cron-secret` (stesso segreto Vault `email_queue_cron_secret` del worker di coda) oltre a service-role key e JWT admin.
+- `send-newsletter-digest` — digest periodico, innescato da `processWeeklyDigestAutomation()` dentro `newsletter-dispatch`
 - `process-email-queue` — worker della coda email (verify_jwt) con invio Resend, retry/backoff e DLQ. Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) e dal cron versionato `process-email-queue` ogni 5 minuti via `invoke_email_queue_worker()`.
 - `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima service-role; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
 - `dispatch-voyage-availability-updates` — svuota la coda `voyage_availability_notifications` e invia il template transazionale `voyage-availability-update` agli utenti che hanno chiesto aggiornamenti sui nuovi viaggi o sulle tratte piene tornate disponibili.
@@ -43,6 +45,12 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 ## Tracking
 - `newsletter-track-open` — pixel apertura
 - `newsletter-track-click` — redirect tracciato click
+- Entrambi registrano tramite le funzioni SQL `newsletter_register_open()` / `newsletter_register_click()`: l'incremento dei contatori è atomico, perché il precedente read-modify-write perdeva le aperture concorrenti (proxy immagini, prefetch, client multipli).
+- `newsletter-track-click` **fallisce chiuso**: se la coppia `delivery`/`token` non corrisponde a una consegna reale, reindirizza a `PUBLIC_SITE_URL` e non al `?url=` richiesto. Prima rediregeva comunque, rendendo l'endpoint un open redirect sul dominio del progetto — utilizzabile per phishing e dannoso per la reputazione del dominio mittente.
+
+## Disiscrizione a un solo click (RFC 8058)
+- `process-email-queue` emette `List-Unsubscribe` e `List-Unsubscribe-Post: List-Unsubscribe=One-Click` su ogni messaggio in coda che porta un `unsubscribe_token` (newsletter, transazionali con token, contact form). Le email di autenticazione non ne hanno e non devono averlo. È un requisito dei bulk sender per Gmail, Yahoo e Microsoft.
+- Il target è `/api/email/unsubscribe` sul dominio del brand, non su `*.supabase.co`: è l'URL che i provider mostrano accanto al mittente e concorre alla reputazione del dominio. In `GET` reindirizza alla pagina `/unsubscribe` (scelta granulare + motivo), in `POST` inoltra il one-click a `handle-email-unsubscribe`, che già gestiva il corpo `List-Unsubscribe=One-Click`.
 
 ## Notifiche di pubblicazione
 - `notify-article-publication` — nuovo articolo

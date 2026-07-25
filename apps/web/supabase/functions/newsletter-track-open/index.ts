@@ -33,33 +33,18 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
-  const { data: delivery } = await supabase
-    .from('newsletter_deliveries')
-    .select('id, status, tracker_token, open_count')
-    .eq('id', deliveryId)
-    .eq('tracker_token', token)
-    .maybeSingle()
 
-  if (!delivery) {
-    return pixelResponse()
+  // Incremento atomico lato database: le aperture arrivano concorrenti (proxy
+  // immagini, client multipli, prefetch) e un read-modify-write ne perdeva una
+  // parte imprecisata.
+  const { error } = await supabase.rpc('newsletter_register_open', {
+    p_delivery_id: deliveryId,
+    p_token: token,
+  })
+
+  if (error) {
+    console.error('Failed to register newsletter open', { deliveryId, error })
   }
-
-  const now = new Date().toISOString()
-  const nextStatus = delivery.status === 'clicked' ? 'clicked' : 'opened'
-  const payload: Record<string, string | number> = {
-    status: nextStatus,
-    open_count: (delivery.open_count ?? 0) + 1,
-    last_opened_at: now,
-  }
-
-  if (!delivery.open_count) {
-    payload.first_opened_at = now
-  }
-
-  await supabase
-    .from('newsletter_deliveries')
-    .update(payload)
-    .eq('id', delivery.id)
 
   return pixelResponse()
 })

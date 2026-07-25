@@ -24,8 +24,13 @@ function successResponse(): Response {
   return jsonResponse({ success: true })
 }
 
+// Volutamente più stretta della classica `[^\s@]+@[^\s@]+\.[^\s@]+`: quella
+// accetta virgole e parentesi, che nei filtri PostgREST sono metacaratteri.
+const EMAIL_PATTERN =
+  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i
+
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  return email.length <= 254 && EMAIL_PATTERN.test(email)
 }
 
 function isMissingRelationError(error: { code?: string; message?: string } | null | undefined): boolean {
@@ -96,6 +101,36 @@ Deno.serve(async (req) => {
       : 'homepage'
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
+
+  // Il cooldown per indirizzo non basta: senza un limite per IP si possono
+  // iterare indirizzi diversi e usare il nostro dominio per spedire conferme
+  // non richieste. Il limite è largo abbastanza da non disturbare l'uso reale
+  // (anche più persone dietro lo stesso NAT).
+  const clientIp =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('cf-connecting-ip')?.trim() ||
+    ''
+
+  if (clientIp) {
+    const { data: allowed, error: rateLimitError } = await supabase.rpc(
+      'consume_rate_limit',
+      {
+        p_bucket: 'newsletter-subscribe',
+        p_identifier: clientIp,
+        p_max_requests: 10,
+        p_window_seconds: 3600,
+      }
+    )
+
+    if (rateLimitError) {
+      // Un errore del contatore non deve impedire le iscrizioni legittime.
+      console.error('Rate limit check failed', rateLimitError)
+    } else if (allowed === false) {
+      console.warn('Rate limited newsletter subscribe attempt', { clientIp })
+      return jsonResponse({ error: 'Too many requests' }, 429)
+    }
+  }
+
   const sendTransactionalTemplate = async (
     templateName: string,
     templateData: Record<string, unknown>
@@ -143,16 +178,30 @@ Deno.serve(async (req) => {
     .eq('email', normalizedEmail)
     .maybeSingle()
 
-  const { data: existingSubscriber, error: lookupError } = await supabase
-    .from('newsletter_subscribers')
-    .select('id, subscribed, profile_id')
-    .or(
-      matchingProfile?.id
-        ? `email.eq.${normalizedEmail},profile_id.eq.${matchingProfile.id}`
-        : `email.eq.${normalizedEmail}`
-    )
-    .limit(1)
-    .maybeSingle()
+  // Due query separate invece di un `.or()` costruito per concatenazione: i
+  // valori interpolati in un filtro PostgREST non sono parametrizzati, quindi
+  // un'email con metacaratteri poteva alterare la condizione.
+  const lookupExistingSubscriber = async () => {
+    const byEmail = await supabase
+      .from('newsletter_subscribers')
+      .select('id, subscribed, profile_id')
+      .eq('email', normalizedEmail)
+      .limit(1)
+      .maybeSingle()
+
+    if (byEmail.error || byEmail.data || !matchingProfile?.id) {
+      return byEmail
+    }
+
+    return await supabase
+      .from('newsletter_subscribers')
+      .select('id, subscribed, profile_id')
+      .eq('profile_id', matchingProfile.id)
+      .limit(1)
+      .maybeSingle()
+  }
+
+  const { data: existingSubscriber, error: lookupError } = await lookupExistingSubscriber()
 
   if (lookupError) {
     console.error('Failed to load newsletter subscriber', lookupError)

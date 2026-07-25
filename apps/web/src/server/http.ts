@@ -39,6 +39,25 @@ export async function readJsonBody<T = Record<string, unknown>>(
   return raw ? (JSON.parse(raw) as T) : ({} as T);
 }
 
+/** Read the raw request body as text, tolerating pre-parsed `req.body`. */
+export async function readTextBody(req: NodeRequest): Promise<string> {
+  if (typeof req.body === "string") return req.body;
+  if (req.body && typeof req.body === "object") {
+    // Vercel may pre-parse form bodies into an object.
+    return new URLSearchParams(req.body as Record<string, string>).toString();
+  }
+  if (typeof req.on !== "function") return "";
+
+  return await new Promise<string>((resolve, reject) => {
+    let data = "";
+    req.on!("data", (chunk) => {
+      data += String(chunk);
+    });
+    req.on!("end", () => resolve(data));
+    req.on!("error", (err) => reject(err));
+  });
+}
+
 export function sendJson(res: NodeResponse, status: number, payload: unknown): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");

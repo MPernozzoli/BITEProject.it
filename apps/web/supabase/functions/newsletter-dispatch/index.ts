@@ -14,6 +14,7 @@ import {
   type SystemEmailAutomationRow,
 } from '../_shared/system-email-automation.ts'
 import { NewsletterEmail } from '../_shared/newsletter-email.tsx'
+import { isInjectedServiceKey, timingSafeEqual } from '../_shared/service-auth.ts'
 import {
   buildMergeVariables,
   renderMergeTags,
@@ -254,6 +255,18 @@ async function authorizeRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>
 ): Promise<{ ok: true } | { ok: false; response: Response }> {
+  // pg_cron chiama con il secret dedicato invece della service-role key, così
+  // il segreto usato dallo scheduler è revocabile in autonomia.
+  const cronSecret = Deno.env.get('EMAIL_QUEUE_CRON_SECRET')
+  const headerCronSecret = req.headers.get('x-cron-secret')
+  if (
+    cronSecret &&
+    headerCronSecret &&
+    timingSafeEqual(headerCronSecret, cronSecret)
+  ) {
+    return { ok: true }
+  }
+
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
     return {
@@ -263,9 +276,8 @@ async function authorizeRequest(
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (serviceRoleKey && token === serviceRoleKey) {
+  if (isInjectedServiceKey(token)) {
     return { ok: true }
   }
 

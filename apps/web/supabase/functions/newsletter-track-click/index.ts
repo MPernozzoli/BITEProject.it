@@ -7,6 +7,7 @@ function redirect(url: string): Response {
     headers: {
       Location: url,
       'Cache-Control': 'no-store, max-age=0',
+      'Referrer-Policy': 'no-referrer',
     },
   })
 }
@@ -28,46 +29,42 @@ Deno.serve(async (req) => {
     return redirect(PUBLIC_SITE_URL)
   }
 
-  let decodedTarget = PUBLIC_SITE_URL
+  let decodedTarget: string | null = null
   try {
-    const nextUrl = decodeURIComponent(target)
-    const parsed = new URL(nextUrl)
-    decodedTarget =
-      parsed.protocol === 'http:' || parsed.protocol === 'https:'
-        ? parsed.toString()
-        : PUBLIC_SITE_URL
+    const parsed = new URL(decodeURIComponent(target))
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      decodedTarget = parsed.toString()
+    }
   } catch {
-    decodedTarget = PUBLIC_SITE_URL
+    decodedTarget = null
+  }
+
+  if (!decodedTarget) {
+    return redirect(PUBLIC_SITE_URL)
   }
 
   const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
-  const { data: delivery } = await supabase
-    .from('newsletter_deliveries')
-    .select('id, click_count, tracker_token')
-    .eq('id', deliveryId)
-    .eq('tracker_token', token)
-    .maybeSingle()
 
-  if (!delivery) {
-    return redirect(decodedTarget)
+  // Fail closed. Se la coppia delivery/token non corrisponde a una consegna
+  // reale, questo endpoint diventerebbe un open redirect sul dominio del
+  // progetto: utilizzabile per phishing e dannoso per la reputazione del
+  // dominio mittente. Il redirect verso `decodedTarget` avviene solo dopo che
+  // il click e' stato registrato su una delivery esistente.
+  const { data: registered, error } = await supabase.rpc('newsletter_register_click', {
+    p_delivery_id: deliveryId,
+    p_token: token,
+    p_url: decodedTarget,
+  })
+
+  if (error) {
+    console.error('Failed to register newsletter click', { deliveryId, error })
+    return redirect(PUBLIC_SITE_URL)
   }
 
-  const now = new Date().toISOString()
-  const payload: Record<string, string | number> = {
-    status: 'clicked',
-    click_count: (delivery.click_count ?? 0) + 1,
-    last_clicked_at: now,
-    last_clicked_url: decodedTarget,
+  if (registered !== true) {
+    console.warn('Rejected newsletter click for unknown delivery/token', { deliveryId })
+    return redirect(PUBLIC_SITE_URL)
   }
-
-  if (!delivery.click_count) {
-    payload.first_clicked_at = now
-  }
-
-  await supabase
-    .from('newsletter_deliveries')
-    .update(payload)
-    .eq('id', delivery.id)
 
   return redirect(decodedTarget)
 })

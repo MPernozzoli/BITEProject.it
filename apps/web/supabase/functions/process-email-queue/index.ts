@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { isInjectedServiceKey } from '../_shared/service-auth.ts'
+import { isInjectedServiceKey, timingSafeEqual } from '../_shared/service-auth.ts'
+import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -48,19 +49,54 @@ function parseRetryAfterSeconds(value: string | null): number | null {
   return null
 }
 
+/**
+ * Header di disiscrizione a un solo click (RFC 8058).
+ *
+ * Requisito dei bulk sender per Gmail, Yahoo e Microsoft: senza questi header
+ * le email finiscono penalizzate e l'unico modo che l'utente ha di sottrarsi è
+ * segnalare spam, che è molto peggio per la reputazione del dominio.
+ *
+ * Il target punta al dominio del brand (`/api/email/unsubscribe`), che gestisce
+ * il POST one-click e reindirizza le persone alla pagina `/unsubscribe`.
+ * L'header viene emesso solo quando il messaggio in coda porta un token: le
+ * email di autenticazione non ne hanno e non devono averlo.
+ */
+function buildUnsubscribeHeaders(
+  payload: Record<string, unknown>,
+): Record<string, string> {
+  const token =
+    typeof payload.unsubscribe_token === 'string'
+      ? payload.unsubscribe_token.trim()
+      : ''
+
+  if (!token) return {}
+
+  const unsubscribeUrl = `${PUBLIC_SITE_URL}/api/email/unsubscribe?token=${encodeURIComponent(token)}`
+
+  return {
+    'List-Unsubscribe': `<${unsubscribeUrl}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
+}
+
 async function sendResendEmail(
   payload: Record<string, unknown>,
   apiKey: string,
 ): Promise<string | null> {
+  const headers: Record<string, string> = {
+    ...(payload.message_id
+      ? { 'X-BITE-Message-ID': String(payload.message_id) }
+      : {}),
+    ...buildUnsubscribeHeaders(payload),
+  }
+
   const body = {
     from: payload.from,
     to: Array.isArray(payload.to) ? payload.to : [payload.to],
     subject: payload.subject,
     html: payload.html,
     text: payload.text,
-    headers: payload.message_id
-      ? { 'X-BITE-Message-ID': String(payload.message_id) }
-      : undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
   }
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -190,7 +226,9 @@ Deno.serve(async (req) => {
 
   const authHeader = req.headers.get('Authorization')
   const headerCronSecret = req.headers.get('x-cron-secret')
-  const cronSecretAuthorized = Boolean(cronSecret && headerCronSecret && headerCronSecret === cronSecret)
+  const cronSecretAuthorized = Boolean(
+    cronSecret && headerCronSecret && timingSafeEqual(headerCronSecret, cronSecret)
+  )
   if (cronSecretAuthorized) {
     // Authorized by the dedicated pg_cron secret below.
   } else if (!authHeader?.startsWith('Bearer ')) {

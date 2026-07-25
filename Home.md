@@ -62,7 +62,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 | **Edge Functions** | 31+ in `apps/web/supabase/functions/` |
 | **Pagamenti** | Bunq (request-inquiry) + bonifico bancario |
 | **Mappe** | MapLibre GL + supercluster |
-| **Origine** | nato su Lovable Cloud, poi migrato fuori da Lovable |
+| **Origine** | nato su Lovable Cloud, poi migrato fuori da Lovable. Il progetto Supabase di Lovable (`vdflrzcmlipvtardannd`) è **legacy**: l'unico attivo è `ekwloweuicrqjjgabfdp` → [[08 - Supabase]] |
 | **Deploy** | Vercel (SPA rewrite + edge middleware) |
 
 ---
