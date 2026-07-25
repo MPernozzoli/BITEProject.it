@@ -13,6 +13,7 @@ import {
   Text,
 } from 'npm:@react-email/components@0.0.22'
 import { PUBLIC_SITE_URL, SITE_NAME } from '../email-config.ts'
+import { resolveSiteLanguage } from '../site-language.ts'
 
 const DEFAULT_HERO_IMAGE = `${PUBLIC_SITE_URL}/og-image.jpeg`
 
@@ -61,8 +62,14 @@ type EditorialEmailShellProps = {
   unsubscribeUrl?: string | null
 }
 
+/**
+ * Last line of defence for every template: whatever language string reaches a template gets
+ * mapped here, using the same rule as the rest of the site. Previously anything that was not
+ * exactly 'en' rendered in Italian, so a caller passing 'pl' or 'de' silently produced an
+ * Italian email — see _shared/site-language.ts.
+ */
 export function resolveEmailLanguage(language?: string | null): EmailLanguage {
-  return language?.trim().toLowerCase() === 'en' ? 'en' : 'it'
+  return resolveSiteLanguage(language)
 }
 
 export function buildGreetingName(recipientName?: string | null): string {

@@ -256,11 +256,16 @@ async function parseNativeHook(rawBody: string, headers: Headers): Promise<Email
   const wh = new Webhook(hookSecret.replace('v1,whsec_', ''))
   const { user, email_data } = wh.verify(rawBody, Object.fromEntries(headers)) as NativeHookPayload
 
-  // Must hit the Supabase project's own API URL (Kong), not the app's site_url, and
-  // must carry an apikey or the gateway rejects it with "No API key found in request".
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-  const confirmationUrl = `${supabaseUrl}/auth/v1/verify?token=${email_data.token_hash}&type=${email_data.email_action_type}&redirect_to=${encodeURIComponent(email_data.redirect_to)}&apikey=${anonKey}`
+  // La verifica vera vive su /auth/v1/verify del gateway Kong e pretende un
+  // apikey, altrimenti risponde "No API key found in request": non si può
+  // puntare direttamente al site_url dell'app.
+  // Il link però non può nemmeno puntare a `<project>.supabase.co`, perché un
+  // messaggio spedito da mail.biteproject.it il cui unico link sta su un altro
+  // dominio viene marcato dai filtri come disallineato (e ci farebbe stampare
+  // la anon key in chiaro dentro ogni email).
+  // La route `/api/auth/verify` tiene insieme le due cose: link sul dominio del
+  // brand, apikey aggiunta lato server subito prima del redirect al gateway.
+  const confirmationUrl = `https://${ROOT_DOMAIN}/api/auth/verify?token=${encodeURIComponent(email_data.token_hash)}&type=${encodeURIComponent(email_data.email_action_type)}&redirect_to=${encodeURIComponent(email_data.redirect_to)}`
 
   const locale = await resolveLocale(user.id, user.user_metadata?.lang)
 

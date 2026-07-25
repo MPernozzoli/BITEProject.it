@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
 import { isInjectedServiceKey } from '../_shared/service-auth.ts'
+import { resolveSiteLanguage } from '../_shared/site-language.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +23,7 @@ type ProfileRow = {
   name: string | null
   email: string | null
   preferred_language: string | null
+  secondary_language: string | null
 }
 
 type VoyageRow = {
@@ -152,7 +154,7 @@ Deno.serve(async (req) => {
   const legIds = [...new Set(rows.flatMap((row) => row.leg_ids ?? []))]
 
   const [profilesRes, voyagesRes, legsRes] = await Promise.all([
-    supabase.from('profiles').select('id, name, email, preferred_language').in('id', profileIds),
+    supabase.from('profiles').select('id, name, email, preferred_language, secondary_language').in('id', profileIds),
     supabase.from('voyages').select('id, name, name_it, name_en').in('id', voyageIds),
     legIds.length
       ? supabase
@@ -192,7 +194,7 @@ Deno.serve(async (req) => {
   for (const notification of rows) {
     const profile = profilesById.get(notification.recipient_profile_id)
     const voyage = voyagesById.get(notification.voyage_id)
-    const language = profile?.preferred_language === 'en' ? 'en' : 'it'
+    const language = resolveSiteLanguage(profile?.preferred_language, profile?.secondary_language)
     const recipientEmail = profile?.email?.trim()
 
     if (!recipientEmail || !voyage) {

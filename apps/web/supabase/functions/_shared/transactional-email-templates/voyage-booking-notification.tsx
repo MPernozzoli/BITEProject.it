@@ -52,6 +52,15 @@ interface VoyageBookingNotificationProps {
   paymentMethod?: string | null
   paymentReference?: string | null
   paymentExpiresAt?: string | null
+  /** Bank coordinates, passed only for bank_transfer so the payer can pay straight from the email. */
+  bankTransferIban?: string | null
+  bankTransferBic?: string | null
+  bankTransferHolder?: string | null
+  /**
+   * Booking status the settlement produced ('requested' | 'user_confirmed'). Lets the
+   * payment_received email say what happened to the application, not just that money landed.
+   */
+  paymentOutcome?: string | null
   changeKind?: string | null
   /** New effective departure of the first delayed leg; only set for schedule_delayed. */
   newDepartureAt?: string | null
@@ -100,7 +109,7 @@ const COPY = {
       if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto il pagamento per ${voyageName}.`
       if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
       if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
-      if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Ricorda di indicare la causale esatta: senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
+      if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Qui sotto trovi di nuovo tutti i dati: ricorda di indicare la causale esatta, senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
       if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
@@ -128,7 +137,24 @@ const COPY = {
     paymentExpiresAt: 'Scadenza',
     bankTransferPendingIntro: (name: string, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
-      return `${prefix}abbiamo registrato il bonifico in attesa per ${voyageName}. La candidatura non verra esaminata finche non riceviamo l'importo corretto con la causale indicata.`
+      return `${prefix}abbiamo registrato il bonifico in attesa per ${voyageName}. Qui sotto trovi tutti i dati per fare il versamento: la candidatura non verra esaminata finche non riceviamo l'importo corretto con la causale indicata.`
+    },
+    bankTransferTitle: 'Dati per il bonifico',
+    bankHolder: 'Intestatario',
+    bankIban: 'IBAN',
+    bankBic: 'BIC / SWIFT',
+    bankReference: 'Causale (obbligatoria)',
+    bankAmount: 'Importo esatto',
+    bankDeadline: 'Da completare entro',
+    bankMatchWarning:
+      'Per convalidare il pagamento in automatico devono combaciare sia l\'importo sia la causale. Senza la causale esatta non riusciamo ad abbinare il bonifico alla tua candidatura.',
+    bankDeadlineWarning:
+      'Se il bonifico non arriva entro la scadenza indicata, la candidatura decade in automatico e dovrai ripresentarla.',
+    paymentOutcomeTitle: 'Cosa succede adesso',
+    paymentOutcome: {
+      requested:
+        'La tua candidatura e ora al vaglio dell\'organizzatore: la esaminiamo al piu presto e ti scriviamo appena c\'e una decisione.',
+      user_confirmed: 'Il tuo posto a bordo e confermato: non devi fare altro.',
     },
     paymentMethodLabels: {
       bank_transfer: 'Bonifico',
@@ -189,7 +215,7 @@ const COPY = {
       if (eventType === 'payment_received') return `${prefix}we received your payment for ${voyageName}.`
       if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
       if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
-      if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. Remember to use the exact reference: without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`
+      if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. All the details are below again: remember to use the exact reference, without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`
       if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
       return `${prefix}we received your berth request for ${voyageName}.`
@@ -217,7 +243,24 @@ const COPY = {
     paymentExpiresAt: 'Deadline',
     bankTransferPendingIntro: (name: string, voyageName: string) => {
       const prefix = name ? `${name}, ` : ''
-      return `${prefix}we recorded your pending bank transfer for ${voyageName}. Your application will not be reviewed until we receive the exact amount with the required reference.`
+      return `${prefix}we recorded your pending bank transfer for ${voyageName}. Everything you need to send it is below: your application will not be reviewed until we receive the exact amount with the required reference.`
+    },
+    bankTransferTitle: 'Bank transfer details',
+    bankHolder: 'Account holder',
+    bankIban: 'IBAN',
+    bankBic: 'BIC / SWIFT',
+    bankReference: 'Reference (required)',
+    bankAmount: 'Exact amount',
+    bankDeadline: 'Complete it by',
+    bankMatchWarning:
+      'For the payment to be validated automatically, both the amount and the reference must match. Without the exact reference we cannot link the transfer to your application.',
+    bankDeadlineWarning:
+      'If the transfer does not arrive by the deadline shown, the application lapses automatically and you will have to apply again.',
+    paymentOutcomeTitle: 'What happens now',
+    paymentOutcome: {
+      requested:
+        'Your application is now with the organiser for review: we will look at it as soon as possible and write to you with a decision.',
+      user_confirmed: 'Your place on board is confirmed: nothing else is needed from you.',
     },
     paymentMethodLabels: {
       bank_transfer: 'Bank transfer',
@@ -296,6 +339,10 @@ const VoyageBookingNotificationEmail = ({
   paymentMethod,
   paymentReference,
   paymentExpiresAt,
+  bankTransferIban,
+  bankTransferBic,
+  bankTransferHolder,
+  paymentOutcome,
   changeKind,
   newDepartureAt,
   baselineDepartureBy,
@@ -332,6 +379,14 @@ const VoyageBookingNotificationEmail = ({
     variant === 'payment_pending' && paymentMethod === 'bank_transfer'
       ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName)
       : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)
+  // A payer who closed the dialog has nothing else to pay from: when the contribution is still
+  // owed by transfer, the email itself has to carry the full coordinates, not just a reference.
+  const showsBankInstructions =
+    (variant === 'payment_pending' || variant === 'payment_reminder') &&
+    paymentMethod === 'bank_transfer' &&
+    Boolean(bankTransferIban?.trim())
+  const outcomeKey = paymentOutcome?.trim() as keyof typeof copy.paymentOutcome | undefined
+  const outcomeText = outcomeKey ? copy.paymentOutcome[outcomeKey] : null
   // When a refund is owed, the whole point of the email is to collect an IBAN, so the
   // primary button leads straight to the self-service refund form.
   const primaryCta = refundPending
@@ -376,7 +431,25 @@ const VoyageBookingNotificationEmail = ({
           <EmailCallout>{copy.refundPendingBody}</EmailCallout>
         </EmailCard>
       ) : null}
-      {amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
+      {outcomeText ? (
+        <EmailCard>
+          <EmailSectionLabel>{copy.paymentOutcomeTitle}</EmailSectionLabel>
+          <EmailBodyText>{outcomeText}</EmailBodyText>
+        </EmailCard>
+      ) : null}
+      {showsBankInstructions ? (
+        <EmailCard>
+          <EmailSectionLabel>{copy.bankTransferTitle}</EmailSectionLabel>
+          {amountLabel ? <EmailHighlightBox label={copy.bankAmount} value={amountLabel} /> : null}
+          <EmailHighlightBox label={copy.bankReference} value={paymentReference} />
+          <EmailDetailRow label={copy.bankHolder} value={bankTransferHolder} strong />
+          <EmailDetailRow label={copy.bankIban} value={bankTransferIban} strong />
+          <EmailDetailRow label={copy.bankBic} value={bankTransferBic} />
+          <EmailDetailRow label={copy.bankDeadline} value={paymentExpiresAtLabel} strong />
+          <EmailCallout>{copy.bankMatchWarning}</EmailCallout>
+          <EmailCallout>{copy.bankDeadlineWarning}</EmailCallout>
+        </EmailCard>
+      ) : amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
         <EmailCard>
           <EmailSectionLabel>{copy.paymentTitle}</EmailSectionLabel>
           {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
@@ -417,13 +490,22 @@ export const template = {
     return voyageName ? `${title} ${voyageName} — BITE` : `${title} — BITE`
   },
   displayName: 'Voyage booking notifications',
+  // The bank-transfer variant is the one worth eyeballing: it is the only email a payer can
+  // still pay from once the in-app dialog is closed.
   previewData: {
     language: 'it',
     recipientName: 'Massimo',
-    eventType: 'admin_approved',
+    eventType: 'payment_pending',
     voyageName: 'Mediterraneo 2026',
     legs: ['Palermo → Cagliari', 'Cagliari → Mahon'],
     partySize: 2,
+    amountEur: 168.4,
+    paymentMethod: 'bank_transfer',
+    paymentReference: 'BON-1A2B3C4D-9F0E',
+    paymentExpiresAt: '2026-08-01T18:00:00.000Z',
+    bankTransferIban: 'NL61BUNQ2201910510',
+    bankTransferBic: 'BUNQNL2A',
+    bankTransferHolder: 'Massimo Pernozzoli',
     bookingUrl: `${PUBLIC_SITE_URL}/bookings`,
     unsubscribeUrl: `${PUBLIC_SITE_URL}/unsubscribe?token=preview-booking`,
   },

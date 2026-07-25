@@ -91,11 +91,19 @@ async function markPaidByBunqRequestId(requestId: number): Promise<boolean> {
     .update({ status: "paid", paid_at: new Date().toISOString(), payer_alias: payerAlias, updated_at: new Date().toISOString() })
     .eq("id", row.id)
     .eq("status", "pending");
+  // Notification first, settlement second: settle_voyage_booking_payment merges the resulting
+  // booking status into the row queued here, so the payer receives a single email covering both
+  // "we received your contribution" and what happened to the application. Its own try/catch:
+  // a failed enqueue must never stop the money from actually promoting the booking.
   try {
-    await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
     await enqueuePaymentReceivedForDeposit(db, row);
   } catch (error) {
-    console.error("[bunq/webhook] clearing payment deadline failed", error);
+    console.error("[bunq/webhook] payment notification enqueue failed", error);
+  }
+  try {
+    await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
+  } catch (error) {
+    console.error("[bunq/webhook] settling payment failed", error);
   }
   return true;
 }
@@ -144,11 +152,19 @@ async function markPaidByReference(params: {
     })
     .eq("id", row.id)
     .eq("status", "pending");
+  // Notification first, settlement second: settle_voyage_booking_payment merges the resulting
+  // booking status into the row queued here, so the payer receives a single email covering both
+  // "we received your contribution" and what happened to the application. Its own try/catch:
+  // a failed enqueue must never stop the money from actually promoting the booking.
   try {
-    await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
     await enqueuePaymentReceivedForDeposit(db, row);
   } catch (error) {
-    console.error("[bunq/webhook] clearing payment deadline failed", error);
+    console.error("[bunq/webhook] payment notification enqueue failed", error);
+  }
+  try {
+    await clearBookingPaymentDeadlineIfSettled(db, row.booking_request_id);
+  } catch (error) {
+    console.error("[bunq/webhook] settling payment failed", error);
   }
   return true;
 }

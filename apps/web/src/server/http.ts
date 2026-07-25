@@ -15,7 +15,8 @@ export interface NodeRequest {
 export interface NodeResponse {
   statusCode: number;
   setHeader(name: string, value: string): void;
-  end(body?: string): void;
+  /** Node accetta anche payload binari: serve per rispondere con immagini. */
+  end(body?: string | Uint8Array): void;
 }
 
 /** Read and JSON-parse the request body, tolerating pre-parsed `req.body`. */

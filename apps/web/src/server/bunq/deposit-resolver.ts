@@ -371,6 +371,10 @@ export async function clearBookingPaymentDeadlineIfSettled(
  * Promotes a fully-paid application out of 'pending_payment' and fires the "new candidature"
  * notifications. A no-op for bookings already past that state, so it is safe to call on every
  * settlement — including the delta payment of an accepted route change.
+ *
+ * Call {@link enqueuePaymentReceivedNotifications} *first*: for a paid (non-comped) settlement
+ * the RPC merges the resulting booking status into that same notification row instead of
+ * queueing a second, near-identical status email.
  */
 export async function settleBookingPayment(
   db: SupabaseClient,
@@ -410,6 +414,26 @@ export async function findExistingDeposit(
   return data as ExistingDepositRow | null;
 }
 
+/**
+ * Fields that re-arm an already-dispatched notification row. The queue keeps one row per
+ * (booking, event, recipient), so without this a second legitimate occurrence of the same
+ * event — a payer who first opened the Bunq link and then switched to a bonifico, a delta
+ * payment settling after a route change — would silently never be emailed. queued_at is part
+ * of the dispatcher's idempotency key, so bumping it is what stops the ESP from treating the
+ * resend as a duplicate of the first send.
+ */
+function resendFields(): Record<string, unknown> {
+  return {
+    queued_at: new Date().toISOString(),
+    processed_at: null,
+    emailed_at: null,
+    push_sent_at: null,
+    // A re-armed row is a new event, so it gets the full retry budget again.
+    attempts: 0,
+    failed_at: null,
+  };
+}
+
 export async function enqueueBookingNotification(
   db: SupabaseClient,
   params: {
@@ -417,6 +441,8 @@ export async function enqueueBookingNotification(
     recipientProfileId: string;
     eventType: BookingNotificationEvent | "plan_change_pending";
     metadata?: Record<string, unknown>;
+    /** Re-send even if this event was already emailed for this booking. */
+    resend?: boolean;
   },
 ): Promise<void> {
   const { error } = await db.from("voyage_booking_notifications").upsert(
@@ -427,6 +453,7 @@ export async function enqueueBookingNotification(
       metadata: params.metadata ?? {},
       failed_at: null,
       error_message: null,
+      ...(params.resend ? resendFields() : {}),
     },
     { onConflict: "booking_request_id,event_type,recipient_profile_id" },
   );
@@ -438,6 +465,7 @@ export async function enqueueAdminBookingNotification(
   bookingRequestId: string,
   eventType: BookingNotificationEvent,
   metadata: Record<string, unknown> = {},
+  options: { resend?: boolean } = {},
 ): Promise<void> {
   const { data: admins, error: adminError } = await db.from("user_roles").select("user_id").eq("role", "admin");
   if (adminError) throw new Error(adminError.message);
@@ -451,6 +479,7 @@ export async function enqueueAdminBookingNotification(
       metadata,
       failed_at: null,
       error_message: null,
+      ...(options.resend ? resendFields() : {}),
     }));
   if (!rows.length) return;
 
@@ -476,13 +505,19 @@ export async function enqueuePaymentPendingNotifications(
     payment_reference: params.reference,
     payment_expires_at: params.expiresAt,
   };
+  // Only ever called for a freshly created deposit (both endpoints return early on an existing
+  // pending one), so re-arming cannot spam: a resend here means the payer really did start a
+  // new payment, most often by switching method after seeing the €500 Bunq cap.
   await enqueueBookingNotification(resolved.db, {
     bookingRequestId: resolved.bookingRequestId,
     recipientProfileId: resolved.user.id,
     eventType: "payment_pending",
     metadata,
+    resend: true,
   });
-  await enqueueAdminBookingNotification(resolved.db, resolved.bookingRequestId, "admin_payment_pending", metadata);
+  await enqueueAdminBookingNotification(resolved.db, resolved.bookingRequestId, "admin_payment_pending", metadata, {
+    resend: true,
+  });
 }
 
 export async function enqueuePaymentReceivedNotifications(
@@ -500,11 +535,16 @@ export async function enqueuePaymentReceivedNotifications(
     payment_method: params.paymentMethod,
     payment_reference: params.reference,
   };
+  // Re-armed on purpose: a booking can settle more than once (the delta payment of an accepted
+  // route change), and each settlement is its own "we got your money" moment.
   await enqueueBookingNotification(db, {
     bookingRequestId: params.bookingRequestId,
     recipientProfileId: params.recipientProfileId,
     eventType: "payment_received",
     metadata,
+    resend: true,
   });
-  await enqueueAdminBookingNotification(db, params.bookingRequestId, "admin_payment_received", metadata);
+  await enqueueAdminBookingNotification(db, params.bookingRequestId, "admin_payment_received", metadata, {
+    resend: true,
+  });
 }

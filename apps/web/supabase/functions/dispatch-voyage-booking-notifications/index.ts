@@ -1,7 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 import { PUBLIC_SITE_URL } from '../_shared/email-config.ts'
+import { BANK_TRANSFER_DETAILS } from '../_shared/bank-details.ts'
 import { isInjectedServiceKey } from '../_shared/service-auth.ts'
+import { resolveSiteLanguage } from '../_shared/site-language.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,16 +15,28 @@ type NotificationRow = {
   booking_request_id: string
   recipient_profile_id: string
   event_type: string
+  queued_at: string
   emailed_at: string | null
   push_sent_at: string | null
+  attempts: number | null
   metadata: Record<string, unknown>
 }
+
+/**
+ * A failed booking notification is retried instead of being abandoned: a single transient error
+ * used to mean the traveller was never told their contribution was due, received or approved.
+ * Double delivery is not a risk — the Resend idempotency key is row id + queued_at, neither of
+ * which a retry changes, so anything that did go out the first time is deduplicated there.
+ */
+const MAX_ATTEMPTS = 5
+const RETRY_DELAY_MS = 15 * 60 * 1000
 
 type ProfileRow = {
   id: string
   name: string | null
   email: string | null
   preferred_language?: string | null
+  secondary_language?: string | null
 }
 
 type BookingRow = {
@@ -177,6 +191,26 @@ async function queueEmail(params: {
     throw new Error(await response.text())
   }
 }
+
+/**
+ * The events that are actually addressed TO the admins, listed one by one.
+ *
+ * This cannot be derived from the 'admin_' prefix, which is what it used to do: 'admin_approved'
+ * is not an admin-directed event at all — it is the *booking status* of the same name, enqueued to
+ * the TRAVELLER by admin_set_voyage_booking_status ("your request was approved, confirm it"). The
+ * prefix test swept it into the admin branch, so applicants received the admin template and, since
+ * no admin copy matches 'admin_approved', its fallback text: "Nuova richiesta di imbarco".
+ * The correct traveller copy for it already exists in voyage-booking-notification.tsx (it/en) and
+ * was simply never reached.
+ */
+const ADMIN_EVENT_TYPES = new Set([
+  'admin_new_booking',
+  'admin_cancelled',
+  'admin_modified',
+  'admin_payment_pending',
+  'admin_payment_received',
+  'admin_plan_change',
+])
 
 function buildAdminPushMessage(params: {
   eventType: string
@@ -438,20 +472,40 @@ Deno.serve(async (req) => {
   const limit = typeof body.limit === 'number' ? Math.max(1, Math.min(100, Math.trunc(body.limit))) : 50
   const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-  const { data: notifications, error: notificationError } = await supabase
-    .from('voyage_booking_notifications')
-    .select('id, booking_request_id, recipient_profile_id, event_type, emailed_at, push_sent_at, metadata')
-    .is('processed_at', null)
-    .is('failed_at', null)
-    .order('queued_at', { ascending: true })
-    .limit(limit)
+  // Two plain queries rather than one `.or(...)` with a nested and(): never-attempted rows and
+  // retryable failures are different enough that expressing them as a single PostgREST filter
+  // string buys nothing, and a malformed filter would take down every booking email at once.
+  const NOTIFICATION_COLUMNS =
+    'id, booking_request_id, recipient_profile_id, event_type, queued_at, emailed_at, push_sent_at, attempts, metadata'
+  const retryBefore = new Date(Date.now() - RETRY_DELAY_MS).toISOString()
+  const [{ data: freshRows, error: freshError }, { data: retryRows, error: retryError }] = await Promise.all([
+    supabase
+      .from('voyage_booking_notifications')
+      .select(NOTIFICATION_COLUMNS)
+      .is('processed_at', null)
+      .is('failed_at', null)
+      .order('queued_at', { ascending: true })
+      .limit(limit),
+    supabase
+      .from('voyage_booking_notifications')
+      .select(NOTIFICATION_COLUMNS)
+      .is('processed_at', null)
+      .not('failed_at', 'is', null)
+      .lt('attempts', MAX_ATTEMPTS)
+      .lt('failed_at', retryBefore)
+      .order('queued_at', { ascending: true })
+      .limit(limit),
+  ])
 
+  const notificationError = freshError ?? retryError
   if (notificationError) {
     console.error('Failed to load booking notifications', notificationError)
     return jsonResponse({ error: 'Failed to load notifications' }, 500)
   }
 
-  const pending = (notifications ?? []) as NotificationRow[]
+  const pending = [...((freshRows ?? []) as NotificationRow[]), ...((retryRows ?? []) as NotificationRow[])]
+    .sort((a, b) => a.queued_at.localeCompare(b.queued_at))
+    .slice(0, limit)
   if (!pending.length) return jsonResponse({ success: true, queued: 0, failed: 0 })
 
   const requestIds = [...new Set(pending.map((row) => row.booking_request_id))]
@@ -473,7 +527,7 @@ Deno.serve(async (req) => {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, name, email, preferred_language')
+    .select('id, name, email, preferred_language, secondary_language')
     .in('id', profileIds)
 
   const profileRows = (profiles ?? []) as ProfileRow[]
@@ -561,20 +615,21 @@ Deno.serve(async (req) => {
   for (const notification of pending) {
     const booking = bookingById.get(notification.booking_request_id)
     const profile = profileById.get(notification.recipient_profile_id)
-    const isAdminEvent = notification.event_type.startsWith('admin_')
+    const isAdminEvent = ADMIN_EVENT_TYPES.has(notification.event_type)
     if (!booking || !profile || (!profile.email && !isAdminEvent)) {
       failed += 1
       await supabase
         .from('voyage_booking_notifications')
         .update({
           failed_at: new Date().toISOString(),
+          attempts: (notification.attempts ?? 0) + 1,
           error_message: !booking ? 'booking_not_found' : 'recipient_profile_or_email_missing',
         })
         .eq('id', notification.id)
       continue
     }
 
-    const language = profile.preferred_language === 'en' ? 'en' : 'it'
+    const language = resolveSiteLanguage(profile.preferred_language, profile.secondary_language)
     const voyage = voyageById.get(booking.voyage_id)
     const settings = bookingSettingsByVoyageId.get(booking.voyage_id)
     const legLabels = (legsByRequestId.get(booking.id) ?? [])
@@ -596,9 +651,17 @@ Deno.serve(async (req) => {
     const oldLegs = oldFrom && oldTo ? [`${oldFrom} -> ${oldTo}`] : null
     const proposedLegs = proposedFrom && proposedTo ? [`${proposedFrom} -> ${proposedTo}`] : null
     const adminMessage = metadataString(metadata, 'admin_message') ?? metadataString(metadata, 'admin_note')
-    const amountEur = metadataNumber(metadata, 'amount_eur') ?? metadataNumber(metadata, 'amountEur')
+    const amountCents = metadataNumber(metadata, 'amount_cents')
+    const amountEur =
+      metadataNumber(metadata, 'amount_eur') ??
+      metadataNumber(metadata, 'amountEur') ??
+      // The SQL reminder sweep queues cents straight off the deposit row.
+      (amountCents === null ? null : amountCents / 100)
     const paymentReference = metadataString(metadata, 'payment_reference') ?? metadataString(metadata, 'reference')
     const paymentMethod = metadataString(metadata, 'payment_method')
+    // Bank coordinates are static, so they are resolved here rather than carried through every
+    // queue payload — the SQL-side reminder sweep has no way to pass them.
+    const bankTransfer = paymentMethod === 'bank_transfer' ? BANK_TRANSFER_DETAILS : null
     const emailMetadata = {
       notification_id: notification.id,
       booking_request_id: notification.booking_request_id,
@@ -623,7 +686,11 @@ Deno.serve(async (req) => {
             : isAdminEvent
               ? 'voyage-booking-admin-notification'
               : 'voyage-booking-notification',
-          idempotencyKey: `voyage-booking:${notification.id}`,
+          // A notification row is re-armed in place (processed_at reset) whenever the same event
+          // legitimately fires again — an unpaid transfer reminded every 6h, a payer switching
+          // from the Bunq link to a bonifico. Keying only on the row id makes the ESP dedupe
+          // every one of those as a repeat of the first send, so queued_at is part of the key.
+          idempotencyKey: `voyage-booking:${notification.id}:${Date.parse(notification.queued_at) || 0}`,
           templateData: isBriefing
             ? {
                 language,
@@ -667,6 +734,10 @@ Deno.serve(async (req) => {
                 paymentMethod,
                 paymentReference,
                 paymentExpiresAt: metadataString(metadata, 'payment_expires_at'),
+                bankTransferIban: bankTransfer?.iban ?? null,
+                bankTransferBic: bankTransfer?.bic ?? null,
+                bankTransferHolder: bankTransfer?.holder ?? null,
+                paymentOutcome: metadataString(metadata, 'booking_status'),
                 changeKind: metadataString(metadata, 'change_kind'),
                 newDepartureAt: metadataString(metadata, 'new_departure_at'),
                 baselineDepartureBy: metadataString(metadata, 'baseline_departure_window_end'),
@@ -703,6 +774,7 @@ Deno.serve(async (req) => {
         .from('voyage_booking_notifications')
         .update({
           failed_at: new Date().toISOString(),
+          attempts: (notification.attempts ?? 0) + 1,
           error_message: error instanceof Error ? error.message.slice(0, 500) : 'unknown_error',
         })
         .eq('id', notification.id)
@@ -806,6 +878,8 @@ Deno.serve(async (req) => {
           processed_at: new Date().toISOString(),
           emailed_at: emailedAt,
           push_sent_at: pushSentAt,
+          // A retry that finally lands clears the earlier failure, so the row reads as delivered.
+          failed_at: null,
           error_message: null,
         })
         .eq('id', notification.id)

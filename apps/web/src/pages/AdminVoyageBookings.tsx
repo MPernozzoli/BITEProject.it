@@ -23,6 +23,7 @@ import {
 import BookingGanttTable from "@/components/admin/BookingGanttTable";
 import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
 import PlanChangeProposalDialog, { type PlanChangeProposal } from "@/components/admin/PlanChangeProposalDialog";
+import ManualPaymentDialog, { type ManualPayment } from "@/components/admin/ManualPaymentDialog";
 import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -57,6 +58,7 @@ import {
   getWaypointStopUiMode,
   isLegComplexityAuto,
 } from "@/lib/booking-utils";
+import { depositForPayerEur } from "@/lib/booking-deposit";
 import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
 import { DEFAULT_BOOKING_BRIEFINGS } from "@/lib/booking-briefings";
 import { sendBookingInvites, type BookingParticipant } from "@/lib/booking-participants";
@@ -84,6 +86,13 @@ type UntypedSupabase = {
 
 const typedSupabase = supabase as unknown as UntypedSupabase;
 type AdminBookingRpcResult = { booking_request_id: string; over_capacity: boolean };
+type ManualPaymentRpcResult = {
+  booking_request_id: string;
+  booking_status: VoyageBookingStatus;
+  deposit_id: string;
+  amount_cents: number;
+  reused_pending_deposit: boolean;
+};
 
 const emptySettingsForm: BookingSettings = {
   voyage_id: "",
@@ -109,6 +118,12 @@ const statusOptions: VoyageBookingStatus[] = [
   "rejected",
   "expired",
 ];
+
+// The Gantt's filter covers one status the select above deliberately does not: 'pending_payment'
+// is never something an admin sets by hand (you get there by applying and leave by paying), but
+// those rows must still be *visible* — otherwise an application whose transfer went unmatched is
+// invisible in every admin surface, and the manual payment confirmation could never reach it.
+const statusFilterOptions: VoyageBookingStatus[] = ["pending_payment", ...statusOptions];
 
 // Rifiutato/annullato/scaduto are "negative" outcomes: excluded from the overview's default
 // status filter so the Gantt opens showing only bookings still relevant to follow up on.
@@ -301,7 +316,7 @@ const AdminVoyageBookings = () => {
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
   const [statusFilter, setStatusFilter] = useState<Set<VoyageBookingStatus>>(
-    () => new Set(statusOptions.filter((status) => !negativeBookingStatuses.has(status)))
+    () => new Set(statusFilterOptions.filter((status) => !negativeBookingStatuses.has(status)))
   );
   const [voyageSearchQuery, setVoyageSearchQuery] = useState("");
   const [voyageTypeFilter, setVoyageTypeFilter] = useState<"all" | "water" | "land">("all");
@@ -318,6 +333,8 @@ const AdminVoyageBookings = () => {
   /** Controls the reason dialog separately from the staged draft, so multiple drags can
    * accumulate into pendingProposal before the admin opts to actually send it. */
   const [proposalDialogOpen, setProposalDialogOpen] = useState(false);
+  /** Booking whose contribution is being confirmed by hand; null keeps the dialog closed. */
+  const [paymentDialogRequestId, setPaymentDialogRequestId] = useState<string | null>(null);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
 
@@ -874,6 +891,61 @@ const AdminVoyageBookings = () => {
   const rejectRequest = (requestId: string) => updateRequestStatus(requestId, "rejected");
 
   /**
+   * Contribution due on a booking's current legs, recomputed exactly like the payment flow does,
+   * purely to prefill the manual dialog. The fixed minimum is always applied here: waiving it
+   * needs the payer's other bookings on this voyage, which this page does not load, and a
+   * prefill that is €20 too high is harmless — the admin types what actually arrived anyway.
+   */
+  const dueEurForRequest = (requestId: string): number | null => {
+    const request = requests.find((item) => item.id === requestId);
+    if (!request) return null;
+    const legIds = new Set(
+      requestLegs.filter((link) => link.booking_request_id === requestId).map((link) => link.bookable_leg_id)
+    );
+    const bookedLegs = legs.filter((leg) => legIds.has(leg.id));
+    if (!bookedLegs.length) return null;
+    return depositForPayerEur(
+      bookedLegs,
+      {
+        isLead: true,
+        paymentMode: request.payment_mode ?? "lead_pays_all",
+        partySize: request.party_size,
+      },
+      { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
+    );
+  };
+
+  /**
+   * Records a contribution that reached the bank account but not the matcher. The RPC owns every
+   * consequence (deposit row, reactivation of an expired application, promotion out of
+   * pending_payment, notifications), so there is nothing to sequence here.
+   */
+  const confirmManualPayment = async ({ amountEur, reference, note }: ManualPayment) => {
+    if (!paymentDialogRequestId) return;
+    setSaving(true);
+    const { data, error } = await typedSupabase.rpc("admin_confirm_voyage_booking_payment", {
+      _booking_request_id: paymentDialogRequestId,
+      _amount_eur: amountEur,
+      _reference: reference,
+      _participant_id: null,
+      _admin_note: note,
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPaymentDialogRequestId(null);
+    const result = Array.isArray(data) ? (data[0] as ManualPaymentRpcResult | undefined) : undefined;
+    toast.success(
+      result?.booking_status
+        ? `Pagamento registrato. Stato: ${getBookingStatusLabel(result.booking_status, "it")}.`
+        : "Pagamento registrato."
+    );
+    await loadVoyageDetails(selectedVoyageId);
+  };
+
+  /**
    * Stages a Gantt-bar drag-resize locally (no RPC call yet). Repeated drags on the same
    * request — either edge, any number of times — keep updating this same draft, since
    * BookingGanttTable renders the bar from pendingProposal once one is staged for that row.
@@ -1428,7 +1500,7 @@ const AdminVoyageBookings = () => {
                   type="button"
                   className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
                 >
-                  {statusFilter.size === statusOptions.length
+                  {statusFilter.size === statusFilterOptions.length
                     ? "Tutti gli stati"
                     : statusFilter.size === 0
                       ? "Nessuno stato"
@@ -1436,7 +1508,7 @@ const AdminVoyageBookings = () => {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {statusOptions.map((status) => (
+                {statusFilterOptions.map((status) => (
                   <DropdownMenuCheckboxItem
                     key={status}
                     checked={statusFilter.has(status)}
@@ -1534,6 +1606,8 @@ const AdminVoyageBookings = () => {
               stagedResize={pendingProposal}
               pendingInviteRequestIds={pendingInviteRequestIds}
               awaitingPaymentRequestIds={awaitingPaymentRequestIds}
+              paidDepositRequestIds={paidDepositRequestIds}
+              onConfirmPayment={(requestId) => setPaymentDialogRequestId(requestId)}
               onStageResize={stageResize}
               onCancelStagedResize={() => void cancelPlanChangeProposal()}
               onOpenProposalDialog={() => setProposalDialogOpen(true)}
@@ -2391,6 +2465,28 @@ const AdminVoyageBookings = () => {
               ]?.name ?? null
             : null
         }
+      />
+
+      <ManualPaymentDialog
+        open={paymentDialogRequestId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPaymentDialogRequestId(null);
+        }}
+        onConfirm={(payment) => void confirmManualPayment(payment)}
+        saving={saving}
+        travellerName={
+          paymentDialogRequestId
+            ? profilesById[
+                requests.find((item) => item.id === paymentDialogRequestId)?.profile_id ?? ""
+              ]?.name ?? null
+            : null
+        }
+        bookingStatus={
+          paymentDialogRequestId
+            ? requests.find((item) => item.id === paymentDialogRequestId)?.status ?? null
+            : null
+        }
+        dueEur={paymentDialogRequestId ? dueEurForRequest(paymentDialogRequestId) : null}
       />
     </div>
   );

@@ -18,6 +18,7 @@ Già scritto e verificato in locale (`tsc` pulito, nessun nuovo errore di lint),
 | 1.5 Filter injection + rate limit per IP | ✅ fatto | `newsletter-subscribe/index.ts`, migrazione `20260725101000` |
 | 1.6 Cron di dispatch | ✅ fatto | migrazione `20260725100000` (`invoke_newsletter_dispatch()`, ogni 5 min) |
 | 1.5-bis Confronto segreti a tempo costante | ✅ fatto | `_shared/service-auth.ts`, `newsletter-dispatch`, `process-email-queue` |
+| D8 Link allineati al dominio mittente (tracking newsletter + verifica auth) | ✅ fatto | `api/t/click.ts`, `api/t/open.ts`, `api/auth/verify.ts`, `newsletter-dispatch`, `auth-email-hook` |
 | 1.1 Schema campagne versionato | ⏸️ da fare | richiede il dump dello schema reale da produzione |
 | Fasi 2-4 | ⏸️ da fare | — |
 
@@ -94,9 +95,7 @@ where tablename in ('newsletter_messages','newsletter_deliveries','newsletter_ev
 
 **D8 — Tutti i link delle newsletter puntano a un dominio diverso dal mittente.** `newsletter-dispatch` costruisce il tracking su `${SUPABASE_URL}/functions/v1/...`, e `rewriteTrackedLinks()` riscrive **ogni** `href` del corpo verso quel dominio; anche il pixel di apertura sta lì. Il risultato è che un'email spedita da `mail.biteproject.it` contiene il 100% dei link su `ekwloweuicrqjjgabfdp.supabase.co`. È esattamente il segnale che Resend segnala come "Ensure link URLs match sending domain", e sulla newsletter pesa molto più che sulle email di autenticazione, dove il link disallineato è uno solo.
 
-Due strade, non alternative fra loro ma con costi diversi:
-- **Custom domain Supabase** (add-on a pagamento): il progetto risponde su `api.biteproject.it` e l'allineamento si risolve ovunque in un colpo solo — tracking newsletter, pixel, link di verifica auth — senza toccare il codice, solo `SUPABASE_URL`.
-- **Proxy sul dominio del brand** (gratis): route Vercel `/api/t/click` e `/api/t/open` che reggono il redirect verso le edge function. Richiede di cambiare `trackingBaseUrl` in `newsletter-dispatch` e di reggere il traffico di tracking su Vercel.
+✅ **Risolto con la proxy** (2026-07-25), scartato il custom domain Supabase per non aggiungere costi: `newsletter-dispatch` costruisce il tracking su `${PUBLIC_SITE_URL}/api/t`, e le route `api/t/click.ts` / `api/t/open.ts` registrano l'evento chiamando direttamente le RPC — un solo hop, non due. Stessa cura per il link di verifica delle email di autenticazione, ora su `/api/auth/verify` (vedi §1.3-bis). Le edge function di tracking restano pubblicate per le email già spedite.
 
 **D7 — Template.** Google Fonts caricati via `<link>` nell'`<head>` (rimosso da quasi tutti i client), nessun `color-scheme`/`prefers-color-scheme` (in dark mode su Apple Mail e Outlook la card beige si rompe), nessun link "visualizza nel browser".
 
@@ -292,11 +291,17 @@ Se invece vanno tenute fuori, applicare solo le due della newsletter e registrar
 supabase db push --include-all=false --dry-run
 ```
 
-Dopo il push, ridistribuire le edge function toccate:
+**L'ordine di deploy non è indifferente: prima Vercel, poi le edge function.** I link di tracking e di verifica auth ora puntano a route Vercel (`/api/t/*`, `/api/auth/verify`, `/api/email/unsubscribe`): se le edge function partissero per prime, nella finestra intermedia le email uscirebbero con link verso route non ancora esistenti — comprese le conferme di iscrizione account.
+
+Dopo il deploy Vercel e il push del database, ridistribuire le edge function toccate:
 
 ```bash
-supabase functions deploy newsletter-dispatch newsletter-track-click newsletter-track-open newsletter-subscribe process-email-queue
+supabase functions deploy newsletter-dispatch newsletter-track-click newsletter-track-open newsletter-subscribe process-email-queue auth-email-hook
 ```
+
+`newsletter-track-click` e `newsletter-track-open` vanno ridistribuite ma **non vanno rimosse**: le email già spedite contengono i vecchi URL su dominio Supabase e devono continuare a funzionare.
+
+Le route Vercel non richiedono nuove variabili d'ambiente: `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` sono già configurate in produzione (verificato con `vercel env ls`), e `PUBLIC_SITE_URL` ha un default su `https://biteproject.it`.
 
 Verifiche post-deploy:
 

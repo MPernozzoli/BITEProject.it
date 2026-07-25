@@ -109,7 +109,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       status: string;
       amount_cents: number;
       bunq_request_id: number | null;
-      payment_method: "bunq_link" | "bank_transfer";
+      // 'manual' rows are born 'paid', so the polling branch below never runs for them — but they
+      // can still be read back here, so the union has to admit them.
+      payment_method: "bunq_link" | "bank_transfer" | "manual";
       reference: string;
     };
 
@@ -141,7 +143,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
             })
             .eq("id", row.id)
             .eq("status", "pending");
-          await clearBookingPaymentDeadlineIfSettled(db, bookingRequestId);
+          // Queue the "money landed" notification *before* settling: settlement merges the
+          // resulting booking status into this same row, so the traveller gets one email
+          // saying both that the contribution arrived and what became of their application.
           try {
             await enqueuePaymentReceivedNotifications(db, {
               bookingRequestId,
@@ -153,6 +157,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           } catch (error) {
             console.error("[bunq/status] payment notification enqueue failed", error);
           }
+          await clearBookingPaymentDeadlineIfSettled(db, bookingRequestId);
           sendJson(res, 200, { status: "paid", amountEur: row.amount_cents / 100 });
           return;
         }

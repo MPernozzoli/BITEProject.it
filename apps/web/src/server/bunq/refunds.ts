@@ -42,7 +42,10 @@ type DepositRefundRow = {
   booking_request_id: string;
   participant_id: string | null;
   environment: string;
-  payment_method: "bunq_link" | "bank_transfer";
+  // 'manual' rows were vouched for by an admin, not observed by the bank integration: they carry
+  // no bunq_request_id and often no matchable reference, so resolvePayerAlias falls through to the
+  // refund_pending branch for them. That is the intended outcome, not a gap.
+  payment_method: "bunq_link" | "bank_transfer" | "manual";
   amount_cents: number;
   status: string;
   bunq_request_id: number | null;

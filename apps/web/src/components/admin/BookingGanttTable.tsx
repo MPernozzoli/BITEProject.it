@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsUpDown, Mail, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Mail, Plus, Wallet, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,10 @@ interface BookingGanttTableProps {
   /** Accepted invites still owing their contribution — shown with a small "in attesa di
    * pagamento" badge; settle_voyage_booking_payment confirms them automatically once paid. */
   awaitingPaymentRequestIds: Set<string>;
+  /** Bookings with at least one settled deposit — the "Registra pagamento" shortcut is hidden for these. */
+  paidDepositRequestIds: Set<string>;
+  /** Opens the manual payment dialog for a booking whose contribution arrived outside the matcher. */
+  onConfirmPayment: (requestId: string) => void;
   /** Stage a request's leg range after a drag-resize; nextLegIds is the full new set. Does not call any RPC. */
   onStageResize: (requestId: string, nextLegIds: string[]) => void;
   /** Discard the staged resize for the row currently being edited. */
@@ -155,6 +159,8 @@ const BookingGanttTable = ({
   stagedResize,
   pendingInviteRequestIds,
   awaitingPaymentRequestIds,
+  paidDepositRequestIds,
+  onConfirmPayment,
   onStageResize,
   onCancelStagedResize,
   onOpenProposalDialog,
@@ -869,12 +875,31 @@ const BookingGanttTable = ({
                       <X size={13} /> Rifiuta
                     </button>
                   ) : null}
+                  {!paidDepositRequestIds.has(request.id) && !["cancelled", "rejected"].includes(request.status) ? (
+                    <button
+                      type="button"
+                      onClick={() => onConfirmPayment(request.id)}
+                      disabled={saving}
+                      title="Il contributo è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
+                      className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+                    >
+                      <Wallet size={13} /> Registra pagamento
+                    </button>
+                  ) : null}
                   <select
                     value={request.status}
                     onChange={(event) => onStatusChange(request.id, event.target.value as VoyageBookingStatus)}
                     disabled={saving}
                     className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none disabled:opacity-50"
                   >
+                    {/* 'pending_payment' is never an admin-settable status — it is reached by applying
+                        and left by paying — but a row can sit in it, so it needs a matching option
+                        or the select would silently render the wrong value. */}
+                    {!statusOptions.includes(request.status) && (
+                      <option value={request.status} disabled>
+                        {getBookingStatusLabel(request.status, "it")}
+                      </option>
+                    )}
                     {statusOptions.map((status) => (
                       <option key={status} value={status}>
                         {getBookingStatusLabel(status, "it")}

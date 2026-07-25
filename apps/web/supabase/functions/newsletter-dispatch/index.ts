@@ -389,16 +389,19 @@ async function queueNewsletterDelivery(
     deliveryType: 'campaign' | 'automation'
     eventType?: string | null
     suppressedEmails: Set<string>
-    supabaseUrl: string
   }
 ): Promise<'queued' | 'suppressed' | 'skipped' | 'failed'> {
   const normalizedEmail = params.recipientEmail.trim().toLowerCase()
   const deliveryId = crypto.randomUUID()
   const messageId = crypto.randomUUID()
   const trackerToken = crypto.randomUUID().replaceAll('-', '')
-  const trackingBaseUrl = `${params.supabaseUrl}/functions/v1`
-  const clickTrackingBase = `${trackingBaseUrl}/newsletter-track-click?delivery=${deliveryId}&token=${trackerToken}`
-  const openTrackingUrl = `${trackingBaseUrl}/newsletter-track-open?delivery=${deliveryId}&token=${trackerToken}`
+  // Il tracking passa dal dominio del brand, non da `<project>.supabase.co`:
+  // riscrivendo ogni href del corpo, un tracking su dominio Supabase rendeva
+  // disallineato il 100% dei link rispetto al mittente `mail.biteproject.it`.
+  // Le route Vercel `/api/t/*` registrano l'evento e reggono il redirect.
+  const trackingBaseUrl = `${PUBLIC_SITE_URL}/api/t`
+  const clickTrackingBase = `${trackingBaseUrl}/click?delivery=${deliveryId}&token=${trackerToken}`
+  const openTrackingUrl = `${trackingBaseUrl}/open?delivery=${deliveryId}&token=${trackerToken}`
 
   if (params.suppressedEmails.has(normalizedEmail)) {
     const inserted = await createDeliveryRecord(supabase, {
@@ -705,7 +708,6 @@ Deno.serve(async (req) => {
         eventId: null,
         deliveryType: 'campaign',
         suppressedEmails,
-        supabaseUrl,
       })
 
       if (result === 'queued') summary.campaignsQueued++
@@ -855,7 +857,6 @@ Deno.serve(async (req) => {
           deliveryType: 'automation',
           eventType: event.event_type,
           suppressedEmails,
-          supabaseUrl,
         })
 
         if (result === 'queued') {

@@ -39,6 +39,16 @@ Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_a
 
 `admin_set_voyage_booking_status` blocca `admin_approved`/`user_confirmed` se esiste un deposito `pending` sulla richiesta: le candidature con bonifico restano quindi sospese finché la riconciliazione Bunq non marca il deposito come `paid`.
 
+## Email lungo il flusso pagamento → [[12 - Newsletter ed Email]]
+Ogni momento in cui i soldi cambiano stato genera una mail bilingue al candidato:
+
+1. **Bonifico da fare** (`payment_pending`, metodo `bank_transfer`): la mail replica la dialog e contiene importo esatto, causale obbligatoria, intestatario, IBAN, BIC e scadenza, piu l'avviso che senza match esatto di importo e causale la candidatura non viene esaminata e decade alla scadenza. Le coordinate vengono da `supabase/functions/_shared/bank-details.ts`, gemello di `src/server/bunq/bank-details.ts`.
+2. **Sollecito** (`payment_reminder`, ogni 6h finché il bonifico non arriva o scade la finestra): stesse coordinate complete.
+3. **Soldi ricevuti** (`payment_received`): parte da `/status` e dal webhook e include l'esito della riconciliazione — candidatura al vaglio dell'admin (`requested`) oppure posto direttamente confermato (`user_confirmed`, invito accettato). È una sola mail: `settle_voyage_booking_payment` unisce l'esito nella stessa notifica invece di accodarne una seconda.
+4. **Approvazione admin** (`admin_approved` → poi `user_confirmed`): la mail di approvazione parte da `admin_set_voyage_booking_status`, quella di conferma da `confirm_voyage_booking` o dal ramo invito di `settle_voyage_booking_payment`.
+
+Un evento ripetibile (cambio metodo di pagamento, sollecito, saldo differenza dopo un cambio tratta) ri-arma la riga in coda e aggiorna `queued_at`, che entra nella idempotency key Resend: senza, i re-invii venivano deduplicati per 24 ore.
+
 ## Rimborsi automatici
 `apps/web/api/bookings/status.ts` applica la policy di rimborso prima di rendere terminale una prenotazione:
 
