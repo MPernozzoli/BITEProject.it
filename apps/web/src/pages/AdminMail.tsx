@@ -916,10 +916,10 @@ const AdminMail = () => {
                               <p className="shrink-0 text-xs text-muted-foreground">{formatDate(message.created_at)}</p>
                             </div>
                             <div className="mail-body prose prose-stone max-w-none">
-                              {message.text_body?.trim() ? (
-                                <MailTextBody text={message.text_body} />
-                              ) : message.html_body ? (
+                              {message.html_body?.trim() ? (
                                 <div className="mail-html-body" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.html_body) }} />
+                              ) : message.text_body?.trim() ? (
+                                <MailTextBody text={message.text_body} />
                               ) : (
                                 <p>Messaggio senza corpo.</p>
                               )}
