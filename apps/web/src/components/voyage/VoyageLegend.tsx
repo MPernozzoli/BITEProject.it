@@ -9,9 +9,10 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Mountain, Ship, TicketCheck, X } from "lucide-react";
+import { BookOpen, ExternalLink, Mountain, Ship, TicketCheck, X } from "lucide-react";
 import {
   buildVoyageLegendArticlePlan,
+  buildVoyagePath,
   getLocalizedArticleTitle,
   getLocalizedVoyageName,
   getLocalizedWaypointName,
@@ -351,6 +352,15 @@ const VoyageLegend = ({
               {lang === "it" ? "Adesioni aperte" : "Open to join"}
             </span>
           ) : null}
+          <Link
+            to={buildVoyagePath(voyage)}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-[9px] font-sans font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-accent hover:text-accent"
+            title={lang === "it" ? "Vedi il viaggio completo" : "View full voyage"}
+          >
+            <ExternalLink size={10} />
+            {lang === "it" ? "Viaggio" : "Voyage"}
+          </Link>
         </div>
         <div className="flex shrink-0 items-start gap-3">
           {storyIndexLinks.length > 0 ? (

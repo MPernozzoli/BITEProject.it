@@ -180,8 +180,10 @@ function buildPositionedArticlesForCluster(
           const wp = wps[midIdx] || wps[0];
           return { ...article, displayLat: wp.lat, displayLng: wp.lng };
         }
-        const mid = wps[Math.floor(wps.length / 2)];
-        return { ...article, displayLat: mid.lat, displayLng: mid.lng };
+        // Whole-voyage article with no specific point on the route: don't
+        // stack it on a shared midpoint marker. It's already shown in the
+        // side panel / voyage legend as a "whole voyage" article.
+        return null;
       }
       return null;
     })
