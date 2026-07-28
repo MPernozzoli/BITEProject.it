@@ -29,7 +29,7 @@ import {
   quotedLineDepth,
   splitQuotedMailText,
   unquoteLine,
-} from "@/lib/mail-display";
+} from "@pynkstudio/mailapp/mailbox";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 
 type MailView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";

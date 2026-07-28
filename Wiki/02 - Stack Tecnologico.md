@@ -47,7 +47,7 @@ Vedi [[14 - Mappe e Layer Geospaziale]].
 
 ## Mail
 - **Resend** — invio/ricezione email automatiche e mail admin; webhook su Vercel e coda invio su Supabase Edge Functions → [[12 - Newsletter ed Email]].
-- **@pynkstudio/mailapp** — package condiviso PynkStudio per struttura e utility mail; in questa repo è installato da tarball GitHub e usato lato server per normalizzazione indirizzi nel modulo admin mail → [[12 - Newsletter ed Email]].
+- **@pynkstudio/mailapp** — package condiviso PynkStudio; installato da tarball GitHub pinnato a tag (`v0.4.0`). Da `0.4.0` contiene tutto il **mailbox runtime** usato da questa repo: threading, display/citazioni, ricerca, firma webhook, I/O Resend, assegnazione inbound, push e handler `(req, res)` per le route Vercel. Qui resta solo la config BITE in `apps/web/src/server/mail.ts` → [[12 - Newsletter ed Email]].
 
 ## Origine
 Il progetto nasce storicamente su **Lovable Cloud**, ma lo stack operativo è stato migrato fuori da Lovable. Oggi usa Supabase, Vercel e Resend; non restano dipendenze runtime Lovable.

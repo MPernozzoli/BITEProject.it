@@ -56,7 +56,14 @@ cp src/integrations/supabase/types.ts ../crew/src/integrations/supabase/types.ts
 
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
-Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`; l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18.
+Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`, **pinnato a un tag** (`archive/refs/tags/vX.Y.Z.tar.gz`): non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel. L'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale).
+
+Quando si cambia la logica mail, l'intervento va fatto **nel package** (`~/Documents/Unreal Projects/siti/pynkstudio-mailapp`), non qui:
+```bash
+npm run typecheck && npm run test && npm run build   # nel repo del package
+git add -A && git commit && git tag vX.Y.Z && git push origin main --tags
+```
+Poi aggiornare l'URL del tarball in `apps/web/package.json` e reinstallare. `dist/` è committato di proposito, perché gli install da tarball GitHub non eseguono la build.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]] · [[23 - Community]]

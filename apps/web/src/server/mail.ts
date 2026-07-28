@@ -1,61 +1,41 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+/**
+ * BITE mailbox wiring for @pynkstudio/mailapp.
+ *
+ * All mail behavior (threading, search, assignment, push, Resend I/O) lives in
+ * the package; this file only declares what is specific to BITE — the two
+ * domains, the sender identities — and injects the Supabase clients and the
+ * push transport.
+ */
+
+import webpush from "web-push";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { parseEmailAddress } from "@pynkstudio/mailapp/core";
-import { bearerToken, readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "./http.js";
+import { resolveMailboxConfig, type MailFromOption } from "@pynkstudio/mailapp/mailbox";
+import type { MailboxNodeContext, PushSubscriptionTarget } from "@pynkstudio/mailapp/node";
 
 export const ORDINARY_MAIL_DOMAIN = "biteproject.it";
 export const AUTOMATIC_MAIL_DOMAIN = "mail.biteproject.it";
 
-export const MAIL_FROM_OPTIONS = [
-  {
-    id: "hello",
-    label: "Hello",
-    from: `BITE <hello@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-  {
-    id: "massimo",
-    label: "Massimo",
-    from: `Massimo <massimo@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-  {
-    id: "sami",
-    label: "Sami",
-    from: `Sami <sami@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-  {
-    id: "pack",
-    label: "Pack",
-    from: `Pack <pack@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-  {
-    id: "viaggi",
-    label: "Viaggi",
-    from: `Viaggi <viaggi@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-  {
-    id: "support",
-    label: "Support",
-    from: `Support <support@${ORDINARY_MAIL_DOMAIN}>`,
-    brand: "bite_ordinary",
-  },
-] as const;
+export const MAIL_FROM_OPTIONS: readonly MailFromOption[] = [
+  { id: "hello", label: "Hello", from: `BITE <hello@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+  { id: "massimo", label: "Massimo", from: `Massimo <massimo@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+  { id: "sami", label: "Sami", from: `Sami <sami@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+  { id: "pack", label: "Pack", from: `Pack <pack@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+  { id: "viaggi", label: "Viaggi", from: `Viaggi <viaggi@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+  { id: "support", label: "Support", from: `Support <support@${ORDINARY_MAIL_DOMAIN}>`, brand: "bite_ordinary" },
+];
 
-export type MailBrand = "bite_ordinary" | "bite_automatic" | "newsletter" | "transactional";
+export const mailboxConfig = resolveMailboxConfig({
+  ordinaryDomain: ORDINARY_MAIL_DOMAIN,
+  automaticDomain: AUTOMATIC_MAIL_DOMAIN,
+  ordinaryBrand: "bite_ordinary",
+  automaticBrand: "bite_automatic",
+  fromOptions: MAIL_FROM_OPTIONS,
+});
 
-export type AuthenticatedAdmin = {
-  db: SupabaseClient;
-  user: {
-    id: string;
-    email?: string;
-    user_metadata?: Record<string, unknown>;
-  };
-};
-
+/**
+ * Service-role client. Also used by the newsletter tracking routes under
+ * `api/t/`, which need to write events without a user session.
+ */
 export function createMailServiceClient(): SupabaseClient {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -77,112 +57,47 @@ function createMailAuthClient(): SupabaseClient {
   });
 }
 
-export async function requireAdmin(req: NodeRequest, res: NodeResponse): Promise<AuthenticatedAdmin | null> {
-  const token = bearerToken(req);
-  if (!token) {
-    sendJson(res, 401, { error: "unauthenticated" });
-    return null;
-  }
-
-  const auth = createMailAuthClient();
-  const { data, error } = await auth.auth.getUser(token);
-  const user = data?.user;
-  if (error || !user) {
-    sendJson(res, 401, { error: "unauthenticated" });
-    return null;
-  }
-
-  const db = createMailServiceClient();
-  const { data: isAdmin, error: roleError } = await db.rpc("has_role", {
-    _user_id: user.id,
-    _role: "admin",
-  });
-  if (roleError || isAdmin !== true) {
-    sendJson(res, 403, { error: "forbidden" });
-    return null;
-  }
-
-  return { db, user };
+function vapidDetails() {
+  const publicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY ?? process.env.VITE_WEB_PUSH_PUBLIC_KEY ?? "";
+  const privateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY ?? "";
+  const subject = process.env.WEB_PUSH_VAPID_SUBJECT ?? `mailto:hello@${ORDINARY_MAIL_DOMAIN}`;
+  if (!publicKey || !privateKey) return null;
+  return { subject, publicKey, privateKey };
 }
 
-export async function readMailJsonBody<T>(req: NodeRequest, res: NodeResponse): Promise<T | null> {
-  try {
-    return await readJsonBody<T>(req);
-  } catch {
-    sendJson(res, 400, { error: "invalid_body" });
-    return null;
-  }
+/**
+ * Push transport handed to the package. `web-push` must be imported as a default
+ * ESM binding on Vercel for `sendNotification` to be exposed, and it rejects with
+ * a `statusCode`, which is what lets the package prune retired endpoints.
+ */
+async function sendMailPush(target: PushSubscriptionTarget, payload: string): Promise<unknown> {
+  const vapid = vapidDetails();
+  if (!vapid) throw new Error("web_push_not_configured");
+  return webpush.sendNotification(
+    { endpoint: target.endpoint, expirationTime: null, keys: target.keys },
+    payload,
+    { TTL: 60 * 5, vapidDetails: vapid },
+  );
 }
 
-export function readRawBody(req: NodeRequest): Promise<string> {
-  if (typeof req.body === "string") return Promise.resolve(req.body);
-  if (req.body && typeof req.body === "object") return Promise.resolve(JSON.stringify(req.body));
-  if (typeof req.on !== "function") return Promise.resolve("");
-
-  return new Promise((resolve, reject) => {
-    let data = "";
-    req.on!("data", (chunk) => {
-      data += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
-    });
-    req.on!("end", () => resolve(data));
-    req.on!("error", (err) => reject(err));
-  });
-}
-
-export function firstHeader(req: NodeRequest, name: string): string | null {
-  const direct = req.headers[name] ?? req.headers[name.toLowerCase()] ?? req.headers[name.toUpperCase()];
-  const value = Array.isArray(direct) ? direct[0] : direct;
-  return value ?? null;
-}
-
-export function verifySvixSignature(req: NodeRequest, rawBody: string): boolean {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) return true;
-
-  const svixId = firstHeader(req, "svix-id");
-  const svixTimestamp = firstHeader(req, "svix-timestamp");
-  const svixSignature = firstHeader(req, "svix-signature");
-  if (!svixId || !svixTimestamp || !svixSignature) return false;
-
-  try {
-    const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
-    const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
-    const computed = createHmac("sha256", secretBytes).update(signedContent).digest("base64");
-    return svixSignature
-      .split(" ")
-      .map((sig) => sig.replace(/^v1,/, ""))
-      .some((sig) => {
-        try {
-          return timingSafeEqual(Buffer.from(sig, "base64"), Buffer.from(computed, "base64"));
-        } catch {
-          return false;
-        }
-      });
-  } catch {
-    return false;
-  }
-}
-
-export function normalizeAddress(value: string): string {
-  return parseEmailAddress(value).address.trim().toLowerCase();
-}
-
-export function detectMailBrand(addresses: string[]): MailBrand {
-  const normalized = addresses.map(normalizeAddress);
-  if (normalized.some((address) => address.endsWith(`@${AUTOMATIC_MAIL_DOMAIN}`))) return "bite_automatic";
-  return "bite_ordinary";
-}
-
-export function fromOptionById(id: string | undefined) {
-  return MAIL_FROM_OPTIONS.find((option) => option.id === id) ?? MAIL_FROM_OPTIONS[0];
-}
-
-export function userDisplayName(user: AuthenticatedAdmin["user"]): string | null {
-  const metaName = user.user_metadata?.name || user.user_metadata?.full_name;
-  if (typeof metaName === "string" && metaName.trim()) return metaName.trim();
-  return user.email ?? null;
-}
-
-export function jsonMethodNotAllowed(res: NodeResponse): void {
-  sendJson(res, 405, { error: "method_not_allowed" });
-}
+export const mailContext: MailboxNodeContext = {
+  config: mailboxConfig,
+  createServiceClient: () => createMailServiceClient(),
+  getUserFromToken: async (token) => {
+    const { data, error } = await createMailAuthClient().auth.getUser(token);
+    if (error || !data?.user) return null;
+    const { id, email, user_metadata } = data.user;
+    return { id, email, user_metadata };
+  },
+  resendApiKey: () => process.env.RESEND_API_KEY,
+  webhookSecret: () => process.env.RESEND_WEBHOOK_SECRET,
+  internalTestSecret: () => process.env.INTERNAL_MAIL_WEBHOOK_TEST_SECRET,
+  ...(vapidDetails()
+    ? {
+        push: {
+          send: sendMailPush,
+          title: (assigned: boolean) => (assigned ? "Nuova mail assegnata" : "Nuova mail BITE"),
+        },
+      }
+    : {}),
+};

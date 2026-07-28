@@ -48,7 +48,7 @@ tags: [frontend, lib, hooks, logica]
 
 ### Newsletter / notifiche → [[12 - Newsletter ed Email]]
 - `newsletter.ts`, `email-notification-preferences.ts`
-- `mail-display.ts` — helper UI mail riusabili per nome mittente (`from_name` → firma → indirizzo), preview del solo testo nuovo e split delle citazioni; da sostituire con API `@pynkstudio/mailapp` quando il package le esporrà.
+- ~~`mail-display.ts`~~ — **rimosso il 28 luglio 2026**: gli helper per nome mittente (`from_name` → firma → indirizzo), preview del solo testo nuovo e split delle citazioni sono ora in `@pynkstudio/mailapp/mailbox` (isomorfo, safe nel bundle client). `AdminMail.tsx` importa da lì → [[12 - Newsletter ed Email]].
 
 ### Profilo
 - `profile-avatar.ts`, `profile-completeness.ts`
