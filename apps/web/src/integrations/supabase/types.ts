@@ -4593,7 +4593,10 @@ export type Database = {
           name: string | null
           name_en: string | null
           name_it: string | null
+          nearby_airports: Json
           planned_stop_duration_minutes: number
+          poi: Json
+          activities: Json
           sort_order: number
           stop_departure_time: string | null
           stop_hours: number | null
@@ -4620,7 +4623,10 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          nearby_airports?: Json
           planned_stop_duration_minutes?: number
+          poi?: Json
+          activities?: Json
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null
@@ -4647,7 +4653,10 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          nearby_airports?: Json
           planned_stop_duration_minutes?: number
+          poi?: Json
+          activities?: Json
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null

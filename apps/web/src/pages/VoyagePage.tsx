@@ -16,28 +16,35 @@ import {
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
   getVoyageIdFromRouteParam,
+  normalizeWaypointActivities,
+  normalizeWaypointAirports,
   normalizeWaypointMedia,
+  normalizeWaypointPoi,
   totalCoordinateDistanceKm,
   totalWaypointDistance,
   type GeoArticle,
   type Voyage,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
-import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
 import { perPersonDepositEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
 import {
+  Activity,
   ArrowLeft,
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
   Images,
+  Landmark,
   MapPin,
   MapPinned,
   Mountain,
   Navigation,
+  Plane,
   Route,
   Ship,
   TicketCheck,
@@ -218,6 +225,15 @@ const VoyagePage = () => {
     return null;
   }, [articles, waypoints]);
 
+  const heroRouteCoordinates = useMemo(() => {
+    const geometryCoordinates = (voyage?.cached_geometry as { coordinates?: [number, number][] } | null)?.coordinates;
+    if (Array.isArray(geometryCoordinates) && geometryCoordinates.length >= 2) return geometryCoordinates;
+    const waypointCoordinates = waypoints
+      .filter((waypoint) => Number.isFinite(waypoint.lat) && Number.isFinite(waypoint.lng))
+      .map((waypoint): [number, number] => [waypoint.lng, waypoint.lat]);
+    return waypointCoordinates.length >= 2 ? waypointCoordinates : null;
+  }, [voyage, waypoints]);
+
   const galleryItems = useMemo(() => {
     const items: { url: string; alt: string }[] = [];
     const seen = new Set<string>();
@@ -344,17 +360,18 @@ const VoyagePage = () => {
   }
 
   const dateRange = formatVoyageDateRange(voyage, locale);
-  const description = voyageDescription || DEFAULT_DESCRIPTION;
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
 
   return (
     <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
       {/* Hero */}
       <section className="relative">
-        <div className={`relative h-[38vh] md:h-[48vh] overflow-hidden ${heroImage ? "" : "bg-gradient-to-br from-primary via-primary/85 to-accent/60"}`}>
-          {heroImage && (
+        <div className={`relative h-[38vh] md:h-[48vh] overflow-hidden ${heroRouteCoordinates || heroImage ? "" : "bg-gradient-to-br from-primary via-primary/85 to-accent/60"}`}>
+          {heroRouteCoordinates ? (
+            <VoyageRouteHeroMap coordinates={heroRouteCoordinates} className="absolute inset-0" />
+          ) : heroImage ? (
             <img src={heroImage} alt={voyageName || voyage.name} className="img-cover" loading="eager" decoding="async" />
-          )}
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10" />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-24 md:px-8 md:pt-28">
             <Link
@@ -383,8 +400,8 @@ const VoyagePage = () => {
         {/* Overlapping info card */}
         <div className="page-section-wide relative z-10 -mt-10 px-4 md:-mt-14 md:px-8">
           <div className="glass-panel rounded-[32px] p-6 md:p-8">
-            {description && (
-              <p className="editorial-body text-base md:text-lg text-muted-foreground leading-relaxed mb-6 max-w-3xl">{description}</p>
+            {voyageDescription && (
+              <p className="editorial-body text-base md:text-lg text-muted-foreground leading-relaxed mb-6 max-w-3xl">{voyageDescription}</p>
             )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="glass-panel-soft rounded-[24px] p-4">
@@ -561,6 +578,9 @@ const VoyagePage = () => {
                     : article.title_en
                   : null;
                 const waypointMoment = formatWaypointMoment(waypoint, locale);
+                const poiItems = normalizeWaypointPoi(waypoint.poi);
+                const activityItems = normalizeWaypointActivities(waypoint.activities);
+                const airportItems = normalizeWaypointAirports(waypoint.nearby_airports);
                 const stopLabel =
                   index === 0
                     ? (lang === "it" ? "Partenza" : "Departure")
@@ -629,6 +649,61 @@ const VoyagePage = () => {
                                 )}
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {(poiItems.length > 0 || activityItems.length > 0) && (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {poiItems.length > 0 && (
+                              <div className="rounded-[18px] border border-border/60 bg-background/40 p-3">
+                                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                                  <Landmark size={13} /> {lang === "it" ? "Punti di interesse" : "Points of interest"}
+                                </p>
+                                <ul className="m-0 list-none space-y-1.5 p-0">
+                                  {poiItems.map((item, itemIndex) => (
+                                    <li key={`${waypoint.id}-poi-${itemIndex}`} className="text-sm">
+                                      <span className="font-medium text-foreground">{item.name}</span>
+                                      {item.description && <span className="text-muted-foreground"> — {item.description}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {activityItems.length > 0 && (
+                              <div className="rounded-[18px] border border-border/60 bg-background/40 p-3">
+                                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                                  <Activity size={13} /> {lang === "it" ? "Attività previste" : "Planned activities"}
+                                </p>
+                                <ul className="m-0 list-none space-y-1.5 p-0">
+                                  {activityItems.map((item, itemIndex) => (
+                                    <li key={`${waypoint.id}-activity-${itemIndex}`} className="text-sm">
+                                      <span className="font-medium text-foreground">{item.name}</span>
+                                      {item.description && <span className="text-muted-foreground"> — {item.description}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {airportItems.length > 0 && (
+                          <div className="mt-4">
+                            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                              <Plane size={13} /> {lang === "it" ? "Aeroporti vicini" : "Nearby airports"}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {airportItems.map((airport, airportIndex) => (
+                                <span
+                                  key={`${waypoint.id}-airport-${airportIndex}`}
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/40 px-3 py-1.5 text-xs text-foreground"
+                                >
+                                  {airport.name}
+                                  {airport.iata ? ` (${airport.iata})` : ""}
+                                  {airport.distanceKm != null ? (
+                                    <span className="text-muted-foreground">· {Math.round(airport.distanceKm)} km</span>
+                                  ) : null}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>

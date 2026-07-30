@@ -24,7 +24,8 @@ import BookingGanttTable from "@/components/admin/BookingGanttTable";
 import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
 import PlanChangeProposalDialog, { type PlanChangeProposal } from "@/components/admin/PlanChangeProposalDialog";
 import ManualPaymentDialog, { type ManualPayment } from "@/components/admin/ManualPaymentDialog";
-import { getWaypointEffectiveType, totalWaypointDistance } from "@/lib/voyage-utils";
+import WaypointDetailsDialog from "@/components/admin/WaypointDetailsDialog";
+import { getWaypointEffectiveType, hasVoyageDatesTbd, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
   type BookingProfile,
@@ -337,6 +338,7 @@ const AdminVoyageBookings = () => {
   const [paymentDialogRequestId, setPaymentDialogRequestId] = useState<string | null>(null);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [saveAndLeavePending, setSaveAndLeavePending] = useState(false);
+  const [detailsWaypointId, setDetailsWaypointId] = useState<string | null>(null);
 
   // Holds the last voyages list loaded from the DB (updated only by loadVoyages, never by
   // local edits) so loadVoyageDetails can snapshot the voyage-level route-planning fields
@@ -348,6 +350,8 @@ const AdminVoyageBookings = () => {
   const ignoreNextPopRef = useRef(false);
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId) || null;
+  const selectedVoyageType: "water" | "land" = selectedVoyage?.type === "land" ? "land" : "water";
+  const selectedVoyageDatesTbd = selectedVoyage ? hasVoyageDatesTbd(selectedVoyage) : false;
 
   const toggleVoyageStatusFilter = (status: BookingVoyage["status"]) => {
     setVoyageStatusFilter((current) => {
@@ -638,6 +642,7 @@ const AdminVoyageBookings = () => {
       ),
     [waypoints]
   );
+  const detailsWaypointIndex = publicPlanningWaypoints.findIndex((waypoint) => waypoint.id === detailsWaypointId);
   const routePlanningStats = useMemo(() => {
     const routeWaypoints = waypoints.filter(hasWaypointCoordinates);
     const totalDistanceNm = routeWaypoints.length >= 2 ? totalWaypointDistance(routeWaypoints) : 0;
@@ -1865,13 +1870,22 @@ const AdminVoyageBookings = () => {
                           </span>
                         </div>
                       )}
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {index + 1}. {waypointName}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatWaypointStopTiming(waypoint, incomingLeg, outboundLeg)}
-                        </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {index + 1}. {waypointName}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatWaypointStopTiming(waypoint, incomingLeg, outboundLeg)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDetailsWaypointId(waypoint.id)}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
+                        >
+                          <Pencil size={12} /> Dettagli tappa
+                        </button>
                       </div>
 
                       <div className="grid gap-2 sm:grid-cols-2">
@@ -2450,6 +2464,19 @@ const AdminVoyageBookings = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <WaypointDetailsDialog
+        waypointId={detailsWaypointId}
+        index={Math.max(0, detailsWaypointIndex)}
+        total={publicPlanningWaypoints.length}
+        lang={lang}
+        voyageType={selectedVoyageType}
+        datesTbd={selectedVoyageDatesTbd}
+        onOpenChange={(open) => {
+          if (!open) setDetailsWaypointId(null);
+        }}
+        onSaved={() => void loadVoyageDetails(selectedVoyageId)}
+      />
 
       <PlanChangeProposalDialog
         open={proposalDialogOpen && pendingProposal !== null}

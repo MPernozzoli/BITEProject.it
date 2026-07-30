@@ -367,6 +367,80 @@ async function fetchNearbyNamedPlaces(
   return [];
 }
 
+function normalizeOverpassAirport(item: unknown, lat: number, lng: number): VoyageWaypointAirport | null {
+  if (!item || typeof item !== "object") return null;
+  const candidate = item as {
+    lat?: number;
+    lon?: number;
+    center?: { lat?: number; lon?: number };
+    tags?: Record<string, string | undefined>;
+  };
+  const tags = candidate.tags || {};
+  const name = tags.name || tags["name:en"] || tags["name:it"];
+  const airportLat = candidate.lat ?? candidate.center?.lat;
+  const airportLng = candidate.lon ?? candidate.center?.lon;
+  if (!name || !Number.isFinite(airportLat) || !Number.isFinite(airportLng)) return null;
+  return {
+    name,
+    iata: tags.iata?.toUpperCase() || null,
+    icao: tags.icao?.toUpperCase() || null,
+    distanceKm: haversineNM(lat, lng, airportLat as number, airportLng as number) * 1.852,
+    lat: airportLat as number,
+    lng: airportLng as number,
+  };
+}
+
+/** Nearby airports via the free public Overpass API (OpenStreetMap `aeroway=aerodrome`) — no API key needed. */
+export async function fetchNearbyAirports(lat: number, lng: number, limit = 8): Promise<VoyageWaypointAirport[]> {
+  const radii = [120000, 300000];
+
+  for (const radiusMeters of radii) {
+    const query = `
+      [out:json][timeout:15];
+      (
+        node(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
+        way(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
+        relation(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
+      );
+      out center tags 30;
+    `;
+
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeout = controller ? globalThis.setTimeout(() => controller.abort(), 17000) : null;
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body: new URLSearchParams({ data: query }).toString(),
+          signal: controller?.signal,
+        });
+        if (!res.ok) continue;
+        const data = await res.json() as { elements?: unknown[] };
+        const seen = new Set<string>();
+        const airports = (data.elements || [])
+          .map((item) => normalizeOverpassAirport(item, lat, lng))
+          .filter((item): item is VoyageWaypointAirport => {
+            if (!item) return false;
+            const key = item.iata || item.icao || item.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
+          .slice(0, limit);
+        if (airports.length) return airports;
+      } catch {
+        // Try the next public Overpass endpoint.
+      } finally {
+        if (timeout) globalThis.clearTimeout(timeout);
+      }
+    }
+  }
+
+  return [];
+}
+
 async function fetchNearbySettlementsFromNominatim(lat: number, lng: number): Promise<NearbyNamedPlace[]> {
   const degrees = 1.35;
   const viewbox = [
@@ -798,6 +872,61 @@ export const normalizeWaypointMedia = (value: unknown): VoyageWaypointMediaItem[
       name: typeof candidate.name === "string" ? candidate.name : null,
       path: typeof candidate.path === "string" ? candidate.path : null,
       url: candidate.url,
+    }];
+  });
+};
+
+export interface VoyageWaypointPoi {
+  name: string;
+  description: string | null;
+}
+
+export interface VoyageWaypointActivity {
+  name: string;
+  description: string | null;
+}
+
+export interface VoyageWaypointAirport {
+  name: string;
+  iata: string | null;
+  icao: string | null;
+  distanceKm: number | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+const normalizeNamedList = <T extends { name: string; description: string | null }>(
+  value: unknown
+): T[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as Partial<T>;
+    if (typeof candidate.name !== "string" || !candidate.name.trim()) return [];
+    return [{
+      name: candidate.name,
+      description: typeof candidate.description === "string" && candidate.description.trim() ? candidate.description : null,
+    } as T];
+  });
+};
+
+export const normalizeWaypointPoi = (value: unknown): VoyageWaypointPoi[] => normalizeNamedList<VoyageWaypointPoi>(value);
+
+export const normalizeWaypointActivities = (value: unknown): VoyageWaypointActivity[] => normalizeNamedList<VoyageWaypointActivity>(value);
+
+export const normalizeWaypointAirports = (value: unknown): VoyageWaypointAirport[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as Partial<VoyageWaypointAirport>;
+    if (typeof candidate.name !== "string" || !candidate.name.trim()) return [];
+    return [{
+      name: candidate.name,
+      iata: typeof candidate.iata === "string" && candidate.iata.trim() ? candidate.iata : null,
+      icao: typeof candidate.icao === "string" && candidate.icao.trim() ? candidate.icao : null,
+      distanceKm: typeof candidate.distanceKm === "number" && Number.isFinite(candidate.distanceKm) ? candidate.distanceKm : null,
+      lat: typeof candidate.lat === "number" && Number.isFinite(candidate.lat) ? candidate.lat : null,
+      lng: typeof candidate.lng === "number" && Number.isFinite(candidate.lng) ? candidate.lng : null,
     }];
   });
 };
@@ -1513,6 +1642,9 @@ export interface VoyageWaypoint {
   event_date: string | null;
   event_time: string | null;
   media: VoyageWaypointMediaItem[];
+  poi?: VoyageWaypointPoi[];
+  activities?: VoyageWaypointActivity[];
+  nearby_airports?: VoyageWaypointAirport[];
   planned_stop_duration_minutes?: number;
   stop_mode?: "legacy" | "hours" | "nights" | null;
   stop_hours?: number | null;

@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, MapPin, Trash2 } from "lucide-react";
+import { Loader2, MapPin, Plane, Sparkles, Trash2 } from "lucide-react";
 import {
   buildWaypointDefaultLocalizedNames,
+  fetchNearbyAirports,
   formatWaypointCoordinateLabel,
   getWaypointEffectiveType,
   getWaypointSequenceHeading,
+  normalizeWaypointActivities,
+  normalizeWaypointAirports,
+  normalizeWaypointPoi,
   reverseGeocodePlaceLocalized,
   type VoyageWaypoint,
+  type VoyageWaypointActivity,
+  type VoyageWaypointAirport,
   type VoyageWaypointMediaItem,
+  type VoyageWaypointPoi,
 } from "@/lib/voyage-utils";
 import { STOP_DEPARTURE_PRESETS } from "@/lib/booking-utils";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
@@ -105,12 +112,23 @@ const WaypointEditorPanel = ({
   const [maritimeBusy, setMaritimeBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [poiItems, setPoiItems] = useState<VoyageWaypointPoi[]>(() => normalizeWaypointPoi(waypoint.poi));
+  const [activityItems, setActivityItems] = useState<VoyageWaypointActivity[]>(() => normalizeWaypointActivities(waypoint.activities));
+  const [airportItems, setAirportItems] = useState<VoyageWaypointAirport[]>(() => normalizeWaypointAirports(waypoint.nearby_airports));
+  const [airportsBusy, setAirportsBusy] = useState(false);
+  const [poiDraft, setPoiDraft] = useState({ name: "", description: "" });
+  const [activityDraft, setActivityDraft] = useState({ name: "", description: "" });
 
   // Reload the form whenever a different waypoint is opened.
   useEffect(() => {
     setForm(buildWaypointFormState(waypoint));
     setActiveLang(lang);
     setMaritimeMode("auto");
+    setPoiItems(normalizeWaypointPoi(waypoint.poi));
+    setActivityItems(normalizeWaypointActivities(waypoint.activities));
+    setAirportItems(normalizeWaypointAirports(waypoint.nearby_airports));
+    setPoiDraft({ name: "", description: "" });
+    setActivityDraft({ name: "", description: "" });
     // waypoint identity is what matters; field edits come back through onUpdate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waypoint.id]);
@@ -258,6 +276,68 @@ const WaypointEditorPanel = ({
     },
     [onDeleteMedia, onUpdate, waypoint.media]
   );
+
+  const commitPoi = useCallback((next: VoyageWaypointPoi[]) => {
+    setPoiItems(next);
+    void onUpdate({ poi: next });
+  }, [onUpdate]);
+
+  const addPoi = useCallback(() => {
+    if (!poiDraft.name.trim()) return;
+    commitPoi([...poiItems, { name: poiDraft.name.trim(), description: poiDraft.description.trim() || null }]);
+    setPoiDraft({ name: "", description: "" });
+  }, [commitPoi, poiDraft, poiItems]);
+
+  const removePoi = useCallback((index: number) => {
+    commitPoi(poiItems.filter((_, itemIndex) => itemIndex !== index));
+  }, [commitPoi, poiItems]);
+
+  const commitActivities = useCallback((next: VoyageWaypointActivity[]) => {
+    setActivityItems(next);
+    void onUpdate({ activities: next });
+  }, [onUpdate]);
+
+  const addActivity = useCallback(() => {
+    if (!activityDraft.name.trim()) return;
+    commitActivities([...activityItems, { name: activityDraft.name.trim(), description: activityDraft.description.trim() || null }]);
+    setActivityDraft({ name: "", description: "" });
+  }, [activityDraft, activityItems, commitActivities]);
+
+  const removeActivity = useCallback((index: number) => {
+    commitActivities(activityItems.filter((_, itemIndex) => itemIndex !== index));
+  }, [activityItems, commitActivities]);
+
+  const commitAirports = useCallback((next: VoyageWaypointAirport[]) => {
+    setAirportItems(next);
+    void onUpdate({ nearby_airports: next });
+  }, [onUpdate]);
+
+  const removeAirport = useCallback((index: number) => {
+    commitAirports(airportItems.filter((_, itemIndex) => itemIndex !== index));
+  }, [airportItems, commitAirports]);
+
+  const handleSearchAirports = useCallback(async () => {
+    setAirportsBusy(true);
+    try {
+      const found = await fetchNearbyAirports(waypoint.lat, waypoint.lng);
+      if (!found.length) {
+        toast.message("Nessun aeroporto trovato nel raggio di ricerca.");
+        return;
+      }
+      const known = new Set(airportItems.map((item) => item.iata || item.icao || item.name.toLowerCase()));
+      const fresh = found.filter((item) => !known.has(item.iata || item.icao || item.name.toLowerCase()));
+      if (!fresh.length) {
+        toast.message("Aeroporti già tutti presenti in elenco.");
+        return;
+      }
+      commitAirports([...airportItems, ...fresh].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)));
+      toast.success(`${fresh.length} aeroporti aggiunti.`);
+    } catch {
+      toast.error("Ricerca aeroporti non riuscita, riprova.");
+    } finally {
+      setAirportsBusy(false);
+    }
+  }, [airportItems, commitAirports, waypoint.lat, waypoint.lng]);
 
   return (
     <form
@@ -570,6 +650,145 @@ const WaypointEditorPanel = ({
             </p>
           </div>
         )}
+      </section>
+
+      <section className={sectionClass}>
+        <p className={sectionTitleClass}>Punti di interesse</p>
+        <div className="grid gap-2">
+          {poiItems.length === 0 ? (
+            <p className="m-0 text-[11px] text-muted-foreground">Nessun POI aggiunto.</p>
+          ) : (
+            poiItems.map((item, itemIndex) => (
+              <div key={`${item.name}-${itemIndex}`} className="flex items-start justify-between gap-2 border border-border bg-background/60 p-2">
+                <div className="min-w-0">
+                  <p className="m-0 text-[12px] font-semibold text-foreground">{item.name}</p>
+                  {item.description ? <p className="m-0 mt-0.5 text-[11px] text-muted-foreground">{item.description}</p> : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removePoi(itemIndex)}
+                  className="shrink-0 px-1.5 py-1 border border-border bg-background text-[10px] cursor-pointer hover:bg-muted transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="grid gap-1.5">
+          <input
+            type="text"
+            placeholder="Nome (es. Castello, spiaggia, museo...)"
+            value={poiDraft.name}
+            onChange={(event) => setPoiDraft((prev) => ({ ...prev, name: event.target.value }))}
+            className={inputClass}
+          />
+          <textarea
+            rows={2}
+            placeholder="Descrizione (opzionale)"
+            value={poiDraft.description}
+            onChange={(event) => setPoiDraft((prev) => ({ ...prev, description: event.target.value }))}
+            className={`${inputClass} resize-y`}
+          />
+          <button
+            type="button"
+            onClick={addPoi}
+            disabled={!poiDraft.name.trim()}
+            className="justify-self-start inline-flex items-center gap-2 px-2.5 py-1.5 border border-border bg-muted text-foreground text-[11px] font-semibold cursor-pointer rounded-sm hover:bg-muted/70 transition-colors disabled:opacity-50"
+          >
+            Aggiungi POI
+          </button>
+        </div>
+      </section>
+
+      <section className={sectionClass}>
+        <p className={sectionTitleClass}>Attività previste</p>
+        <div className="grid gap-2">
+          {activityItems.length === 0 ? (
+            <p className="m-0 text-[11px] text-muted-foreground">Nessuna attività aggiunta.</p>
+          ) : (
+            activityItems.map((item, itemIndex) => (
+              <div key={`${item.name}-${itemIndex}`} className="flex items-start justify-between gap-2 border border-border bg-background/60 p-2">
+                <div className="min-w-0">
+                  <p className="m-0 text-[12px] font-semibold text-foreground">{item.name}</p>
+                  {item.description ? <p className="m-0 mt-0.5 text-[11px] text-muted-foreground">{item.description}</p> : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeActivity(itemIndex)}
+                  className="shrink-0 px-1.5 py-1 border border-border bg-background text-[10px] cursor-pointer hover:bg-muted transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="grid gap-1.5">
+          <input
+            type="text"
+            placeholder="Nome attività (es. Snorkeling, tour guidato...)"
+            value={activityDraft.name}
+            onChange={(event) => setActivityDraft((prev) => ({ ...prev, name: event.target.value }))}
+            className={inputClass}
+          />
+          <textarea
+            rows={2}
+            placeholder="Descrizione (opzionale)"
+            value={activityDraft.description}
+            onChange={(event) => setActivityDraft((prev) => ({ ...prev, description: event.target.value }))}
+            className={`${inputClass} resize-y`}
+          />
+          <button
+            type="button"
+            onClick={addActivity}
+            disabled={!activityDraft.name.trim()}
+            className="justify-self-start inline-flex items-center gap-2 px-2.5 py-1.5 border border-border bg-muted text-foreground text-[11px] font-semibold cursor-pointer rounded-sm hover:bg-muted/70 transition-colors disabled:opacity-50"
+          >
+            Aggiungi attività
+          </button>
+        </div>
+      </section>
+
+      <section className={sectionClass}>
+        <p className={sectionTitleClass}>Aeroporti vicini</p>
+        <button
+          type="button"
+          onClick={() => void handleSearchAirports()}
+          disabled={airportsBusy}
+          className="justify-self-start inline-flex items-center gap-2 px-2.5 py-1.5 border border-border bg-muted text-foreground text-[11px] font-semibold cursor-pointer rounded-sm hover:bg-muted/70 transition-colors disabled:opacity-60"
+        >
+          {airportsBusy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+          Cerca aeroporti vicini (OpenStreetMap)
+        </button>
+        <div className="grid gap-2">
+          {airportItems.length === 0 ? (
+            <p className="m-0 text-[11px] text-muted-foreground">Nessun aeroporto associato.</p>
+          ) : (
+            airportItems.map((item, itemIndex) => (
+              <div key={`${item.iata || item.icao || item.name}-${itemIndex}`} className="flex items-center justify-between gap-2 border border-border bg-background/60 p-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Plane size={13} className="shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <p className="m-0 text-[12px] font-semibold text-foreground">
+                      {item.name} {item.iata ? <span className="text-muted-foreground">({item.iata})</span> : null}
+                    </p>
+                    {item.distanceKm != null ? (
+                      <p className="m-0 mt-0.5 text-[11px] text-muted-foreground">{Math.round(item.distanceKm)} km</p>
+                    ) : null}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAirport(itemIndex)}
+                  className="shrink-0 px-1.5 py-1 border border-border bg-background text-[10px] cursor-pointer hover:bg-muted transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
       <section className={sectionClass}>
