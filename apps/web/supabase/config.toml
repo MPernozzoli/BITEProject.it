@@ -1,1 +1,62 @@
 project_id = "ekwloweuicrqjjgabfdp"
+
+# `verify_jwt` dichiarato esplicitamente per le function newsletter.
+#
+# Il default della CLI è `true`: senza queste righe un deploy da riga di comando
+# spegne silenziosamente gli endpoint pubblici — iscrizione, conferma,
+# disiscrizione, pixel e redirect di tracking — che devono rispondere a chiamanti
+# senza sessione. I valori qui sotto sono quelli in produzione al 2 agosto 2026.
+#
+# Le altre function del progetto non sono dichiarate: mantengono la
+# configurazione impostata da dashboard. Dichiararle qui man mano che si
+# toccano.
+
+# --- pubbliche: nessuna sessione, l'autorizzazione è nel corpo della function ---
+
+# Modulo di iscrizione sul sito. Protetta da honeypot, consenso obbligatorio,
+# rate limit per IP e cooldown per indirizzo.
+[functions.newsletter-subscribe]
+verify_jwt = false
+
+# Link di conferma cliccato dalla casella di posta.
+[functions.confirm-newsletter-subscription]
+verify_jwt = false
+
+# Target `List-Unsubscribe`: il provider fa POST senza alcun utente.
+[functions.handle-email-unsubscribe]
+verify_jwt = false
+
+# Webhook soppressioni: autorizza col proprio bearer (service key, claim
+# service_role o EMAIL_SUPPRESSION_WEBHOOK_SECRET).
+[functions.handle-email-suppression]
+verify_jwt = false
+
+# Pixel e redirect aperti dal client di posta del destinatario.
+[functions.newsletter-track-open]
+verify_jwt = false
+
+[functions.newsletter-track-click]
+verify_jwt = false
+
+# --- interne: cron, service role o admin autenticato ---
+
+[functions.newsletter-dispatch]
+verify_jwt = true
+
+[functions.send-newsletter-digest]
+verify_jwt = true
+
+[functions.my-newsletter-subscription]
+verify_jwt = true
+
+[functions.update-my-profile]
+verify_jwt = true
+
+[functions.notify-article-publication]
+verify_jwt = true
+
+[functions.notify-story-subscribers]
+verify_jwt = true
+
+[functions.dispatch-engagement-notifications]
+verify_jwt = true
