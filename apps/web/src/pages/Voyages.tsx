@@ -10,15 +10,33 @@ import {
   getLocalizedVoyageName,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  normalizeWaypointMedia,
   totalCoordinateDistanceKm,
   totalWaypointDistance,
   type GeoArticle,
   type Voyage,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
-import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { useEffect, useMemo } from "react";
-import { ArrowRight, MapPinned } from "lucide-react";
+import { ArrowRight, Compass, Mountain, Ship } from "lucide-react";
+
+const getVoyageStatusLabel = (status: Voyage["status"], lang: "it" | "en") => {
+  if (lang === "it") {
+    if (status === "planned") return "In programma";
+    if (status === "active") return "In corso";
+    return "Completato";
+  }
+  if (status === "planned") return "Upcoming";
+  if (status === "active") return "Underway";
+  return "Completed";
+};
+
+const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
+  if (status === "planned") return "border border-dashed border-slate-300/80 bg-slate-50/65 text-slate-600";
+  if (status === "active") return "border border-sky-300/75 bg-sky-50/75 text-sky-800";
+  return "border border-emerald-300/70 bg-emerald-50/70 text-emerald-800";
+};
 
 const VoyagesPage = () => {
   const { lang } = useI18n();
@@ -118,18 +136,20 @@ const VoyagesPage = () => {
   }, [articleLinks]);
 
   useEffect(() => {
+    const description = lang === "it"
+      ? "Tutte le rotte navigate da Spritz: partenze, arrivi, tappe e i racconti di ogni viaggio, in mare e in camper."
+      : "Every route Spritz has sailed or driven: departures, arrivals, stops, and the stories behind each journey.";
+
     applySeo({
-      title: "Voyages | BITE",
-      description:
-        "Public route archive with departures, arrivals, stops, and dates from the voyages aboard S/Y Spritz.",
+      title: lang === "it" ? "Le nostre rotte | BITE" : "Our routes | BITE",
+      description,
       pathname: "/voyages",
       type: "collection",
       structuredData: {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
         name: "BITE Voyages",
-        description:
-          "Public route archive with departures, arrivals, stops, and dates from the voyages aboard S/Y Spritz.",
+        description,
         url: `${window.location.origin}/voyages`,
         hasPart: voyages.map((voyage) => ({
           "@type": "Trip",
@@ -153,15 +173,15 @@ const VoyagesPage = () => {
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="max-w-3xl">
             <p className="glass-chip inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-6">
-              {lang === "it" ? "Rotte pubbliche" : "Public routes"}
+              {lang === "it" ? "Le nostre rotte" : "Our routes"}
             </p>
             <h1 className="editorial-heading text-4xl md:text-6xl mb-6">
-              {lang === "it" ? "Viaggi e rotte navigabili dalle IA" : "Voyages and routes visible to AI agents"}
+              {lang === "it" ? "Ogni rotta racconta un pezzo di viaggio" : "Every route tells a piece of the journey"}
             </h1>
             <p className="editorial-body text-lg text-muted-foreground leading-relaxed">
               {lang === "it"
-                ? "Ogni viaggio espone partenza, arrivo, soste intermedie, date e collegamenti agli articoli pubblicati."
-                : "Each voyage exposes departure, arrival, intermediate stops, dates, and links to published articles."}
+                ? "Dalla prima traversata in Grecia fino all'Atlantico: qui trovi tutte le rotte di Spritz, con partenze, arrivi, tappe e i racconti di ogni viaggio."
+                : "From our first crossing in Greece to the Atlantic: every route Spritz has sailed, with departures, arrivals, stops, and the stories behind each journey."}
             </p>
           </div>
         </div>
@@ -189,20 +209,46 @@ const VoyagesPage = () => {
             const dateRange = formatVoyageDateRange(voyage, locale);
             const voyageName = getLocalizedVoyageName(voyage, lang);
             const voyageDescription = getLocalizedVoyageDescription(voyage, lang);
+            const isWater = voyage.type === "water";
+            const TypeIcon = isWater ? Ship : Mountain;
+            const coverImage = (() => {
+              const articleCover = (publicContent?.articles ?? [])
+                .find((article) => article.voyage_id === voyage.id && article.cover_image)?.cover_image;
+              if (articleCover) return articleCover;
+              for (const waypoint of voyageWaypoints) {
+                const image = normalizeWaypointMedia(waypoint.media).find((item) => item.kind === "image");
+                if (image) return image.url;
+              }
+              return null;
+            })();
 
             return (
               <Link
                 key={voyage.id}
                 to={buildVoyagePath(voyage)}
-                className="glass-panel rounded-[32px] px-6 py-6 md:px-8 md:py-7 hover:border-accent transition-colors"
+                className="group glass-panel rounded-[32px] px-6 py-6 md:px-8 md:py-7 hover:border-accent transition-colors"
               >
                 <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
+                  {coverImage && (
+                    <div className="h-40 w-full shrink-0 overflow-hidden rounded-[24px] bg-muted md:h-32 md:w-44">
+                      <img
+                        src={coverImage}
+                        alt={voyageName}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className="glass-chip inline-flex px-3 py-1 text-[11px] font-sans uppercase tracking-[0.24em] text-accent">
-                        {voyage.status}
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-sans uppercase tracking-[0.2em] ${getVoyageStatusPillClassName(voyage.status)}`}>
+                        {getVoyageStatusLabel(voyage.status, lang)}
                       </span>
-                      <span className="text-xs text-muted-foreground">{voyage.type}</span>
+                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <TypeIcon size={13} className={isWater ? "text-sky-600" : "text-orange-600"} />
+                        {isWater ? (lang === "it" ? "Via mare" : "By sea") : (lang === "it" ? "Via terra" : "By land")}
+                      </span>
                     </div>
                     <h2 className="editorial-heading text-2xl md:text-4xl mb-3">{voyageName}</h2>
                     {voyageDescription && (
@@ -214,7 +260,7 @@ const VoyagesPage = () => {
                   <div className="flex-shrink-0 text-sm text-muted-foreground md:text-right">
                     {dateRange && <p>{dateRange}</p>}
                     {routeDistance && <p>{routeDistance.value} {routeDistance.unit}</p>}
-                    <p>{publicWaypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
+                    <p>{publicWaypoints.length} {lang === "it" ? "tappe" : "stops"}</p>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -225,7 +271,7 @@ const VoyagesPage = () => {
                     <p className="text-sm">
                       {departure
                         ? getLocalizedWaypointName(departure, lang, departureIndex >= 0 ? departureIndex : 0)
-                        : (lang === "it" ? "Non definita" : "Not set")}
+                        : (lang === "it" ? "Da definire" : "To be announced")}
                     </p>
                   </div>
                   <div className="glass-panel-soft rounded-[24px] p-4">
@@ -235,17 +281,17 @@ const VoyagesPage = () => {
                     <p className="text-sm">
                       {arrival
                         ? getLocalizedWaypointName(arrival, lang, arrivalIndex >= 0 ? arrivalIndex : publicWaypoints.length - 1)
-                        : (lang === "it" ? "In corso" : "Open-ended")}
+                        : (lang === "it" ? "Ancora in viaggio" : "Still going")}
                     </p>
                   </div>
                   <div className="glass-panel-soft rounded-[24px] p-4 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">
-                        {lang === "it" ? "Pagina pubblica" : "Public page"}
+                        {lang === "it" ? "Racconto completo" : "Full story"}
                       </p>
-                      <p className="text-sm">{lang === "it" ? "Dettagli rotta" : "Route details"}</p>
+                      <p className="text-sm">{lang === "it" ? "Scopri il viaggio" : "See the journey"}</p>
                     </div>
-                    <ArrowRight size={16} className="text-accent" />
+                    <ArrowRight size={16} className="text-accent transition-transform group-hover:translate-x-1" />
                   </div>
                 </div>
               </Link>
@@ -255,13 +301,15 @@ const VoyagesPage = () => {
           {voyages.length === 0 && (
             <div className="glass-panel rounded-[32px] p-10 text-center">
               <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-accent/10 text-accent mb-4">
-                <MapPinned size={20} />
+                <Compass size={20} />
               </div>
               <h2 className="editorial-heading text-3xl mb-3">
-                {lang === "it" ? "Nessuna rotta pubblica" : "No public routes yet"}
+                {lang === "it" ? "Nessuna rotta ancora pubblicata" : "No routes published yet"}
               </h2>
               <p className="editorial-body text-muted-foreground">
-                {DEFAULT_DESCRIPTION}
+                {lang === "it"
+                  ? "Torna presto per scoprire i prossimi viaggi di Spritz."
+                  : "Check back soon to discover Spritz's next journeys."}
               </p>
             </div>
           )}
