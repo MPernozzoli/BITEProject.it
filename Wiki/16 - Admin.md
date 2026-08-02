@@ -54,5 +54,8 @@ La PWA admin monta anche `AdminMobileNavigation` dal layout globale per utenti a
 ## SEO
 Le rotte admin sono marcate `noindex, nofollow` in `vercel.json` → [[18 - Deploy e Configurazione]].
 
+## Accesso agenti (MCP)
+Le stesse capacità del backoffice sono raggiungibili da un client agentico tramite il server MCP su `/api/mcp` → [[25 - MCP Admin]]. I token si emettono e si revocano da `/profile` → **Accesso agenti** (`AdminMcpTokens.tsx`); l'agente può pianificare, scrivere bozze, programmare e preparare newsletter, ma non pubblicare né spedire: quello resta ai cron, come dalla UI.
+
 ## Collegamenti
-- [[13 - Booking Voyage]] · [[12 - Newsletter ed Email]] · [[17 - Content Model]]
+- [[13 - Booking Voyage]] · [[12 - Newsletter ed Email]] · [[17 - Content Model]] · [[25 - MCP Admin]]

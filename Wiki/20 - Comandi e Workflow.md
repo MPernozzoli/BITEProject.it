@@ -54,6 +54,16 @@ cp src/integrations/supabase/types.ts ../crew/src/integrations/supabase/types.ts
 - Prima di chiedere interventi manuali, gli agenti devono predisporre quanto più possibile: generare valori configurabili localmente quando opportuno, preparare file/comandi e indicare con precisione dove inserire chiavi, token o segreti.
 - Quando un'implementazione introduce o modifica migrazioni Supabase, gli agenti devono applicarle autonomamente al termine del lavoro e verificarne l'esito. Se credenziali o accessi mancanti lo impediscono, devono lasciare istruzioni operative complete e segnalare il blocco come azione richiesta all'umano.
 
+## Server MCP admin → [[25 - MCP Admin]]
+```bash
+# ispezione manuale dei tool (serve un token bite_mcp_... generato da /profile)
+npx @modelcontextprotocol/inspector
+
+# collegare Claude Code al backoffice
+claude mcp add --transport http bite-admin https://admin.biteproject.it/mcp --header "Authorization: Bearer <token>"
+```
+I test dei tool girano con il resto della suite: `src/test/mcp-*.test.ts` usano un client MCP reale su transport in-memory e uno stub del client Supabase (`src/test/mcp-stub-supabase.ts`), quindi non toccano rete né database.
+
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
 Per `@pynkstudio/mailapp` e `@pynkstudio/newsletterapp` usare il tarball GitHub pubblico già presente in `package.json`, **pinnato a un tag** (`archive/refs/tags/vX.Y.Z.tar.gz`): non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel. Per mailapp l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale); newsletterapp non ha peer dependencies.

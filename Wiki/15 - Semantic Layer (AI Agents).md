@@ -39,5 +39,8 @@ Articoli, Voyage, Waypoint, Observations, Crew/Vessel (`vessel:s-y-spritz` = S/Y
 ## Sotto-app collegata
 `apps/data` (`@biteproject/data`, build in `/_data/`) è la superficie applicativa di questo layer → [[19 - Sub-App (pack e data)]].
 
+## Superficie privata: il server MCP
+Questo layer è **pubblico e in sola lettura**. La controparte privata è il server MCP su `/api/mcp` → [[25 - MCP Admin]]: stesso dominio, ma dietro token admin, e permette di *agire* sul backoffice (pianificare, scrivere bozze, programmare, preparare newsletter) invece che solo leggere. Le due superfici non condividono codice né autorizzazione: qui non serve autenticazione e non si scrive nulla.
+
 ## Collegamenti
-- [[17 - Content Model]] · [[14 - Mappe e Layer Geospaziale]] · [[09 - Edge Functions]]
+- [[17 - Content Model]] · [[14 - Mappe e Layer Geospaziale]] · [[09 - Edge Functions]] · [[25 - MCP Admin]]

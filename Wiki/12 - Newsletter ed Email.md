@@ -143,5 +143,12 @@ Migrazioni: il package pubblica lo schema canonico in `migrations/` (`0001_newsl
 - `AdminProfile.tsx` mostra solo i controlli applicabili: mail e viaggi admin solo agli admin; viaggi utente solo a chi ha almeno una richiesta/partecipazione booking. Il salvataggio passa da `update-my-profile` perché `email_notification_preferences` non è scrivibile direttamente dal client. Se la public key VAPID cambia, il client annulla la subscription vecchia e ne registra una nuova; `AdminDashboard.tsx` ripete questa sincronizzazione in background quando il permesso push è già `granted`.
 - Regola per nuovi sistemi push: ogni nuovo dominio che invia Web Push deve dichiarare una colonna/preferenza dedicata o riusare esplicitamente una categoria esistente, filtrare l'invio lato server prima di leggere/spedire le subscription e documentare il controllo in questa sezione.
 
+## Tool MCP
+I tool `newsletter_*` di [[25 - MCP Admin]] permettono a un agente di leggere le campagne e le metriche, creare e aggiornare bozze e **schedulare** un invio; spedisce comunque il cron `newsletter-dispatch`. Un tool "invia ora a tutta la lista" non esiste di proposito.
+
+Non reimplementano nulla: oggetto, corpo, lingue obbligatorie, stato e payload passano da `@pynkstudio/newsletterapp/admin` (`buildMessagePayload`, `collectMissingFields`, `getMessageReadiness`, `aggregateDeliveryMetrics`), esattamente come `AdminNewsletterManager`. I corpi scritti dall'agente arrivano in Markdown e vengono salvati come HTML in modalità `html`, il caso che il composer già gestisce per i corpi scritti fuori dall'editor rich text.
+
+**Invio di prova non disponibile:** servirebbe logica nuova, che per la regola qui sopra va scritta nel package con bump dei due pin, non in questa repo.
+
 ## Collegamenti
-- [[09 - Edge Functions]] · [[16 - Admin]] (AdminNewsletterManager)
+- [[09 - Edge Functions]] · [[16 - Admin]] (AdminNewsletterManager) · [[25 - MCP Admin]]

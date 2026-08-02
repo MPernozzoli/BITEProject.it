@@ -13,6 +13,8 @@ iubgicrwfovrnvoqr/
 │   ├── web/           # @biteproject/web, sito principale
 │   │   ├── src/       # React app → [[05 - Frontend - Pagine]] / [[06 - Frontend - Componenti]]
 │   │   ├── api/       # Vercel Functions sorgente → [[10 - API Vercel]]
+│   │   │               #   api/mcp/ = server MCP admin → [[25 - MCP Admin]]
+│   │   │               #   (logica in src/server/mcp/)
 │   │   ├── public/    # asset statici del sito principale
 │   │   ├── scripts/   # generate-sitemap
 │   │   └── supabase/  # backend Supabase sorgente → [[08 - Supabase]]

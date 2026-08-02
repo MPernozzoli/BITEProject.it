@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@pynkstudio/mailapp": "https://github.com/PynkStudio/pynkstudio-mailapp/archive/refs/tags/v0.4.0.tar.gz",
     "@pynkstudio/newsletterapp": "https://github.com/PynkStudio/pynkstudio-newsletterapp/archive/refs/tags/v0.1.2.tar.gz",
     "@radix-ui/react-accordion": "^1.2.11",
@@ -76,6 +77,7 @@
     "livekit-server-sdk": "^2.17.0",
     "lucide-react": "^0.475.0",
     "maplibre-gl": "^5.21.1",
+    "marked": "^18.0.7",
     "next-themes": "^0.3.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",

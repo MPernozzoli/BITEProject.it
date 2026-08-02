@@ -39,6 +39,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[22 - Citizen Science e Osservazioni]] — campionamenti, catalogo parametri, mappa e export su `data.`
 - [[15 - Semantic Layer (AI Agents)]] — llms.txt, JSON/GeoJSON pubblici
 - [[16 - Admin]] — dashboard, editor, gestione contenuti
+- [[25 - MCP Admin]] — server MCP del backoffice: piano editoriale, bozze, schedulazione e newsletter pilotabili da un agente
 - [[24 - Termini e Condizioni]] — natura non commerciale, contributo spese, policy rimborsi e forza maggiore
 
 ### Operazioni

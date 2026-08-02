@@ -129,6 +129,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `dispatch_membership_renewal_reminders` — RPC service-role/postgres che accoda email di rinnovo manuale Crew Pass nella coda transazionale esistente.
 - `dispatch_community_live_event_email_reminders` / `list_due_community_live_event_push_reminders` — RPC service-role/postgres per reminder live: la prima accoda mail transazionali, la seconda alimenta il dispatcher Web Push.
 - `resolve_voyage_for_timestamp` / `reattribute_observation_voyages` / `rebuild_observations_export_view` — helper `SECURITY DEFINER` **service-role-only** del dominio citizen science: attribuzione del viaggio dal timestamp e rigenerazione della vista di export dal catalogo parametri → [[22 - Citizen Science e Osservazioni]]
+- `admin_mcp_tokens` / `admin_mcp_audit_log` — token opachi (hash HMAC col pepper lato Vercel, scope, scadenza, revoca) e registro delle chiamate del server MCP admin. RLS attiva **senza policy**: scritte solo dal service role, la UI passa da `/api/mcp/tokens`. L'indice unico parziale su `(token_id, tool, client_request_id) where outcome = 'ok'` è anche la chiave di idempotenza dei tool → [[25 - MCP Admin]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 
 ## Hardening remoto applicato

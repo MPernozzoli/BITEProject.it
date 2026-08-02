@@ -11,6 +11,7 @@ tags: [deploy, vercel, config, env]
 
 ## `vercel.json`
 **Rewrites:**
+- `/mcp` → `/api/mcp` (server MCP admin → [[25 - MCP Admin]]; deve stare **prima** del fallback SPA, l'ordine conta)
 - `/llms.txt` → `/api/llms`
 - `/llms-full.txt` → `/api/llms?full=1`
 - `/sitemap-live.xml` → `/api/sitemap`
@@ -21,7 +22,7 @@ tags: [deploy, vercel, config, env]
 
 I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, immagini, manifest, ecc.): un asset/chunk Vite mancante deve restituire 404, non `index.html`, altrimenti browser con shell vecchie dopo un deploy possono tentare di eseguire HTML come modulo JavaScript.
 
-**Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`.
+**Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`, `/mcp`, `/api/mcp/:path*`.
 
 ## Edge middleware
 - `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. Mantiene lo stesso contenuto operativo di `apps/web/middleware.ts`, ma resta un file reale per evitare problemi di packaging Edge su Vercel.
@@ -54,6 +55,7 @@ Mail admin e invio Resend:
 - `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY`/`VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel per autenticare admin e scrivere lo storico mail.
 - `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT` in Vercel per notificare gli admin quando arrivano nuove mail.
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in Vercel per generare token delle room BITE Crew.
+- `MCP_TOKEN_PEPPER` in Vercel (≥32 caratteri, generato a caso): è il pepper dell'HMAC con cui `/api/mcp` hasha i token del server MCP admin → [[25 - MCP Admin]]. Senza, l'endpoint rifiuta ogni richiesta invece di accettare hash riproducibili.
 - Le Supabase Edge Functions automatiche usano `mail.biteproject.it` come sender domain.
 
 Secret Supabase Functions / Vault specifici community:

@@ -42,11 +42,18 @@ La scelta tra pagamento online e bonifico avviene in `PaymentMethodDialog` dopo 
 - `prerender.ts` — prerendering per bot/crawler, in coppia con `middleware.ts` a livello edge. Per `logbook` e `voyages` genera HTML server-side con liste `<a>` IT/EN verso tutti i contenuti pubblici; per articoli e rotte genera canonical/hreflang, OpenGraph/Twitter, JSON-LD (`BlogPosting`/`Trip`), testo ed internal linking. Per le pagine statiche SEO-sensitive aggiunge anche sezioni HTML e JSON-LD specifici: `/crew` include Spritz/Deerberg Beryll 32 e la ciurma; `/collaborations` include ricerca sul campo in mare, citizen science, creator/editoriale e brand partnership documentate da uso reale.
 - `llms.ts` — proxy same-origin per `public-llms`, esposto come `/llms.txt` e `/llms-full.txt`, così gli agenti AI leggono il feed dal dominio canonico.
 
+## 🤖 MCP admin (`apps/web/api/mcp/`) → [[25 - MCP Admin]]
+| Endpoint | Metodo | Scopo |
+|---|---|---|
+| `index.ts` | POST/GET/DELETE | server MCP del backoffice su `/api/mcp` (alias `/mcp`): trasporto Streamable HTTP stateless, autenticato con token `bite_mcp_...` e ruolo admin ancora valido. Espone i tool di piano editoriale, articoli e newsletter |
+| `tokens.ts` | GET/POST/DELETE | emissione, elenco e revoca dei token MCP; autenticato con l'access token Supabase dell'admin. Il valore in chiaro del token esiste solo nella risposta alla POST |
+
 ## Note
+- La logica MCP server-side vive in `apps/web/src/server/mcp/` (`server.ts`, `registry.ts`, `auth.ts`, `audit.ts`, `markdown.ts`, `tools/`).
 - La logica Bunq server-side vive in `apps/web/src/server/bunq/` (`client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`).
 - Gli importi sono **sempre ricalcolati lato server** (`apps/web/src/lib/booking-deposit.ts`), mai fidati dal client.
 - Gli importi membership sono ricalcolati lato server da `membership_tiers`, separati dai depositi booking.
 - I token LiveKit sono sempre firmati server-side; il client non vede mai `LIVEKIT_API_SECRET`. La policy dei grant è coerente con live tipo YouTube: viewer per membri, regia solo admin.
 
 ## Collegamenti
-- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]] · [[23 - Community]]
+- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]] · [[23 - Community]] · [[25 - MCP Admin]]

@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { isInjectedServiceKey } from '../_shared/service-auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,6 +45,14 @@ async function authorizeRequest(
   }
 
   const token = authHeader.slice('Bearer '.length).trim()
+
+  // La service key nuova (`sb_secret_...`) è opaca: senza questo controllo i
+  // chiamanti server-to-server (server MCP admin incluso) verrebbero rifiutati
+  // perché non c'è nessun claim `role` da leggere.
+  if (isInjectedServiceKey(token)) {
+    return { ok: true }
+  }
+
   const claims = parseJwtClaims(token)
 
   if (claims?.role === 'service_role') {
