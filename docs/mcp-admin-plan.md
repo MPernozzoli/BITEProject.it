@@ -15,12 +15,12 @@ Implementato e verificato in locale: `tsc` pulito sui file nuovi, lint pulito, 3
 | Fase | Stato | Dove |
 |---|---|---|
 | 0 · Verifica schema + spike transport | ✅ | schema reale confermato via SQL su `ekwloweuicrqjjgabfdp` |
-| 1 · Trasporto, auth token, audit | ✅ | `api/mcp/index.ts`, `api/mcp/tokens.ts`, `src/server/mcp/{auth,audit,registry,context}.ts`, migrazione `20260802210000` |
+| 1 · Trasporto, auth token, audit | ✅ | `api/mcp/index.ts`, `api/mcp/tokens.ts`, `src/server/mcp/{auth,audit,registry,context}.ts`, migrazione `20260802210739` |
 | 2 · Tool read-only + resources + prompts | ✅ | `src/server/mcp/tools/*`, `server.ts` |
 | 3 · Scrittura articoli + Markdown⇄TipTap | ✅ | `src/server/mcp/markdown.ts`, `tools/articles.ts` |
 | 4 · Piano editoriale e schedulazione | ✅ | `tools/plan.ts` |
 | 5 · Newsletter | ✅ salvo invio di prova | `tools/newsletter.ts`, tutto sopra `@pynkstudio/newsletterapp/admin` |
-| 6 · OAuth 2.1 | ✅ | `api/mcp/oauth/*`, `src/server/mcp/oauth.ts`, `AdminMcpAuthorize.tsx`, migrazione `20260802230000` |
+| 6 · OAuth 2.1 | ✅ | `api/mcp/oauth/*`, `src/server/mcp/oauth.ts`, `AdminMcpAuthorize.tsx`, migrazione `20260802213214` |
 | 7 · UI token, test, Wiki | ✅ | `AdminMcpTokens.tsx`, `src/test/mcp-*.test.ts`, `Wiki/25 - MCP Admin.md` |
 | Extra · Mail | ✅ | `tool/mail.ts` sopra `@pynkstudio/mailapp/mailbox/server`, invio dietro `confirm: true` |
 | Extra · Fedeltà editoriale (foto, cover, tag, autori, voyage) | ✅ | `article_upload_image`/`newsletter_upload_image` nel bucket `logbook-media`, `markdown.ts` con didascalie via `mediaFigure` |

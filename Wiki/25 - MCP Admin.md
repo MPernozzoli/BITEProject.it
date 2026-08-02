@@ -3,7 +3,7 @@ tags: [admin, mcp, ai, agents, backoffice]
 ---
 # 25 - MCP Admin
 
-⬅️ [[Home]] · sorgente: `apps/web/api/mcp/`, `apps/web/src/server/mcp/`, migrazione `20260802210000_admin_mcp_access.sql`
+⬅️ [[Home]] · sorgente: `apps/web/api/mcp/`, `apps/web/src/server/mcp/`, migrazione `20260802210739_admin_mcp_access.sql`
 
 ## Cos'è
 Un server **MCP** (Model Context Protocol) che espone il backoffice a un client agentico (Claude Code, Claude Desktop): pianificare il piano editoriale, scrivere e aggiornare bozze, programmarne la pubblicazione, gestire le campagne newsletter.
@@ -41,7 +41,7 @@ Un client come Claude Code punta direttamente col token manuale; un connector br
 | `POST /api/mcp/oauth/approve` | chiamato dalla pagina di consenso con la sessione Supabase dell'admin; unico punto che emette l'authorization code |
 | `POST /api/mcp/oauth/token` | scambia code+PKCE per access/refresh token, o rinnova con rotazione |
 
-**Chi autentica l'umano resta Supabase.** L'AS qui sopra non tocca l'auth: verifica solo che chi approva sia già loggato e admin, poi emette codice e token. I token OAuth sono righe di `admin_mcp_tokens` con `kind = oauth_access|oauth_refresh` (colonne aggiunte da `20260802230000_admin_mcp_oauth.sql`, insieme a `admin_mcp_oauth_clients` e `admin_mcp_oauth_codes`): stessa validazione, stesso audit, stessa revoca dei token manuali — non è una seconda specie di credenziale.
+**Chi autentica l'umano resta Supabase.** L'AS qui sopra non tocca l'auth: verifica solo che chi approva sia già loggato e admin, poi emette codice e token. I token OAuth sono righe di `admin_mcp_tokens` con `kind = oauth_access|oauth_refresh` (colonne aggiunte da `20260802213214_admin_mcp_oauth.sql`, insieme a `admin_mcp_oauth_clients` e `admin_mcp_oauth_codes`): stessa validazione, stesso audit, stessa revoca dei token manuali — non è una seconda specie di credenziale.
 
 Guardrail specifici del flusso: PKCE S256 obbligatorio (niente client confidenziali), `redirect_uri` per confronto esatto contro quelli registrati (mai un redirect verso un URI non verificato), code monouso — un riuso revoca **tutta** l'autorizzazione di quel client per quell'utente, non solo il token, refresh token a rotazione (l'uso invalida quello precedente), binding alla risorsa (RFC 8707: un token per `/mcp` non vale su un altro server MCP), ruolo admin ricontrollato a ogni scambio/rinnovo.
 
