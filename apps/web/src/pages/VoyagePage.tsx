@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +30,7 @@ import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
 import { perPersonDepositEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
 import {
@@ -144,6 +145,21 @@ const VoyagePage = () => {
   });
   const articles = snapshotArticles ?? liveArticles;
 
+  const { data: photoPoints = [] } = useQuery<LogbookPhotoPoint[]>({
+    queryKey: ["voyage-photo-points", voyage?.id],
+    enabled: Boolean(voyage?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("logbook_photo_points" as never)
+        .select("id, voyage_id, taken_at, title_it, title_en, storage_path, is_published, sort_order")
+        .eq("voyage_id", voyage!.id)
+        .eq("is_published", true)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as LogbookPhotoPoint[];
+    },
+  });
+
   const { data: referencedLeg = null } = useQuery<ReferencedLeg | null>({
     queryKey: ["voyage-referenced-leg", referencedLegId, voyageId],
     enabled: Boolean(referencedLegId && voyageId),
@@ -254,8 +270,15 @@ const VoyagePage = () => {
         });
       }
     });
+    photoPoints.forEach((point) => {
+      const url = buildPhotoPointUrl(point.storage_path);
+      if (!seen.has(url)) {
+        seen.add(url);
+        items.push({ url, alt: (lang === "it" ? point.title_it || point.title_en : point.title_en) || "" });
+      }
+    });
     return items;
-  }, [publicWaypointEntries, articles, lang]);
+  }, [publicWaypointEntries, articles, photoPoints, lang]);
 
   const waypointById = useMemo(() => {
     const map: Record<string, VoyageWaypoint> = {};
@@ -341,6 +364,16 @@ const VoyagePage = () => {
       },
     });
   }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, heroImage, lang, publicWaypointEntries, publicWaypoints.length, voyage, voyageDescription, voyageName]);
+
+  const hasScrolledToHashRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || hasScrolledToHashRef.current || !location.hash) return;
+    hasScrolledToHashRef.current = true;
+    const el = document.getElementById(location.hash.slice(1));
+    if (!el) return;
+    const headerOffset = 96;
+    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - headerOffset);
+  }, [isLoading, location.hash]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading route...</p></div>;
@@ -554,9 +587,9 @@ const VoyagePage = () => {
         </section>
       )}
 
-      {/* Stops + related articles */}
+      {/* Stops */}
       <section className="page-section pt-0">
-        <div className="page-section-wide grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
+        <div className="page-section-wide">
           <div className="glass-panel rounded-[34px] p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent">
@@ -720,7 +753,12 @@ const VoyagePage = () => {
               )}
             </div>
           </div>
+        </div>
+      </section>
 
+      {/* Related articles */}
+      <section id="articoli-collegati" className="page-section pt-0 scroll-mt-24">
+        <div className="page-section-wide">
           <div className="glass-panel rounded-[34px] p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent">
@@ -735,7 +773,7 @@ const VoyagePage = () => {
                 </p>
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {articles.map((article) => {
                 const title = lang === "it" ? article.title_it || article.title_en : article.title_en;
                 const excerpt = lang === "it" ? article.excerpt_it || article.excerpt_en : article.excerpt_en;

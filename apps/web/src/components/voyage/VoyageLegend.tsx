@@ -346,12 +346,6 @@ const VoyageLegend = ({
             className={`shrink-0 ${isWater ? "text-sky-600" : "text-orange-600"}`}
           />
           <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
-          {voyageIsBookable ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/70 bg-emerald-50/85 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.16em] text-emerald-800">
-              <TicketCheck size={10} />
-              {lang === "it" ? "Adesioni aperte" : "Open to join"}
-            </span>
-          ) : null}
           <Link
             to={buildVoyagePath(voyage)}
             onClick={(e) => e.stopPropagation()}
@@ -457,7 +451,7 @@ const VoyageLegend = ({
 
       {articlePlan.wholeVoyageArticles.length > 0 && (
         <div className="mb-3 space-y-2">
-          {articlePlan.wholeVoyageArticles.map((art) => (
+          {articlePlan.wholeVoyageArticles.slice(0, 2).map((art) => (
             <div key={art.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-sans">
               <span className="text-muted-foreground line-clamp-2 min-w-0 flex-1 basis-[min(100%,12rem)]">
                 {getLocalizedArticleTitle(art, lang)}
@@ -471,6 +465,16 @@ const VoyageLegend = ({
               </button>
             </div>
           ))}
+          {articles.length > 2 && (
+            <Link
+              to={`${buildVoyagePath(voyage)}#articoli-collegati`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-accent hover:text-foreground transition-colors"
+            >
+              {lang === "it" ? "Vedi tutti gli articoli" : "See all articles"}
+              <ExternalLink size={10} />
+            </Link>
+          )}
         </div>
       )}
 

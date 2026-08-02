@@ -10,7 +10,7 @@ import Footer from "./Footer";
 import SeoManager from "./SeoManager";
 
 const Layout = ({ children }: { children: ReactNode }) => {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const { isAdmin } = useAuth();
   const isMobile = useIsMobile();
   const strippedPath = stripLangPrefix(pathname);
@@ -28,8 +28,12 @@ const Layout = ({ children }: { children: ReactNode }) => {
       document.body.style.overflow = "";
       document.documentElement.style.overflow = "";
     }
-    window.scrollTo(0, 0);
-  }, [pathname, isLogbookIndex]);
+    // Un hash nell'URL (es. #articoli-collegati) indica un'ancora voluta dalla pagina:
+    // non riportare a inizio pagina, lascia che sia la pagina a gestire lo scroll.
+    if (!hash) {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname, isLogbookIndex, hash]);
 
   return (
     <div
