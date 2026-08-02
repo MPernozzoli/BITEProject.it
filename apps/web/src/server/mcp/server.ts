@@ -8,6 +8,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { requireScope, type McpContext } from "./context.js";
 import { tiptapToMarkdown } from "./markdown.js";
 import { registerArticleTools } from "./tools/articles.js";
+import { registerMailTools } from "./tools/mail.js";
 import { registerNewsletterTools } from "./tools/newsletter.js";
 import { registerPlanTools } from "./tools/plan.js";
 
@@ -38,6 +39,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   registerPlanTools(server, ctx);
   registerArticleTools(server, ctx);
   registerNewsletterTools(server, ctx);
+  registerMailTools(server, ctx);
   registerResources(server, ctx);
   registerPrompts(server);
 

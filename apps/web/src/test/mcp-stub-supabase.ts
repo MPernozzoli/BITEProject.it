@@ -26,6 +26,7 @@ class StubQuery implements PromiseLike<Result> {
   private op: "select" | "insert" | "update" | "delete" = "select";
   private values: Record<string, unknown> | undefined;
   private filters: Record<string, unknown> = {};
+  private comparators: { column: string; op: string; value: string }[] = [];
   private returning = false;
   private headOnly = false;
 
@@ -42,9 +43,9 @@ class StubQuery implements PromiseLike<Result> {
     return this;
   }
 
-  insert(values: Record<string, unknown>): this {
+  insert(values: Record<string, unknown> | Record<string, unknown>[]): this {
     this.op = "insert";
-    this.values = values;
+    this.values = values as Record<string, unknown>;
     return this;
   }
 
@@ -64,24 +65,73 @@ class StubQuery implements PromiseLike<Result> {
     return this;
   }
 
-  // Filtri che i test non devono distinguere: registrati e ignorati.
+  /** Case-insensitive esatto: basta per `resolveTagIds`, che cerca un nome preciso. */
+  ilike(column: string, value: unknown): this {
+    this.comparators.push({ column, op: "ilike", value: String(value).toLowerCase() });
+    return this;
+  }
+
+  /**
+   * I confronti sono veri, non decorativi: una `delete().lt("expires_at", …)`
+   * che ignorasse il filtro svuoterebbe la tabella e farebbe passare test che
+   * in produzione fallirebbero.
+   */
+  gte(column: string, value: unknown): this {
+    return this.compare(column, ">=", value);
+  }
+  lte(column: string, value: unknown): this {
+    return this.compare(column, "<=", value);
+  }
+  gt(column: string, value: unknown): this {
+    return this.compare(column, ">", value);
+  }
+  lt(column: string, value: unknown): this {
+    return this.compare(column, "<", value);
+  }
+
+  // Filtri e modificatori che i test non devono distinguere: accettati e ignorati.
   neq(): this { return this; }
-  gte(): this { return this; }
-  lte(): this { return this; }
   in(): this { return this; }
   or(): this { return this; }
   is(): this { return this; }
   not(): this { return this; }
   order(): this { return this; }
   limit(): this { return this; }
+  range(): this { return this; }
+
+  private compare(column: string, op: string, value: unknown): this {
+    this.comparators.push({ column, op, value: String(value) });
+    return this;
+  }
 
   private rows(): Record<string, unknown>[] {
     const rows = this.fixtures.tables?.[this.table] ?? [];
     const entries = Object.entries(this.filters);
-    if (entries.length === 0) return rows;
-    return rows.filter((row) => entries.every(([column, value]) => row[column] === value));
+    return rows.filter((row) => {
+      if (!entries.every(([column, value]) => row[column] === value)) return false;
+      return this.comparators.every(({ column, op, value }) => {
+        const actual = String(row[column] ?? "");
+        if (op === ">=") return actual >= value;
+        if (op === "<=") return actual <= value;
+        if (op === ">") return actual > value;
+        if (op === "<") return actual < value;
+        if (op === "ilike") return actual.toLowerCase() === value;
+        return true;
+      });
+    });
   }
 
+  private table_(): Record<string, unknown>[] {
+    if (!this.fixtures.tables) this.fixtures.tables = {};
+    if (!this.fixtures.tables[this.table]) this.fixtures.tables[this.table] = [];
+    return this.fixtures.tables[this.table];
+  }
+
+  /**
+   * Le scritture non sono solo registrate ma anche applicate alle fixture: i
+   * flussi in più passi (OAuth su tutti) leggono ciò che il passo precedente ha
+   * scritto, e uno stub che dimentica renderebbe il test una finzione.
+   */
   private resolve(single: boolean): Result {
     if (this.op === "select") {
       const rows = this.rows();
@@ -90,11 +140,25 @@ class StubQuery implements PromiseLike<Result> {
     }
 
     this.writes.push({ table: this.table, op: this.op, values: this.values, filters: { ...this.filters } });
+    const rows = this.table_();
 
     if (this.op === "insert") {
-      const inserted = { id: `stub-${this.table}-${this.writes.length}`, ...(this.values ?? {}) };
-      return { data: this.returning ? (single ? inserted : [inserted]) : null, error: null };
+      const incoming = Array.isArray(this.values) ? (this.values as Record<string, unknown>[]) : [this.values ?? {}];
+      const inserted = incoming.map((values, index) => ({
+        id: `stub-${this.table}-${this.writes.length}-${index}`,
+        ...values,
+      }));
+      rows.push(...inserted);
+      return { data: this.returning ? (single ? inserted[0] : inserted) : null, error: null };
     }
+
+    if (this.op === "update") {
+      for (const row of this.rows()) Object.assign(row, this.values ?? {});
+      return { data: null, error: null };
+    }
+
+    const matching = new Set(this.rows());
+    this.fixtures.tables![this.table] = rows.filter((row) => !matching.has(row));
     return { data: null, error: null };
   }
 
@@ -114,9 +178,18 @@ class StubQuery implements PromiseLike<Result> {
   }
 }
 
+/** Un file per bucket/percorso: basta a provare che il tool ha chiamato upload e getPublicUrl correttamente. */
+export interface StubUpload {
+  bucket: string;
+  path: string;
+  bytes: number;
+  contentType?: string;
+}
+
 export function createStubSupabase(fixtures: StubFixtures = {}) {
   const writes: StubWrite[] = [];
   const rpcCalls: { name: string; args: unknown }[] = [];
+  const uploads: StubUpload[] = [];
 
   const client = {
     from(table: string) {
@@ -127,6 +200,19 @@ export function createStubSupabase(fixtures: StubFixtures = {}) {
       const value = fixtures.rpc?.[name];
       return Promise.resolve({ data: value === undefined ? true : value, error: null });
     },
+    storage: {
+      from(bucket: string) {
+        return {
+          upload: (path: string, body: Buffer, options?: { contentType?: string }) => {
+            uploads.push({ bucket, path, bytes: body.byteLength, contentType: options?.contentType });
+            return Promise.resolve({ data: { path }, error: null });
+          },
+          getPublicUrl: (path: string) => ({
+            data: { publicUrl: `https://stub.supabase.co/storage/v1/object/public/${bucket}/${path}` },
+          }),
+        };
+      },
+    },
     auth: {
       admin: {
         getUserById: () => Promise.resolve({ data: { user: { email: "admin@biteproject.it" } }, error: null }),
@@ -134,5 +220,5 @@ export function createStubSupabase(fixtures: StubFixtures = {}) {
     },
   };
 
-  return { client: client as never, writes, rpcCalls };
+  return { client: client as never, writes, rpcCalls, uploads };
 }

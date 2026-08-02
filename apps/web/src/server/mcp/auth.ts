@@ -14,12 +14,26 @@ const TOKEN_PREFIX = "bite_mcp_";
 /** Caratteri del token in chiaro conservati per riconoscerlo in lista. */
 const VISIBLE_PREFIX_LENGTH = TOKEN_PREFIX.length + 6;
 
+/**
+ * Le tre specie di token vivono nella stessa tabella ma non sono
+ * intercambiabili: un refresh token non apre l'endpoint MCP, e si vede dal
+ * prefisso ancora prima di interrogare il database.
+ */
+export type TokenKind = "manual" | "oauth_access" | "oauth_refresh";
+
+const KIND_PREFIX: Record<TokenKind, string> = {
+  manual: TOKEN_PREFIX,
+  oauth_access: `${TOKEN_PREFIX}at_`,
+  oauth_refresh: `${TOKEN_PREFIX}rt_`,
+};
+
 export type AuthFailure =
   | "missing_token"
   | "invalid_token"
   | "revoked_token"
   | "expired_token"
   | "not_admin"
+  | "wrong_resource"
   | "misconfigured";
 
 /**
@@ -46,8 +60,8 @@ export function hashToken(token: string): string {
   return createHmac("sha256", pepper()).update(token).digest("hex");
 }
 
-export function generateToken(): { token: string; hash: string; prefix: string } {
-  const token = `${TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+export function generateToken(kind: TokenKind = "manual"): { token: string; hash: string; prefix: string } {
+  const token = `${KIND_PREFIX[kind]}${randomBytes(32).toString("base64url")}`;
   return {
     token,
     hash: hashToken(token),
@@ -66,13 +80,22 @@ interface TokenRow {
   scopes: string[] | null;
   expires_at: string;
   revoked_at: string | null;
+  kind: TokenKind | null;
+  resource: string | null;
 }
 
 /**
  * Risolve il token in un contesto autenticato. Non tocca le RLS: gira già con
  * service role perché la tabella dei token non è leggibile da nessun altro.
+ *
+ * `expectedResource` è l'URL canonico di questo server MCP: un access token
+ * emesso per un'altra risorsa non deve valere qui (RFC 8707).
  */
-export async function authenticate(service: SupabaseClient, rawToken: string | null): Promise<AuthResult> {
+export async function authenticate(
+  service: SupabaseClient,
+  rawToken: string | null,
+  expectedResource?: string,
+): Promise<AuthResult> {
   if (!rawToken || !looksLikeMcpToken(rawToken)) return { ok: false, reason: "missing_token" };
 
   let hash: string;
@@ -84,7 +107,7 @@ export async function authenticate(service: SupabaseClient, rawToken: string | n
 
   const { data, error } = await service
     .from("admin_mcp_tokens")
-    .select("id,user_id,name,scopes,expires_at,revoked_at")
+    .select("id,user_id,name,scopes,expires_at,revoked_at,kind,resource")
     .eq("token_hash", hash)
     .maybeSingle();
 
@@ -94,8 +117,13 @@ export async function authenticate(service: SupabaseClient, rawToken: string | n
   }
   const row = data as TokenRow | null;
   if (!row) return { ok: false, reason: "invalid_token" };
+  // Un refresh token è credenziale del solo endpoint /token: qui non apre nulla.
+  if (row.kind === "oauth_refresh") return { ok: false, reason: "invalid_token" };
   if (row.revoked_at) return { ok: false, reason: "revoked_token" };
   if (new Date(row.expires_at).getTime() <= Date.now()) return { ok: false, reason: "expired_token" };
+  if (expectedResource && row.resource && row.resource !== expectedResource) {
+    return { ok: false, reason: "wrong_resource" };
+  }
 
   const { data: isAdmin, error: roleError } = await service.rpc("has_role", {
     _user_id: row.user_id,
@@ -155,6 +183,8 @@ export function authFailureMessage(reason: AuthFailure): string {
       return "Questo token è scaduto: generane uno nuovo dal profilo admin.";
     case "not_admin":
       return "L'utente del token non ha più il ruolo admin.";
+    case "wrong_resource":
+      return "Questo token è stato emesso per un'altra risorsa MCP.";
     case "misconfigured":
       return "Server MCP non configurato (MCP_TOKEN_PEPPER assente).";
     default:

@@ -96,14 +96,27 @@ function inlineTokensToNodes(tokens: Token[] | undefined): JSONContent[] {
   return out;
 }
 
-/** Separa i segnaposto immagine dagli inline veri: le immagini diventano blocchi fratelli. */
+/**
+ * Separa i segnaposto immagine dagli inline veri: le immagini diventano blocchi
+ * fratelli. `![alt](src "titolo")` — il "titolo" fra virgolette, sintassi
+ * Markdown standard — diventa la didascalia di un `mediaFigure`, lo stesso
+ * nodo con cui l'editor mostra foto con caption. Senza titolo resta
+ * un'immagine semplice (`@tiptap/extension-image`), senza didascalia.
+ */
 function splitInline(nodes: JSONContent[]): { inline: JSONContent[]; images: JSONContent[] } {
   const inline: JSONContent[] = [];
   const images: JSONContent[] = [];
   for (const node of nodes) {
     if (node.type === "__image") {
       const attrs = node.attrs ?? {};
-      images.push({ type: "image", attrs: { src: attrs.src, alt: attrs.alt ?? null, title: attrs.title ?? null } });
+      if (attrs.title) {
+        images.push({
+          type: "mediaFigure",
+          attrs: { kind: "image", src: attrs.src, alt: attrs.alt ?? "", caption: attrs.title },
+        });
+      } else {
+        images.push({ type: "image", attrs: { src: attrs.src, alt: attrs.alt ?? null, title: null } });
+      }
     } else {
       inline.push(node);
     }
@@ -305,9 +318,13 @@ function blockToMarkdown(node: JSONContent, depth: number): string {
       return `![${String(node.attrs?.alt ?? "")}](${String(node.attrs?.src ?? "")})`;
     case "mediaFigure": {
       const caption = String(node.attrs?.caption ?? "");
+      const alt = String(node.attrs?.alt ?? caption);
       const src = String(node.attrs?.src ?? "");
       const kind = String(node.attrs?.kind ?? "image");
-      return kind === "youtube" ? `[video: ${caption || src}](${src})` : `![${caption}](${src})`;
+      if (kind === "youtube") return `[video: ${caption || src}](${src})`;
+      // Il "titolo" fra virgolette è sintassi Markdown standard: markdownToTiptap
+      // lo rilegge come didascalia, così il round-trip non perde la caption.
+      return caption ? `![${alt}](${src} "${caption}")` : `![${alt}](${src})`;
     }
     case "youtube":
       return `[video](${String(node.attrs?.src ?? "")})`;

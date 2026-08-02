@@ -24,6 +24,8 @@ I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, imm
 
 **Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`, `/mcp`, `/api/mcp/:path*`.
 
+**Rewrites OAuth MCP:** `/.well-known/oauth-authorization-server(/:path*)` → `/api/mcp/oauth/metadata`, `/.well-known/oauth-protected-resource(/:path*)` → `/api/mcp/oauth/protected-resource` → [[25 - MCP Admin]].
+
 ## Edge middleware
 - `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. Mantiene lo stesso contenuto operativo di `apps/web/middleware.ts`, ma resta un file reale per evitare problemi di packaging Edge su Vercel.
 - Il middleware Edge non importa helper da `@vercel/functions`: usa direttamente gli header `x-middleware-next` e `x-middleware-rewrite`, così Vercel non include moduli Node non supportati nell'Edge runtime.

@@ -15,6 +15,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getArticleTranslationGaps } from "../../../lib/article-translation-gaps.js";
 import { McpToolError, type McpContext } from "../context.js";
 import { countWords, markdownToTiptap, tiptapToMarkdown } from "../markdown.js";
+import { uploadImageFromUrl } from "../media.js";
 import { clientRequestIdShape, confirmShape, registerTool, type ToolOutcome } from "../registry.js";
 import { assignArticleToSlot, findNextOpenSlot, todayIso } from "./plan.js";
 
@@ -74,6 +75,18 @@ interface ArticleRow {
   story_id: string | null;
 }
 
+export type AuthorInput = { profile_id: string; role?: string };
+
+/**
+ * `authorsShape` è un letterale non `as const`, e la propagazione del tipo
+ * attraverso `z.objectOutputType<Shape, …>` in `registry.ts` finisce per
+ * allargare `profile_id` a opzionale. Zod lo valida comunque a runtime — qui
+ * serve solo a TypeScript, non a un controllo in più.
+ */
+function typedAuthors(value: unknown): AuthorInput[] | undefined {
+  return value as AuthorInput[] | undefined;
+}
+
 async function loadArticle(ctx: McpContext, id: string, withBody: boolean): Promise<ArticleRow & { content_it?: unknown; content_en?: unknown }> {
   const columns = withBody ? `${ARTICLE_COLUMNS},content_it,content_en` : ARTICLE_COLUMNS;
   const { data, error } = await ctx.service.from("logbook_articles").select(columns).eq("id", id).maybeSingle();
@@ -81,6 +94,115 @@ async function loadArticle(ctx: McpContext, id: string, withBody: boolean): Prom
   if (!data) throw new McpToolError("not_found", `Articolo ${id} inesistente.`);
   return data as unknown as ArticleRow & { content_it?: unknown; content_en?: unknown };
 }
+
+/**
+ * Trova o crea i tag per nome (case-insensitive: `tags.name` è unico). Uno per
+ * chiamata invece di un batch upsert: con le poche decine di tag di un
+ * articolo il costo è trascurabile, e l'ordine dei risultati resta quello
+ * dell'input, cosa che un upsert multiplo non garantisce.
+ */
+async function resolveTagIds(ctx: McpContext, names: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const { data: existing, error: findError } = await ctx.service
+      .from("tags")
+      .select("id")
+      .ilike("name", name)
+      .maybeSingle();
+    if (findError) throw new McpToolError("db_error", `Ricerca tag "${name}" fallita: ${findError.message}`);
+    if (existing) {
+      ids.push((existing as { id: string }).id);
+      continue;
+    }
+    const { data: created, error: createError } = await ctx.service
+      .from("tags")
+      .insert({ name })
+      .select("id")
+      .maybeSingle();
+    if (createError) throw new McpToolError("db_error", `Creazione tag "${name}" fallita: ${createError.message}`);
+    if (created) ids.push((created as { id: string }).id);
+  }
+  return ids;
+}
+
+/**
+ * Sostituisce interamente tag e autori di un articolo — stessa semantica
+ * "cancella e riscrivi" dell'editor admin (`ArticleEditor.tsx`), non un merge:
+ * chi passa `tags` intende l'elenco finale, non un'aggiunta.
+ */
+async function replaceTagsAndAuthors(
+  ctx: McpContext,
+  articleId: string,
+  tags: string[] | undefined,
+  authors: { profile_id: string; role?: string }[] | undefined,
+): Promise<void> {
+  if (tags !== undefined) {
+    const { error: deleteError } = await ctx.service.from("article_tags").delete().eq("article_id", articleId);
+    if (deleteError) throw new McpToolError("db_error", `Pulizia tag fallita: ${deleteError.message}`);
+    const tagIds = await resolveTagIds(ctx, tags);
+    if (tagIds.length > 0) {
+      const { error: insertError } = await ctx.service
+        .from("article_tags")
+        .insert(tagIds.map((tagId) => ({ article_id: articleId, tag_id: tagId })));
+      if (insertError) throw new McpToolError("db_error", `Salvataggio tag fallito: ${insertError.message}`);
+    }
+  }
+
+  if (authors !== undefined) {
+    const { error: deleteError } = await ctx.service.from("article_authors").delete().eq("article_id", articleId);
+    if (deleteError) throw new McpToolError("db_error", `Pulizia autori fallita: ${deleteError.message}`);
+    if (authors.length > 0) {
+      const { error: insertError } = await ctx.service.from("article_authors").insert(
+        authors.map((author) => ({
+          article_id: articleId,
+          profile_id: author.profile_id,
+          ...(author.role ? { role: author.role } : {}),
+        })),
+      );
+      if (insertError) throw new McpToolError("db_error", `Salvataggio autori fallito: ${insertError.message}`);
+    }
+  }
+}
+
+const tagsShape = {
+  tags: z
+    .array(z.string().min(1).max(60))
+    .max(20)
+    .optional()
+    .describe("Elenco finale dei tag (per nome, creati se mancanti). Sostituisce quelli esistenti, non li somma."),
+};
+
+const authorsShape = {
+  authors: z
+    .array(
+      z.object({
+        profile_id: z.string().uuid().describe("Profilo già esistente: qui non si creano profili nuovi."),
+        role: z.string().max(40).optional().describe('Default "author".'),
+      }),
+    )
+    .max(10)
+    .optional()
+    .describe("Elenco finale degli autori collegati. Sostituisce quelli esistenti, non li somma."),
+};
+
+const coverShape = {
+  cover_focal_x: z.number().min(0).max(1).optional().describe("Punto focale orizzontale della cover, 0-1."),
+  cover_focal_y: z.number().min(0).max(1).optional().describe("Punto focale verticale della cover, 0-1."),
+  cover_zoom: z.number().min(1).max(4).optional().describe("Zoom della cover, 1 = nessuno."),
+};
+
+const tripShape = {
+  voyage_id: z.string().uuid().nullable().optional().describe("Voyage a cui collegare l'articolo."),
+  voyage_segment_start: z.number().int().nullable().optional(),
+  voyage_segment_end: z.number().int().nullable().optional(),
+  voyage_waypoint_start_id: z.string().uuid().nullable().optional(),
+  voyage_waypoint_end_id: z.string().uuid().nullable().optional(),
+  location_name: z.string().max(200).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+};
 
 export function registerArticleTools(server: McpServer, ctx: McpContext): void {
   registerTool(server, ctx, {
@@ -173,6 +295,16 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
         contentEn: article.content_en ?? null,
       });
 
+      const [{ data: tagLinks }, { data: authorLinks }, { data: settings }] = await Promise.all([
+        context.service.from("article_tags").select("tags(name)").eq("article_id", id),
+        context.service.from("article_authors").select("profile_id,role").eq("article_id", id),
+        context.service
+          .from("logbook_articles")
+          .select("cover_focal_x,cover_focal_y,cover_zoom,voyage_id,voyage_segment_start,voyage_segment_end,voyage_waypoint_start_id,voyage_waypoint_end_id,location_name,latitude,longitude")
+          .eq("id", id)
+          .maybeSingle(),
+      ]);
+
       return {
         text: `"${article.title_it || article.title_en}" — stato ${article.status}${article.scheduled_at ? `, programmato ${article.scheduled_at}` : ""}${gaps.hasGaps ? `. Lacune: ${gaps.labels.join("; ")}` : ""}.`,
         targetId: article.id,
@@ -185,6 +317,11 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           word_count_it: includeBody ? countWords(article.content_it) : undefined,
           word_count_en: includeBody ? countWords(article.content_en) : undefined,
           translation_gaps: gaps.labels,
+          tags: (tagLinks ?? [])
+            .map((row) => (row as unknown as { tags: { name: string } | null }).tags?.name)
+            .filter(Boolean),
+          authors: authorLinks ?? [],
+          ...(settings ?? {}),
         },
       } satisfies ToolOutcome;
     },
@@ -194,7 +331,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_create_draft",
     title: "Crea una bozza",
     description:
-      "Crea un nuovo articolo in stato draft. Titolo obbligatorio in italiano e inglese: il sito è bilingue e una bozza monolingue non è programmabile. Il corpo si passa in Markdown e viene convertito nel formato dell'editor.",
+      "Crea un nuovo articolo in stato draft, con tutte le impostazioni dell'editor: corpo in Markdown (grassetto, corsivo, titoli, liste, citazioni, codice, foto — anche con didascalia via ![alt](url \"didascalia\")), cover con punto focale e zoom, tag, autori, collegamento a un voyage/waypoint. Titolo obbligatorio in italiano e inglese: il sito è bilingue e una bozza monolingue non è programmabile.",
     scope: "articles:write",
     kind: "write",
     inputSchema: {
@@ -207,6 +344,12 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       category: z.string().max(120).optional().describe(`Default: "${DEFAULT_CATEGORY}".`),
       editorial_type: z.enum(EDITORIAL_TYPES).optional(),
       cover_image: z.string().url().optional(),
+      slug_it: z.string().max(160).optional(),
+      slug_en: z.string().max(160).optional(),
+      ...coverShape,
+      ...tripShape,
+      ...tagsShape,
+      ...authorsShape,
       ...clientRequestIdShape,
     },
     annotations: { destructiveHint: false, idempotentHint: false },
@@ -217,6 +360,8 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
         .from("logbook_articles")
         .insert({
           slug,
+          slug_it: args.slug_it?.trim() || null,
+          slug_en: args.slug_en?.trim() || null,
           title_it: args.title_it.trim(),
           title_en: args.title_en.trim(),
           excerpt_it: args.excerpt_it?.trim() || null,
@@ -227,12 +372,30 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           status: "draft",
           editorial_type: args.editorial_type ?? null,
           cover_image: args.cover_image ?? null,
+          ...(args.cover_focal_x !== undefined ? { cover_focal_x: args.cover_focal_x } : {}),
+          ...(args.cover_focal_y !== undefined ? { cover_focal_y: args.cover_focal_y } : {}),
+          ...(args.cover_zoom !== undefined ? { cover_zoom: args.cover_zoom } : {}),
+          voyage_id: args.voyage_id ?? null,
+          voyage_segment_start: args.voyage_segment_start ?? null,
+          voyage_segment_end: args.voyage_segment_end ?? null,
+          voyage_waypoint_start_id: args.voyage_waypoint_start_id ?? null,
+          voyage_waypoint_end_id: args.voyage_waypoint_end_id ?? null,
+          location_name: args.location_name ?? null,
+          latitude: args.latitude ?? null,
+          longitude: args.longitude ?? null,
         })
         .select("id,slug")
         .maybeSingle();
-      if (error) throw new McpToolError("db_error", `Creazione bozza fallita: ${error.message}`);
+      if (error) {
+        const unique = /slug_it|slug_en/.test(error.message) ? " (slug_it/slug_en già in uso da un altro articolo)" : "";
+        throw new McpToolError("db_error", `Creazione bozza fallita: ${error.message}${unique}`);
+      }
 
       const created = data as { id: string; slug: string } | null;
+      if (created && (args.tags !== undefined || args.authors !== undefined)) {
+        await replaceTagsAndAuthors(context, created.id, args.tags, typedAuthors(args.authors));
+      }
+
       return {
         text: `Bozza creata: "${args.title_it}" (slug ${created?.slug}). Modificabile in admin su /admin/article/${created?.id}.`,
         targetId: created?.id ?? null,
@@ -242,10 +405,32 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
   });
 
   registerTool(server, ctx, {
+    name: "article_upload_image",
+    title: "Carica una foto per un articolo",
+    description:
+      "Scarica un'immagine da un URL https e la ripubblica nello storage BITE (stesso bucket dell'upload manuale nell'editor). Restituisce l'URL pubblico da usare come cover_image o nel corpo Markdown — con didascalia scrivendo ![alt](url \"didascalia\").",
+    scope: "articles:write",
+    kind: "write",
+    inputSchema: {
+      source_url: z.string().url().describe("URL https dell'immagine sorgente."),
+      folder: z.string().max(60).optional().describe('Cartella nel bucket. Default "articles". Usa "covers" per le cover.'),
+      ...clientRequestIdShape,
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+    handler: async (args, context) => {
+      const uploaded = await uploadImageFromUrl(context, { sourceUrl: args.source_url, folder: args.folder ?? "articles" });
+      return {
+        text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB): ${uploaded.url}`,
+        data: uploaded,
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
     name: "article_update",
     title: "Aggiorna un articolo",
     description:
-      "Modifica i campi indicati di un articolo esistente (patch parziale: i campi non passati restano invariati). Il corpo passato in Markdown sostituisce quello della lingua corrispondente.",
+      "Modifica i campi indicati di un articolo esistente (patch parziale: i campi non passati restano invariati). Copre tutte le impostazioni dell'editor: corpo Markdown, cover con punto focale/zoom, slug bilingui, tag, autori, collegamento voyage/waypoint. tags e authors sostituiscono l'elenco esistente, non lo sommano.",
     scope: "articles:write",
     kind: "write",
     inputSchema: {
@@ -259,6 +444,12 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       category: z.string().max(120).optional(),
       editorial_type: z.enum(EDITORIAL_TYPES).nullable().optional(),
       cover_image: z.string().url().nullable().optional(),
+      slug_it: z.string().max(160).nullable().optional(),
+      slug_en: z.string().max(160).nullable().optional(),
+      ...coverShape,
+      ...tripShape,
+      ...tagsShape,
+      ...authorsShape,
       ...clientRequestIdShape,
     },
     annotations: { destructiveHint: false, idempotentHint: true },
@@ -275,23 +466,46 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       if (args.category !== undefined) patch.category = args.category.trim();
       if (args.editorial_type !== undefined) patch.editorial_type = args.editorial_type;
       if (args.cover_image !== undefined) patch.cover_image = args.cover_image;
+      if (args.cover_focal_x !== undefined) patch.cover_focal_x = args.cover_focal_x;
+      if (args.cover_focal_y !== undefined) patch.cover_focal_y = args.cover_focal_y;
+      if (args.cover_zoom !== undefined) patch.cover_zoom = args.cover_zoom;
+      if (args.slug_it !== undefined) patch.slug_it = args.slug_it?.trim() || null;
+      if (args.slug_en !== undefined) patch.slug_en = args.slug_en?.trim() || null;
+      if (args.voyage_id !== undefined) patch.voyage_id = args.voyage_id;
+      if (args.voyage_segment_start !== undefined) patch.voyage_segment_start = args.voyage_segment_start;
+      if (args.voyage_segment_end !== undefined) patch.voyage_segment_end = args.voyage_segment_end;
+      if (args.voyage_waypoint_start_id !== undefined) patch.voyage_waypoint_start_id = args.voyage_waypoint_start_id;
+      if (args.voyage_waypoint_end_id !== undefined) patch.voyage_waypoint_end_id = args.voyage_waypoint_end_id;
+      if (args.location_name !== undefined) patch.location_name = args.location_name;
+      if (args.latitude !== undefined) patch.latitude = args.latitude;
+      if (args.longitude !== undefined) patch.longitude = args.longitude;
 
-      if (Object.keys(patch).length === 0) {
+      const relationsChanged = args.tags !== undefined || args.authors !== undefined;
+      if (Object.keys(patch).length === 0 && !relationsChanged) {
         return { text: "Nessun campo da aggiornare.", targetId: article.id, data: { article_id: article.id, changed: false } };
       }
 
-      patch.updated_at = new Date().toISOString();
-      const { error } = await context.service.from("logbook_articles").update(patch).eq("id", article.id);
-      if (error) throw new McpToolError("db_error", `Aggiornamento fallito: ${error.message}`);
+      if (Object.keys(patch).length > 0) {
+        patch.updated_at = new Date().toISOString();
+        const { error } = await context.service.from("logbook_articles").update(patch).eq("id", article.id);
+        if (error) {
+          const unique = /slug_it|slug_en/.test(error.message) ? " (slug_it/slug_en già in uso da un altro articolo)" : "";
+          throw new McpToolError("db_error", `Aggiornamento fallito: ${error.message}${unique}`);
+        }
+      }
+      if (relationsChanged) {
+        await replaceTagsAndAuthors(context, article.id, args.tags, typedAuthors(args.authors));
+      }
 
+      const fields = [...Object.keys(patch).filter((key) => key !== "updated_at"), ...(relationsChanged ? ["tags/authors"] : [])];
       const note =
         article.status === "published"
           ? " L'articolo è già pubblicato: la modifica è online da subito e fa ripartire l'ottimizzazione SEO."
           : "";
       return {
-        text: `Articolo aggiornato (${Object.keys(patch).filter((key) => key !== "updated_at").join(", ")}).${note}`,
+        text: `Articolo aggiornato (${fields.join(", ")}).${note}`,
         targetId: article.id,
-        data: { article_id: article.id, changed: true, fields: Object.keys(patch).filter((key) => key !== "updated_at") },
+        data: { article_id: article.id, changed: true, fields },
       } satisfies ToolOutcome;
     },
   });

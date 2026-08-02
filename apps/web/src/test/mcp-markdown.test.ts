@@ -43,6 +43,14 @@ describe("markdownToTiptap", () => {
     const doc = markdownToTiptap("![vela](https://cdn.example/vela.jpg)");
     expect(doc.content?.[0]).toMatchObject({ type: "image", attrs: { src: "https://cdn.example/vela.jpg", alt: "vela" } });
   });
+
+  it("un'immagine con titolo diventa una mediaFigure con didascalia", () => {
+    const doc = markdownToTiptap('![vela](https://cdn.example/vela.jpg "In rada a Bonifacio")');
+    expect(doc.content?.[0]).toMatchObject({
+      type: "mediaFigure",
+      attrs: { kind: "image", src: "https://cdn.example/vela.jpg", alt: "vela", caption: "In rada a Bonifacio" },
+    });
+  });
 });
 
 describe("tiptapToMarkdown", () => {
@@ -57,7 +65,7 @@ describe("tiptapToMarkdown", () => {
         },
       ],
     });
-    expect(markdown).toContain("![In rada](https://cdn.example/a.jpg)");
+    expect(markdown).toContain('![In rada](https://cdn.example/a.jpg "In rada")');
     expect(markdown).toContain("⟨mappa: Bocche di Bonifacio⟩");
   });
 
@@ -78,6 +86,8 @@ describe("round-trip", () => {
     ["separatore", "Prima\n\n---\n\nDopo"],
     ["formattazione inline", "Testo **grassetto** e *corsivo*."],
     ["link", "Vai su [BITE](https://biteproject.it)."],
+    ["foto senza didascalia", "![vela al tramonto](https://cdn.example/vela.jpg)"],
+    ["foto con didascalia", '![vela](https://cdn.example/vela.jpg "In rada a Bonifacio")'],
   ];
 
   for (const [name, markdown] of cases) {

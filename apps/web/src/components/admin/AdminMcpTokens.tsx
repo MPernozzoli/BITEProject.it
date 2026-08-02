@@ -30,9 +30,11 @@ const SCOPE_LABELS: Record<string, { it: string; en: string }> = {
   "plan:write": { it: "Programmare nel piano", en: "Schedule in the plan" },
   "newsletter:read": { it: "Leggere le newsletter", en: "Read newsletters" },
   "newsletter:write": { it: "Scrivere newsletter", en: "Write newsletters" },
+  "mail:read": { it: "Leggere la posta", en: "Read mail" },
+  "mail:write": { it: "Rispondere, inoltrare e scrivere mail", en: "Reply, forward and write mail" },
 };
 
-const DEFAULT_SCOPES = ["articles:read", "articles:write", "plan:read", "plan:write", "newsletter:read"];
+const DEFAULT_SCOPES = ["articles:read", "articles:write", "plan:read", "plan:write", "newsletter:read", "mail:read"];
 
 const COPY = {
   it: {

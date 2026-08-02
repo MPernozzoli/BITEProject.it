@@ -63,6 +63,7 @@ const AdminBadgesPage = lazy(() => import("./pages/AdminBadgesPage"));
 const AdminMapPresence = lazy(() => import("./pages/AdminMapPresence"));
 const AdminSpritzDiscoveries = lazy(() => import("./pages/AdminSpritzDiscoveries"));
 const AdminMedia = lazy(() => import("./pages/AdminMedia"));
+const AdminMcpAuthorize = lazy(() => import("./pages/AdminMcpAuthorize"));
 const AdminLogbookPoints = lazy(() => import("./pages/AdminLogbookPoints"));
 const AdminPackGallery = lazy(() => import("./pages/AdminPackGallery"));
 const AdminMail = lazy(() => import("./pages/AdminMail"));
@@ -266,6 +267,9 @@ const App = () => {
                     <Route path="/admin/bookings/candidati/rimborsi" element={<Navigate to="/admin/bookings/rimborsi" replace />} />
                     <Route path="/admin/candidates" element={<Navigate to="/admin/bookings" replace />} />
                     <Route path="/admin/media" element={<AdminRoute><AdminMedia /></AdminRoute>} />
+                    {/* Consenso OAuth del server MCP: gestisce da sé sessione e ruolo, perché
+                        AdminRoute perderebbe i parametri OAuth nel redirect al login. */}
+                    <Route path="/admin/mcp/authorize" element={<AdminMcpAuthorize />} />
                     <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />
                     <Route path="/admin/logbook-points" element={<AdminRoute><AdminLogbookPoints /></AdminRoute>} />
                     <Route path="/admin/pack-gallery" element={<AdminRoute><AdminPackGallery /></AdminRoute>} />

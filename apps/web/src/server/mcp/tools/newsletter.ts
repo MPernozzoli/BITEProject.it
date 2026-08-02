@@ -31,6 +31,7 @@ import {
 } from "@pynkstudio/newsletterapp/admin";
 import { newsletterConfig } from "../../../lib/newsletter-config.js";
 import { McpToolError, type McpContext } from "../context.js";
+import { uploadImageFromUrl } from "../media.js";
 import { clientRequestIdShape, confirmShape, registerTool, type ToolOutcome } from "../registry.js";
 
 /** Stesse lingue della console admin: tutte quelle supportate, IT ed EN obbligatorie. */
@@ -270,7 +271,7 @@ export function registerNewsletterTools(server: McpServer, ctx: McpContext): voi
     name: "newsletter_create_draft",
     title: "Crea una bozza di campagna",
     description:
-      "Crea una campagna in bozza. Oggetto e corpo vanno forniti almeno nelle lingue obbligatorie; il corpo si passa in Markdown (o in HTML con body_is_html: true) e viene salvato nella modalità HTML che il dispatcher già gestisce. Non schedula nulla.",
+      "Crea una campagna in bozza. Oggetto e corpo vanno forniti almeno nelle lingue obbligatorie; il corpo si passa in Markdown — grassetto, corsivo, titoli, liste, citazioni, link e immagini (![alt](url), carica prima l'immagine con newsletter_upload_image) diventano HTML vero — o in HTML già pronto con body_is_html: true. Non schedula nulla.",
     scope: "newsletter:write",
     kind: "write",
     inputSchema: {
@@ -472,6 +473,28 @@ export function registerNewsletterTools(server: McpServer, ctx: McpContext): voi
         text: `"${row.name}" riportata in bozza.`,
         targetId: row.id,
         data: { message_id: row.id, changed: true },
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
+    name: "newsletter_upload_image",
+    title: "Carica una foto per una newsletter",
+    description:
+      "Scarica un'immagine da un URL https e la ripubblica nello storage BITE (stesso bucket usato dal composer). Restituisce l'URL pubblico da inserire nel corpo con la sintassi Markdown ![alt](url): il body delle campagne è già convertito in HTML, quindi diventa un'immagine vera nell'email.",
+    scope: "newsletter:write",
+    kind: "write",
+    inputSchema: {
+      source_url: z.string().url().describe("URL https dell'immagine sorgente."),
+      folder: z.string().max(60).optional().describe('Cartella nel bucket. Default "newsletter".'),
+      ...clientRequestIdShape,
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+    handler: async (args, context) => {
+      const uploaded = await uploadImageFromUrl(context, { sourceUrl: args.source_url, folder: args.folder ?? "newsletter" });
+      return {
+        text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB): ${uploaded.url}`,
+        data: uploaded,
       } satisfies ToolOutcome;
     },
   });

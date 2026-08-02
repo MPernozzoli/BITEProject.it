@@ -15,6 +15,7 @@ import { bearerToken, readJsonBody, sendJson, type NodeRequest, type NodeRespons
 import { authFailureMessage, authFailureStatus, authenticate } from "../../src/server/mcp/auth.js";
 import { buildMcpServer } from "../../src/server/mcp/server.js";
 import type { McpContext } from "../../src/server/mcp/context.js";
+import { resolveOrigin, resourceUrl } from "../../src/server/mcp/oauth.js";
 
 function siteUrl(): string {
   return (process.env.PUBLIC_SITE_URL || process.env.VITE_SITE_URL || "https://biteproject.it").replace(/\/$/, "");
@@ -39,11 +40,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const auth = await authenticate(service, bearerToken(nodeReq));
+  const origin = resolveOrigin(req.headers);
+  const auth = await authenticate(service, bearerToken(nodeReq), resourceUrl(origin));
   if (!auth.ok) {
     const status = authFailureStatus(auth.reason);
     if (status === 401) {
-      res.setHeader("WWW-Authenticate", 'Bearer realm="bite-admin", error="invalid_token"');
+      // Il puntatore ai metadata è ciò che fa partire il flusso OAuth in un
+      // client che non ha un token: senza, resta un 401 muto.
+      res.setHeader(
+        "WWW-Authenticate",
+        `Bearer realm="bite-admin", error="invalid_token", resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+      );
     }
     sendJson(nodeRes, status, { error: auth.reason, message: authFailureMessage(auth.reason) });
     return;

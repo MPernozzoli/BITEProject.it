@@ -27,7 +27,7 @@ const BOT_UA_RE =
 
 /** Paths that must never be prerendered (private/system areas). */
 const PRERENDER_EXCLUDE_RE =
-  /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter)(\/|$)/i;
+  /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter|mcp|\.well-known)(\/|$)/i;
 const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;
 const LEGACY_PUBLIC_PATH_RE =
   /^\/(crew|manifesto|logbook|voyages|links|linktree|route|collaborations|contact)(\/|$)/i;

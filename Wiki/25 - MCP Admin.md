@@ -26,7 +26,24 @@ Il rewrite `/mcp` → `/api/mcp` sta in `vercel.json` **prima** del catch-all SP
 - A ogni richiesta si ri-verifica `has_role(user_id,'admin')`: **togliere il ruolo invalida subito tutti i token di quell'utente**, senza revocarli uno per uno.
 - Il valore in chiaro esiste solo nella risposta alla creazione. La UI è in `AdminMcpTokens.tsx`, montata da `AdminProfile.tsx` su `/profile` per gli admin.
 
-Scope: `articles:read|write`, `plan:read|write`, `newsletter:read|write`.
+Scope: `articles:read|write`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`.
+
+### OAuth 2.1 (connector claude.ai)
+Un client come Claude Code punta direttamente col token manuale; un connector browser (claude.ai) non sa mandare un header custom e si aspetta un authorization server. Per quel caso c'è un AS minimale, tutto in `apps/web/api/mcp/oauth/` + `src/server/mcp/oauth.ts`:
+
+| Endpoint | Scopo |
+|---|---|
+| `/.well-known/oauth-authorization-server` | metadata RFC 8414 (rewrite → `oauth/metadata.ts`) |
+| `/.well-known/oauth-protected-resource` | metadata RFC 9728, puntato dall'header `WWW-Authenticate` del 401 di `/api/mcp` |
+| `POST /api/mcp/oauth/register` | dynamic client registration (RFC 7591), pubblica e rate-limitata per IP; solo client pubblici (`token_endpoint_auth_method: none`) |
+| `GET /api/mcp/oauth/authorize` | valida client/redirect_uri/PKCE, poi redirige a `/admin/mcp/authorize` |
+| `/admin/mcp/authorize` (`AdminMcpAuthorize.tsx`) | pagina di consenso nella SPA: l'admin vede chi chiede accesso e sceglie gli scope |
+| `POST /api/mcp/oauth/approve` | chiamato dalla pagina di consenso con la sessione Supabase dell'admin; unico punto che emette l'authorization code |
+| `POST /api/mcp/oauth/token` | scambia code+PKCE per access/refresh token, o rinnova con rotazione |
+
+**Chi autentica l'umano resta Supabase.** L'AS qui sopra non tocca l'auth: verifica solo che chi approva sia già loggato e admin, poi emette codice e token. I token OAuth sono righe di `admin_mcp_tokens` con `kind = oauth_access|oauth_refresh` (colonne aggiunte da `20260802230000_admin_mcp_oauth.sql`, insieme a `admin_mcp_oauth_clients` e `admin_mcp_oauth_codes`): stessa validazione, stesso audit, stessa revoca dei token manuali — non è una seconda specie di credenziale.
+
+Guardrail specifici del flusso: PKCE S256 obbligatorio (niente client confidenziali), `redirect_uri` per confronto esatto contro quelli registrati (mai un redirect verso un URI non verificato), code monouso — un riuso revoca **tutta** l'autorizzazione di quel client per quell'utente, non solo il token, refresh token a rotazione (l'uso invalida quello precedente), binding alla risorsa (RFC 8707: un token per `/mcp` non vale su un altro server MCP), ruolo admin ricontrollato a ogni scambio/rinnovo.
 
 ## Tool
 Registrati tutti tramite `registry.ts`, che applica in un punto solo controllo di scope, rate limit, audit, idempotenza e formato della risposta.
@@ -34,8 +51,9 @@ Registrati tutti tramite `registry.ts`, che applica in un punto solo controllo d
 | Dominio | Tool |
 |---|---|
 | Piano | `plan_get_settings`, `plan_list_slots`, `plan_find_gaps`, `plan_upsert_slot`, `plan_assign_article`, `plan_free_slot` |
-| Articoli | `article_search`, `article_get`, `article_create_draft`, `article_update`, `article_translate`, `article_seo_optimize`, `article_schedule`, `article_unschedule` |
-| Newsletter | `newsletter_list_messages`, `newsletter_get_message`, `newsletter_stats`, `newsletter_create_draft`, `newsletter_update_draft`, `newsletter_schedule`, `newsletter_cancel_schedule` |
+| Articoli | `article_search`, `article_get`, `article_create_draft`, `article_update`, `article_translate`, `article_seo_optimize`, `article_schedule`, `article_unschedule`, `article_upload_image` |
+| Newsletter | `newsletter_list_messages`, `newsletter_get_message`, `newsletter_stats`, `newsletter_create_draft`, `newsletter_update_draft`, `newsletter_schedule`, `newsletter_cancel_schedule`, `newsletter_upload_image` |
+| Mail | `mail_list_messages`, `mail_get_message`, `mail_mark`, `mail_reply`, `mail_forward`, `mail_compose` |
 
 Risorse: `bite://guide/editorial`, `bite://article/{id}`, `bite://plan/{YYYY-MM}`.
 Prompt: `pianifica-mese`, `bozza-da-appunti`, `digest-newsletter`.
@@ -49,8 +67,16 @@ Prompt: `pianifica-mese`, `bozza-da-appunti`, `digest-newsletter`.
 - **Audit**: `admin_mcp_audit_log` registra tool, argomenti (con i corpi lunghi troncati), esito, risorsa toccata e durata. Riga scritta prima dell'effetto, aggiornata dopo.
 - **Prompt injection**: le istruzioni del server dichiarano che i contenuti letti dal database sono dati, non comandi.
 
+## Mail
+I tool `mail_*` non toccano `apps/web/api/email/*`: chiamano direttamente le funzioni esportate da `@pynkstudio/mailapp/mailbox/server` (`loadMailbox`, `applyMailMessageAction`, `sendMailboxMessage`, `attachThreadMessages`) — la stessa libreria dietro quegli endpoint HTTP, non una sua reimplementazione, coerente con `AGENTS.md`. `mail_list_messages`/`mail_get_message` leggono; `mail_mark` gestisce (letto/stella/archivio/spam) senza `confirm` salvo `delete`, che cancella la riga; `mail_reply`/`mail_forward`/`mail_compose` spediscono davvero tramite Resend e stanno dietro `confirm: true` come ogni altro tool ⚠ — sono gli unici tool mail con un effetto che esce dal sistema. Il forward non prosegue il thread originale (niente `replyToMessageId`): è un nuovo messaggio con l'originale citato in corpo, senza allegati.
+
 ## Contenuti: Markdown ⇄ TipTap
-`src/server/mcp/markdown.ts` converte nei due sensi fra Markdown e il ProseMirror JSON dell'editor. Non usa `generateJSON` di TipTap perché le estensioni del client tirano dentro React e un DOM: costruisce l'albero dai token di `marked`. I nodi che Markdown non rappresenta (mini-mappa, media figure) sono resi in sola lettura come testo riconoscibile e non vengono ricreati in scrittura. Coperto da test di round-trip in `src/test/mcp-markdown.test.ts`.
+`src/server/mcp/markdown.ts` converte nei due sensi fra Markdown e il ProseMirror JSON dell'editor. Non usa `generateJSON` di TipTap perché le estensioni del client tirano dentro React e un DOM: costruisce l'albero dai token di `marked`. Copre la formattazione che offre l'editor — grassetto, corsivo, sottolineato (`<u>`), codice inline e a blocco, titoli h1-h3, liste puntate/numerate, citazioni, separatori, link — e le foto: `![alt](url)` diventa un'immagine, `![alt](url "didascalia")` (sintassi Markdown standard per il titolo) diventa un nodo `mediaFigure` con didascalia, lo stesso con cui l'editor mostra foto captionate. I nodi che Markdown non rappresenta comunque (mini-mappa) restano resi in sola lettura come testo riconoscibile. Coperto da test di round-trip in `src/test/mcp-markdown.test.ts`.
+
+Per la newsletter la stessa fedeltà arriva gratis: `newsletter_create_draft`/`update_draft` passano il corpo Markdown per `marked.parse()`, che produce HTML vero (`<strong>`, `<h2>`, `<ul>`, `<img>`...) salvato in modalità `html`, la stessa che la console admin già gestisce per i corpi scritti fuori dall'editor rich text.
+
+## Foto
+`src/server/mcp/media.ts` scarica un'immagine da un URL https e la ripubblica nel bucket **`logbook-media`** — lo stesso dell'upload manuale in `ArticleEditor.tsx` e in `AdminNewsletterManager.tsx` — invece di lasciare l'articolo a puntare verso un dominio esterno e fragile. Limiti: solo https, solo JPG/PNG/WEBP/GIF, 12MB. `article_upload_image` (cartella default `articles`, usa `covers` per le cover) e `newsletter_upload_image` (cartella default `newsletter`) restituiscono l'URL pubblico da usare come `cover_image` o dentro il corpo Markdown.
 
 ## Configurazione
 - Env Vercel: `MCP_TOKEN_PEPPER` (≥32 caratteri). `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` erano già presenti.
@@ -60,10 +86,12 @@ Prompt: `pianifica-mese`, `bozza-da-appunti`, `digest-newsletter`.
   ```
 - Ispezione manuale: `npx @modelcontextprotocol/inspector` → [[20 - Comandi e Workflow]].
 
+## Impostazioni articolo coperte
+`article_create_draft`/`article_update` non toccano solo il corpo: cover con punto focale (`cover_focal_x/y`) e zoom (`cover_zoom`), slug bilingui SEO (`slug_it`/`slug_en`, indicizzati unique case-insensitive — un duplicato torna come errore DB leggibile), tag (per nome: risolti su quelli esistenti o creati al volo, **sostituiscono** l'elenco esistente quando passati, non lo sommano — stessa semantica "cancella e riscrivi" di `ArticleEditor.tsx`), autori (`{profile_id, role}`, stessa sostituzione, il profilo deve già esistere), collegamento voyage/waypoint/segmento, posizione (`location_name`/`latitude`/`longitude`). `article_get` li restituisce tutti, tag inclusi per nome.
+
 ## Non ancora fatto
 - **Invio di prova della newsletter**: richiederebbe logica nuova, che per `AGENTS.md` va in `@pynkstudio/newsletterapp` con bump dei due pin, non qui.
-- **OAuth 2.1**: serve solo per il pulsante "Connect" dei connector su claude.ai. Con Claude Code e Claude Desktop basta il token.
-- **Media**: nessun tool di upload; la libreria media resta su `/admin/media`.
+- **Libreria media**: i tool caricano un'immagine puntuale nel bucket, non gestiscono la libreria (`/admin/media`) né creano profili autore.
 
 ## Collegamenti
 - [[16 - Admin]] · [[15 - Semantic Layer (AI Agents)]] · [[12 - Newsletter ed Email]] · [[10 - API Vercel]] · [[08 - Supabase]] · [[17 - Content Model]]

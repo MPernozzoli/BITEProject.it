@@ -84,3 +84,28 @@ export function firstQueryParam(req: NodeRequest, key: string): string | null {
     return null;
   }
 }
+
+/**
+ * CORS aperto per gli endpoint OAuth del server MCP.
+ *
+ * Sono endpoint di scoperta e scambio token, pensati per essere letti da client
+ * di terze parti (incluso un browser su un altro dominio): senza questi header
+ * il flusso di connessione si ferma prima di cominciare. Non espongono dati
+ * dell'utente — i metadata sono pubblici per definizione e il token endpoint
+ * pretende comunque code + PKCE.
+ */
+export function setPublicCors(res: NodeResponse, methods: string): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", `${methods}, OPTIONS`);
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version");
+  res.setHeader("Access-Control-Max-Age", "86400");
+}
+
+/** Risponde a un preflight. Ritorna true quando la richiesta è stata gestita. */
+export function handlePreflight(req: NodeRequest, res: NodeResponse, methods: string): boolean {
+  if (req.method !== "OPTIONS") return false;
+  setPublicCors(res, methods);
+  res.statusCode = 204;
+  res.end();
+  return true;
+}
