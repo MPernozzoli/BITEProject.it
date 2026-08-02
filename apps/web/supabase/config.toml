@@ -40,8 +40,16 @@ verify_jwt = false
 
 # --- interne: cron, service role o admin autenticato ---
 
+# Invocata da pg_cron, che manda `x-cron-secret` e **nessun** header
+# `Authorization`: con `verify_jwt = true` il gateway la respingeva prima ancora
+# di arrivare alla function, e il cron ogni 5 minuti prendeva 401 da mesi.
+# Stesso schema di process-email-queue, publish-scheduled-articles e
+# publish-social-queue, tutte a `false`: l'autorizzazione la fa la function con
+# `authorizeOperator` — secret del cron in confronto a tempo costante, oppure
+# service token, oppure sessione admin verificata via `has_role`. Senza nulla
+# di tutto ciò risponde 401.
 [functions.newsletter-dispatch]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-newsletter-digest]
 verify_jwt = true
