@@ -36,6 +36,25 @@ import {
   buildNewsletterPreviewVariables,
   renderNewsletterMergeTags,
 } from "@/lib/newsletter";
+import {
+  aggregateDeliveryMetrics,
+  buildMessagePayload,
+  collectMissingFields,
+  createEmptyBodyModes as createEmptyBodyModesBase,
+  createEmptyFormState,
+  createEmptyJsonTranslations as createEmptyJsonTranslationsBase,
+  createEmptyStringTranslations as createEmptyStringTranslationsBase,
+  getMessageReadiness as getMessageReadinessBase,
+  hasBodyForLanguage as hasBodyForLanguageBase,
+  isValidScheduleInput,
+  parseBodyModes as parseBodyModesBase,
+  parseJsonTranslations as parseJsonTranslationsBase,
+  parseStringTranslations as parseStringTranslationsBase,
+  resolvePreviewValue as resolvePreviewValueBase,
+  toDateTimeLocalValue,
+  type ComposerLanguages,
+  type MissingField,
+} from "@pynkstudio/newsletterapp/admin";
 
 type NewsletterKind = "campaign" | "automation";
 type AutomationTrigger = "subscribed" | "unsubscribed";
@@ -128,97 +147,63 @@ interface NewsletterFormState {
   bodyModeTranslations: TranslationBodyModeMap;
 }
 
-const languageCodes = ALL_LANGUAGES.map((language) => language.code);
 const requiredLanguages: ExtendedLanguage[] = ["it", "en"];
 const optionalLanguages = ALL_LANGUAGES.filter(
   (language) => !requiredLanguages.includes(language.code)
 );
 
-const createEmptyStringTranslations = (): TranslationStringMap =>
-  Object.fromEntries(languageCodes.map((code) => [code, ""])) as TranslationStringMap;
-
-const createEmptyJsonTranslations = (): TranslationJsonMap =>
-  Object.fromEntries(languageCodes.map((code) => [code, null])) as TranslationJsonMap;
-
-const createEmptyBodyModes = (): TranslationBodyModeMap =>
-  Object.fromEntries(languageCodes.map((code) => [code, "richtext"])) as TranslationBodyModeMap;
-
-const emptyFormState = (): NewsletterFormState => ({
-  id: null,
-  name: "",
-  kind: "campaign",
-  fromName: "BITE",
-  scheduledAt: "",
-  automationTrigger: "subscribed",
-  automationDelayMinutes: 0,
-  automationActive: true,
-  subjectTranslations: createEmptyStringTranslations(),
-  preheaderTranslations: createEmptyStringTranslations(),
-  bodyHtmlTranslations: createEmptyStringTranslations(),
-  bodyJsonTranslations: createEmptyJsonTranslations(),
-  bodyModeTranslations: createEmptyBodyModes(),
-});
-
-const parseStringTranslations = (value: Json): TranslationStringMap => {
-  const next = createEmptyStringTranslations();
-  if (!value || typeof value !== "object" || Array.isArray(value)) return next;
-
-  for (const code of languageCodes) {
-    const maybeValue = (value as Record<string, unknown>)[code];
-    if (typeof maybeValue === "string") next[code] = maybeValue;
-  }
-
-  return next;
+/**
+ * Il package ragiona su codici lingua generici; BITE li tipizza con
+ * `ExtendedLanguage`. I cast al confine sono l'unico adattamento: la logica
+ * (quali lingue sono obbligatorie, cosa conta come corpo, come si compatta una
+ * mappa di traduzioni) vive in `@pynkstudio/newsletterapp/admin`, così non può
+ * divergere dal dispatcher.
+ */
+const composerLanguages: ComposerLanguages = {
+  all: ALL_LANGUAGES.map((language) => language.code),
+  required: requiredLanguages,
 };
 
-const parseJsonTranslations = (value: Json): TranslationJsonMap => {
-  const next = createEmptyJsonTranslations();
-  if (!value || typeof value !== "object" || Array.isArray(value)) return next;
+const createEmptyStringTranslations = () =>
+  createEmptyStringTranslationsBase(composerLanguages) as TranslationStringMap;
 
-  for (const code of languageCodes) {
-    const maybeValue = (value as Record<string, Json | null>)[code];
-    if (maybeValue) next[code] = maybeValue;
-  }
+const createEmptyJsonTranslations = () =>
+  createEmptyJsonTranslationsBase(composerLanguages) as TranslationJsonMap;
 
-  return next;
-};
+const createEmptyBodyModes = () =>
+  createEmptyBodyModesBase(composerLanguages) as TranslationBodyModeMap;
+
+const emptyFormState = (): NewsletterFormState =>
+  createEmptyFormState(composerLanguages, { fromName: "BITE" }) as NewsletterFormState;
+
+const parseStringTranslations = (value: Json): TranslationStringMap =>
+  parseStringTranslationsBase(value, composerLanguages) as TranslationStringMap;
+
+const parseJsonTranslations = (value: Json): TranslationJsonMap =>
+  parseJsonTranslationsBase(value, composerLanguages) as TranslationJsonMap;
 
 const parseBodyModes = (
   value: Json,
   bodyJsonTranslations: TranslationJsonMap,
   bodyHtmlTranslations: TranslationStringMap
-): TranslationBodyModeMap => {
-  const next = createEmptyBodyModes();
+): TranslationBodyModeMap =>
+  parseBodyModesBase(
+    value,
+    bodyJsonTranslations,
+    bodyHtmlTranslations,
+    composerLanguages
+  ) as TranslationBodyModeMap;
 
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    for (const code of languageCodes) {
-      const maybeValue = (value as Record<string, unknown>)[code];
-      if (maybeValue === "html" || maybeValue === "richtext") {
-        next[code] = maybeValue;
-      }
-    }
-  }
-
-  for (const code of languageCodes) {
-    if (next[code] === "richtext" && !bodyJsonTranslations[code] && bodyHtmlTranslations[code].trim()) {
-      next[code] = "html";
-    }
-  }
-
-  return next;
-};
-
-const compactStringTranslations = (value: TranslationStringMap) =>
-  Object.fromEntries(Object.entries(value).filter(([, entry]) => entry.trim().length > 0));
-
-const compactJsonTranslations = (value: TranslationJsonMap) =>
-  Object.fromEntries(Object.entries(value).filter(([, entry]) => Boolean(entry)));
+const hasBodyForLanguage = (
+  bodyHtmlTranslations: TranslationStringMap,
+  bodyJsonTranslations: TranslationJsonMap,
+  language: ExtendedLanguage
+) => hasBodyForLanguageBase(bodyHtmlTranslations, bodyJsonTranslations, language);
 
 const getLanguageLabel = (language: ExtendedLanguage) =>
   ALL_LANGUAGES.find((entry) => entry.code === language)?.label ?? language.toUpperCase();
 
-const formatDateTimeLocal = (value: string | null) =>
-  value ? new Date(value).toISOString().slice(0, 16) : "";
+const formatDateTimeLocal = toDateTimeLocalValue;
 
 const getCampaignStatusLabel = (status: string) => {
   if (status === "scheduled") return "Programmato";
@@ -236,22 +221,14 @@ const getReadableEvent = (eventType: string) =>
 const resolvePreviewValue = (
   values: TranslationStringMap,
   selectedLanguage: ExtendedLanguage
-) =>
-  values[selectedLanguage] ||
-  values.it ||
-  values.en ||
-  Object.values(values).find(Boolean) ||
-  "";
+) => resolvePreviewValueBase(values, selectedLanguage, composerLanguages);
 
-const hasJsonValue = (value: Json | null) =>
-  Boolean(value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0);
-
-const hasBodyForLanguage = (
-  bodyHtmlTranslations: TranslationStringMap,
-  bodyJsonTranslations: TranslationJsonMap,
-  language: ExtendedLanguage
-) =>
-  bodyHtmlTranslations[language].trim().length > 0 || hasJsonValue(bodyJsonTranslations[language]);
+/** Etichette dei campi mancanti. Il package li restituisce strutturati. */
+const describeMissingField = (missing: MissingField) => {
+  if (missing.field === "name") return "nome interno";
+  const label = missing.language.toUpperCase();
+  return missing.field === "subject" ? `subject ${label}` : `contenuto ${label}`;
+};
 
 const MetricCard = ({
   label,
@@ -668,30 +645,16 @@ const AdminNewsletterManager = () => {
     }
   };
 
-  const collectMissingRequiredFields = (state: NewsletterFormState) => {
-    const missing: string[] = [];
-    if (!state.name.trim()) missing.push("nome interno");
-
-    for (const language of requiredLanguages) {
-      if (!state.subjectTranslations[language].trim()) {
-        missing.push(`subject ${language.toUpperCase()}`);
-      }
-      if (!hasBodyForLanguage(state.bodyHtmlTranslations, state.bodyJsonTranslations, language)) {
-        missing.push(`contenuto ${language.toUpperCase()}`);
-      }
-    }
-
-    return missing;
-  };
-
   const saveMessage = async () => {
-    const missingFields = collectMissingRequiredFields(form);
+    const missingFields = collectMissingFields(form, composerLanguages);
     if (missingFields.length > 0) {
-      toast.error(`Completa i campi richiesti: ${missingFields.join(", ")}.`);
+      toast.error(
+        `Completa i campi richiesti: ${missingFields.map(describeMissingField).join(", ")}.`
+      );
       return;
     }
 
-    if (form.kind === "campaign" && form.scheduledAt && Number.isNaN(new Date(form.scheduledAt).valueOf())) {
+    if (form.kind === "campaign" && !isValidScheduleInput(form.scheduledAt)) {
       toast.error("La data di schedulazione non è valida.");
       return;
     }
@@ -702,30 +665,10 @@ const AdminNewsletterManager = () => {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const payload = {
-      name: form.name.trim(),
-      kind: form.kind,
-      from_name: form.fromName.trim() || "BITE",
-      scheduled_at:
-        form.kind === "campaign" && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
-      automation_trigger: form.kind === "automation" ? form.automationTrigger : null,
-      automation_delay_minutes: form.kind === "automation" ? form.automationDelayMinutes : 0,
-      status:
-        form.kind === "campaign"
-          ? form.scheduledAt
-            ? "scheduled"
-            : "draft"
-          : form.automationActive
-            ? "active"
-            : "paused",
-      subject_translations: compactStringTranslations(form.subjectTranslations),
-      preheader_translations: compactStringTranslations(form.preheaderTranslations),
-      body_html_translations: compactStringTranslations(form.bodyHtmlTranslations),
-      body_json_translations: compactJsonTranslations(form.bodyJsonTranslations),
-      body_mode_translations: form.bodyModeTranslations,
-      created_by: user?.id || null,
-      updated_at: new Date().toISOString(),
-    };
+    const payload = buildMessagePayload(form, {
+      createdBy: user?.id ?? null,
+      fallbackFromName: "BITE",
+    });
 
     const mutation = form.id
       ? (supabase as any).from("newsletter_messages").update(payload).eq("id", form.id)
@@ -800,39 +743,21 @@ const AdminNewsletterManager = () => {
     await fetchNewsletterData();
   };
 
-  const getMessageMetrics = (messageId: string) => {
-    const messageDeliveries = deliveries.filter((delivery) => delivery.newsletter_message_id === messageId);
-    const sent = messageDeliveries.filter((delivery) => ["sent", "opened", "clicked"].includes(delivery.status)).length;
-    const opened = messageDeliveries.filter((delivery) => delivery.open_count > 0).length;
-    const clicked = messageDeliveries.filter((delivery) => delivery.click_count > 0).length;
-    const suppressed = messageDeliveries.filter((delivery) => delivery.status === "suppressed").length;
-
-    return {
-      total: messageDeliveries.length,
-      sent,
-      opened,
-      clicked,
-      suppressed,
-    };
-  };
+  const getMessageMetrics = (messageId: string) =>
+    aggregateDeliveryMetrics(
+      deliveries.filter((delivery) => delivery.newsletter_message_id === messageId)
+    );
 
   const getMessageReadiness = (message: NewsletterMessage) => {
-    const subjectTranslations = parseStringTranslations(message.subject_translations);
-    const bodyHtmlTranslations = parseStringTranslations(message.body_html_translations);
-    const bodyJsonTranslations = parseJsonTranslations(message.body_json_translations);
-
-    const missing = requiredLanguages.flatMap((language) => {
-      const issues: string[] = [];
-      if (!subjectTranslations[language].trim()) issues.push(`${language.toUpperCase()} subject`);
-      if (!hasBodyForLanguage(bodyHtmlTranslations, bodyJsonTranslations, language)) {
-        issues.push(`${language.toUpperCase()} body`);
-      }
-      return issues;
-    });
+    const { ready, missing } = getMessageReadinessBase(message, composerLanguages);
 
     return {
-      ready: missing.length === 0,
-      missing,
+      ready,
+      missing: missing.map((issue) =>
+        issue.field === "name"
+          ? "nome interno"
+          : `${issue.language.toUpperCase()} ${issue.field === "subject" ? "subject" : "body"}`
+      ),
     };
   };
 

@@ -56,14 +56,27 @@ cp src/integrations/supabase/types.ts ../crew/src/integrations/supabase/types.ts
 
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
-Per `@pynkstudio/mailapp` usare il tarball GitHub pubblico già presente in `package.json`, **pinnato a un tag** (`archive/refs/tags/vX.Y.Z.tar.gz`): non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel. L'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale).
+Per `@pynkstudio/mailapp` e `@pynkstudio/newsletterapp` usare il tarball GitHub pubblico già presente in `package.json`, **pinnato a un tag** (`archive/refs/tags/vX.Y.Z.tar.gz`): non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel. Per mailapp l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale); newsletterapp non ha peer dependencies.
 
-Quando si cambia la logica mail, l'intervento va fatto **nel package** (`~/Documents/Unreal Projects/siti/pynkstudio-mailapp`), non qui:
+Quando si cambia la logica mail o newsletter, l'intervento va fatto **nel package**, non qui —
+`~/Documents/Unreal Projects/siti/pynkstudio-mailapp` e `~/Documents/Unreal Projects/siti/pynkstudio-newsletterapp`:
 ```bash
 npm run typecheck && npm run test && npm run build   # nel repo del package
 git add -A && git commit && git tag vX.Y.Z && git push origin main --tags
 ```
 Poi aggiornare l'URL del tarball in `apps/web/package.json` e reinstallare. `dist/` è committato di proposito, perché gli install da tarball GitHub non eseguono la build.
+
+Per **newsletterapp** ci sono due pin da aggiornare, non uno:
+1. il tarball in `apps/web/package.json` (route Vercel + console admin);
+2. l'URL raw in `apps/web/supabase/functions/_shared/newsletterapp.ts` (edge function), che usa l'albero `deno/` — anche quello committato, perché Deno lo scarica direttamente.
+
+Le edge function si deployano separatamente dall'app web: se i due pin divergono, i due runtime eseguono versioni diverse della stessa logica.
+
+Verifica delle edge function dopo un cambio (nessun Deno installato di default, `npx` lo scarica):
+```bash
+cd apps/web && npx deno@2 check --no-lock --node-modules-dir=auto supabase/functions/newsletter-*/index.ts
+```
+Rimuovere `apps/web/node_modules` dopo: `--node-modules-dir=auto` lo crea per risolvere gli specifier `npm:`.
 
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]] · [[23 - Community]]

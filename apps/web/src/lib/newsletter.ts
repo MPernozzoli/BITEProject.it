@@ -1,103 +1,67 @@
-export const NEWSLETTER_MERGE_TAGS = [
-  { token: "{{user_name}}", label: "Nome completo" },
-  { token: "{{first_name}}", label: "Nome" },
-  { token: "{{greeting_name}}", label: "Nome saluto" },
-  { token: "{{user_email}}", label: "Email utente" },
-  { token: "{{preferred_language}}", label: "Lingua preferita" },
-  { token: "{{profile_url}}", label: "URL profilo" },
-  { token: "{{unsubscribe_url}}", label: "URL disiscrizione" },
-  { token: "{{site_url}}", label: "URL sito" },
-  { token: "{{message_name}}", label: "Nome messaggio" },
-  { token: "{{delivery_type}}", label: "Tipo invio" },
-  { token: "{{event_type}}", label: "Evento automazione" },
-  { token: "{{subscriber_source}}", label: "Sorgente iscrizione" },
-  { token: "{{today}}", label: "Data ISO" },
-  { token: "{{current_year}}", label: "Anno corrente" },
-] as const;
+/**
+ * Adattatore client verso `@pynkstudio/newsletterapp`.
+ *
+ * Merge tag, validazione del composer, metriche e tolleranza alle tabelle non
+ * ancora migrate vivono nel package; qui restano solo le etichette in italiano
+ * e il binding alla configurazione di BITE.
+ *
+ * Non aggiungere logica qui: qualsiasi comportamento nuovo va nel package.
+ */
+import {
+  NEWSLETTER_MERGE_TAGS as PACKAGE_MERGE_TAGS,
+  buildPreviewVariables,
+  createOptionalFunctionInvoker,
+  isMissingSupabaseResourceError,
+  normalizeOptionalSelectResult,
+  renderMergeTags,
+} from "@pynkstudio/newsletterapp/core";
+import type { NewsletterBodyMode } from "@pynkstudio/newsletterapp/admin";
 
-const unavailableEdgeFunctions = new Set<string>();
+import { newsletterConfig } from "./newsletter-config";
 
-const getErrorStatus = (error: unknown): number | undefined => {
-  if (!error || typeof error !== "object") return undefined;
+export { isMissingSupabaseResourceError, normalizeOptionalSelectResult };
+export type { NewsletterBodyMode };
 
-  const status = (error as { status?: unknown }).status;
-  return typeof status === "number" ? status : undefined;
+/** Etichette del selettore tag nel composer. Il package espone solo le chiavi. */
+const MERGE_TAG_LABELS: Record<string, string> = {
+  user_name: "Nome completo",
+  first_name: "Nome",
+  greeting_name: "Nome saluto",
+  user_email: "Email utente",
+  preferred_language: "Lingua preferita",
+  profile_url: "URL profilo",
+  unsubscribe_url: "URL disiscrizione",
+  site_url: "URL sito",
+  message_name: "Nome messaggio",
+  delivery_type: "Tipo invio",
+  event_type: "Evento automazione",
+  subscriber_source: "Sorgente iscrizione",
+  today: "Data ISO",
+  current_year: "Anno corrente",
 };
 
-export const isMissingSupabaseResourceError = (error: unknown) => {
-  if (!error || typeof error !== "object") return false;
+export const NEWSLETTER_MERGE_TAGS = PACKAGE_MERGE_TAGS.map((tag) => ({
+  token: tag.token,
+  label: MERGE_TAG_LABELS[tag.labelKey] ?? tag.labelKey,
+}));
 
-  const status = getErrorStatus(error);
-  const message = "message" in error && typeof error.message === "string" ? error.message : "";
-  const details = "details" in error && typeof error.details === "string" ? error.details : "";
-  const code = "code" in error && typeof error.code === "string" ? error.code : "";
-  const hint = "hint" in error && typeof error.hint === "string" ? error.hint : "";
-  const combined = `${message} ${details} ${hint}`.toLowerCase();
+export const renderNewsletterMergeTags = renderMergeTags;
 
-  return (
-    status === 404 ||
-    code === "42P01" ||
-    code === "PGRST205" ||
-    combined.includes("does not exist") ||
-    combined.includes("could not find the table") ||
-    combined.includes("relation") && combined.includes("does not exist")
-  );
-};
+/**
+ * Stesse variabili di un invio reale, con valori di esempio: l'anteprima del
+ * composer non può divergere da ciò che riceve un destinatario.
+ */
+export const buildNewsletterPreviewVariables = (messageName: string, language: string) =>
+  buildPreviewVariables(newsletterConfig, {
+    messageName,
+    language,
+    sampleName: "Massimo",
+    sampleEmail: "massimo@example.com",
+  });
 
-export const invokeOptionalNewsletterFunction = async <TData = unknown>(
-  invoke: (name: string, options: { body: Record<string, unknown> }) => Promise<{ data: TData | null; error: unknown }>,
-  name: string,
-  body: Record<string, unknown>,
-) => {
-  if (unavailableEdgeFunctions.has(name)) {
-    return { data: null, error: null, unavailable: true };
-  }
-
-  const { data, error } = await invoke(name, { body });
-
-  if (isMissingSupabaseResourceError(error)) {
-    unavailableEdgeFunctions.add(name);
-    return { data: null, error: null, unavailable: true };
-  }
-
-  return { data, error, unavailable: false };
-};
-
-export const normalizeOptionalSelectResult = <TRow>(
-  result: { data: TRow[] | null; error: unknown },
-) => {
-  if (isMissingSupabaseResourceError(result.error)) {
-    return { data: [] as TRow[], error: null, unavailable: true };
-  }
-
-  return {
-    data: (result.data ?? []) as TRow[],
-    error: result.error,
-    unavailable: false,
-  };
-};
-
-export type NewsletterBodyMode = "richtext" | "html";
-
-export const renderNewsletterMergeTags = (
-  template: string,
-  variables: Record<string, string>
-) =>
-  template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => variables[key] ?? "");
-
-export const buildNewsletterPreviewVariables = (messageName: string, language: string) => ({
-  user_name: "Massimo",
-  first_name: "Massimo",
-  greeting_name: "Massimo",
-  user_email: "massimo@example.com",
-  preferred_language: language,
-  profile_url: "https://biteproject.it/profile/demo-user",
-  unsubscribe_url: "https://biteproject.it/unsubscribe?token=demo",
-  site_url: "https://biteproject.it",
-  message_name: messageName || "Newsletter Demo",
-  delivery_type: "campaign",
-  event_type: "subscribed",
-  subscriber_source: "profile",
-  today: new Date().toISOString().slice(0, 10),
-  current_year: String(new Date().getFullYear()),
-});
+/**
+ * Le edge function newsletter vengono deployate separatamente dall'app: finché
+ * una non esiste, la console deve degradare invece di rompersi. L'invoker
+ * ricorda i 404 così un pannello che fa polling non li ripete a ogni refresh.
+ */
+export const invokeOptionalNewsletterFunction = createOptionalFunctionInvoker();

@@ -8,6 +8,39 @@ tags: [newsletter, email, notifiche, funzionalita]
 Sistema completo di newsletter + email transazionali, interamente su [[09 - Edge Functions]].
 Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come origine storica del progetto e non è più un provider email/auth.
 
+## ⚠️ Dove si scrive la logica newsletter
+**Dal 2 agosto 2026 la logica newsletter vive in `@pynkstudio/newsletterapp`, non in questa repo.**
+Gemello di `@pynkstudio/mailapp`: quello possiede la casella di posta, questo possiede la lista.
+
+- Repo: `PynkStudio/pynkstudio-newsletterapp` (clone locale `~/Documents/Unreal Projects/siti/pynkstudio-newsletterapp`), pinnato al tag `v0.1.2`.
+- Doppio consumo: **npm** (`archive/refs/tags/v0.1.2.tar.gz`) per le route Vercel e la console admin; **URL raw** dell'albero `deno/` per le edge function, perché Deno risolve gli specifier alla lettera e non può usare `dist/` (scritto con estensioni `.js` per Node ESM). Le due versioni vanno tenute allineate.
+- Il tag per le edge function è dichiarato **in un punto solo**: `supabase/functions/_shared/newsletterapp.ts`. Puntare a `main` cambierebbe il comportamento senza un deploy.
+
+**Regola:** qualsiasi aggiornamento futuro alla newsletter va scritto nel package. Vale per iscrizione e consenso, anti-abuso, semantica delle preferenze, soppressioni, dispatch e deduplica, trigger e ritardi delle automazioni, schedulazione del digest, tracking, merge tag, validazione e metriche della console.
+
+Resta in questa repo **solo** ciò che non è riutilizzabile altrove:
+- la shell grafica delle email (`_shared/newsletter-email.tsx`): font, colori, header, footer;
+- il copy in italiano e le traduzioni (etichette dei merge tag, stati, messaggi della console);
+- il content model — *quali* articoli entrano nel digest e come sono impaginati nel payload del template (`send-newsletter-digest`);
+- gli agganci operativi che esistono solo qui: il worker della coda email, il dispatch delle notifiche di engagement, l'autorizzazione del webhook soppressioni;
+- la configurazione BITE: dominio, mittente, lingue, canali push, automazione `story-new-article-notification`.
+
+Se qualcosa è *quasi* riutilizzabile, si aggiunge un campo o una callback opzionale al package con un default sensato — non si biforca la logica qui.
+
+### Mappa dei file
+| Qui | Cosa contiene |
+| --- | --- |
+| `src/lib/newsletter-config.ts` | config BITE isomorfa (dominio, mittente, lingue), usata da console e route Vercel |
+| `src/server/newsletter.ts` | contesto Vercel: config + client service-role. Niente renderer né sender: le route Vercel fanno solo tracking e one-click |
+| `src/lib/newsletter.ts` | adattatore client: etichette merge tag in italiano + binding alla config |
+| `supabase/functions/_shared/newsletterapp.ts` | pin della versione del package per le edge function |
+| `supabase/functions/_shared/newsletter.ts` | config + contesto edge: shell email, sender transazionale, canali push, automazioni BITE, `serveNewsletter()` |
+| `supabase/functions/_shared/{newsletter-helpers,email-preferences,system-email-automation,newsletter-subscription-activation}.ts` | adattatori sottili: mantengono la firma vecchia per le function non-newsletter che li importano. **Non aggiungere logica qui** |
+
+Le edge function newsletter sono ora file da ~10 righe che montano un handler del package. Le uniche con corpo sono `send-newsletter-digest` (content model) e `newsletter-dispatch` (agganci operativi).
+
+Migrazioni: il package pubblica lo schema canonico in `migrations/` (`0001_newsletter_schema.sql`, `0002_newsletter_tracking_functions.sql`). Vanno applicate esplicitamente — vedi la nota sul cron più sotto, che resta aperta.
+
 ## Naming pubblico
 - A livello commerciale/utente il servizio **non si chiama "newsletter"**: si chiama **"Appunti dalla barca"** (IT) / **"Notes from the boat"** (EN). Vale per copy home, consenso, toast, pagine `/newsletter/confirm` e `/unsubscribe`, SEO e le email utente (conferma iscrizione, benvenuto, digest).
 - "newsletter" resta solo come termine tecnico/interno: nomi di tabelle (`newsletter_*`), edge functions (`newsletter-dispatch`, ecc.), pannello `AdminNewsletterManager` e categoria generica nella privacy policy.
@@ -36,11 +69,15 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 - `handle-email-unsubscribe` → pagina `/unsubscribe`
 - `handle-email-suppression` → gestione interna bounce/soppressioni; i webhook pubblici Resend della mail app passano da Vercel (`/api/webhooks/email/inbound`)
 - Protezione di `newsletter-subscribe`: honeypot, consenso obbligatorio, cooldown per indirizzo (`resend_cooldown_minutes`) e rate limit per IP (10 richieste/ora) tramite `consume_rate_limit()` — il cooldown per indirizzo da solo non impediva di iterare su indirizzi diversi usando il dominio per spedire conferme non richieste. La ricerca del subscriber usa due query separate invece di un `.or()` costruito per concatenazione, perché i valori interpolati nei filtri PostgREST non sono parametrizzati.
+- L'endpoint **non rivela mai** se un indirizzo è già iscritto: honeypot, indirizzo altrui già iscritto e conferma spedita rispondono tutti `{ success: true }`. Chi cambia il mapping HTTP nel package deve preservarlo.
+- Un utente autenticato che iscrive **il proprio** indirizzo salta il double opt-in: il possesso è già dimostrato. Tutti i percorsi di attivazione (conferma via email, switch nel profilo, fallback senza conferma) passano da `activateNewsletterSubscription`, quindi iscriversi ha sempre gli stessi effetti collaterali.
 - Lib client: `apps/web/src/lib/newsletter.ts`, `apps/web/src/lib/email-notification-preferences.ts`
 
 ## Invio & digest
 - `newsletter-dispatch` — dispatch campagne; dopo aver accodato invoca inline `process-email-queue` (se ci sono consegne accodate) così le campagne partono subito senza dipendere dal cron/dashboard.
-- **⚠️ Cron `newsletter-dispatch` NON ancora applicato:** la migrazione `20260725100000_newsletter_atomic_tracking_and_dispatch_cron.sql` esiste nel repo (contatori atomici `newsletter_register_open`/`newsletter_register_click` + `invoke_newsletter_dispatch()` schedulata ogni 5 minuti) ma **non è stata eseguita sul database remoto**: `newsletter_register_open`, `newsletter_register_click` e `invoke_newsletter_dispatch` non esistono come funzioni, e il job cron non è schedulato. Il blocco reale è più a monte — `newsletter-dispatch/index.ts` legge/scrive `newsletter_deliveries`, `newsletter_campaigns`, `newsletter_messages` ed `newsletter_events`, nessuna delle quali esiste nello schema remoto né ha una migrazione (locale o remota) che le crei. Applicare `20260725100000` da sola schedulerebbe un cron ogni 5 minuti che fallisce sempre e attiverebbe funzioni di tracking puntate a tabelle inesistenti. Prima di applicarla serve la migrazione che crea lo schema `newsletter_deliveries`/`newsletter_campaigns`/`newsletter_messages`/`newsletter_events` — verificare con chi ha scritto `newsletter-dispatch/index.ts` se quella migrazione esiste altrove o va ancora scritta.
+- **⚠️ Cron `newsletter-dispatch` NON ancora applicato — ma il blocco a monte ora ha una soluzione.** La migrazione `20260725100000_newsletter_atomic_tracking_and_dispatch_cron.sql` esiste nel repo (contatori atomici + `invoke_newsletter_dispatch()` ogni 5 minuti) ma **non è stata eseguita sul database remoto**. Il motivo era che `newsletter_deliveries`, `newsletter_messages` e `newsletter_events` non esistevano nello schema remoto e nessuna migrazione le creava: applicare `20260725100000` da sola avrebbe schedulato un cron che fallisce sempre.
+  **Lo schema mancante ora è pubblicato dal package** (`@pynkstudio/newsletterapp/migrations/0001_newsletter_schema.sql`, più `0002` per i contatori atomici, che sono gli stessi di `20260725100000`). Ordine per sbloccare: applicare `0001`, poi `0002`, verificare che le tabelle esistano, e solo allora applicare la parte cron di `20260725100000`. **Non ancora fatto: richiede una decisione umana**, perché attiva invii periodici su dati di produzione.
+  Nota su `0001`: è tutto `if not exists`, quindi non tocca le tabelle già presenti (`newsletter_subscribers`, `newsletter_confirmation_tokens`, `email_unsubscribe_tokens`, `newsletter_unsubscribe_feedback`, `email_notification_preferences`, `suppressed_emails`, `system_email_automations`). Verificare comunque le colonne prima di applicarla: quelle esistenti sono nate a mano e potrebbero divergere dallo schema canonico.
 - `send-newsletter-digest` — digest periodico, innescato da `processWeeklyDigestAutomation()` dentro `newsletter-dispatch`
 - `process-email-queue` — worker della coda email (verify_jwt) con invio Resend, retry/backoff e DLQ. Triggerato da: `contact-form-submit`, `newsletter-dispatch` (inline) e dal cron versionato `process-email-queue` ogni 5 minuti via `invoke_email_queue_worker()`.
 - `send-transactional-email` / `preview-transactional-email` — email transazionali + anteprima service-role; i template registrati condividono uno shell editoriale BITE e componenti brand per card, pill, dettagli, tratte e importi.
@@ -55,7 +92,9 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 
 ## Disiscrizione a un solo click (RFC 8058)
 - `process-email-queue` emette `List-Unsubscribe` e `List-Unsubscribe-Post: List-Unsubscribe=One-Click` su ogni messaggio in coda che porta un `unsubscribe_token` (newsletter, transazionali con token, contact form). Le email di autenticazione non ne hanno e non devono averlo. È un requisito dei bulk sender per Gmail, Yahoo e Microsoft.
-- Il target è `/api/email/unsubscribe` sul dominio del brand, non su `*.supabase.co`: è l'URL che i provider mostrano accanto al mittente e concorre alla reputazione del dominio. In `GET` reindirizza alla pagina `/unsubscribe` (scelta granulare + motivo), in `POST` inoltra il one-click a `handle-email-unsubscribe`, che già gestiva il corpo `List-Unsubscribe=One-Click`.
+- Il target è `/api/email/unsubscribe` sul dominio del brand, non su `*.supabase.co`: è l'URL che i provider mostrano accanto al mittente e concorre alla reputazione del dominio. In `GET` reindirizza alla pagina `/unsubscribe` (scelta granulare + motivo); in `POST` **applica direttamente** la disiscrizione tramite il package, invece di inoltrarla a `handle-email-unsubscribe`. Da quando la logica è nel package è la stessa in entrambi i posti, quindi il percorso è un hop solo. L'edge function resta pubblicata perché le email già spedite puntano ancora lì.
+- Un token già usato o sconosciuto risponde `200`: per il provider non c'è nulla da riprovare, e un 5xx lo farebbe insistere.
+- **Disiscriversi dalla newsletter non è disiscriversi da tutto.** La soppressione globale (riga in `suppressed_emails`) scatta solo quando *nessun* canale email resta attivo. Simmetricamente, una re-iscrizione cancella solo le soppressioni con `reason = 'unsubscribe'`: bounce e reclami sono verdetti del provider e sopravvivono.
 
 ## Notifiche di pubblicazione
 - `notify-article-publication` — nuovo articolo
@@ -85,7 +124,11 @@ Lo stack operativo è **Supabase + Vercel + Resend**: Lovable resta solo come or
 - Localizzazione (it/en): ogni template accetta una prop `locale` (`'it' | 'en'`, con copy dict interno) e imposta `<Html lang={locale}>`; anche `EMAIL_SUBJECTS` in `auth-email-hook/index.ts` è per-locale. La risoluzione della lingua (`resolveLocale`) segue: `user_metadata.lang` (impostato al signup da `UserLogin.tsx` con `data: { name, lang }`) → fallback `profiles.preferred_language` (lookup service-role per `user.id`) → `DEFAULT_LOCALE = 'it'`, coerente col fallback pubblico del sito ([[03 - Routing e i18n]]). Vale sia per il webhook nativo Supabase (`parseNativeHook`) sia per l'envelope legacy interno (`parseLegacyEnvelope`, che legge `payload.data.lang`/`payload.data.user_id`). L'endpoint `/preview` accetta `locale` nel body (default `it`).
 
 ## Template & helper condivisi
-`_shared/`: `email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `system-email-automation.ts`, `transactional-email-templates/`. In `transactional-email-templates/theme.tsx` vivono i componenti condivisi di brand; `voyage-participant-invite` usa layout card, riepilogo tratta/contributo e step numerati per guidare signup/login, compilazione dati candidato e conferma.
+`_shared/`: `email-config.ts`, `newsletter-email.tsx`, `newsletterapp.ts`, `newsletter.ts`, `transactional-email-templates/`. In `transactional-email-templates/theme.tsx` vivono i componenti condivisi di brand; `voyage-participant-invite` usa layout card, riepilogo tratta/contributo e step numerati per guidare signup/login, compilazione dati candidato e conferma.
+
+`email-preferences.ts`, `newsletter-helpers.ts`, `system-email-automation.ts` e `newsletter-subscription-activation.ts` **non contengono più logica**: sono adattatori che applicano la config BITE alle funzioni del package, così le function non-newsletter che li importano (`notify-article-publication`, `notify-story-subscribers`, `dispatch-engagement-notifications`, `update-my-profile`) restano invariate. Se serve un comportamento nuovo, va nel package.
+
+`_shared/newsletter.ts` carica React e `@react-email/components` con un `import()` dinamico dentro `renderNewsletter`: lo stesso modulo è importato anche dalle function di tracking, che non renderizzano nulla e non devono pagarne il cold start.
 
 ## Push (Web Push)
 - `vapid-public-key` — espone la chiave pubblica VAPID; gestione preferenze notifiche in `ProfileNotificationsMenu.tsx` / `AdminProfile.tsx`.

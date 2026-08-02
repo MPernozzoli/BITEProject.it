@@ -47,7 +47,9 @@ tags: [frontend, lib, hooks, logica]
 - `maplibre.ts`, `map-presence.ts`
 
 ### Newsletter / notifiche → [[12 - Newsletter ed Email]]
-- `newsletter.ts`, `email-notification-preferences.ts`
+- `newsletter-config.ts` — config BITE isomorfa per `@pynkstudio/newsletterapp` (dominio, mittente, lingue). Vive in `lib/` e non in `server/newsletter.ts` perché la usa anche la console admin, e quel modulo tira dentro `web-push` e il client service-role.
+- `newsletter.ts` — **dal 2 agosto 2026 è un adattatore**: merge tag, anteprima del composer e tolleranza alle tabelle non ancora migrate arrivano dal package; qui restano solo le etichette in italiano.
+- `email-notification-preferences.ts`
 - ~~`mail-display.ts`~~ — **rimosso il 28 luglio 2026**: gli helper per nome mittente (`from_name` → firma → indirizzo), preview del solo testo nuovo e split delle citazioni sono ora in `@pynkstudio/mailapp/mailbox` (isomorfo, safe nel bundle client). `AdminMail.tsx` importa da lì → [[12 - Newsletter ed Email]].
 
 ### Profilo

@@ -31,7 +31,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 
 ### Funzionalità chiave
 - [[11 - Pagamenti Bunq]] — contributo viaggio e flusso pagamento
-- [[12 - Newsletter ed Email]] — newsletter + email transazionali
+- [[12 - Newsletter ed Email]] — newsletter + email transazionali (logica in `@pynkstudio/newsletterapp` e `@pynkstudio/mailapp`: le modifiche si scrivono lì)
 - [[13 - Booking Voyage]] — prenotazione tratte e partecipanti
 - [[23 - Community]] — BITE Crew: membership, feed, live, tier e benefit booking
 - [[21 - Tracking Real-Time Viaggi]] — date effettive, ricalcolo a cascata, stati derivati

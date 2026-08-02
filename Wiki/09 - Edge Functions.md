@@ -21,6 +21,8 @@ tags: [backend, edge-functions, serverless, supabase]
 - `newsletter-subscribe`, `confirm-newsletter-subscription`, `my-newsletter-subscription`
 - `newsletter-dispatch`, `send-newsletter-digest`
 - `newsletter-track-open`, `newsletter-track-click`
+- **Dal 2 agosto 2026 sono file da ~10 righe** che montano un handler di `@pynkstudio/newsletterapp` con `serveNewsletter()`. Le uniche con un corpo sono `send-newsletter-digest` (content model BITE) e `newsletter-dispatch` (agganci a coda email e notifiche di engagement). Anche `handle-email-unsubscribe` e `handle-email-suppression` sono montaggi; quest'ultima tiene solo l'autorizzazione del chiamante.
+- Import dall'albero `deno/` del package via URL raw, pinnato in `_shared/newsletterapp.ts`: Deno risolve gli specifier alla lettera e non può usare `dist/`, scritto con estensioni `.js` per Node ESM.
 - `notify-article-publication`, `notify-story-subscribers`
 - `publish-scheduled-articles` — pubblicazione articoli programmati. Espone `dry_run=1` per verificare la coda senza cambiare stato; in produzione viene invocata da `pg_cron` ogni minuto tramite `public.invoke_editorial_edge_function()`, `pg_net` e secret dedicato `SCHEDULED_ARTICLES_CRON_SECRET` / `scheduled_articles_cron_secret`.
 
@@ -54,7 +56,9 @@ tags: [backend, edge-functions, serverless, supabase]
 - `admin-storage-buckets` — provisioning bucket storage
 
 ## Codice condiviso (`_shared/`)
-`email-config.ts`, `email-preferences.ts`, `newsletter-email.tsx`, `newsletter-helpers.ts`, `newsletter-subscription-activation.ts`, `public-semantic.ts`, `social-oauth-auth.ts`, `system-email-automation.ts`.
+`email-config.ts`, `newsletter-email.tsx`, `newsletterapp.ts` (pin della versione del package), `newsletter.ts` (config + contesto + `serveNewsletter`), `public-semantic.ts`, `social-oauth-auth.ts`.
+
+`email-preferences.ts`, `newsletter-helpers.ts`, `system-email-automation.ts` e `newsletter-subscription-activation.ts` sopravvivono come **adattatori sottili** verso `@pynkstudio/newsletterapp`, per non toccare le function non-newsletter che li importano. Non contengono logica: nuovi comportamenti vanno nel package → [[12 - Newsletter ed Email]].
 `email-config.ts`, `auth-email-hook` e `send-transactional-email` usano `mail.biteproject.it` come sender domain per le email automatiche. L'invio effettivo passa da Resend in `process-email-queue`; la casella ordinaria admin vive invece su `/api/email/*` in [[10 - API Vercel]].
 
 ## Collegamenti
