@@ -124,6 +124,10 @@ describe("server MCP admin", () => {
         "newsletter_list_messages",
         "newsletter_create_draft",
         "newsletter_schedule",
+        "voyage_search",
+        "voyage_get",
+        "voyage_waypoint_update",
+        "voyage_waypoint_upload_image",
       ]),
     );
   });
@@ -269,5 +273,6 @@ describe("scope", () => {
     expect(MCP_SCOPES).toContain("articles:write");
     expect(MCP_SCOPES).toContain("plan:write");
     expect(MCP_SCOPES).toContain("newsletter:write");
+    expect(MCP_SCOPES).toContain("voyages:write");
   });
 });

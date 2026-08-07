@@ -20,6 +20,8 @@ export const MCP_SCOPES = [
   "newsletter:write",
   "mail:read",
   "mail:write",
+  "voyages:read",
+  "voyages:write",
 ] as const;
 
 export type McpScope = (typeof MCP_SCOPES)[number];
@@ -32,6 +34,8 @@ export const DEFAULT_MCP_SCOPES: McpScope[] = [
   "plan:write",
   "newsletter:read",
   "mail:read",
+  "voyages:read",
+  "voyages:write",
 ];
 
 export function isMcpScope(value: string): value is McpScope {

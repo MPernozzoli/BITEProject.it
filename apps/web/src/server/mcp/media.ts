@@ -23,7 +23,7 @@ const ALLOWED_CONTENT_TYPES: Record<string, string> = {
   "image/gif": "gif",
 };
 
-/** Cartelle ammesse: le stesse che usa l'editor (`covers`, `articles`, `instagram-stories/*`, `newsletter`). */
+/** Cartelle ammesse: le stesse che usa l'editor (`covers`, `articles`, `instagram-stories/*`, `newsletter`, `voyages`). */
 const FOLDER_RE = /^[a-z0-9][a-z0-9/_-]{0,60}$/i;
 
 function extensionFor(contentType: string, sourceUrl: string): string | null {
