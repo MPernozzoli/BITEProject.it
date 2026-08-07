@@ -257,16 +257,20 @@ export function registerVoyageTools(server: McpServer, ctx: McpContext): void {
     },
     annotations: { destructiveHint: false, idempotentHint: false },
     handler: async (args, context) => {
+      // Verifica che la tappa esista *prima* di scaricare e caricare l'immagine:
+      // altrimenti un waypoint_id sbagliato lascerebbe nel bucket un file
+      // orfano, mai collegato a nessuna tappa e mai ripulito.
+      const waypoint = args.waypoint_id ? await loadWaypoint(context, args.waypoint_id) : null;
+
       const uploaded = await uploadImageFromUrl(context, { sourceUrl: args.source_url, folder: args.folder ?? "voyages" });
 
-      if (!args.waypoint_id) {
+      if (!waypoint) {
         return {
           text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB): ${uploaded.url}`,
           data: uploaded,
         } satisfies ToolOutcome;
       }
 
-      const waypoint = await loadWaypoint(context, args.waypoint_id);
       const existingMedia = Array.isArray(waypoint.media) ? (waypoint.media as Record<string, unknown>[]) : [];
       const nextMedia = [
         ...existingMedia,

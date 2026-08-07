@@ -187,6 +187,20 @@ describe("voyage_waypoint_upload_image", () => {
     expect(writes.filter((write: StubWrite) => write.table === "voyage_waypoints")).toHaveLength(0);
   });
 
+  it("con un waypoint_id inesistente non carica l'immagine (niente file orfani nel bucket)", async () => {
+    const { client, uploads } = await connect();
+    const result = await client.callTool({
+      name: "voyage_waypoint_upload_image",
+      arguments: {
+        source_url: "https://cdn.example/bonifacio.jpg",
+        waypoint_id: "99999999-9999-4999-8999-000000000009",
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(uploads).toHaveLength(0);
+  });
+
   it("con waypoint_id aggiunge la foto alla galleria della tappa senza sostituire quelle esistenti", async () => {
     const fixtures = baseFixtures();
     fixtures.tables!.voyage_waypoints[0].media = [{ kind: "image", url: "https://existing/1.jpg", name: null, mime_type: null, path: null }];
