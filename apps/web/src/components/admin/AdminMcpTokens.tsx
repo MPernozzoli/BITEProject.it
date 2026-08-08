@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { DEFAULT_MCP_SCOPES, MCP_SCOPES, MCP_SCOPE_LABELS, mcpScopeLabel } from "@/lib/mcp-scopes";
 
 type McpTokenRecord = {
   id: string;
@@ -22,30 +23,6 @@ type McpTokenRecord = {
   last_used_at: string | null;
   revoked_at: string | null;
 };
-
-const SCOPE_LABELS: Record<string, { it: string; en: string }> = {
-  "articles:read": { it: "Leggere articoli", en: "Read articles" },
-  "articles:write": { it: "Scrivere articoli", en: "Write articles" },
-  "plan:read": { it: "Leggere il piano", en: "Read the plan" },
-  "plan:write": { it: "Programmare nel piano", en: "Schedule in the plan" },
-  "newsletter:read": { it: "Leggere le newsletter", en: "Read newsletters" },
-  "newsletter:write": { it: "Scrivere newsletter", en: "Write newsletters" },
-  "mail:read": { it: "Leggere la posta", en: "Read mail" },
-  "mail:write": { it: "Rispondere, inoltrare e scrivere mail", en: "Reply, forward and write mail" },
-  "voyages:read": { it: "Leggere le rotte e le tappe", en: "Read voyages and stops" },
-  "voyages:write": { it: "Modificare le tappe (descrizioni, POI, attività, foto)", en: "Edit stops (descriptions, POIs, activities, photos)" },
-};
-
-const DEFAULT_SCOPES = [
-  "articles:read",
-  "articles:write",
-  "plan:read",
-  "plan:write",
-  "newsletter:read",
-  "mail:read",
-  "voyages:read",
-  "voyages:write",
-];
 
 const COPY = {
   it: {
@@ -113,7 +90,7 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(DEFAULT_SCOPES);
+  const [scopes, setScopes] = useState<string[]>(DEFAULT_MCP_SCOPES);
   const [expiresInDays, setExpiresInDays] = useState(90);
   const [freshToken, setFreshToken] = useState<string | null>(null);
 
@@ -245,7 +222,8 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
             {copy.permissions}
           </p>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(SCOPE_LABELS).map(([scope, label]) => {
+            {MCP_SCOPES.map((scope) => {
+              const label = MCP_SCOPE_LABELS[scope];
               const selected = scopes.includes(scope);
               return (
                 <button
@@ -314,7 +292,7 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
                     {copy.lastUsed} {formatDate(token.last_used_at)}
                   </p>
                   <p className="mt-1 text-[11px] font-sans text-muted-foreground">
-                    {token.scopes.map((scope) => SCOPE_LABELS[scope]?.[lang] ?? scope).join(" · ")}
+                    {token.scopes.map((scope) => mcpScopeLabel(scope, lang)).join(" · ")}
                   </p>
                 </div>
                 <Button
