@@ -714,6 +714,30 @@ export async function adminPayoutDeposit(
   const refundCents = Math.max(0, Math.min(deposit.amount_cents - alreadyRefundedCents, targetCents - alreadyRefundedCents));
   if (refundCents <= 0) throw Object.assign(new Error("nothing_to_refund"), { status: 409 });
 
+  // Claim before paying — same discipline as submitManualRefund/retryQueuedRefund — so a double
+  // click (or two admins acting on the same deposit at once) cannot trigger two Bunq payouts.
+  // refund_pending is the lock: for an already-pending deposit it flips true->false (identical
+  // to retryQueuedRefund's claim); for a discretionary forfeiture override it flips false->true,
+  // additionally gated on refund_amount_cents being unchanged since we read it above.
+  const { data: claimed, error: claimError } = deposit.refund_pending
+    ? await db
+        .from("voyage_booking_deposits")
+        .update({ refund_pending: false, refund_payout_queued: false, updated_at: new Date().toISOString() })
+        .eq("id", deposit.id)
+        .eq("refund_pending", true)
+        .select("id")
+        .maybeSingle()
+    : await db
+        .from("voyage_booking_deposits")
+        .update({ refund_pending: true, updated_at: new Date().toISOString() })
+        .eq("id", deposit.id)
+        .eq("refund_pending", false)
+        .eq("refund_amount_cents", alreadyRefundedCents)
+        .select("id")
+        .maybeSingle();
+  if (claimError) throw new Error(claimError.message);
+  if (!claimed) throw Object.assign(new Error("refund_already_processing"), { status: 409 });
+
   const payerAlias = await resolvePayerAlias(db, deposit);
   if (!payerAlias) {
     await db
@@ -730,11 +754,30 @@ export async function adminPayoutDeposit(
   }
 
   const reference = `REF-${deposit.booking_request_id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
-  const payment = await createBunqOutgoingPayment({
-    amountEur: centsToEur(refundCents),
-    counterpartyAlias: payerAlias,
-    description: `Rimborso BITE ${reference}`,
-  });
+  let payment: { id: number };
+  try {
+    payment = await createBunqOutgoingPayment({
+      amountEur: centsToEur(refundCents),
+      counterpartyAlias: payerAlias,
+      description: `Rimborso BITE ${reference}`,
+    });
+  } catch (error) {
+    // The claim above must not leave the deposit stranded (invisible to admin_list_pending_refunds,
+    // un-retryable) on a transient Bunq failure — re-arm it exactly like submitManualRefund does.
+    await db
+      .from("voyage_booking_deposits")
+      .update({
+        refund_pending: true,
+        refund_payout_queued: true,
+        refund_pending_amount_cents: refundCents,
+        refund_pending_reason: "payout_failed",
+        payer_alias: payerAlias,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", deposit.id);
+    const message = error instanceof Error ? error.message : "bunq_refund_failed";
+    throw Object.assign(new Error(message), { status: 502 });
+  }
 
   const nextRefundedCents = alreadyRefundedCents + refundCents;
   const { error: updateError } = await db

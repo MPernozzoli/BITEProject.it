@@ -191,15 +191,23 @@ const BankTransferDialog = ({
             <CopyRow label={lang === "it" ? "Causale (obbligatoria)" : "Reference (required)"} value={state.details.reference} />
 
             <div className="rounded-md border border-red-300/70 bg-red-50/80 px-3 py-2 text-xs font-semibold leading-relaxed text-red-900 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100/90">
-              {lang === "it"
-                ? "Hai 24 ore per completare il bonifico. Se il pagamento non perviene entro 24 ore, la candidatura decade automaticamente."
-                : "You have 24 hours to complete the transfer. If payment does not arrive within 24 hours, the application lapses automatically."}
+              {state.details.phase === "balance"
+                ? lang === "it"
+                  ? "Questo bonifico non ha una scadenza stretta: puoi completarlo quando puoi. Ricorda però che il saldo complessivo va comunque ricevuto entro la scadenza indicata nella tua area prenotazioni, altrimenti la prenotazione decade e l'acconto non è rimborsabile."
+                  : "This transfer has no strict deadline: complete it whenever you can. Just remember the overall balance must still arrive by the deadline shown in your bookings area, or the booking lapses and the deposit is not refundable."
+                : lang === "it"
+                  ? "Hai 24 ore per completare il bonifico. Se il pagamento non perviene entro 24 ore, la candidatura decade automaticamente."
+                  : "You have 24 hours to complete the transfer. If payment does not arrive within 24 hours, the application lapses automatically."}
             </div>
 
             <div className="rounded-md border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
-              {lang === "it"
-                ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale. Finché non riceviamo l'importo con la causale esatta, la prenotazione non è conclusa e non potrai partecipare al viaggio."
-                : "For automatic validation, both the amount and the reference must match. Until we receive the correct amount with the exact reference, the booking is not finalised and you cannot take part in the voyage."}
+              {state.details.phase === "balance"
+                ? lang === "it"
+                  ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale."
+                  : "For automatic validation, both the amount and the reference must match."
+                : lang === "it"
+                  ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale. Finché non riceviamo l'importo con la causale esatta, la prenotazione non è conclusa e non potrai partecipare al viaggio."
+                  : "For automatic validation, both the amount and the reference must match. Until we receive the correct amount with the exact reference, the booking is not finalised and you cannot take part in the voyage."}
             </div>
 
             <ContributionTrustNote lang={lang} variant="plain" />

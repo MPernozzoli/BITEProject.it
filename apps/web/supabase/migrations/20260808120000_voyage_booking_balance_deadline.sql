@@ -19,12 +19,168 @@
 -- never stored, so a route change can never leave a stale deadline behind.
 
 -- ---------------------------------------------------------------------------
+-- Fix: expire_pending_voyage_booking_payments must not cancel an already-paid booking
+--
+-- This pre-existing sweep (20260721140100) cancels the whole booking whenever it finds a
+-- 'pending' deposit whose short window lapsed (r.expires_at) OR that is simply older than 2 days
+-- (d.created_at), for ANY status up to and including user_confirmed. That was safe when a booking
+-- had exactly one ever-relevant payment: an abandoned attempt meant it was never legitimately
+-- paid at all, so cancelling was correct. It is no longer safe now that a second payment (the
+-- balance, or a deposit top-up after a route change) can be armed on a booking that already holds
+-- its place — an abandoned balance bank-transfer would otherwise cancel an already-confirmed,
+-- already-paid booking days or weeks before the real balance deadline. The exclusion below
+-- mirrors src/server/bunq/deposit-resolver.ts's bookingHasEverBeenPaid: once any deposit has
+-- ever settled for the booking, a further lingering pending deposit is a retriable top-up, not a
+-- gate — expire_unpaid_voyage_booking_balance / expire_unpaid_voyage_booking_guest_shares are the
+-- ones that enforce the real (15-day) consequence for that case.
+create or replace function public.expire_pending_voyage_booking_payments()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_expired integer := 0;
+  v_rec record;
+  v_leg_ids uuid[];
+begin
+  for v_rec in
+    -- (a) applications abandoned before any payment was armed, past their grace deadline
+    select r.id, r.voyage_id
+    from public.voyage_booking_requests r
+    where r.status = 'pending_payment'
+      and r.expires_at is not null
+      and r.expires_at <= timezone('utc', now())
+      and not public.voyage_booking_has_paid_deposit(r.id)
+    union
+    -- (b) a payment was armed but never settled, and the booking never actually cleared its
+    -- initial gate (no deposit has ever been paid for it) — see comment above for why an
+    -- already-paid booking is deliberately excluded here.
+    select distinct r.id, r.voyage_id
+    from public.voyage_booking_requests r
+    join public.voyage_booking_deposits d
+      on d.booking_request_id = r.id
+     and d.status = 'pending'
+    where r.status in ('pending_payment', 'requested', 'waitlisted', 'admin_approved', 'user_confirmed')
+      and (
+        (r.expires_at is not null and r.expires_at <= timezone('utc', now()))
+        or d.created_at <= timezone('utc', now()) - interval '2 days'
+      )
+      and not public.voyage_booking_has_paid_deposit(r.id)
+  loop
+    select array_agg(bookable_leg_id)
+    into v_leg_ids
+    from public.voyage_booking_request_legs
+    where booking_request_id = v_rec.id;
+
+    update public.voyage_booking_requests
+    set
+      status = 'expired',
+      expires_at = null,
+      updated_at = timezone('utc', now())
+    where id = v_rec.id
+      and status = 'pending_payment';
+
+    if found then
+      -- Never reviewed by anyone and never paid: retire it silently, no notifications.
+      update public.voyage_booking_deposits
+      set status = 'cancelled', updated_at = timezone('utc', now())
+      where booking_request_id = v_rec.id
+        and status = 'pending';
+
+      v_expired := v_expired + 1;
+      continue;
+    end if;
+
+    update public.voyage_booking_requests
+    set
+      status = 'cancelled',
+      cancelled_at = coalesce(cancelled_at, timezone('utc', now())),
+      expires_at = null,
+      updated_at = timezone('utc', now())
+    where id = v_rec.id
+      and status in ('requested', 'waitlisted', 'admin_approved', 'user_confirmed');
+
+    if found then
+      update public.voyage_booking_deposits
+      set status = 'cancelled', updated_at = timezone('utc', now())
+      where booking_request_id = v_rec.id
+        and status = 'pending';
+
+      perform public.enqueue_voyage_booking_notification(v_rec.id, 'payment_expired');
+      perform public.enqueue_admin_voyage_booking_notifications(
+        v_rec.id,
+        'admin_cancelled',
+        jsonb_build_object('reason', 'payment_expired')
+      );
+      perform public.promote_waitlisted_voyage_bookings(v_rec.voyage_id, coalesce(v_leg_ids, array[]::uuid[]));
+
+      v_expired := v_expired + 1;
+    end if;
+  end loop;
+
+  return v_expired;
+end;
+$$;
+
+revoke execute on function public.expire_pending_voyage_booking_payments() from public, anon, authenticated;
+grant execute on function public.expire_pending_voyage_booking_payments() to service_role;
+
+-- A balance/top-up payment left pending on an already-paid booking is now excluded from the
+-- sweep above (it never cancels the booking) but the stale deposit row itself would otherwise
+-- sit as 'pending' forever, forcing findExistingDeposit's idempotency check to keep reusing an
+-- old bunq.me link / bank reference indefinitely. Sweeping those rows to 'cancelled' on the same
+-- cadence lets the traveller's next click on "Paga il saldo" mint a fresh one.
+create or replace function public.expire_stale_voyage_booking_topup_deposits()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_count integer;
+begin
+  with stale as (
+    select d.id
+    from public.voyage_booking_deposits d
+    join public.voyage_booking_requests r on r.id = d.booking_request_id
+    where d.status = 'pending'
+      and r.status in ('requested', 'waitlisted', 'admin_approved', 'user_confirmed')
+      and public.voyage_booking_has_paid_deposit(r.id)
+      and (
+        (r.expires_at is not null and r.expires_at <= timezone('utc', now()))
+        or d.created_at <= timezone('utc', now()) - interval '2 days'
+      )
+  )
+  update public.voyage_booking_deposits d
+  set status = 'cancelled', updated_at = timezone('utc', now())
+  from stale
+  where d.id = stale.id;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+revoke execute on function public.expire_stale_voyage_booking_topup_deposits() from public, anon, authenticated;
+grant execute on function public.expire_stale_voyage_booking_topup_deposits() to service_role;
+
+select cron.schedule(
+  'expire-stale-voyage-booking-topup-deposits',
+  '*/10 * * * *',
+  $$select public.expire_stale_voyage_booking_topup_deposits();$$
+)
+where not exists (
+  select 1 from cron.job where jobname = 'expire-stale-voyage-booking-topup-deposits'
+);
+
+-- ---------------------------------------------------------------------------
 -- Schema
 -- ---------------------------------------------------------------------------
 
 alter table public.voyage_booking_requests
   add column if not exists contribution_due_cents integer,
   add column if not exists contribution_deposit_cents integer,
+  add column if not exists contribution_due_stamped_at timestamptz,
   add column if not exists balance_forfeited_at timestamptz,
   add column if not exists balance_reminder_sent_at timestamptz;
 
@@ -32,12 +188,15 @@ comment on column public.voyage_booking_requests.contribution_due_cents is
   'Snapshot of the null-payer''s (solo traveller / lead) full contribution, stamped by resolveDepositPayer. NULL for bookings created before the deposit/balance split shipped.';
 comment on column public.voyage_booking_requests.contribution_deposit_cents is
   'Snapshot of the null-payer''s required upfront deposit (min(50% of contribution_due_cents, €499)).';
+comment on column public.voyage_booking_requests.contribution_due_stamped_at is
+  'When the snapshot above was last computed. A route change re-inserts voyage_booking_request_legs with a fresh created_at; if that is later than this timestamp, the snapshot predates the traveller''s current legs and every sweep below skips the booking rather than act on stale numbers.';
 comment on column public.voyage_booking_requests.balance_forfeited_at is
   'Set when the booking was cancelled by expire_unpaid_voyage_booking_balance for missing the balance deadline.';
 
 alter table public.voyage_booking_participants
   add column if not exists contribution_due_cents integer,
   add column if not exists contribution_deposit_cents integer,
+  add column if not exists contribution_due_stamped_at timestamptz,
   add column if not exists balance_reminder_sent_at timestamptz;
 
 comment on column public.voyage_booking_participants.contribution_due_cents is
@@ -108,6 +267,30 @@ $$;
 comment on function public.voyage_booking_balance_deadline(uuid) is
   'Balance due date: 15 days before the earliest departure among this booking''s own linked legs (the traveller''s embarkation leg, not necessarily the voyage''s overall start). NULL when the legs carry no departure time yet — the sweeps below never act on a NULL deadline.';
 
+-- A route change (respond_voyage_booking_plan_change, accept_proposed_change) re-inserts
+-- voyage_booking_request_legs with a fresh created_at but does NOT recompute
+-- contribution_due_cents (that formula lives only in TS, deliberately not duplicated here).
+-- Without this guard the balance-deadline sweeps would keep comparing paid-so-far against a
+-- pre-route-change total forever, for any booking whose accepted change did not happen to
+-- require an immediate settlement payment — false cancellations of an already-settled booking
+-- are the failure mode this exists to rule out. NULL stamped_at (never stamped) is never fresh.
+create or replace function public.voyage_booking_contribution_snapshot_is_fresh(
+  _booking_request_id uuid,
+  _stamped_at timestamptz
+)
+returns boolean
+language sql
+stable
+set search_path = public, pg_temp
+as $$
+  select _stamped_at is not null and not exists (
+    select 1
+    from public.voyage_booking_request_legs link
+    where link.booking_request_id = _booking_request_id
+      and link.created_at > _stamped_at
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- a) Whole booking lapses: the "primary payer" (the booking owner / lead) missed
 --    their own balance deadline.
@@ -147,6 +330,9 @@ begin
     where r.status in ('requested', 'waitlisted', 'admin_approved', 'user_confirmed')
       and coalesce(r.is_comped, false) = false
       and coalesce(lead.contribution_due_cents, r.contribution_due_cents) is not null
+      and public.voyage_booking_contribution_snapshot_is_fresh(
+        r.id, coalesce(lead.contribution_due_stamped_at, r.contribution_due_stamped_at)
+      )
       and public.voyage_booking_balance_deadline(r.id) is not null
       and public.voyage_booking_balance_deadline(r.id) <= timezone('utc', now())
       and coalesce((
@@ -255,6 +441,7 @@ begin
       and r.status in ('requested', 'waitlisted', 'admin_approved', 'user_confirmed')
       and coalesce(r.is_comped, false) = false
       and p.contribution_due_cents is not null
+      and public.voyage_booking_contribution_snapshot_is_fresh(r.id, p.contribution_due_stamped_at)
       and coalesce((
         select sum(d.amount_cents) from public.voyage_booking_deposits d
         where d.booking_request_id = r.id and d.participant_id = p.id and d.status = 'paid'
@@ -360,6 +547,9 @@ begin
       and coalesce(r.is_comped, false) = false
       and coalesce(lead.contribution_due_cents, r.contribution_due_cents) is not null
       and coalesce(lead.balance_reminder_sent_at, r.balance_reminder_sent_at) is null
+      and public.voyage_booking_contribution_snapshot_is_fresh(
+        r.id, coalesce(lead.contribution_due_stamped_at, r.contribution_due_stamped_at)
+      )
       and public.voyage_booking_balance_deadline(r.id) is not null
       and public.voyage_booking_balance_deadline(r.id) <= timezone('utc', now()) + interval '5 days'
       and coalesce((
@@ -381,6 +571,7 @@ begin
       and coalesce(r.is_comped, false) = false
       and p.contribution_due_cents is not null
       and p.balance_reminder_sent_at is null
+      and public.voyage_booking_contribution_snapshot_is_fresh(r.id, p.contribution_due_stamped_at)
       and coalesce((
         select sum(d.amount_cents) from public.voyage_booking_deposits d
         where d.booking_request_id = r.id and d.participant_id = p.id and d.status = 'paid'

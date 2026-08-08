@@ -202,8 +202,14 @@ export async function resolveDepositPayer(
   if (!ACTIVE_STATUSES.includes(bookingStatus)) {
     throw new DepositHttpError(409, { error: "booking_not_active", status: bookingStatus });
   }
+  // The short per-attempt window only guards the *initial* payment gate — once the booking has
+  // ever had a paid deposit it already holds its place, and a stale expires_at can otherwise
+  // linger forever in a split-payment booking where a different payer's own attempt lapsed
+  // (armBookingPaymentDeadline only clears it once every pending deposit is resolved). Without
+  // this, a legitimate balance/top-up payment could be permanently blocked by someone else's
+  // abandoned attempt.
   const expiresAt = (request as { expires_at?: string | null }).expires_at;
-  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+  if (expiresAt && new Date(expiresAt).getTime() <= Date.now() && !(await bookingHasEverBeenPaid(db, bookingRequestId))) {
     throw new DepositHttpError(409, { error: "payment_deadline_expired" });
   }
 
@@ -286,6 +292,44 @@ export async function resolveDepositPayer(
   // whole contribution again: dueEur/depositTarget are recomputed from the current legs, so
   // subtracting what this payer already settled leaves exactly the delta. Retries stay idempotent
   // in value either way.
+  // Snapshot this payer's obligation so the balance-deadline sweep (pure SQL) can tell whether
+  // it has been met without duplicating the mileage-based contribution formula in SQL. Written
+  // on the entity the sweep will actually query: the booking request for a null payer (solo
+  // travellers, or a lead before guests are configured / paying for the whole lead_pays_all
+  // party), the participant row otherwise (an each_pays_own guest, or the lead once they have
+  // their own participant row).
+  //
+  // This MUST run before the amountEur<=0 early-return below: a route change can make a payer's
+  // dueEur *drop* below what they already paid, and that "already settled" outcome is exactly
+  // when a stale (too high) snapshot would matter most — the balance-deadline sweep would keep
+  // seeing an inflated due_cents forever and could wrongly cancel/forfeit an already-fully-paid
+  // booking. Every resolveDepositPayer call refreshes the truth, whether or not it ends up
+  // collecting anything.
+  const dueCents = Math.round(dueEur * 100);
+  const depositCents = Math.round(depositTarget * 100);
+  const stampedAt = new Date().toISOString();
+  if (payerParticipantId) {
+    const { error: stampError } = await db
+      .from("voyage_booking_participants")
+      .update({
+        contribution_due_cents: dueCents,
+        contribution_deposit_cents: depositCents,
+        contribution_due_stamped_at: stampedAt,
+      })
+      .eq("id", payerParticipantId);
+    if (stampError) throw new Error(stampError.message);
+  } else {
+    const { error: stampError } = await db
+      .from("voyage_booking_requests")
+      .update({
+        contribution_due_cents: dueCents,
+        contribution_deposit_cents: depositCents,
+        contribution_due_stamped_at: stampedAt,
+      })
+      .eq("id", bookingRequestId);
+    if (stampError) throw new Error(stampError.message);
+  }
+
   const alreadyPaidEur = await paidDepositTotalEur(db, bookingRequestId, payerParticipantId);
   const phase: PaymentPhase = alreadyPaidEur < depositTarget ? "deposit" : "balance";
   const targetEur = phase === "deposit" ? depositTarget : dueEur;
@@ -307,28 +351,6 @@ export async function resolveDepositPayer(
   // resolver is shared by both methods. Blocking it here would make large contributions
   // (e.g. a long multi-leg reroute) impossible to pay by any method.
 
-  // Snapshot this payer's obligation so the balance-deadline sweep (pure SQL) can tell whether
-  // it has been met without duplicating the mileage-based contribution formula in SQL. Written
-  // on the entity the sweep will actually query: the booking request for a null payer (solo
-  // travellers, or a lead before guests are configured / paying for the whole lead_pays_all
-  // party), the participant row otherwise (an each_pays_own guest, or the lead once they have
-  // their own participant row).
-  const dueCents = Math.round(dueEur * 100);
-  const depositCents = Math.round(depositTarget * 100);
-  if (payerParticipantId) {
-    const { error: stampError } = await db
-      .from("voyage_booking_participants")
-      .update({ contribution_due_cents: dueCents, contribution_deposit_cents: depositCents })
-      .eq("id", payerParticipantId);
-    if (stampError) throw new Error(stampError.message);
-  } else {
-    const { error: stampError } = await db
-      .from("voyage_booking_requests")
-      .update({ contribution_due_cents: dueCents, contribution_deposit_cents: depositCents })
-      .eq("id", bookingRequestId);
-    if (stampError) throw new Error(stampError.message);
-  }
-
   const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
   return {
     db,
@@ -348,8 +370,33 @@ export async function resolveDepositPayer(
 }
 
 /**
- * Starts the 48h payment window when a new pending payment is created. Existing deadlines are
- * kept as-is so polling or retrying the same payment cannot extend the booking hold forever.
+ * True once the booking has cleared its initial payment gate — at least one deposit has ever
+ * settled for it, by any payer. A booking in this state already holds its place (review-eligible
+ * or a confirmed seat); a further payment (topping up a still-short deposit after a route change,
+ * or the later balance) is a retriable top-up, not a make-or-break gate.
+ */
+async function bookingHasEverBeenPaid(db: SupabaseClient, bookingRequestId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from("voyage_booking_deposits")
+    .select("id")
+    .eq("booking_request_id", bookingRequestId)
+    .eq("status", "paid")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
+/**
+ * Starts the payment window (1h Bunq link / 24h bank transfer) when a fresh application's very
+ * first payment is created — abandoning it lets expire_pending_voyage_booking_payments sweep the
+ * whole application away, which is the intended fate for something that was never actually paid.
+ *
+ * Once the booking has ever had a paid deposit, this becomes a no-op: any further payment (the
+ * balance, or a top-up after a route change) must be retriable at any time without risking the
+ * booking itself — the traveller already holds their place. That is enforced separately (the
+ * balance's own deadline is 15 days before departure, via expire_unpaid_voyage_booking_balance /
+ * expire_unpaid_voyage_booking_guest_shares, not this short per-attempt window).
  */
 export async function armBookingPaymentDeadline(
   db: SupabaseClient,
@@ -367,6 +414,7 @@ export async function armBookingPaymentDeadline(
   if (readError) throw new Error(readError.message);
   const row = current as { expires_at?: string | null; status?: string } | null;
   if (!row || !ACTIVE_STATUSES.includes(row.status ?? "")) return row?.expires_at ?? null;
+  if (await bookingHasEverBeenPaid(db, bookingRequestId)) return row.expires_at ?? null;
 
   // Only ever move the deadline forward. A fresh application already carries the short
   // pending_payment grace window, and choosing bank transfer must widen it to a banking day —

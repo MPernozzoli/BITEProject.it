@@ -101,12 +101,16 @@ const PaymentMethodDialog = ({
             {loading ? <Loader2 size={18} className="mb-3 animate-spin" /> : <CreditCard size={18} className="mb-3" />}
             <span className="block text-sm font-semibold">{it ? "Paga adesso (carta)" : "Pay now (card)"}</span>
             <span className="mt-1 block text-xs font-medium text-accent">
-              {it ? "Entro 1 ora" : "Within 1 hour"}
+              {isBalance ? (it ? "Rapido" : "Fast") : it ? "Entro 1 ora" : "Within 1 hour"}
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-              {it
-                ? "Apri Bunq e paga con carta, Apple Pay, Google Pay o altri metodi. Il pagamento va completato entro 1 ora."
-                : "Open Bunq and pay by card, Apple Pay, Google Pay or other methods. Payment must be completed within 1 hour."}
+              {isBalance
+                ? it
+                  ? "Apri Bunq e paga con carta, Apple Pay, Google Pay o altri metodi."
+                  : "Open Bunq and pay by card, Apple Pay, Google Pay or other methods."
+                : it
+                  ? "Apri Bunq e paga con carta, Apple Pay, Google Pay o altri metodi. Il pagamento va completato entro 1 ora."
+                  : "Open Bunq and pay by card, Apple Pay, Google Pay or other methods. Payment must be completed within 1 hour."}
             </span>
           </button>
 
@@ -123,12 +127,16 @@ const PaymentMethodDialog = ({
             <Landmark size={18} className="mb-3" />
             <span className="block text-sm font-semibold">{it ? "Bonifico" : "Bank transfer"}</span>
             <span className="mt-1 block text-xs font-medium text-accent">
-              {it ? "Entro 24 ore" : "Within 24 hours"}
+              {isBalance ? (it ? "Nessuna fretta" : "No rush") : it ? "Entro 24 ore" : "Within 24 hours"}
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-              {it
-                ? "Mostra IBAN, importo e causale obbligatoria. Lo validiamo automaticamente quando arriva. Hai 24 ore per completarlo."
-                : "Shows IBAN, amount and required reference. We validate it automatically when it arrives. You have 24 hours to complete it."}
+              {isBalance
+                ? it
+                  ? "Mostra IBAN, importo e causale obbligatoria. Lo validiamo automaticamente quando arriva: nessuna scadenza stretta su questo bonifico, ma il saldo va comunque ricevuto entro la scadenza della tua prenotazione."
+                  : "Shows IBAN, amount and required reference. We validate it automatically when it arrives: no strict deadline on this transfer, but the balance must still arrive by your booking's deadline."
+                : it
+                  ? "Mostra IBAN, importo e causale obbligatoria. Lo validiamo automaticamente quando arriva. Hai 24 ore per completarlo."
+                  : "Shows IBAN, amount and required reference. We validate it automatically when it arrives. You have 24 hours to complete it."}
             </span>
           </button>
         </div>

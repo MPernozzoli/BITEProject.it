@@ -130,6 +130,8 @@ const UserBookings = () => {
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
   const [paidDepositRequestIds, setPaidDepositRequestIds] = useState<Set<string>>(() => new Set());
+  /** Sum of paid deposits (EUR) per booking request, used to show the outstanding balance. */
+  const [paidEurByRequestId, setPaidEurByRequestId] = useState<Record<string, number>>({});
   const [bookingSettings, setBookingSettings] = useState<BookingSettings[]>([]);
   const [bookingTasks, setBookingTasks] = useState<BookingTask[]>([]);
   const [taskCompletions, setTaskCompletions] = useState<BookingTaskCompletion[]>([]);
@@ -275,7 +277,7 @@ const UserBookings = () => {
       requestIds.length
         ? typedSupabase
             .from("voyage_booking_deposits")
-            .select("booking_request_id,status")
+            .select("booking_request_id,status,amount_cents")
             .in("booking_request_id", requestIds)
             .eq("status", "paid")
         : Promise.resolve({ data: [], error: null }),
@@ -301,12 +303,13 @@ const UserBookings = () => {
     setLegs(((legsRes.data as BookableLeg[] | null) || []));
     setWaypoints(((waypointsRes.data as BookingWaypoint[] | null) || []));
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
-    setPaidDepositRequestIds(
-      new Set(
-        (((depositsRes.data as { booking_request_id: string }[] | null) || []).map(
-          (deposit) => deposit.booking_request_id
-        ))
-      )
+    const paidDeposits = ((depositsRes.data as { booking_request_id: string; amount_cents: number }[] | null) || []);
+    setPaidDepositRequestIds(new Set(paidDeposits.map((deposit) => deposit.booking_request_id)));
+    setPaidEurByRequestId(
+      paidDeposits.reduce<Record<string, number>>((acc, deposit) => {
+        acc[deposit.booking_request_id] = (acc[deposit.booking_request_id] ?? 0) + deposit.amount_cents / 100;
+        return acc;
+      }, {})
     );
     setBookingSettings(((settingsRes.data as BookingSettings[] | null) || []));
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
@@ -466,6 +469,39 @@ const UserBookings = () => {
         : [],
     [requestLegs, ownRequestForSelectedVoyage]
   );
+  /** Outstanding balance (EUR) still owed on the own request for the selected voyage, and the
+   * date by which it must arrive (15 days before the earliest departure among its own legs — the
+   * traveller's embarkation leg, mirroring voyage_booking_balance_deadline in the DB). Best-effort
+   * client-side estimate for display only: the amount actually charged is always recomputed
+   * server-side when the payment is started. */
+  const ownRequestBalance = useMemo(() => {
+    if (!ownRequestForSelectedVoyage) return null;
+    const ownLegs = ownRequestLegIdsForSelectedVoyage.map((id) => legsById[id]).filter(Boolean);
+    if (ownLegs.length === 0) return null;
+    const totalDueEur = totalDepositEur(ownLegs, ownRequestForSelectedVoyage.party_size, selectedContributionOptions);
+    const paidEur = paidEurByRequestId[ownRequestForSelectedVoyage.id] ?? 0;
+    const outstandingEur = Math.round((totalDueEur - paidEur + Number.EPSILON) * 100) / 100;
+    const departureTimes = ownLegs
+      .map((leg) => leg.starts_at_window_start)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((time) => Number.isFinite(time));
+    const deadline = departureTimes.length
+      ? new Date(Math.min(...departureTimes) - 15 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+    return { outstandingEur, deadline };
+  }, [ownRequestForSelectedVoyage, ownRequestLegIdsForSelectedVoyage, legsById, selectedContributionOptions, paidEurByRequestId]);
+  /** Shown once the traveller has already paid something (the deposit) but a genuine balance
+   * remains — not while the very first payment is still outstanding, which has its own banner. */
+  const ownRequestBalanceDue =
+    ownRequestForSelectedVoyage &&
+    !ownRequestForSelectedVoyage.is_comped &&
+    ["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(ownRequestForSelectedVoyage.status) &&
+    paidDepositRequestIds.has(ownRequestForSelectedVoyage.id) &&
+    ownRequestBalance &&
+    ownRequestBalance.outstandingEur > 0.5
+      ? ownRequestBalance
+      : null;
   const companionRows = useMemo(() => occupancy.filter((row) => !row.is_own), [occupancy]);
   const generalAvailabilityWatch = useMemo(
     () => availabilityWatches.find((watch) => watch.scope === "all_bookable_voyages") || null,
