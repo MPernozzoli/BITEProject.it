@@ -17,8 +17,10 @@ interface PaymentMethodDialogProps {
   onPayNow: (reservedWindow?: Window | null) => void;
   onBankTransfer: () => void;
   loading?: boolean;
-  /** Contribution due (EUR). When above the Bunq single-transaction cap, only bank transfer works. */
+  /** Amount due now (EUR): the acconto on a first payment, or the saldo once it's due. */
   amountEur?: number;
+  /** When known ahead of the API call, which phase this payment is collecting. */
+  phase?: "deposit" | "balance";
 }
 
 const PaymentMethodDialog = ({
@@ -28,9 +30,11 @@ const PaymentMethodDialog = ({
   onBankTransfer,
   loading = false,
   amountEur,
+  phase,
 }: PaymentMethodDialogProps) => {
   const { lang } = useI18n();
   const it = lang === "it";
+  const isBalance = phase === "balance";
 
   // A bunq.me link is capped at €500; above that only a bank transfer can collect the amount.
   const cardTooHigh = typeof amountEur === "number" && amountEur > BUNQ_SINGLE_TRANSACTION_LIMIT_EUR;
@@ -46,18 +50,30 @@ const PaymentMethodDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{it ? "Completa il pagamento del contributo" : "Complete the contribution payment"}</DialogTitle>
+          <DialogTitle>
+            {isBalance
+              ? it
+                ? "Completa il pagamento del saldo"
+                : "Complete the balance payment"
+              : it
+                ? "Completa il pagamento dell'acconto"
+                : "Complete the deposit payment"}
+          </DialogTitle>
           <DialogDescription>
-            {it
-              ? "Per concludere la candidatura devi versare il contributo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."
-              : "To complete your application you must pay the contribution. Without payment the booking is not finalised and you cannot take part in the voyage."}
+            {isBalance
+              ? it
+                ? "Per mantenere la prenotazione devi versare il saldo entro la scadenza indicata: oltre quel termine la prenotazione decade e l'acconto versato non è rimborsabile."
+                : "To keep your booking you must pay the balance by the indicated deadline: after that the booking lapses and the deposit already paid is not refundable."
+              : it
+                ? "Per concludere la candidatura devi versare l'acconto (50% del contributo, fino a un massimo di €499). Il saldo andrà versato più avanti, entro 15 giorni dalla partenza della tua tratta di imbarco."
+                : "To complete your application you must pay the deposit (50% of the contribution, up to €499). The balance is due later, within 15 days of the departure of your own embarkation leg."}
           </DialogDescription>
         </DialogHeader>
 
         {typeof amountEur === "number" && amountEur > 0 && (
           <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {it ? "Importo da versare" : "Amount to pay"}
+              {isBalance ? (it ? "Saldo da versare" : "Balance to pay") : it ? "Acconto da versare" : "Deposit to pay"}
             </p>
             <p className="text-2xl font-semibold">{formatDepositEur(amountEur, it ? "it" : "en")}</p>
           </div>

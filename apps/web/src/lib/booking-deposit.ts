@@ -21,6 +21,10 @@ export const NIGHT_NAVIGATION_MODIFIER = 0.1;
 export const OFFSHORE_NAVIGATION_MODIFIER = 0.2;
 export const DANGEROUS_NAVIGATION_MODIFIER = 0.2;
 export const BUNQ_SINGLE_TRANSACTION_LIMIT_EUR = 500;
+/** Share of the total contribution requested upfront, as a deposit, at application time. */
+export const DEPOSIT_PERCENT = 0.5;
+/** Deposit never exceeds this, so it always stays payable via the Bunq single-transaction link. */
+export const DEPOSIT_CAP_EUR = 499;
 export const CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES = [
   "requested",
   "waitlisted",
@@ -132,6 +136,15 @@ export function depositForPayerEur(
     ? Math.max(1, Math.floor(opts.partySize) || 1)
     : 1;
   return roundCurrency(perPerson * multiplier);
+}
+
+/**
+ * The upfront deposit owed on a total contribution: half of it, capped so the deposit always
+ * stays payable through the Bunq single-transaction link. The remaining balance is due later,
+ * before departure — see docs/booking payment flow.
+ */
+export function depositTargetEur(totalDueEur: number): number {
+  return Math.min(roundCurrency(totalDueEur * DEPOSIT_PERCENT), DEPOSIT_CAP_EUR);
 }
 
 export function getContributionExplanation(

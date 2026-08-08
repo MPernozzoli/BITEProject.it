@@ -30,6 +30,22 @@ type PendingRefundRow = {
   updated_at: string | null;
 };
 
+type ForfeitedDepositRow = {
+  deposit_id: string;
+  booking_request_id: string;
+  voyage_id: string | null;
+  voyage_name: string | null;
+  voyage_name_it: string | null;
+  voyage_name_en: string | null;
+  traveller_name: string | null;
+  traveller_email: string | null;
+  amount_cents: number | null;
+  refund_amount_cents: number | null;
+  environment: string | null;
+  reference: string | null;
+  updated_at: string | null;
+};
+
 const REASON_LABELS: Record<string, string> = {
   no_payer_alias: "Nessun conto/IBAN registrato per il pagatore",
   no_monetary_account: "IBAN non collegato a un conto Bunq",
@@ -52,20 +68,70 @@ function voyageLabel(row: PendingRefundRow): string {
   return row.voyage_name_it || row.voyage_name || row.voyage_name_en || "Viaggio";
 }
 
+type RefundDepositResult = { ok: boolean; error: string; amountEur: number; needsIban: boolean };
+
+async function callRefundDeposit(depositId: string, percentOverride?: number): Promise<RefundDepositResult> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) return { ok: false, error: "Sessione scaduta: accedi di nuovo.", amountEur: 0, needsIban: false };
+
+  let response: Response;
+  try {
+    response = await fetch("/api/bookings/refund-deposit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ depositId, percentOverride }),
+    });
+  } catch {
+    return { ok: false, error: "Rete non raggiungibile. Riprova.", amountEur: 0, needsIban: false };
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    /* ignore malformed body */
+  }
+  if (!response.ok || payload.ok !== true) {
+    return {
+      ok: false,
+      error: String(payload.error ?? `http_${response.status}`),
+      amountEur: 0,
+      needsIban: false,
+    };
+  }
+  return {
+    ok: true,
+    error: "",
+    amountEur: Number(payload.amountEur ?? 0),
+    needsIban: payload.needsIban === true,
+  };
+}
+
 export default function AdminBookingRefunds() {
   const [rows, setRows] = useState<PendingRefundRow[]>([]);
+  const [forfeited, setForfeited] = useState<ForfeitedDepositRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [overridePercent, setOverridePercent] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await rpcSupabase.rpc("admin_list_pending_refunds");
+    const [pending, forfeitedResult] = await Promise.all([
+      rpcSupabase.rpc("admin_list_pending_refunds"),
+      rpcSupabase.rpc("admin_list_forfeited_deposits"),
+    ]);
     setLoading(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    if (pending.error) {
+      toast.error(pending.error.message);
+    } else {
+      setRows((pending.data as PendingRefundRow[]) ?? []);
     }
-    setRows((data as PendingRefundRow[]) ?? []);
+    if (forfeitedResult.error) {
+      toast.error(forfeitedResult.error.message);
+    } else {
+      setForfeited((forfeitedResult.data as ForfeitedDepositRow[]) ?? []);
+    }
   }, []);
 
   useEffect(() => {
@@ -76,6 +142,54 @@ export default function AdminBookingRefunds() {
     () => rows.reduce((sum, row) => sum + (Number(row.pending_amount_cents ?? 0) || 0), 0),
     [rows],
   );
+
+  const tryAutomaticPayout = async (row: PendingRefundRow) => {
+    setResolvingId(row.deposit_id);
+    const result = await callRefundDeposit(row.deposit_id);
+    setResolvingId(null);
+    if (!result.ok) {
+      toast.error(`Pagamento automatico non riuscito: ${result.error}`);
+      return;
+    }
+    if (result.needsIban || result.amountEur <= 0) {
+      toast.info("Nessun conto trovato per il pagatore: resta in attesa dell'IBAN.");
+      return;
+    }
+    toast.success(`Rimborso eseguito: ${formatEur(Math.round(result.amountEur * 100))}.`);
+    setRows((current) => current.filter((item) => item.deposit_id !== row.deposit_id));
+  };
+
+  const refundForfeited = async (row: ForfeitedDepositRow) => {
+    const raw = overridePercent[row.deposit_id] ?? "100";
+    const percent = Number(raw);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      toast.error("Indica una percentuale tra 1 e 100.");
+      return;
+    }
+    if (
+      !confirm(
+        `Confermi il rimborso discrezionale del ${percent}% (${formatEur(
+          Math.round(((row.amount_cents ?? 0) * percent) / 100),
+        )}) a ${row.traveller_name || row.traveller_email || "questo utente"}?`,
+      )
+    ) {
+      return;
+    }
+    setResolvingId(row.deposit_id);
+    const result = await callRefundDeposit(row.deposit_id, percent);
+    setResolvingId(null);
+    if (!result.ok) {
+      toast.error(`Rimborso non riuscito: ${result.error}`);
+      return;
+    }
+    if (result.needsIban || result.amountEur <= 0) {
+      toast.info("Nessun conto trovato per il pagatore: spostato nella coda 'attende IBAN'.");
+      await load();
+      return;
+    }
+    toast.success(`Rimborso eseguito: ${formatEur(Math.round(result.amountEur * 100))}.`);
+    setForfeited((current) => current.filter((item) => item.deposit_id !== row.deposit_id));
+  };
 
   const retryPayout = async (row: PendingRefundRow) => {
     setResolvingId(row.deposit_id);
@@ -239,7 +353,21 @@ export default function AdminBookingRefunds() {
                           )}
                           <span className="ml-2">Riesegui rimborso</span>
                         </Button>
-                      ) : null}
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void tryAutomaticPayout(row)}
+                          disabled={resolvingId === row.deposit_id}
+                        >
+                          {resolvingId === row.deposit_id ? (
+                            <Loader2 className="animate-spin" size={14} />
+                          ) : (
+                            <RefreshCw size={14} />
+                          )}
+                          <span className="ml-2">Prova pagamento automatico</span>
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant={row.payout_queued ? "outline" : "default"}
@@ -252,6 +380,89 @@ export default function AdminBookingRefunds() {
                           <Check size={14} />
                         )}
                         <span className="ml-2">Segna rimborsato</span>
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="glass-panel rounded-[34px] px-6 py-8 md:px-9">
+          <h2 className="editorial-heading text-2xl md:text-3xl">Acconti trattenuti per mancato saldo</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Prenotazioni (o singole partecipazioni) decadute perché il saldo non è arrivato entro la scadenza:
+            l'acconto è trattenuto per policy, ma puoi comunque rimborsarlo in tutto o in parte a tua discrezione.
+          </p>
+          {!loading && forfeited.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+              <Check size={26} className="opacity-60" />
+              <p className="text-sm">Nessun acconto trattenuto al momento.</p>
+            </div>
+          ) : (
+            <ul className="mt-5 space-y-3">
+              {forfeited.map((row) => (
+                <li
+                  key={row.deposit_id}
+                  className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-background/40 p-5 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{row.traveller_name || "Senza nome"}</span>
+                      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-600">
+                        Trattenuto
+                      </span>
+                      {row.environment && row.environment !== "production" ? (
+                        <span className="glass-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                          {row.environment}
+                        </span>
+                      ) : null}
+                    </div>
+                    {row.traveller_email ? (
+                      <a
+                        href={`mailto:${row.traveller_email}`}
+                        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                      >
+                        <Mail size={13} /> {row.traveller_email}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Email non disponibile</p>
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {row.voyage_name_it || row.voyage_name || row.voyage_name_en || "Viaggio"}
+                    </p>
+                    <p className="text-xs text-muted-foreground/80">
+                      Causale: <span className="font-mono">{row.reference || "—"}</span> · aggiornato {formatDate(row.updated_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 md:flex-col md:items-end">
+                    <span className="text-lg font-semibold">{formatEur(row.amount_cents)}</span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <div className="flex items-center gap-1 text-sm">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={overridePercent[row.deposit_id] ?? "100"}
+                          onChange={(event) =>
+                            setOverridePercent((current) => ({ ...current, [row.deposit_id]: event.target.value }))
+                          }
+                          className="w-16 rounded-md border border-border/60 bg-background/60 px-2 py-1 text-right text-sm"
+                        />
+                        <span className="text-muted-foreground">%</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => void refundForfeited(row)}
+                        disabled={resolvingId === row.deposit_id}
+                      >
+                        {resolvingId === row.deposit_id ? (
+                          <Loader2 className="animate-spin" size={14} />
+                        ) : (
+                          <Wallet size={14} />
+                        )}
+                        <span className="ml-2">Rimborsa</span>
                       </Button>
                     </div>
                   </div>

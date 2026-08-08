@@ -9,6 +9,7 @@ import { getLocalizedBookingVoyageName, type BookingVoyage } from "@/lib/booking
 import {
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
   depositForPayerEur,
+  depositTargetEur,
   formatDepositEur,
   perPersonDepositEur,
   shouldApplyContributionFixedMinimum,
@@ -298,8 +299,8 @@ const ManageBookingParticipants = () => {
           </div>
           <p className="text-xs text-muted-foreground">
             {lang === "it"
-              ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona.`
-              : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person.`}
+              ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a €499) ora e il saldo entro 15gg dalla partenza della propria tratta.`
+              : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to €499) is due now and the balance within 15 days of your leg's departure.`}
           </p>
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${
@@ -317,8 +318,8 @@ const ManageBookingParticipants = () => {
               <span className="font-medium text-foreground">{lang === "it" ? "Pago per tutti" : "I pay for everyone"}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {lang === "it"
-                  ? `Paghi ora ${formatDepositEur(leadPaysAllTotal, "it")} per l'intero gruppo. Gli altri dovranno solo iscriversi e accettare le condizioni.`
-                  : `Pay ${formatDepositEur(leadPaysAllTotal, "en")} now for the whole group. The others only need to register and accept the terms.`}
+                  ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "it")} per l'intero gruppo (saldo di ${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "it")} entro 15gg dalla partenza). Gli altri dovranno solo iscriversi e accettare le condizioni.`
+                  : `Pay the ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "en")} deposit now for the whole group (${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "en")} balance due within 15 days of departure). The others only need to register and accept the terms.`}
               </span>
             </span>
           </label>
@@ -338,8 +339,8 @@ const ManageBookingParticipants = () => {
               <span className="font-medium text-foreground">{lang === "it" ? "Pago solo per me" : "I pay for myself only"}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {lang === "it"
-                  ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")} per te. Ogni altro partecipante verserà il proprio contributo accettando l'invito.`
-                  : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} for yourself now. Each other participant pays their own contribution when accepting.`}
+                  ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "it")} per te (saldo di ${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "it")} entro 15gg dalla partenza). Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
+                  : `Pay the ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "en")} deposit now for yourself (${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "en")} balance due within 15 days of departure). Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
               </span>
             </span>
           </label>

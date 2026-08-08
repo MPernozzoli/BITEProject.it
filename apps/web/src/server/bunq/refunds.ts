@@ -15,7 +15,9 @@ export type RefundTrigger =
   | "admin_cancelled"
   | "admin_rejected"
   | "user_cancelled"
-  | "admin_plan_change_declined";
+  | "admin_plan_change_declined"
+  /** The balance-deadline sweep forfeited the deposit — 0% by default, admin-overridable upward. */
+  | "balance_deadline_missed";
 
 export type RefundSummary = {
   refundable: boolean;
@@ -239,6 +241,13 @@ export async function refundPolicyPercent(
   if (trigger === "admin_plan_change_declined") {
     if (!(await declinedChangeWasForceMajeure(db, booking))) return 100;
     return await withdrawalPercent(db, booking);
+  }
+
+  // The deposit was forfeited for missing the balance deadline — that is the whole point of the
+  // deadline, so the traveller keeps none of it by default. An admin can still raise this via
+  // resolveRefundPercent's override.
+  if (trigger === "balance_deadline_missed") {
+    return 0;
   }
 
   return withdrawalPercent(db, booking);
@@ -632,6 +641,117 @@ export async function retryQueuedRefund(
     })
     .eq("id", deposit.id);
   if (finalizeError) throw new Error(finalizeError.message);
+
+  return { amountEur: centsToEur(refundCents), reference, queued: false };
+}
+
+type PayoutDepositRow = DepositRefundRow & {
+  refund_pending: boolean;
+  refund_pending_amount_cents: number;
+  refund_policy: string | null;
+};
+
+/**
+ * Admin-triggered payout for a single deposit, used for two related cases that both fall
+ * outside the booking-level {@link refundBookingDeposits} flow (which is tied to a booking
+ * status transition — cancelled/rejected):
+ *  - a deposit the balance-deadline sweep flagged `refund_pending` (a co-participant who had
+ *    already paid in full when someone else's missed balance forfeited the booking/their seat —
+ *    see expire_unpaid_voyage_booking_balance / expire_unpaid_voyage_booking_guest_shares), where
+ *    the amount owed was already decided and just needs a payout attempt; and
+ *  - a discretionary refund of an acconto the system forfeited by default
+ *    (`refund_policy = 'balance_deadline_missed'`), which an admin may still choose to pay back
+ *    in full or in part — `percentOverride` is required for this case since the policy default
+ *    is 0%.
+ */
+export async function adminPayoutDeposit(
+  db: SupabaseClient,
+  user: User,
+  depositId: string,
+  percentOverride?: number | null,
+): Promise<ManualRefundResult & { needsIban?: boolean }> {
+  if (!(await isAdmin(db, user))) {
+    throw Object.assign(new Error("admin_required"), { status: 403 });
+  }
+  if (!bunqConfigured()) {
+    throw Object.assign(new Error("bunq_not_configured"), { status: 503 });
+  }
+
+  const { data: depositRow, error: depositError } = await db
+    .from("voyage_booking_deposits")
+    .select(
+      "id, booking_request_id, participant_id, environment, payment_method, amount_cents, status, bunq_request_id, reference, payer_alias, refund_amount_cents, refund_pending, refund_pending_amount_cents, refund_policy",
+    )
+    .eq("id", depositId)
+    .maybeSingle();
+  if (depositError) throw new Error(depositError.message);
+  const deposit = depositRow as PayoutDepositRow | null;
+  if (!deposit) throw Object.assign(new Error("deposit_not_found"), { status: 404 });
+  if (deposit.environment !== environment()) {
+    throw Object.assign(new Error("refund_environment_mismatch"), { status: 409 });
+  }
+  if (deposit.status !== "paid" && deposit.status !== "partially_refunded") {
+    throw Object.assign(new Error("deposit_not_paid"), { status: 409 });
+  }
+
+  const alreadyRefundedCents = Math.max(0, Number(deposit.refund_amount_cents ?? 0) || 0);
+  let targetCents: number;
+  if (deposit.refund_pending) {
+    // Amount already decided by whatever flagged this deposit (the sweep's fairness refund, or
+    // the pre-existing "no payer alias found" path) — just attempt the payout.
+    targetCents = Math.max(0, Number(deposit.refund_pending_amount_cents ?? 0) || 0) + alreadyRefundedCents;
+  } else {
+    if (deposit.refund_policy !== "balance_deadline_missed") {
+      throw Object.assign(new Error("deposit_not_forfeited"), { status: 409 });
+    }
+    if (!Number.isFinite(percentOverride) || (percentOverride as number) <= 0) {
+      throw Object.assign(new Error("percent_override_required"), { status: 400 });
+    }
+    const percent = Math.min(100, Math.round(percentOverride as number));
+    targetCents = Math.round((deposit.amount_cents * percent) / 100);
+  }
+
+  const refundCents = Math.max(0, Math.min(deposit.amount_cents - alreadyRefundedCents, targetCents - alreadyRefundedCents));
+  if (refundCents <= 0) throw Object.assign(new Error("nothing_to_refund"), { status: 409 });
+
+  const payerAlias = await resolvePayerAlias(db, deposit);
+  if (!payerAlias) {
+    await db
+      .from("voyage_booking_deposits")
+      .update({
+        refund_pending: true,
+        refund_payout_queued: false,
+        refund_pending_amount_cents: refundCents,
+        refund_pending_reason: "no_payer_alias",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", deposit.id);
+    return { amountEur: 0, reference: deposit.reference, queued: false, needsIban: true };
+  }
+
+  const reference = `REF-${deposit.booking_request_id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+  const payment = await createBunqOutgoingPayment({
+    amountEur: centsToEur(refundCents),
+    counterpartyAlias: payerAlias,
+    description: `Rimborso BITE ${reference}`,
+  });
+
+  const nextRefundedCents = alreadyRefundedCents + refundCents;
+  const { error: updateError } = await db
+    .from("voyage_booking_deposits")
+    .update({
+      status: nextRefundedCents >= deposit.amount_cents ? "refunded" : "partially_refunded",
+      refunded_at: new Date().toISOString(),
+      refund_amount_cents: nextRefundedCents,
+      refund_reference: reference,
+      refund_payment_id: payment.id,
+      refund_pending: false,
+      refund_pending_amount_cents: 0,
+      refund_pending_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deposit.id);
+  if (updateError) throw new Error(updateError.message);
 
   return { amountEur: centsToEur(refundCents), reference, queued: false };
 }

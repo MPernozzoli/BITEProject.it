@@ -15,7 +15,7 @@ const Terms = () => {
           ? "Questi Termini regolano l'uso di biteproject.it, la registrazione di un account, la partecipazione alla community e la partecipazione ai viaggi condivisi organizzati nell'ambito del progetto BITE. Prima di registrarti o richiedere di partecipare a un viaggio ti chiediamo di leggerli con attenzione: descrivono la natura non commerciale del progetto, i tuoi obblighi e i limiti di responsabilità."
           : "These Terms govern the use of biteproject.it, account registration, participation in the community, and participation in the shared voyages organized within the BITE project. Before you register or request to join a voyage, please read them carefully: they describe the non-commercial nature of the project, your obligations, and the limits of liability."
       }
-      lastUpdated={isIt ? "Ultimo aggiornamento: 21 luglio 2026" : "Last updated: July 21, 2026"}
+      lastUpdated={isIt ? "Ultimo aggiornamento: 8 agosto 2026" : "Last updated: August 8, 2026"}
     >
       <LegalSection title={isIt ? "Natura del progetto BITE" : "Nature of the BITE Project"}>
         <p>
@@ -152,8 +152,18 @@ const Terms = () => {
         </p>
         <p>
           {isIt
-            ? "Il contributo può essere versato tramite pagamento online (Bunq) o bonifico bancario, secondo le modalità indicate al momento della richiesta. Possono essere previsti un deposito e una scadenza per il versamento. Il contributo è determinato in via forfettaria come quota delle spese comuni e, di norma, non è soggetto a conguaglio: non viene ricalcolato al termine del viaggio, né in aumento né in diminuzione. Solo in via eccezionale, in caso di variazioni rilevanti e imprevedibili delle spese comuni, i partecipanti potranno concordare tra loro un adeguamento; nessun conguaglio è dovuto in modo automatico."
-            : "The contribution can be paid via online payment (Bunq) or bank transfer, according to the methods indicated at the time of the request. A deposit and a payment deadline may apply. The contribution is set as a flat share of the common expenses and is generally not subject to settlement: it is not recalculated at the end of the voyage, either upward or downward. Only exceptionally, in case of significant and unforeseeable changes in the common expenses, participants may agree among themselves on an adjustment; no settlement is due automatically."}
+            ? "Il contributo può essere versato tramite pagamento online (Bunq) o bonifico bancario, secondo le modalità indicate al momento della richiesta. Il contributo è determinato in via forfettaria come quota delle spese comuni e, di norma, non è soggetto a conguaglio: non viene ricalcolato al termine del viaggio, né in aumento né in diminuzione. Solo in via eccezionale, in caso di variazioni rilevanti e imprevedibili delle spese comuni, i partecipanti potranno concordare tra loro un adeguamento; nessun conguaglio è dovuto in modo automatico."
+            : "The contribution can be paid via online payment (Bunq) or bank transfer, according to the methods indicated at the time of the request. The contribution is set as a flat share of the common expenses and is generally not subject to settlement: it is not recalculated at the end of the voyage, either upward or downward. Only exceptionally, in case of significant and unforeseeable changes in the common expenses, participants may agree among themselves on an adjustment; no settlement is due automatically."}
+        </p>
+        <p>
+          {isIt
+            ? "Il versamento avviene in due fasi. Al momento della richiesta è dovuto un acconto pari al 50% del contributo, con un massimo di € 499,00 (in modo da restare sempre versabile anche con carta tramite il link di pagamento Bunq). La parte restante (il saldo) va versata entro 15 giorni prima della partenza della tua tratta di imbarco: se hai selezionato più tratte o ti imbarchi in un porto diverso da quello di partenza del viaggio, il termine si calcola sulla partenza della tua tratta, non su quella del viaggio nel suo complesso."
+            : "Payment happens in two steps. At the time of the request, a deposit equal to 50% of the contribution is due, capped at €499.00 (so it always stays payable by card through the Bunq payment link too). The remaining part (the balance) is due within 15 days before the departure of your own embarkation leg: if you selected multiple legs, or you board at a port other than the voyage's overall starting point, the deadline is calculated on your own leg's departure, not on the voyage's departure as a whole."}
+        </p>
+        <p>
+          {isIt
+            ? "Se il saldo non viene versato entro questo termine, la prenotazione decade automaticamente (o, per i gruppi con pagamento individuale, decade la singola partecipazione di chi non ha versato, mentre il resto del gruppo resta confermato) e l'acconto versato non viene rimborsato, salvo una diversa valutazione discrezionale da parte nostra. Questa decadenza per mancato pagamento è distinta dalla rinuncia volontaria e dalle relative percentuali di rimborso indicate nella sezione «Cancellazioni e rimborsi»."
+            : "If the balance is not paid by this deadline, the booking automatically lapses (or, for groups with individual payment, only the participation of whoever did not pay lapses, while the rest of the group stays confirmed) and the deposit paid is not refunded, unless we decide otherwise at our discretion. This lapse for non-payment is distinct from voluntary withdrawal and the related refund percentages set out in the “Cancellations and Refunds” section."}
         </p>
         <p>
           {isIt
@@ -189,6 +199,11 @@ const Terms = () => {
           {isIt
             ? "Il rimborso, quando previsto, viene disposto verso il metodo di pagamento o l'IBAN utilizzato. Se non è disponibile un IBAN o un riferimento valido per il rimborso, l'importo dovuto resta in sospeso finché non ci fornisci le coordinate necessarie."
             : "The refund, where applicable, is issued to the payment method or IBAN used. If no IBAN or valid refund reference is available, the amount owed remains pending until you provide the necessary details."}
+        </p>
+        <p>
+          {isIt
+            ? "Queste percentuali si applicano alla rinuncia volontaria e ai casi assimilati sopra descritti. Sono invece disciplinati separatamente, nella sezione «Contributo alle spese», i casi di decadenza per mancato versamento del saldo entro la scadenza indicata: in quel caso l'acconto non è rimborsato, salvo nostra diversa valutazione discrezionale."
+            : "These percentages apply to voluntary withdrawal and the related cases described above. Cases of lapse for failing to pay the balance by the indicated deadline are instead governed separately, in the “Shared-Cost Contribution” section: in that case the deposit is not refunded, unless we decide otherwise at our discretion."}
         </p>
         <p>
           {isIt

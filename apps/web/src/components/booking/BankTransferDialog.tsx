@@ -130,11 +130,23 @@ const BankTransferDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{lang === "it" ? "Paga con bonifico" : "Pay by bank transfer"}</DialogTitle>
+          <DialogTitle>
+            {state.phase === "ready" && state.details.phase === "balance"
+              ? lang === "it"
+                ? "Paga il saldo con bonifico"
+                : "Pay the balance by bank transfer"
+              : lang === "it"
+                ? "Paga l'acconto con bonifico"
+                : "Pay the deposit by bank transfer"}
+          </DialogTitle>
           <DialogDescription>
-            {lang === "it"
-              ? "Usa questi dati per inviare il bonifico. La candidatura non verrà esaminata finché non riceviamo l'importo corretto con la causale indicata."
-              : "Use these details to send the transfer. Your application will not be reviewed until we receive the correct amount with the reference shown here."}
+            {state.phase === "ready" && state.details.phase === "balance"
+              ? lang === "it"
+                ? "Usa questi dati per inviare il saldo. Se non arriva entro la scadenza indicata nella tua area prenotazioni, la prenotazione decade e l'acconto già versato non è rimborsabile."
+                : "Use these details to send the balance. If it does not arrive by the deadline shown in your bookings area, the booking lapses and the deposit already paid is not refundable."
+              : lang === "it"
+                ? "Usa questi dati per inviare il bonifico. La candidatura non verrà esaminata finché non riceviamo l'importo corretto con la causale indicata."
+                : "Use these details to send the transfer. Your application will not be reviewed until we receive the correct amount with the reference shown here."}
           </DialogDescription>
         </DialogHeader>
 
@@ -163,7 +175,13 @@ const BankTransferDialog = ({
           <div className="space-y-3">
             <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
               <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {lang === "it" ? "Importo da versare" : "Amount to transfer"}
+                {state.details.phase === "balance"
+                  ? lang === "it"
+                    ? "Saldo da versare"
+                    : "Balance to transfer"
+                  : lang === "it"
+                    ? "Acconto da versare"
+                    : "Deposit to transfer"}
               </p>
               <p className="text-2xl font-semibold">{formatDepositEur(state.details.amountEur, lang)}</p>
             </div>

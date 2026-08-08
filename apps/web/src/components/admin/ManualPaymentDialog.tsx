@@ -99,7 +99,8 @@ const ManualPaymentDialog = ({
             />
             {dueEur != null && (
               <p className="text-xs text-muted-foreground">
-                Contributo calcolato sulle tratte attuali: {formatDepositEur(dueEur)}
+                Contributo totale calcolato sulle tratte attuali: {formatDepositEur(dueEur)} (acconto 50%, max
+                €499, più saldo entro 15gg dalla partenza)
                 {alreadyPaidEur > 0 && ` · già versati ${formatDepositEur(alreadyPaidEur)}`}
                 {outstandingEur != null && outstandingEur > 0 && ` · residuo ${formatDepositEur(outstandingEur)}`}
               </p>

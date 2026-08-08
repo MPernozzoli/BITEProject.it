@@ -210,6 +210,7 @@ const ADMIN_EVENT_TYPES = new Set([
   'admin_payment_pending',
   'admin_payment_received',
   'admin_plan_change',
+  'admin_balance_deadline_missed',
 ])
 
 function buildAdminPushMessage(params: {
@@ -266,6 +267,12 @@ function buildAdminPushMessage(params: {
         body: `A booking for ${voyageName} needs attention${legs}.`,
       }
     }
+    if (params.eventType === 'admin_balance_deadline_missed') {
+      return {
+        title: 'Balance deadline missed',
+        body: `${traveler}'s booking for ${voyageName}${legs} lapsed for a missed balance payment.`,
+      }
+    }
     return {
       title: 'New berth request',
       body: `${traveler} requested to join ${voyageName}${legs}.`,
@@ -306,6 +313,12 @@ function buildAdminPushMessage(params: {
     return {
       title: 'Planning viaggio cambiato',
       body: `Un booking per ${voyageName} richiede attenzione${legs}.`,
+    }
+  }
+  if (params.eventType === 'admin_balance_deadline_missed') {
+    return {
+      title: 'Saldo non versato entro la scadenza',
+      body: `La prenotazione di ${traveler} per ${voyageName}${legs} e decaduta per mancato saldo.`,
     }
   }
   return {
@@ -368,6 +381,12 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'second_briefing') {
       return { title: 'Voyage briefing', body: `Operational briefing for ${voyageName}${legs}.` }
     }
+    if (params.eventType === 'balance_reminder') {
+      return { title: 'Balance due soon', body: `The balance for ${voyageName}${legs} is due soon.` }
+    }
+    if (params.eventType === 'balance_deadline_missed') {
+      return { title: 'Balance deadline missed', body: `Your booking for ${voyageName}${legs} lapsed for a missed balance payment.` }
+    }
     return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
   }
 
@@ -412,6 +431,12 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'second_briefing') {
     return { title: 'Briefing viaggio', body: `Briefing operativo per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'balance_reminder') {
+    return { title: 'Saldo in scadenza', body: `Il saldo per ${voyageName}${legs} scade a breve.` }
+  }
+  if (params.eventType === 'balance_deadline_missed') {
+    return { title: 'Scadenza saldo non rispettata', body: `La tua prenotazione per ${voyageName}${legs} e decaduta per mancato saldo.` }
   }
   return { title: 'Aggiornamento booking viaggio', body: `C'e un aggiornamento per ${voyageName}${legs}.` }
 }
@@ -720,6 +745,7 @@ Deno.serve(async (req) => {
                 changeKind: metadataString(metadata, 'change_kind'),
                 oldLegs,
                 proposedLegs,
+                scope: metadataString(metadata, 'scope'),
               }
             : {
                 language,
@@ -744,6 +770,14 @@ Deno.serve(async (req) => {
                 oldLegs,
                 proposedLegs,
                 refundPending: metadataBool(metadata, 'refund_pending'),
+                // "deposit" (acconto) or "balance" (saldo) — set on payment_pending/payment_received/
+                // balance_reminder so the email can say which one this is about.
+                phase: metadataString(metadata, 'phase'),
+                balanceDueAt: metadataString(metadata, 'balance_due_at'),
+                // balance_deadline_missed: 'booking' (the whole booking lapsed), 'participant'
+                // (this guest's own seat lapsed), or 'participant_removed' (sent to the lead
+                // instead, about a guest who lapsed).
+                scope: metadataString(metadata, 'scope'),
               },
           metadata: emailMetadata,
         })

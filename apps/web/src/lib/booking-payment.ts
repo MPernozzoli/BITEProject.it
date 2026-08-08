@@ -1,7 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 
+/** "deposit" collects the upfront acconto; "balance" collects the remaining saldo. */
+export type PaymentPhase = "deposit" | "balance";
+
 export type StartDepositResult =
-  | { ok: true; shareUrl: string; amountEur: number; perPersonEur: number }
+  | {
+      ok: true;
+      shareUrl: string;
+      amountEur: number;
+      perPersonEur: number;
+      phase: PaymentPhase;
+      totalDueEur: number;
+      depositTargetEur: number;
+    }
   | { ok: true; alreadyPaid: true }
   | { ok: false; notConfigured: true }
   | { ok: false; error: string };
@@ -65,6 +76,9 @@ export async function startDepositPayment(
       shareUrl,
       amountEur: Number(payload.amountEur ?? 0),
       perPersonEur: Number(payload.perPersonEur ?? 0),
+      phase: payload.phase === "balance" ? "balance" : "deposit",
+      totalDueEur: Number(payload.totalDueEur ?? 0),
+      depositTargetEur: Number(payload.depositTargetEur ?? 0),
     };
   }
   return { ok: false, error: "no_share_url" };
@@ -77,6 +91,9 @@ export type BankTransferDetails = {
   reference: string;
   amountEur: number;
   perPersonEur: number;
+  phase: PaymentPhase;
+  totalDueEur: number;
+  depositTargetEur: number;
 };
 
 export type StartBankTransferResult =
@@ -130,6 +147,9 @@ export async function startBankTransferDeposit(
         reference: payload.reference,
         amountEur: Number(payload.amountEur ?? 0),
         perPersonEur: Number(payload.perPersonEur ?? 0),
+        phase: payload.phase === "balance" ? "balance" : "deposit",
+        totalDueEur: Number(payload.totalDueEur ?? 0),
+        depositTargetEur: Number(payload.depositTargetEur ?? 0),
       },
     };
   }

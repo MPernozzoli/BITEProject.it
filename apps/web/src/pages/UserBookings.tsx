@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, BellOff, CalendarCheck, Check, Hourglass, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
+import { Bell, BellOff, CalendarCheck, Check, CreditCard, Hourglass, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
@@ -149,6 +149,7 @@ const UserBookings = () => {
     bookingRequestId: string;
     participantId?: string;
     amountEur?: number;
+    phase?: "deposit" | "balance";
   } | null>(null);
   const [paymentStarting, setPaymentStarting] = useState(false);
   const [reactivatingRequestId, setReactivatingRequestId] = useState<string | null>(null);
@@ -1002,6 +1003,18 @@ const UserBookings = () => {
         return;
       }
       reservedWindow?.close();
+      if (payment.ok && "alreadyPaid" in payment) {
+        setPaymentChoice(null);
+        toast.success(lang === "it" ? "Hai già saldato per intero." : "You have already paid in full.");
+        await loadData();
+        return;
+      }
+      if (!payment.ok && "error" in payment && payment.error === "already_settled") {
+        setPaymentChoice(null);
+        toast.success(lang === "it" ? "Hai già saldato per intero." : "You have already paid in full.");
+        await loadData();
+        return;
+      }
       setPaymentChoice(null);
       toast.info(
         lang === "it"
@@ -1012,6 +1025,13 @@ const UserBookings = () => {
     } finally {
       setPaymentStarting(false);
     }
+  };
+
+  /** Opens the payment-method dialog for a booking's next payment (deposit or balance — the
+   * server resolves which one is actually due; the dialog just doesn't preview an amount until
+   * the API responds). Used for the "Paga il saldo" action on an already-confirmed booking. */
+  const openBalancePayment = (request: BookingRequest) => {
+    setPaymentChoice({ bookingRequestId: request.id, phase: "balance" });
   };
 
   const handleDecline = async (participantId: string) => {
@@ -1170,6 +1190,7 @@ const UserBookings = () => {
           }}
           loading={paymentStarting}
           amountEur={paymentChoice?.amountEur}
+          phase={paymentChoice?.phase}
           onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
           onBankTransfer={() => {
             if (!paymentChoice) return;
@@ -1786,6 +1807,16 @@ const UserBookings = () => {
                           <Check size={14} /> {lang === "it" ? "Conferma" : "Confirm"}
                         </button>
                       )}
+                      {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) &&
+                        paidDepositRequestIds.has(detailsRequest.id) && (
+                          <button
+                            type="button"
+                            onClick={() => openBalancePayment(detailsRequest)}
+                            className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent"
+                          >
+                            <CreditCard size={14} /> {lang === "it" ? "Paga il saldo" : "Pay the balance"}
+                          </button>
+                        )}
                       {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) && (
                         <button
                           type="button"

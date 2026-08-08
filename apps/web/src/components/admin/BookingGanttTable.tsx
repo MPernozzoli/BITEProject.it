@@ -875,12 +875,12 @@ const BookingGanttTable = ({
                       <X size={13} /> Rifiuta
                     </button>
                   ) : null}
-                  {!paidDepositRequestIds.has(request.id) && !["cancelled", "rejected"].includes(request.status) ? (
+                  {!["cancelled", "rejected"].includes(request.status) ? (
                     <button
                       type="button"
                       onClick={() => onConfirmPayment(request.id)}
                       disabled={saving}
-                      title="Il contributo è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
+                      title="Il contributo (acconto o saldo) è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
                       className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
                     >
                       <Wallet size={13} /> Registra pagamento

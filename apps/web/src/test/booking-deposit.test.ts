@@ -3,7 +3,9 @@ import { type BookableLeg } from "@/lib/booking-utils";
 import {
   CONTRIBUTION_FIXED_MINIMUM_EUR,
   DEFAULT_CONTRIBUTION_PER_NM_EUR,
+  DEPOSIT_CAP_EUR,
   depositForPayerEur,
+  depositTargetEur,
   legDepositEur,
   perPersonDepositEur,
   totalDepositEur,
@@ -110,5 +112,54 @@ describe("booking deposit", () => {
     const legs = [makeLeg({ planned_nautical_miles: 10 })]; // €29 per person
     expect(depositForPayerEur(legs, { isLead: false, paymentMode: "lead_pays_all", partySize: 4 })).toBe(29);
     expect(depositForPayerEur(legs, { isLead: false, paymentMode: "each_pays_own", partySize: 4 })).toBe(29);
+  });
+});
+
+describe("deposit target (acconto)", () => {
+  it("is 50% of the total contribution", () => {
+    expect(depositTargetEur(100)).toBe(50);
+    expect(depositTargetEur(29)).toBe(14.5);
+  });
+
+  it("is capped at €499 regardless of how large the total is", () => {
+    expect(DEPOSIT_CAP_EUR).toBe(499);
+    expect(depositTargetEur(1000)).toBe(499);
+    expect(depositTargetEur(998)).toBe(499);
+    expect(depositTargetEur(997)).toBeCloseTo(498.5);
+  });
+
+  it("never exceeds the total itself for small contributions", () => {
+    expect(depositTargetEur(20)).toBe(10);
+  });
+
+  /**
+   * Mirrors the phase decision in resolveDepositPayer (deposit-resolver.ts): the first
+   * payment(s) collect up to the deposit target, and only once that is reached does a further
+   * payment collect (the rest of) the balance.
+   */
+  function resolvePhase(totalDueEur: number, alreadyPaidEur: number) {
+    const target = depositTargetEur(totalDueEur);
+    const phase = alreadyPaidEur < target ? "deposit" : "balance";
+    const amountEur = Math.round(((phase === "deposit" ? target : totalDueEur) - alreadyPaidEur) * 100) / 100;
+    return { phase, amountEur };
+  }
+
+  it("collects the deposit first when nothing has been paid yet", () => {
+    expect(resolvePhase(200, 0)).toEqual({ phase: "deposit", amountEur: 100 });
+  });
+
+  it("collects the balance once the deposit target has been met", () => {
+    expect(resolvePhase(200, 100)).toEqual({ phase: "balance", amountEur: 100 });
+  });
+
+  it("collects the remainder of a still-short deposit before ever asking for the balance", () => {
+    // A route change raised the total after a partial deposit payment: still short of the
+    // (now higher) deposit target, so the next payment tops up the deposit, not the balance.
+    expect(resolvePhase(300, 100)).toEqual({ phase: "deposit", amountEur: 50 });
+  });
+
+  it("caps the deposit at €499 even for a large lead_pays_all party", () => {
+    expect(resolvePhase(1200, 0)).toEqual({ phase: "deposit", amountEur: 499 });
+    expect(resolvePhase(1200, 499)).toEqual({ phase: "balance", amountEur: 701 });
   });
 });

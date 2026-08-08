@@ -17,6 +17,7 @@ import {
 import {
   clearBookingPaymentDeadlineIfSettled,
   enqueuePaymentReceivedNotifications,
+  paymentPhaseFromReference,
 } from "../../../src/server/bunq/deposit-resolver.js";
 import {
   bearerToken,
@@ -153,6 +154,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
               amountEur: row.amount_cents / 100,
               paymentMethod: row.payment_method,
               reference: row.reference,
+              phase: paymentPhaseFromReference(row.reference),
             });
           } catch (error) {
             console.error("[bunq/status] payment notification enqueue failed", error);

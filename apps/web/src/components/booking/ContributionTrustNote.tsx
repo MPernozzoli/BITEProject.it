@@ -18,8 +18,8 @@ const ContributionTrustNote = ({ lang, variant = "box" }: ContributionTrustNoteP
     <>
       <p>
         {it
-          ? "Ti chiediamo di versare subito il contributo come dimostrazione di serietà e impegno a intraprendere il viaggio."
-          : "We ask you to pay the contribution right away as proof of seriousness and commitment to undertake the voyage."}
+          ? "Ti chiediamo di versare subito un acconto (50% del contributo, fino a un massimo di €499) come dimostrazione di serietà e impegno a intraprendere il viaggio. Il saldo va versato entro 15 giorni dalla partenza della tua tratta di imbarco."
+          : "We ask you to pay a deposit right away (50% of the contribution, up to €499) as proof of seriousness and commitment to undertake the voyage. The balance is due within 15 days of the departure of your own embarkation leg."}
       </p>
       <p className="mt-1">
         {it
@@ -28,7 +28,9 @@ const ContributionTrustNote = ({ lang, variant = "box" }: ContributionTrustNoteP
         <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-accent underline underline-offset-2">
           {it ? "Termini e Condizioni" : "Terms & Conditions"}
         </a>
-        {it ? ", l'importo ti viene rimborsato per intero." : ", the amount is fully refunded."}
+        {it
+          ? ", quanto versato ti viene rimborsato per intero. Se invece non versi il saldo entro la scadenza, la prenotazione decade e l'acconto non è rimborsabile."
+          : ", what you paid is fully refunded. If instead you do not pay the balance by the deadline, the booking lapses and the deposit is not refundable."}
       </p>
     </>
   );

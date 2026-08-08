@@ -75,7 +75,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   try {
     const { db, user } = await resolveCaller(token);
     const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, phase, totalDueEur, depositTargetEur } =
+      resolved;
 
     // The bunq.me payment link caps a single request at €500. This limit applies ONLY to the
     // online link — a bank transfer (api/payments/bunq/bank-transfer.ts) has no such cap — so
@@ -103,13 +104,17 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           amountEur: existing.amount_cents / 100,
           perPersonEur: existing.per_person_cents / 100,
           partySize: existing.party_size,
+          phase,
+          totalDueEur,
+          depositTargetEur,
         });
         return;
       }
     }
 
-    const reference = `CON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
-    const description = `Quota spese viaggio BITE — ${reference}`;
+    const referencePrefix = phase === "deposit" ? "ACC" : "SAL";
+    const reference = `${referencePrefix}-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+    const description = `${phase === "deposit" ? "Acconto" : "Saldo"} viaggio BITE — ${reference}`;
 
     const created = await createBunqPaymentRequest({
       amountEur,
@@ -150,6 +155,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       perPersonEur,
       partySize: coveredPersons,
       reference,
+      phase,
+      totalDueEur,
+      depositTargetEur,
     });
   } catch (error) {
     if (error instanceof DepositHttpError) {

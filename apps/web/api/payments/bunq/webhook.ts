@@ -14,12 +14,15 @@ import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../
 import {
   clearBookingPaymentDeadlineIfSettled,
   enqueuePaymentReceivedNotifications,
+  paymentPhaseFromReference,
 } from "../../../src/server/bunq/deposit-resolver.js";
 import { getBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import { firstQueryParam, readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 import { timingSafeEqual } from "node:crypto";
 
-const REFERENCE_PATTERN = /\b(?:CON|DEP|BON)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
+// CON/DEP/BON are the pre-deposit/balance-split prefixes, kept so in-flight references issued
+// before this shipped still reconcile. ACC (acconto) / SAL (saldo) are current.
+const REFERENCE_PATTERN = /\b(?:CON|DEP|BON|ACC|SAL)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
 
 type BunqNotificationPayload = {
   NotificationUrl?: {
@@ -196,6 +199,7 @@ async function enqueuePaymentReceivedForDeposit(
     amountEur: row.amount_cents / 100,
     paymentMethod: row.payment_method,
     reference: row.reference,
+    phase: paymentPhaseFromReference(row.reference),
   });
 }
 

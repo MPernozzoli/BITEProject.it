@@ -31,6 +31,8 @@ type BookingEvent =
   | 'payment_reminder'
   | 'plan_change_pending'
   | 'plan_change_auto_accepted'
+  | 'balance_reminder'
+  | 'balance_deadline_missed'
 
 /**
  * A delay arrives as plan_change_pending, but reads nothing like one: the legs are
@@ -71,6 +73,13 @@ interface VoyageBookingNotificationProps {
   /** The refund could not be paid automatically: ask the traveller for an IBAN by email. */
   refundPending?: boolean | null
   unsubscribeUrl?: string | null
+  /** "deposit" (acconto) or "balance" (saldo) — set on payment_pending/payment_received/balance_reminder. */
+  phase?: string | null
+  /** Balance due date, for balance_reminder. */
+  balanceDueAt?: string | null
+  /** For balance_deadline_missed: 'booking' (own), 'participant' (own seat), or
+   * 'participant_removed' (sent to the lead about a guest who lapsed). */
+  scope?: string | null
 }
 
 const COPY = {
@@ -94,8 +103,10 @@ const COPY = {
       plan_change_pending: 'La pianificazione del viaggio e cambiata.',
       plan_change_auto_accepted: 'Pianificazione aggiornata.',
       schedule_delayed: 'Il viaggio sta procedendo in ritardo.',
+      balance_reminder: 'Il saldo scade a breve.',
+      balance_deadline_missed: 'Scadenza saldo non rispettata.',
     },
-    intro: (name: string, eventType: TemplateVariant, voyageName: string) => {
+    intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
       if (eventType === 'schedule_delayed') return `${prefix}${voyageName} sta procedendo in ritardo rispetto alla finestra prevista. Le tue tratte non cambiano, ma le date si spostano: qui sotto trovi la nuova partenza. Se le nuove date non ti sono comode puoi annullare con rimborso completo.`
       if (eventType === 'admin_approved') return `${prefix}la richiesta per ${voyageName} e stata approvata. Apri la tua area booking per confermare.`
@@ -105,11 +116,17 @@ const COPY = {
       if (eventType === 'cancelled') return `${prefix}il booking per ${voyageName} e stato annullato.`
       if (eventType === 'rejected') return `${prefix}la richiesta per ${voyageName} non e stata confermata.`
       if (eventType === 'manual_added') return `${prefix}sei stato aggiunto manualmente al booking per ${voyageName}.`
-      if (eventType === 'payment_pending') return `${prefix}abbiamo registrato un pagamento in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata per mantenere la prenotazione.`
-      if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto il pagamento per ${voyageName}.`
+      if (eventType === 'payment_pending' && phase === 'balance') return `${prefix}abbiamo registrato il pagamento del saldo in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata: oltre quel termine la prenotazione decade e l'acconto gia versato non e rimborsabile.`
+      if (eventType === 'payment_pending') return `${prefix}abbiamo registrato un pagamento dell'acconto in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata per mantenere la prenotazione.`
+      if (eventType === 'payment_received' && phase === 'balance') return `${prefix}abbiamo ricevuto il saldo per ${voyageName}: la tua prenotazione e a posto con i pagamenti.`
+      if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto l'acconto per ${voyageName}. Ricorda che il saldo va versato entro 15 giorni dalla partenza della tua tratta di imbarco.`
       if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
       if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
       if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Qui sotto trovi di nuovo tutti i dati: ricorda di indicare la causale esatta, senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
+      if (eventType === 'balance_reminder') return `${prefix}il saldo per ${voyageName}${balanceDueAtLabel ? ` scade il ${balanceDueAtLabel}` : ' sta per scadere'}. Se non arriva entro quella data, la prenotazione decade e l'acconto gia versato non e rimborsabile.`
+      if (eventType === 'balance_deadline_missed' && scope === 'participant') return `${prefix}la scadenza per versare il saldo di ${voyageName} e passata: la tua partecipazione e stata annullata e l'acconto versato non e rimborsabile.`
+      if (eventType === 'balance_deadline_missed' && scope === 'participant_removed') return `${prefix}un partecipante che avevi invitato su ${voyageName} non ha versato il proprio saldo entro la scadenza: la sua partecipazione e stata annullata. Il resto della prenotazione resta confermato.`
+      if (eventType === 'balance_deadline_missed') return `${prefix}la scadenza per versare il saldo di ${voyageName} e passata: la prenotazione e stata annullata e l'acconto versato non e rimborsabile.`
       if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
@@ -177,6 +194,8 @@ const COPY = {
       plan_change_pending: 'Richiede risposta',
       plan_change_auto_accepted: 'Aggiornato',
       schedule_delayed: 'In ritardo',
+      balance_reminder: 'Saldo in scadenza',
+      balance_deadline_missed: 'Decaduto per mancato saldo',
     },
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
@@ -200,8 +219,10 @@ const COPY = {
       plan_change_pending: 'The voyage plan changed.',
       plan_change_auto_accepted: 'Plan updated.',
       schedule_delayed: 'The voyage is running late.',
+      balance_reminder: 'The balance is due soon.',
+      balance_deadline_missed: 'Balance deadline missed.',
     },
-    intro: (name: string, eventType: TemplateVariant, voyageName: string) => {
+    intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
       if (eventType === 'schedule_delayed') return `${prefix}${voyageName} is running behind its planned window. Your legs do not change, but the dates shift: the new departure is below. If the new dates no longer suit you, you can cancel with a full refund.`
       if (eventType === 'admin_approved') return `${prefix}your request for ${voyageName} was approved. Open your booking area to confirm.`
@@ -211,11 +232,17 @@ const COPY = {
       if (eventType === 'cancelled') return `${prefix}your booking for ${voyageName} was cancelled.`
       if (eventType === 'rejected') return `${prefix}your request for ${voyageName} was not confirmed.`
       if (eventType === 'manual_added') return `${prefix}you were manually added to the booking for ${voyageName}.`
-      if (eventType === 'payment_pending') return `${prefix}we recorded a pending payment for ${voyageName}. Complete it before the deadline to keep your booking.`
-      if (eventType === 'payment_received') return `${prefix}we received your payment for ${voyageName}.`
+      if (eventType === 'payment_pending' && phase === 'balance') return `${prefix}we recorded a pending balance payment for ${voyageName}. Complete it before the deadline: after that the booking lapses and the deposit already paid is not refundable.`
+      if (eventType === 'payment_pending') return `${prefix}we recorded a pending deposit payment for ${voyageName}. Complete it before the deadline to keep your booking.`
+      if (eventType === 'payment_received' && phase === 'balance') return `${prefix}we received the balance for ${voyageName}: your booking is fully settled.`
+      if (eventType === 'payment_received') return `${prefix}we received your deposit for ${voyageName}. Remember the balance is due within 15 days of the departure of your own embarkation leg.`
       if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
       if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
       if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. All the details are below again: remember to use the exact reference, without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`
+      if (eventType === 'balance_reminder') return `${prefix}the balance for ${voyageName}${balanceDueAtLabel ? ` is due on ${balanceDueAtLabel}` : ' is due soon'}. If it does not arrive by then, the booking lapses and the deposit already paid is not refundable.`
+      if (eventType === 'balance_deadline_missed' && scope === 'participant') return `${prefix}the deadline to pay the balance for ${voyageName} has passed: your participation was cancelled and the deposit you paid is not refundable.`
+      if (eventType === 'balance_deadline_missed' && scope === 'participant_removed') return `${prefix}a participant you invited on ${voyageName} did not pay their balance by the deadline: their participation was cancelled. The rest of the booking stays confirmed.`
+      if (eventType === 'balance_deadline_missed') return `${prefix}the deadline to pay the balance for ${voyageName} has passed: the booking was cancelled and the deposit you paid is not refundable.`
       if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
       return `${prefix}we received your berth request for ${voyageName}.`
@@ -283,6 +310,8 @@ const COPY = {
       plan_change_pending: 'Needs reply',
       plan_change_auto_accepted: 'Updated',
       schedule_delayed: 'Running late',
+      balance_reminder: 'Balance due soon',
+      balance_deadline_missed: 'Lapsed — balance missed',
     },
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
@@ -305,6 +334,8 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'payment_reminder',
     'plan_change_pending',
     'plan_change_auto_accepted',
+    'balance_reminder',
+    'balance_deadline_missed',
   ]
   return allowed.includes(value as BookingEvent) ? (value as BookingEvent) : 'requested'
 }
@@ -350,6 +381,9 @@ const VoyageBookingNotificationEmail = ({
   proposedLegs,
   refundPending,
   unsubscribeUrl,
+  phase,
+  balanceDueAt,
+  scope,
 }: VoyageBookingNotificationProps) => {
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
@@ -371,6 +405,7 @@ const VoyageBookingNotificationEmail = ({
   const paymentExpiresAtLabel = formatDateTime(paymentExpiresAt, lang)
   const newDepartureLabel = formatDateTime(newDepartureAt, lang)
   const baselineDepartureLabel = formatDateTime(baselineDepartureBy, lang)
+  const balanceDueAtLabel = formatDateTime(balanceDueAt, lang)
   const paymentMethodKey = paymentMethod?.trim() as keyof typeof copy.paymentMethodLabels | undefined
   const paymentMethodLabel = paymentMethodKey && copy.paymentMethodLabels[paymentMethodKey]
     ? copy.paymentMethodLabels[paymentMethodKey]
@@ -378,7 +413,7 @@ const VoyageBookingNotificationEmail = ({
   const introText =
     variant === 'payment_pending' && paymentMethod === 'bank_transfer'
       ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName)
-      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName)
+      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, phase, scope, balanceDueAtLabel)
   // A payer who closed the dialog has nothing else to pay from: when the contribution is still
   // owed by transfer, the email itself has to carry the full coordinates, not just a reference.
   const showsBankInstructions =
@@ -449,13 +484,14 @@ const VoyageBookingNotificationEmail = ({
           <EmailCallout>{copy.bankMatchWarning}</EmailCallout>
           <EmailCallout>{copy.bankDeadlineWarning}</EmailCallout>
         </EmailCard>
-      ) : amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel ? (
+      ) : amountLabel || paymentMethod || paymentReference || paymentExpiresAtLabel || balanceDueAtLabel ? (
         <EmailCard>
           <EmailSectionLabel>{copy.paymentTitle}</EmailSectionLabel>
           {amountLabel ? <EmailHighlightBox label={copy.amount} value={amountLabel} /> : null}
           <EmailDetailRow label={copy.paymentMethod} value={paymentMethodLabel} />
           <EmailDetailRow label={copy.paymentReference} value={paymentReference} />
           <EmailDetailRow label={copy.paymentExpiresAt} value={paymentExpiresAtLabel} />
+          {balanceDueAtLabel ? <EmailDetailRow label={copy.paymentExpiresAt} value={balanceDueAtLabel} strong /> : null}
         </EmailCard>
       ) : null}
       {isDelay ? (

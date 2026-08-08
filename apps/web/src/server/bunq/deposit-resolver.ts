@@ -9,6 +9,7 @@ import { createAuthClient, createServiceClient } from "./supabase.js";
 import {
   perPersonDepositEur,
   depositForPayerEur,
+  depositTargetEur,
   type DepositLeg,
   type PaymentMode,
 } from "../../lib/booking-deposit.js";
@@ -53,6 +54,16 @@ export class DepositHttpError extends Error {
   }
 }
 
+export type PaymentPhase = "deposit" | "balance";
+
+/** Infers the phase a settled deposit was collecting from its ACC-/SAL- reference prefix. */
+export function paymentPhaseFromReference(reference: string | null | undefined): PaymentPhase | null {
+  if (!reference) return null;
+  if (reference.startsWith("ACC-")) return "deposit";
+  if (reference.startsWith("SAL-")) return "balance";
+  return null;
+}
+
 export type ResolvedDeposit = {
   db: SupabaseClient;
   user: User;
@@ -64,6 +75,12 @@ export type ResolvedDeposit = {
   coveredPersons: number;
   perPersonEur: number;
   amountEur: number;
+  /** Whether this payment collects the upfront deposit or the later balance. */
+  phase: PaymentPhase;
+  /** This payer's full obligation (deposit + balance), regardless of what has been paid so far. */
+  totalDueEur: number;
+  /** This payer's required upfront deposit — min(50% of totalDueEur, €499). */
+  depositTargetEur: number;
 };
 
 type BookingNotificationEvent =
@@ -260,13 +277,19 @@ export async function resolveDepositPayer(
   };
   const perPersonEur = perPersonDepositEur(legs, contributionOpts);
   const dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
+  const depositTarget = depositTargetEur(dueEur);
 
-  // Charge only what is still outstanding. This is what makes an accepted route change with
-  // settlement collect the *difference* rather than the whole contribution a second time: the
-  // amount above is recomputed from the current legs, so subtracting what this payer already
-  // settled leaves exactly the delta. It also makes retries idempotent in value.
+  // Charge only what is still outstanding, and only up to the deposit target until it is fully
+  // reached — the first payment(s) collect the upfront deposit (50% of dueEur, capped at €499),
+  // and only once that target is met does a further payment collect (the rest of) the balance.
+  // This is also what makes an accepted route change collect the *difference* rather than the
+  // whole contribution again: dueEur/depositTarget are recomputed from the current legs, so
+  // subtracting what this payer already settled leaves exactly the delta. Retries stay idempotent
+  // in value either way.
   const alreadyPaidEur = await paidDepositTotalEur(db, bookingRequestId, payerParticipantId);
-  const amountEur = Math.round((dueEur - alreadyPaidEur + Number.EPSILON) * 100) / 100;
+  const phase: PaymentPhase = alreadyPaidEur < depositTarget ? "deposit" : "balance";
+  const targetEur = phase === "deposit" ? depositTarget : dueEur;
+  const amountEur = Math.round((targetEur - alreadyPaidEur + Number.EPSILON) * 100) / 100;
 
   // Nothing left to collect: either fully settled, or the new route costs less than what was
   // already paid. The overpayment is not auto-refunded here — the money has already left the
@@ -284,6 +307,28 @@ export async function resolveDepositPayer(
   // resolver is shared by both methods. Blocking it here would make large contributions
   // (e.g. a long multi-leg reroute) impossible to pay by any method.
 
+  // Snapshot this payer's obligation so the balance-deadline sweep (pure SQL) can tell whether
+  // it has been met without duplicating the mileage-based contribution formula in SQL. Written
+  // on the entity the sweep will actually query: the booking request for a null payer (solo
+  // travellers, or a lead before guests are configured / paying for the whole lead_pays_all
+  // party), the participant row otherwise (an each_pays_own guest, or the lead once they have
+  // their own participant row).
+  const dueCents = Math.round(dueEur * 100);
+  const depositCents = Math.round(depositTarget * 100);
+  if (payerParticipantId) {
+    const { error: stampError } = await db
+      .from("voyage_booking_participants")
+      .update({ contribution_due_cents: dueCents, contribution_deposit_cents: depositCents })
+      .eq("id", payerParticipantId);
+    if (stampError) throw new Error(stampError.message);
+  } else {
+    const { error: stampError } = await db
+      .from("voyage_booking_requests")
+      .update({ contribution_due_cents: dueCents, contribution_deposit_cents: depositCents })
+      .eq("id", bookingRequestId);
+    if (stampError) throw new Error(stampError.message);
+  }
+
   const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
   return {
     db,
@@ -293,6 +338,9 @@ export async function resolveDepositPayer(
     isLead,
     partySize,
     paymentMode,
+    phase,
+    totalDueEur: dueEur,
+    depositTargetEur: depositTarget,
     coveredPersons,
     perPersonEur,
     amountEur,
@@ -504,6 +552,9 @@ export async function enqueuePaymentPendingNotifications(
     payment_method: params.paymentMethod,
     payment_reference: params.reference,
     payment_expires_at: params.expiresAt,
+    phase: resolved.phase,
+    total_due_eur: resolved.totalDueEur,
+    deposit_target_eur: resolved.depositTargetEur,
   };
   // Only ever called for a freshly created deposit (both endpoints return early on an existing
   // pending one), so re-arming cannot spam: a resend here means the payer really did start a
@@ -528,12 +579,15 @@ export async function enqueuePaymentReceivedNotifications(
     amountEur: number;
     paymentMethod?: string | null;
     reference?: string | null;
+    /** "deposit" (acconto) or "balance" (saldo) — inferred by the caller from the reference prefix. */
+    phase?: PaymentPhase | null;
   },
 ): Promise<void> {
   const metadata = {
     amount_eur: params.amountEur,
     payment_method: params.paymentMethod,
     payment_reference: params.reference,
+    phase: params.phase ?? null,
   };
   // Re-armed on purpose: a booking can settle more than once (the delta payment of an accepted
   // route change), and each settlement is its own "we got your money" moment.

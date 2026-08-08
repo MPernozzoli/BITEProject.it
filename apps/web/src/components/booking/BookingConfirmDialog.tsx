@@ -13,7 +13,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
+import { depositTargetEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
@@ -360,6 +360,11 @@ const BookingConfirmDialog = ({
                     : `${formatDepositEur(depositPerPersonEur, "en")} per person × ${partySize} guests`}
                 </p>
               )}
+              <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+                {lang === "it"
+                  ? `Acconto da versare ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza della tua tratta: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
+                  : `Deposit due now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance due within 15 days of your leg's departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
+              </p>
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
                 {lang === "it"
                   ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico."
@@ -368,8 +373,8 @@ const BookingConfirmDialog = ({
               <div className="mt-3 rounded-xl border border-amber-400/60 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
                 <p className="font-semibold">
                   {lang === "it"
-                    ? "Per completare la candidatura dovrai versare il contributo subito dopo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."
-                    : "To complete your application you must pay the contribution right after. Without payment the booking is not finalised and you cannot take part in the voyage."}
+                    ? "Per completare la candidatura dovrai versare l'acconto subito dopo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."
+                    : "To complete your application you must pay the deposit right after. Without payment the booking is not finalised and you cannot take part in the voyage."}
                 </p>
                 <div className="mt-1">
                   <ContributionTrustNote lang={lang} variant="plain" />

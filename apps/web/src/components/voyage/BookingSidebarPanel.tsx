@@ -16,7 +16,7 @@ import { getDangerReasonDef } from "@/lib/danger-reasons";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import { depositTargetEur, formatDepositEur } from "@/lib/booking-deposit";
 
 interface BookingSidebarPanelProps {
   voyage: Voyage | null;
@@ -187,6 +187,11 @@ const BookingSidebarPanel = ({
                       {formatDepositEur(depositPerPersonEur, lang === "it" ? "it" : "en")} × {partySize}
                     </p>
                   )}
+                  <p className="mt-2 text-[11px] font-medium text-amber-900">
+                    {lang === "it"
+                      ? `Acconto ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
+                      : `Deposit now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance within 15 days of departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
+                  </p>
                   <p className="mt-2 text-[11px] leading-relaxed text-amber-950/85">
                     {lang === "it"
                       ? "Non e un prezzo, un biglietto o un servizio commerciale: e una quota equa delle spese vive di un viaggio privato che l'equipaggio deve comunque effettuare."

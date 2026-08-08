@@ -59,7 +59,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   try {
     const { db, user } = await resolveCaller(token);
     const resolved = await resolveDepositPayer(db, user, bookingRequestId, participantId);
-    const { payerParticipantId, coveredPersons, perPersonEur, amountEur } = resolved;
+    const { payerParticipantId, coveredPersons, perPersonEur, amountEur, phase, totalDueEur, depositTargetEur } =
+      resolved;
 
     // Idempotency: resend the same causale/amount for this exact payer instead of minting a new one.
     const existing = await findExistingDeposit(db, bookingRequestId, payerParticipantId, "bank_transfer");
@@ -75,12 +76,16 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           amountEur: existing.amount_cents / 100,
           perPersonEur: existing.per_person_cents / 100,
           partySize: existing.party_size,
+          phase,
+          totalDueEur,
+          depositTargetEur,
         });
         return;
       }
     }
 
-    const reference = `BON-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+    const referencePrefix = phase === "deposit" ? "ACC" : "SAL";
+    const reference = `${referencePrefix}-${bookingRequestId.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
 
     const { error: insertError } = await db.from("voyage_booking_deposits").insert({
       booking_request_id: bookingRequestId,
@@ -114,6 +119,9 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       amountEur,
       perPersonEur,
       partySize: coveredPersons,
+      phase,
+      totalDueEur,
+      depositTargetEur,
     });
   } catch (error) {
     if (error instanceof DepositHttpError) {

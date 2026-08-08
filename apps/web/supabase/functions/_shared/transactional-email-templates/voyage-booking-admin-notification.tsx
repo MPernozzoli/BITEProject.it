@@ -22,6 +22,7 @@ type AdminBookingEvent =
   | 'admin_payment_pending'
   | 'admin_payment_received'
   | 'admin_plan_change'
+  | 'admin_balance_deadline_missed'
 
 /**
  * A delay reaches admins as admin_plan_change, but there is nothing to approve:
@@ -48,6 +49,8 @@ interface VoyageBookingAdminNotificationProps {
   oldLegs?: string[] | null
   proposedLegs?: string[] | null
   unsubscribeUrl?: string | null
+  /** For admin_balance_deadline_missed: 'booking' (whole booking lapsed) or 'participant' (one guest's seat lapsed). */
+  scope?: string | null
 }
 
 const COPY = {
@@ -62,8 +65,9 @@ const COPY = {
       admin_payment_received: 'Pagamento booking ricevuto.',
       admin_plan_change: 'Cambio planning da approvare.',
       schedule_delayed: 'Viaggio in ritardo: avvisati.',
+      admin_balance_deadline_missed: 'Saldo non versato entro la scadenza.',
     },
-    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string) => {
+    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'Un utente'
       if (eventType === 'schedule_delayed') return `${prefix}${voyageName} ha sforato la finestra di partenza prevista e le date si sono spostate. ${traveler} e stato avvisato: non serve approvare nulla, ma puo chiedere di annullare con rimborso completo.`
@@ -72,6 +76,10 @@ const COPY = {
       if (eventType === 'admin_payment_pending') return `${prefix}${traveler} ha avviato un pagamento per ${voyageName}.`
       if (eventType === 'admin_payment_received') return `${prefix}pagamento ricevuto per la prenotazione di ${traveler} su ${voyageName}.`
       if (eventType === 'admin_plan_change') return `${prefix}la prenotazione di ${traveler} su ${voyageName} richiede approvazione del cambio planning.`
+      if (eventType === 'admin_balance_deadline_missed' && scope === 'participant')
+        return `${prefix}un ospite non ha versato il proprio saldo entro la scadenza su ${voyageName}: la sua partecipazione e stata annullata automaticamente e il posto liberato. Il resto della prenotazione di ${traveler} resta confermato. L'acconto e trattenuto di default; puoi comunque rimborsarlo dalla pagina Rimborsi.`
+      if (eventType === 'admin_balance_deadline_missed')
+        return `${prefix}${traveler} non ha versato il saldo entro la scadenza su ${voyageName}: la prenotazione e stata annullata automaticamente. L'acconto e trattenuto di default; puoi comunque rimborsarlo dalla pagina Rimborsi.`
       return `${prefix}${traveler} ha inviato una nuova richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri gestione booking',
@@ -103,6 +111,7 @@ const COPY = {
       admin_payment_received: 'Pagamento ricevuto',
       admin_plan_change: 'Da approvare',
       schedule_delayed: 'In ritardo',
+      admin_balance_deadline_missed: 'Decaduto per mancato saldo',
     },
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
@@ -117,8 +126,9 @@ const COPY = {
       admin_payment_received: 'Booking payment received.',
       admin_plan_change: 'Plan change approval needed.',
       schedule_delayed: 'Voyage running late: travellers told.',
+      admin_balance_deadline_missed: 'Balance deadline missed.',
     },
-    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string) => {
+    intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
       const traveler = travelerName || 'A user'
       if (eventType === 'schedule_delayed') return `${prefix}${voyageName} slipped past its planned departure window and the dates moved. ${traveler} was notified: nothing needs approving, but they can ask to cancel with a full refund.`
@@ -127,6 +137,10 @@ const COPY = {
       if (eventType === 'admin_payment_pending') return `${prefix}${traveler} started a payment for ${voyageName}.`
       if (eventType === 'admin_payment_received') return `${prefix}payment received for ${traveler}'s booking on ${voyageName}.`
       if (eventType === 'admin_plan_change') return `${prefix}${traveler}'s booking on ${voyageName} needs plan-change approval.`
+      if (eventType === 'admin_balance_deadline_missed' && scope === 'participant')
+        return `${prefix}a guest did not pay their balance by the deadline on ${voyageName}: their participation was cancelled automatically and the seat released. The rest of ${traveler}'s booking stays confirmed. The deposit is withheld by default; you can still refund it from the Refunds page.`
+      if (eventType === 'admin_balance_deadline_missed')
+        return `${prefix}${traveler} did not pay the balance by the deadline on ${voyageName}: the booking was cancelled automatically. The deposit is withheld by default; you can still refund it from the Refunds page.`
       return `${prefix}${traveler} submitted a new berth request for ${voyageName}.`
     },
     cta: 'Open booking management',
@@ -158,6 +172,7 @@ const COPY = {
       admin_payment_received: 'Payment received',
       admin_plan_change: 'Needs approval',
       schedule_delayed: 'Running late',
+      admin_balance_deadline_missed: 'Lapsed — balance missed',
     },
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
@@ -171,6 +186,7 @@ function normalizeEventType(value?: string | null): AdminBookingEvent {
     'admin_payment_pending',
     'admin_payment_received',
     'admin_plan_change',
+    'admin_balance_deadline_missed',
   ]
   return allowed.includes(value as AdminBookingEvent) ? (value as AdminBookingEvent) : 'admin_new_booking'
 }
@@ -200,6 +216,7 @@ const VoyageBookingAdminNotificationEmail = ({
   oldLegs,
   proposedLegs,
   unsubscribeUrl,
+  scope,
 }: VoyageBookingAdminNotificationProps) => {
   const lang = resolveEmailLanguage(language)
   const copy = COPY[lang]
@@ -218,7 +235,7 @@ const VoyageBookingAdminNotificationEmail = ({
   const introText =
     variant === 'admin_payment_pending' && paymentMethod === 'bank_transfer'
       ? copy.bankTransferPendingIntro(buildGreetingName(recipientName), resolvedVoyageName, resolvedTravelerName)
-      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, resolvedTravelerName)
+      : copy.intro(buildGreetingName(recipientName), variant, resolvedVoyageName, resolvedTravelerName, scope)
   const amountLabel =
     typeof amountEur === 'number' && amountEur > 0
       ? new Intl.NumberFormat(lang === 'it' ? 'it-IT' : 'en-IE', {
