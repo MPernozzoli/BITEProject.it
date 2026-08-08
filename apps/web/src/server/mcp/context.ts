@@ -6,41 +6,18 @@
  * costruito per singola richiesta.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { McpScope } from "../../lib/mcp-scopes.js";
 
 /**
  * Gli scope sono volutamente pochi e per dominio: servono a limitare un token,
  * non a modellare permessi fini (quelli restano nelle RLS e nel ruolo admin).
+ *
+ * Elenco, tipo e default vivono in `lib/mcp-scopes.ts` — non qui — perché
+ * quel modulo lo importano anche le due UI che li mostrano a un umano
+ * (creazione token, consenso OAuth): un solo posto dove aggiungerne uno
+ * nuovo, non tre elenchi da tenere allineati a mano.
  */
-export const MCP_SCOPES = [
-  "articles:read",
-  "articles:write",
-  "plan:read",
-  "plan:write",
-  "newsletter:read",
-  "newsletter:write",
-  "mail:read",
-  "mail:write",
-  "voyages:read",
-  "voyages:write",
-] as const;
-
-export type McpScope = (typeof MCP_SCOPES)[number];
-
-/** Scope proposti di default alla creazione di un token dalla UI admin. */
-export const DEFAULT_MCP_SCOPES: McpScope[] = [
-  "articles:read",
-  "articles:write",
-  "plan:read",
-  "plan:write",
-  "newsletter:read",
-  "mail:read",
-  "voyages:read",
-  "voyages:write",
-];
-
-export function isMcpScope(value: string): value is McpScope {
-  return (MCP_SCOPES as readonly string[]).includes(value);
-}
+export { MCP_SCOPES, DEFAULT_MCP_SCOPES, isMcpScope, type McpScope } from "../../lib/mcp-scopes.js";
 
 export interface McpAuth {
   tokenId: string;

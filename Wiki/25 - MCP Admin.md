@@ -26,7 +26,7 @@ Il rewrite `/mcp` → `/api/mcp` sta in `vercel.json` **prima** del catch-all SP
 - A ogni richiesta si ri-verifica `has_role(user_id,'admin')`: **togliere il ruolo invalida subito tutti i token di quell'utente**, senza revocarli uno per uno.
 - Il valore in chiaro esiste solo nella risposta alla creazione. La UI è in `AdminMcpTokens.tsx`, montata da `AdminProfile.tsx` su `/profile` per gli admin.
 
-Scope: `articles:read|write`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `voyages:read|write`.
+Scope: `articles:read|write`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `voyages:read|write`. Elenco, tipo ed etichette bilingui vivono in un solo punto, `src/lib/mcp-scopes.ts`: sia la UI di creazione token (`AdminMcpTokens.tsx`) sia la pagina di consenso OAuth (`AdminMcpAuthorize.tsx`) lo importano invece di tenere un proprio elenco, quindi mostrano sempre gli stessi permessi e uno scope nuovo compare in entrambe senza toccarle. `Record<McpScope, …>` obbliga anche a dargli un'etichetta: dimenticarla è un errore di build (`tsc`), non un buco silenzioso scoperto in produzione — cosa già successa una volta con `voyages:*`, aggiunto allo scope server ma non alla pagina di consenso finché non consolidata qui.
 
 ### OAuth 2.1 (connector claude.ai)
 Un client come Claude Code punta direttamente col token manuale; un connector browser (claude.ai) non sa mandare un header custom e si aspetta un authorization server. Per quel caso c'è un AS minimale, tutto in `apps/web/api/mcp/oauth/` + `src/server/mcp/oauth.ts`:

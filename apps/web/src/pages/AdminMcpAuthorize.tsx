@@ -17,19 +17,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getLoginUrl } from "@/lib/admin-host";
 import { useI18n } from "@/lib/i18n";
+import { MCP_SCOPES, mcpScopeLabel } from "@/lib/mcp-scopes";
 
-const SCOPE_LABELS: Record<string, { it: string; en: string }> = {
-  "articles:read": { it: "Leggere gli articoli", en: "Read articles" },
-  "articles:write": { it: "Scrivere e modificare articoli", en: "Write and edit articles" },
-  "plan:read": { it: "Leggere il piano editoriale", en: "Read the editorial plan" },
-  "plan:write": { it: "Programmare nel piano editoriale", en: "Schedule in the editorial plan" },
-  "newsletter:read": { it: "Leggere le newsletter", en: "Read newsletters" },
-  "newsletter:write": { it: "Scrivere e schedulare newsletter", en: "Write and schedule newsletters" },
-  "mail:read": { it: "Leggere la posta", en: "Read mail" },
-  "mail:write": { it: "Rispondere, inoltrare e scrivere mail", en: "Reply, forward and write mail" },
-};
-
-const ALL_SCOPES = Object.keys(SCOPE_LABELS);
+const ALL_SCOPES: string[] = [...MCP_SCOPES];
 
 const COPY = {
   it: {
@@ -232,7 +222,7 @@ const AdminMcpAuthorize = () => {
                   }
                   className="h-4 w-4 rounded border-border accent-[hsl(var(--accent))]"
                 />
-                {SCOPE_LABELS[scope]?.[lang === "en" ? "en" : "it"] ?? scope}
+                {mcpScopeLabel(scope, lang === "en" ? "en" : "it")}
               </label>
             );
           })}
