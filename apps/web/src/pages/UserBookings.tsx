@@ -608,6 +608,43 @@ const UserBookings = () => {
         .map((legId) => legsById[legId])
         .filter(Boolean)
     : [];
+  const detailsOwnLegs = detailsRequest
+    ? requestLegs
+        .filter((link) => link.booking_request_id === detailsRequest.id)
+        .map((link) => legsById[link.bookable_leg_id])
+        .filter(Boolean)
+    : [];
+  /** Outstanding balance for the booking currently open in the details panel — see
+   * ownRequestBalance above for the same best-effort, display-only computation. */
+  const detailsRequestBalanceDue = (() => {
+    if (
+      !detailsRequest ||
+      detailsOwnLegs.length === 0 ||
+      detailsRequest.is_comped ||
+      !["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) ||
+      !paidDepositRequestIds.has(detailsRequest.id)
+    ) {
+      return null;
+    }
+    const totalDueEur = totalDepositEur(detailsOwnLegs, detailsRequest.party_size, {
+      contributionPerNmEur: detailsVoyage?.booking_contribution_per_nm_eur,
+      fixedMinimumEur: shouldApplyContributionFixedMinimum(requests, detailsRequest.voyage_id, detailsRequest.id)
+        ? undefined
+        : 0,
+    });
+    const paidEur = paidEurByRequestId[detailsRequest.id] ?? 0;
+    const outstandingEur = Math.round((totalDueEur - paidEur + Number.EPSILON) * 100) / 100;
+    if (outstandingEur <= 0.5) return null;
+    const departureTimes = detailsOwnLegs
+      .map((leg) => leg.starts_at_window_start)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((time) => Number.isFinite(time));
+    const deadline = departureTimes.length
+      ? new Date(Math.min(...departureTimes) - 15 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+    return { outstandingEur, deadline };
+  })();
   const detailsProposedLegLabels = detailsProposedLegs.map((leg) => getLegLabel(leg, waypointsById, lang));
   // A route change the organiser flagged as chargeable: accepting it sends the traveller to pay
   // the difference (here the whole amount, since nothing has been paid yet). Comped bookings skip it.
@@ -1373,6 +1410,40 @@ const UserBookings = () => {
                           </button>
                         </div>
                       )}
+                    {ownRequestBalanceDue && (
+                      <div className="rounded-[22px] border border-sky-300/60 bg-sky-50/70 p-4 text-sm text-sky-950 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-100/90">
+                        <p className="font-medium">
+                          {lang === "it" ? "Saldo da versare" : "Balance due"}
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed opacity-85">
+                          {lang === "it"
+                            ? `Hai versato l'acconto: manca il saldo di ${formatDepositEur(ownRequestBalanceDue.outstandingEur, "it")}.`
+                            : `You've paid the deposit: the ${formatDepositEur(ownRequestBalanceDue.outstandingEur, "en")} balance is still due.`}
+                          {ownRequestBalanceDue.deadline && (
+                            <span className="mt-1 block font-semibold">
+                              {lang === "it" ? "Da versare entro il " : "Due by "}
+                              {formatBookingDate(ownRequestBalanceDue.deadline, locale)}
+                              {lang === "it"
+                                ? " (15 giorni prima della partenza della tua tratta di imbarco)."
+                                : " (15 days before your own embarkation leg departs)."}
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed opacity-70">
+                          {lang === "it"
+                            ? "Se il saldo non arriva entro quella data la prenotazione decade e l'acconto non è rimborsabile."
+                            : "If the balance does not arrive by then the booking lapses and the deposit is not refundable."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openBalancePayment(ownRequestForSelectedVoyage)}
+                          className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                        >
+                          <CreditCard size={14} />
+                          {lang === "it" ? "Paga il saldo" : "Pay the balance"}
+                        </button>
+                      </div>
+                    )}
 
                     {expiredRequestsForSelectedVoyage.map((request) => {
                       const requestLegLabels = requestLegs
@@ -1843,16 +1914,18 @@ const UserBookings = () => {
                           <Check size={14} /> {lang === "it" ? "Conferma" : "Confirm"}
                         </button>
                       )}
-                      {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) &&
-                        paidDepositRequestIds.has(detailsRequest.id) && (
-                          <button
-                            type="button"
-                            onClick={() => openBalancePayment(detailsRequest)}
-                            className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent"
-                          >
-                            <CreditCard size={14} /> {lang === "it" ? "Paga il saldo" : "Pay the balance"}
-                          </button>
-                        )}
+                      {detailsRequestBalanceDue && (
+                        <button
+                          type="button"
+                          onClick={() => openBalancePayment(detailsRequest)}
+                          className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:text-accent"
+                        >
+                          <CreditCard size={14} />
+                          {lang === "it"
+                            ? `Paga il saldo (${formatDepositEur(detailsRequestBalanceDue.outstandingEur, "it")})`
+                            : `Pay the balance (${formatDepositEur(detailsRequestBalanceDue.outstandingEur, "en")})`}
+                        </button>
+                      )}
                       {["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(detailsRequest.status) && (
                         <button
                           type="button"
