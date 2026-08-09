@@ -168,6 +168,35 @@ describe("tool mail", () => {
     expect(sent?.values).toMatchObject({ to_addresses: ["socio@example.com"], subject: "Re: Domanda sul prossimo viaggio" });
   });
 
+  it("rifiuta mail_reply su un id di un messaggio che abbiamo inviato noi (manderebbe a noi stessi)", async () => {
+    const fixtures = baseFixtures();
+    const SENT_ID = "44444444-4444-4444-8444-000000000009";
+    fixtures.tables!.sent_emails = [
+      {
+        id: SENT_ID,
+        created_at: "2026-08-01T10:00:00Z",
+        message_id: "<reply-1@mail.biteproject.it>",
+        thread_key: "thread-1",
+        from_address: "hello@biteproject.it",
+        to_addresses: ["socio@example.com"],
+        cc_addresses: [],
+        subject: "Re: Domanda sul prossimo viaggio",
+        text_body: "Parte la settimana prossima!",
+        html_body: "<p>Parte la settimana prossima!</p>",
+      },
+    ];
+    const { client, writes } = await connect({ fixtures });
+
+    const result = await client.callTool({
+      name: "mail_reply",
+      arguments: { message_id: SENT_ID, body: "Altro giro", confirm: true },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("inviato da noi");
+    expect(writes.some((write: StubWrite) => write.table === "sent_emails" && write.op === "insert")).toBe(false);
+  });
+
   it("mail_forward cita l'originale e non aggancia il thread", async () => {
     const { client, writes } = await connect();
     const result = await client.callTool({

@@ -253,6 +253,17 @@ export function registerMailTools(server: McpServer, ctx: McpContext): void {
     handler: async (args, context) => {
       const found = await findMessageById(context, args.message_id);
       if (!found) throw new McpToolError("not_found", `Mail ${args.message_id} inesistente.`);
+      if (found.source !== "inbound") {
+        // `findMessageById` cerca anche fra le mail inviate (così mail_get_message può
+        // mostrarle nel thread): rispondervi manderebbe la mail a from_address, cioè al
+        // nostro stesso mittente, non al corrispondente — un invio "riuscito" ma sbagliato,
+        // senza errore visibile. mail_get_message espone `source` per ogni messaggio del
+        // thread: va usato l'id di uno con source "inbound".
+        throw new McpToolError(
+          "not_inbound",
+          `Mail ${args.message_id} è un messaggio inviato da noi, non ricevuto: rispondere manderebbe la mail al nostro stesso mittente. Usa l'id di un messaggio del thread con source "inbound" (vedi mail_get_message).`,
+        );
+      }
       const original = found.row;
 
       const subject = String(original.subject ?? mailboxConfig.noSubjectLabel);
