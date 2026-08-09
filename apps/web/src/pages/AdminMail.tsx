@@ -365,6 +365,9 @@ const AdminMail = () => {
   const [counts, setCounts] = useState<MailboxResponse["counts"]>({});
   const [fromOptions, setFromOptions] = useState<FromOption[]>(fallbackFromOptions);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
   const [sending, setSending] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -421,12 +424,9 @@ const AdminMail = () => {
   }, [selectedMessage]);
   const isMobileMessageOpen = isMobile && !!selectedMessage;
 
-  const clearSelectedMessage = useCallback(() => {
-    setSelectedId(null);
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete("message");
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   useEffect(() => {
     if (!requestedMessageId) return;
@@ -469,35 +469,99 @@ const AdminMail = () => {
     [authHeaders],
   );
 
-  const loadMailbox = useCallback(async () => {
-    if (!session?.access_token) return;
-    setLoading(true);
-    try {
-      const headers = await authHeaders();
-      const params = new URLSearchParams({ view });
-      if (searchQuery.trim()) params.set("q", searchQuery.trim());
-      const response = await fetch(`/api/email/inbox?${params.toString()}`, { headers, cache: "no-store" });
-      if (response.status === 401) {
-        navigate("/login", { state: { from: "/admin/mail" } });
-        return;
+  const loadMailbox = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!session?.access_token) return;
+      const background = options?.background ?? false;
+      // Only the very first load ever blocks the list with "Caricamento mail...".
+      // Every later refresh (poll, manual refresh, view/search change) fetches
+      // behind the scenes and swaps data in once ready, so the list stays put.
+      if (!hasLoadedRef.current) setLoading(true);
+      setRefreshing(true);
+      try {
+        const headers = await authHeaders();
+        const params = new URLSearchParams({ view });
+        if (searchQuery.trim()) params.set("q", searchQuery.trim());
+        const response = await fetch(`/api/email/inbox?${params.toString()}`, { headers, cache: "no-store" });
+        if (response.status === 401) {
+          navigate("/login", { state: { from: "/admin/mail" } });
+          return;
+        }
+        if (!response.ok) throw new Error(await response.text());
+        const data = (await response.json()) as MailboxResponse;
+        hasLoadedRef.current = true;
+
+        setMessages((prev) => {
+          if (!background) return data.messages;
+          // Background refresh (poll/manual refresh): don't yank the message the
+          // user currently has open just because it fell out of this view's filter
+          // (e.g. it was marked read while the "unread" view is showing).
+          const openId = selectedIdRef.current;
+          if (!openId || data.messages.some((message) => message.id === openId)) return data.messages;
+          const stillOpen = prev.find((message) => message.id === openId);
+          return stillOpen ? [stillOpen, ...data.messages] : data.messages;
+        });
+        setCounts(data.counts ?? {});
+        setFromOptions(data.fromOptions?.length ? data.fromOptions : fallbackFromOptions);
+        setSelectedId((current) => {
+          if (requestedMessageId && data.messages.some((message) => message.id === requestedMessageId)) return requestedMessageId;
+          if (background && current) return current;
+          if (current && data.messages.some((message) => message.id === current)) return current;
+          return isMobile ? null : data.messages[0]?.id ?? null;
+        });
+      } catch (error) {
+        console.error("[AdminMail] load failed", error);
+        toast.error("Impossibile caricare la casella mail.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      if (!response.ok) throw new Error(await response.text());
-      const data = (await response.json()) as MailboxResponse;
-      setMessages(data.messages);
-      setCounts(data.counts ?? {});
-      setFromOptions(data.fromOptions?.length ? data.fromOptions : fallbackFromOptions);
-      setSelectedId((current) => {
-        if (requestedMessageId && data.messages.some((message) => message.id === requestedMessageId)) return requestedMessageId;
-        if (current && data.messages.some((message) => message.id === current)) return current;
-        return isMobile ? null : data.messages[0]?.id ?? null;
-      });
-    } catch (error) {
-      console.error("[AdminMail] load failed", error);
-      toast.error("Impossibile caricare la casella mail.");
-    } finally {
-      setLoading(false);
-    }
-  }, [authHeaders, isMobile, navigate, requestedMessageId, searchQuery, session?.access_token, view]);
+    },
+    [authHeaders, isMobile, navigate, requestedMessageId, searchQuery, session?.access_token, view],
+  );
+
+  const clearSelectedMessage = useCallback(() => {
+    setSelectedId(null);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("message");
+    setSearchParams(nextSearchParams, { replace: true });
+    // Only now does a just-read message actually drop off an "unread" list.
+    void loadMailbox({ background: true });
+  }, [loadMailbox, searchParams, setSearchParams]);
+
+  const markMessageRead = useCallback(
+    (id: string) => {
+      setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, read: true } : message)));
+      setCounts((prev) => (typeof prev.unread === "number" ? { ...prev, unread: Math.max(0, prev.unread - 1) } : prev));
+      void (async () => {
+        try {
+          const headers = await authHeaders();
+          const response = await fetch("/api/email/message", {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: JSON.stringify({ id, action: "read" }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+        } catch (error) {
+          console.error("[AdminMail] mark read failed", error);
+        }
+      })();
+    },
+    [authHeaders],
+  );
+
+  // Polling + refresh on focus, entirely in the background: the list never
+  // hides behind a loading state while looking for new mail.
+  useEffect(() => {
+    if (authLoading || !session) return;
+    const tick = () => void loadMailbox({ background: true });
+    const interval = window.setInterval(tick, 30_000);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", tick);
+    };
+  }, [authLoading, session, loadMailbox]);
 
   useEffect(() => {
     if (authLoading || !session) return;
@@ -666,10 +730,10 @@ const AdminMail = () => {
               </div>
               <button
                 type="button"
-                onClick={() => void loadMailbox()}
+                onClick={() => void loadMailbox({ background: true })}
                 className="glass-chip inline-flex h-11 shrink-0 items-center justify-center gap-2 px-4 text-sm font-sans text-muted-foreground hover:text-foreground"
               >
-                <RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
+                <RefreshCw size={16} className={loading || refreshing ? "animate-spin" : undefined} />
                 Aggiorna
               </button>
               <button
@@ -746,7 +810,7 @@ const AdminMail = () => {
                             nextSearchParams.set("message", message.id);
                             setSearchParams(nextSearchParams, { replace: true });
                             if (isMobile) window.scrollTo({ top: 0, behavior: "auto" });
-                            if (view !== "sent" && !message.read) void runAction(message.id, "read");
+                            if (view !== "sent" && !message.read) markMessageRead(message.id);
                           }}
                           className={`mail-list-item block w-full border-b border-stone-200/60 px-4 py-4 text-left transition-colors sm:px-5 ${
                             selected ? "bg-white/85" : "bg-white/25 hover:bg-white/60"

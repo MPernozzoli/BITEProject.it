@@ -9,6 +9,8 @@ import {
   formatWaypointMoment,
   formatVoyageDateRange,
   formatWaypointCoordinateLabel,
+  formatIsoDate,
+  formatWaypointStopDuration,
   getAssociatedArticleForWaypoint,
   getLocalizedVoyageDescription,
   getLocalizedVoyageName,
@@ -28,7 +30,13 @@ import {
 } from "@/lib/voyage-utils";
 import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
-import { perPersonDepositEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
+import {
+  perPersonDepositEur,
+  legDepositEur,
+  contributionFixedMinimumEur,
+  formatDepositEur,
+  getContributionExplanation,
+} from "@/lib/booking-deposit";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -38,6 +46,7 @@ import {
   ArrowLeft,
   CalendarCheck,
   ChevronLeft,
+  Clock,
   ChevronRight,
   Images,
   Landmark,
@@ -545,7 +554,7 @@ const VoyagePage = () => {
               {bookableLegs.length > 0 && (
                 <div className="mt-6 space-y-2">
                   {bookableLegs.map((leg) => {
-                    const price = perPersonDepositEur([leg], contributionOpts);
+                    const price = legDepositEur(leg, contributionOpts);
                     return (
                       <div
                         key={leg.id}
@@ -580,7 +589,14 @@ const VoyagePage = () => {
               )}
 
               {bookableLegs.length > 0 && (
-                <p className="mt-5 text-xs leading-relaxed text-emerald-900/60 max-w-2xl">{contributionExplanation}</p>
+                <div className="mt-5 max-w-2xl space-y-1.5 text-xs leading-relaxed text-emerald-900/60">
+                  <p>{contributionExplanation}</p>
+                  <p>
+                    {lang === "it"
+                      ? `* Agli importi indicati sopra va aggiunta una quota fissa una tantum di ${formatDepositEur(contributionFixedMinimumEur(contributionOpts.fixedMinimumEur), lang)} a persona, indipendentemente dal numero di tratte scelte.`
+                      : `* A one-time fixed contribution of ${formatDepositEur(contributionFixedMinimumEur(contributionOpts.fixedMinimumEur), lang)} per person must be added to the amounts above, regardless of how many legs are chosen.`}
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -600,7 +616,7 @@ const VoyagePage = () => {
                 <p className="text-sm text-muted-foreground">{publicWaypoints.length} {lang === "it" ? "tappe pubbliche" : "public stops"}</p>
               </div>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-6">
               {publicWaypointEntries.map(({ waypoint, originalIndex, article }, index) => {
                 const waypointName = getLocalizedWaypointName(waypoint, lang, originalIndex);
                 const waypointDescription = getLocalizedWaypointDescription(waypoint, lang);
@@ -614,51 +630,152 @@ const VoyagePage = () => {
                 const poiItems = normalizeWaypointPoi(waypoint.poi);
                 const activityItems = normalizeWaypointActivities(waypoint.activities);
                 const airportItems = normalizeWaypointAirports(waypoint.nearby_airports);
-                const stopLabel =
-                  index === 0
-                    ? (lang === "it" ? "Partenza" : "Departure")
-                    : index === publicWaypointEntries.length - 1
-                      ? (lang === "it" ? "Arrivo" : "Arrival")
-                      : `${lang === "it" ? "Sosta" : "Stop"} ${index + 1}`;
+                const isDeparture = index === 0;
+                const isArrival = index === publicWaypointEntries.length - 1;
+                const isBookend = isDeparture || isArrival;
+                const stopNumber = index;
+                const stopLabel = isDeparture
+                  ? (lang === "it" ? "Partenza" : "Departure")
+                  : isArrival
+                    ? (lang === "it" ? "Arrivo" : "Arrival")
+                    : `${lang === "it" ? "Sosta" : "Stop"} ${stopNumber}`;
+                const BookendIcon = isDeparture ? Navigation : MapPinned;
+
+                const arrivalLabel = formatIsoDate(waypoint.date_end, locale);
+                const departureLabel = formatIsoDate(waypoint.date_start, locale);
+                const stopDurationLabel = formatWaypointStopDuration(waypoint, lang);
+                const hasStayInfo = Boolean(arrivalLabel || departureLabel || stopDurationLabel);
+
+                const heroMedia = mediaItems.find((item) => item.kind === "image") ?? mediaItems[0];
+                const extraMedia = heroMedia ? mediaItems.filter((item) => item !== heroMedia) : [];
 
                 return (
-                  <article key={waypoint.id} className="glass-panel-soft rounded-[26px] p-5">
-                    <div className="flex items-start gap-4">
-                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent mb-2">{stopLabel}</p>
-                            <h3 className="editorial-heading text-xl mb-2">{waypointName}</h3>
-                            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                              <MapPin size={13} /> {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                  <article
+                    key={waypoint.id}
+                    className={`overflow-hidden rounded-[28px] ${isBookend ? "glass-panel" : "glass-panel-soft"}`}
+                  >
+                    {heroMedia && heroMedia.kind === "image" ? (
+                      <div className="relative aspect-[16/8] w-full overflow-hidden sm:aspect-[16/7]">
+                        <img
+                          src={heroMedia.url}
+                          alt={heroMedia.name || waypointName}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        {isBookend ? (
+                          <BookendIcon
+                            className="absolute right-5 top-5 h-10 w-10 text-white/35 sm:h-12 sm:w-12"
+                            strokeWidth={1.5}
+                          />
+                        ) : (
+                          <span className="editorial-heading absolute right-5 top-4 text-5xl font-medium text-white/25 sm:text-6xl">
+                            {stopNumber}
+                          </span>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
+                          <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/80">{stopLabel}</p>
+                          <h3 className="editorial-heading mt-1 text-2xl text-white sm:text-3xl">{waypointName}</h3>
+                          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-white/75">
+                            <MapPin size={13} /> {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-4 p-5 pb-0 sm:p-7 sm:pb-0">
+                        <span
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                            isBookend ? "bg-accent text-accent-foreground" : "bg-accent/10 text-accent"
+                          }`}
+                        >
+                          {isBookend ? <BookendIcon size={14} /> : stopNumber}
+                        </span>
+                        <div>
+                          <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent">{stopLabel}</p>
+                          <h3 className="editorial-heading mt-1 text-xl sm:text-2xl">{waypointName}</h3>
+                          <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <MapPin size={13} /> {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-5 sm:p-7">
+                      {(waypointMoment || article) && (
+                        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {waypointMoment && <span>{waypointMoment}</span>}
+                          {article && (
+                            <Link to={`/logbook/${article.slug}`} className="text-accent hover:text-foreground transition-colors">
+                              {lang === "it" ? "Articolo collegato" : "Related article"}: {articleTitle}
+                            </Link>
+                          )}
+                        </div>
+                      )}
+                      <div className={`grid gap-6 ${hasStayInfo ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""}`}>
+                        {waypointDescription && (
+                          <div className="editorial-dropcap min-w-0 max-w-[64ch]">
+                            <p className="text-[15px] leading-[1.75] text-foreground/75" style={{ textWrap: "pretty" }}>
+                              {waypointDescription}
                             </p>
                           </div>
-                          <div className="text-right text-xs text-muted-foreground max-w-[220px]">
-                            {waypointMoment && <p>{waypointMoment}</p>}
-                            {article && (
-                              <Link to={`/logbook/${article.slug}`} className="inline-flex mt-2 text-accent hover:text-foreground transition-colors">
-                                {lang === "it" ? "Articolo collegato" : "Related article"}: {articleTitle}
-                              </Link>
-                            )}
-                          </div>
-                        </div>
-                        {waypointDescription && (
-                          <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-                            {waypointDescription}
-                          </p>
                         )}
-                        {mediaItems.length > 0 && (
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {mediaItems.map((mediaItem, mediaIndex) => (
-                              <div key={`${waypoint.id}-${mediaIndex}`} className="overflow-hidden rounded-[20px] border border-border/60 bg-background/40">
+                        {hasStayInfo && (
+                          <aside className="rounded-[20px] border border-border/60 bg-background/40 p-4 sm:p-5 lg:self-start">
+                            <p className="mb-3 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                              {lang === "it" ? "Info pratiche" : "Practical info"}
+                            </p>
+                            <dl className="m-0 space-y-3.5">
+                              {arrivalLabel && (
+                                <div className="flex items-start gap-2.5">
+                                  <CalendarCheck size={14} className="mt-0.5 shrink-0 text-accent" />
+                                  <div>
+                                    <dt className="text-[11px] text-muted-foreground">
+                                      {lang === "it" ? "Arrivo previsto" : "Expected arrival"}
+                                    </dt>
+                                    <dd className="m-0 text-sm text-foreground">{arrivalLabel}</dd>
+                                  </div>
+                                </div>
+                              )}
+                              {departureLabel && (
+                                <div className="flex items-start gap-2.5">
+                                  <Ship size={14} className="mt-0.5 shrink-0 text-accent" />
+                                  <div>
+                                    <dt className="text-[11px] text-muted-foreground">
+                                      {lang === "it" ? "Ripartenza prevista" : "Expected departure"}
+                                    </dt>
+                                    <dd className="m-0 text-sm text-foreground">{departureLabel}</dd>
+                                  </div>
+                                </div>
+                              )}
+                              {stopDurationLabel && (
+                                <div className="flex items-start gap-2.5">
+                                  <Clock size={14} className="mt-0.5 shrink-0 text-accent" />
+                                  <div>
+                                    <dt className="text-[11px] text-muted-foreground">
+                                      {lang === "it" ? "Durata sosta" : "Stop duration"}
+                                    </dt>
+                                    <dd className="m-0 text-sm text-foreground">{stopDurationLabel}</dd>
+                                  </div>
+                                </div>
+                              )}
+                            </dl>
+                          </aside>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        {extraMedia.length > 0 && (
+                          <div className="mt-5 flex gap-3 overflow-x-auto pb-1">
+                            {extraMedia.map((mediaItem, mediaIndex) => (
+                              <div
+                                key={`${waypoint.id}-${mediaIndex}`}
+                                className="w-40 shrink-0 overflow-hidden rounded-[16px] border border-border/60 bg-background/40"
+                              >
                                 {mediaItem.kind === "image" ? (
                                   <img
                                     src={mediaItem.url}
                                     alt={mediaItem.name || waypointName}
-                                    className="h-44 w-full object-cover"
+                                    className="h-28 w-full object-cover"
                                     loading="lazy"
                                     decoding="async"
                                   />
@@ -668,14 +785,14 @@ const VoyagePage = () => {
                                     controls
                                     playsInline
                                     preload="metadata"
-                                    className="h-44 w-full object-cover"
+                                    className="h-28 w-full object-cover"
                                   />
                                 ) : (
                                   <a
                                     href={mediaItem.url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="flex h-44 items-center justify-center px-4 text-center text-sm text-accent hover:text-foreground transition-colors"
+                                    className="flex h-28 items-center justify-center px-3 text-center text-xs text-accent hover:text-foreground transition-colors"
                                   >
                                     {mediaItem.name || (lang === "it" ? "Apri allegato" : "Open attachment")}
                                   </a>
@@ -684,42 +801,48 @@ const VoyagePage = () => {
                             ))}
                           </div>
                         )}
-                        {(poiItems.length > 0 || activityItems.length > 0) && (
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {poiItems.length > 0 && (
-                              <div className="rounded-[18px] border border-border/60 bg-background/40 p-3">
-                                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                                  <Landmark size={13} /> {lang === "it" ? "Punti di interesse" : "Points of interest"}
-                                </p>
-                                <ul className="m-0 list-none space-y-1.5 p-0">
-                                  {poiItems.map((item, itemIndex) => (
-                                    <li key={`${waypoint.id}-poi-${itemIndex}`} className="text-sm">
-                                      <span className="font-medium text-foreground">{item.name}</span>
-                                      {item.description && <span className="text-muted-foreground"> — {item.description}</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {activityItems.length > 0 && (
-                              <div className="rounded-[18px] border border-border/60 bg-background/40 p-3">
-                                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                                  <Activity size={13} /> {lang === "it" ? "Attività previste" : "Planned activities"}
-                                </p>
-                                <ul className="m-0 list-none space-y-1.5 p-0">
-                                  {activityItems.map((item, itemIndex) => (
-                                    <li key={`${waypoint.id}-activity-${itemIndex}`} className="text-sm">
-                                      <span className="font-medium text-foreground">{item.name}</span>
-                                      {item.description && <span className="text-muted-foreground"> — {item.description}</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
+                        {poiItems.length > 0 && (
+                          <div className="mt-6">
+                            <p className="mb-3 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                              <Landmark size={13} className="text-accent" /> {lang === "it" ? "Punti di interesse" : "Points of interest"}
+                            </p>
+                            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-proximity">
+                              {poiItems.map((item, itemIndex) => (
+                                <div
+                                  key={`${waypoint.id}-poi-${itemIndex}`}
+                                  className="w-64 shrink-0 snap-start rounded-[16px] border border-border/60 bg-background/40 p-3.5"
+                                >
+                                  <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                  {item.description && (
+                                    <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{item.description}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {activityItems.length > 0 && (
+                          <div className="mt-6">
+                            <p className="mb-3 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
+                              <Activity size={13} className="text-accent" /> {lang === "it" ? "Attività previste" : "Planned activities"}
+                            </p>
+                            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-proximity">
+                              {activityItems.map((item, itemIndex) => (
+                                <div
+                                  key={`${waypoint.id}-activity-${itemIndex}`}
+                                  className="w-64 shrink-0 snap-start rounded-[16px] border border-border/60 bg-background/40 p-3.5"
+                                >
+                                  <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                  {item.description && (
+                                    <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{item.description}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {airportItems.length > 0 && (
-                          <div className="mt-4">
+                          <div className="mt-6">
                             <p className="mb-2 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
                               <Plane size={13} /> {lang === "it" ? "Aeroporti vicini" : "Nearby airports"}
                             </p>

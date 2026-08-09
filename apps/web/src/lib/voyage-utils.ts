@@ -390,7 +390,12 @@ function normalizeOverpassAirport(item: unknown, lat: number, lng: number): Voya
   };
 }
 
-/** Nearby airports via the free public Overpass API (OpenStreetMap `aeroway=aerodrome`) — no API key needed. */
+/**
+ * Nearby airports via the free public Overpass API (OpenStreetMap `aeroway=aerodrome`) — no API key needed.
+ * Restricted to aerodromes tagged with an IATA code: in OSM that's the reliable signal for an airport
+ * serving commercial passenger traffic, as opposed to aviosuperfici, gliding strips and private airfields
+ * (which almost never carry one, even when tagged `aeroway=aerodrome`).
+ */
 export async function fetchNearbyAirports(lat: number, lng: number, limit = 8): Promise<VoyageWaypointAirport[]> {
   const radii = [120000, 300000];
 
@@ -398,9 +403,9 @@ export async function fetchNearbyAirports(lat: number, lng: number, limit = 8): 
     const query = `
       [out:json][timeout:15];
       (
-        node(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
-        way(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
-        relation(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"];
+        node(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"]["iata"];
+        way(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"]["iata"];
+        relation(around:${radiusMeters},${lat},${lng})["aeroway"="aerodrome"]["iata"];
       );
       out center tags 30;
     `;
@@ -825,6 +830,41 @@ export function formatWaypointMoment(
   const end = formatIsoDate(waypoint.date_end, locale);
   if (start && end) return start === end ? start : `${start} → ${end}`;
   return start || end;
+}
+
+/**
+ * Durata prevista della sosta a un waypoint, per la pagina pubblica della rotta.
+ * Preferisce la differenza reale tra `date_end` (arrivo) e `date_start` (ripartenza,
+ * nomenclatura storica invertita: vedi AdminVoyageManager); in assenza di date esplicite
+ * ripiega su stop_mode/stop_nights/stop_hours.
+ */
+export function formatWaypointStopDuration(
+  waypoint: Pick<VoyageWaypoint, "date_start" | "date_end" | "stop_mode" | "stop_hours" | "stop_nights">,
+  lang: Language
+): string | null {
+  const italian = lang === "it";
+  const arrivalMs = waypoint.date_end ? Date.parse(waypoint.date_end) : NaN;
+  const departureMs = waypoint.date_start ? Date.parse(waypoint.date_start) : NaN;
+
+  if (Number.isFinite(arrivalMs) && Number.isFinite(departureMs) && departureMs > arrivalMs) {
+    const hours = (departureMs - arrivalMs) / 3_600_000;
+    if (hours >= 20) {
+      const days = Math.max(1, Math.round(hours / 24));
+      return italian ? `${days} ${days === 1 ? "giorno" : "giorni"}` : `${days} ${days === 1 ? "day" : "days"}`;
+    }
+    const roundedHours = Math.max(1, Math.round(hours));
+    return italian ? `${roundedHours} ${roundedHours === 1 ? "ora" : "ore"}` : `${roundedHours} ${roundedHours === 1 ? "hour" : "hours"}`;
+  }
+
+  if (waypoint.stop_mode === "nights" && waypoint.stop_nights) {
+    const nights = waypoint.stop_nights;
+    return italian ? `${nights} ${nights === 1 ? "giorno" : "giorni"}` : `${nights} ${nights === 1 ? "day" : "days"}`;
+  }
+  if (waypoint.stop_mode === "hours" && waypoint.stop_hours) {
+    const hours = waypoint.stop_hours;
+    return italian ? `${hours} ${hours === 1 ? "ora" : "ore"}` : `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  return null;
 }
 
 export function buildWaypointDefaultLocalizedNames(

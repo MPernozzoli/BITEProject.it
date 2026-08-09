@@ -697,6 +697,18 @@
     @apply max-w-7xl mx-auto;
   }
 
+  /* Capolettera editoriale riusabile (tappe, articoli, blocchi narrativi) */
+  .editorial-dropcap p:first-of-type::first-letter {
+    float: left;
+    font-family: var(--font-serif);
+    font-size: clamp(2.25rem, 4vw, 3.1rem);
+    line-height: 0.8;
+    padding-right: 0.4rem;
+    padding-top: 0.1rem;
+    font-weight: 500;
+    color: hsl(var(--accent));
+  }
+
   /* Homepage — blocco origine BITE: capolettera + colonna laterale */
   .home-origin-body p::first-letter {
     float: left;
