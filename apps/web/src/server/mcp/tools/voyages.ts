@@ -59,6 +59,17 @@ interface WaypointRow {
   date_end: string | null;
 }
 
+async function loadVoyage(ctx: McpContext, voyageId: string): Promise<VoyageRow> {
+  const { data, error } = await ctx.service
+    .from("voyages")
+    .select(VOYAGE_COLUMNS)
+    .eq("id", voyageId)
+    .maybeSingle();
+  if (error) throw new McpToolError("db_error", `Lettura rotta fallita: ${error.message}`);
+  if (!data) throw new McpToolError("not_found", `Rotta ${voyageId} inesistente.`);
+  return data as unknown as VoyageRow;
+}
+
 async function loadWaypoint(ctx: McpContext, waypointId: string): Promise<WaypointRow> {
   const { data, error } = await ctx.service
     .from("voyage_waypoints")
@@ -174,6 +185,51 @@ export function registerVoyageTools(server: McpServer, ctx: McpContext): void {
         text: `"${voyageRow.name_it || voyageRow.name}" — ${rows.length} tappe.`,
         targetId: voyageRow.id,
         data: { voyage: voyageRow, waypoints: rows },
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
+    name: "voyage_update",
+    title: "Aggiorna il contenuto narrativo di una rotta",
+    description:
+      "Modifica i campi indicati di una rotta esistente (patch parziale: i campi non passati restano invariati). Copre nome e descrizione in entrambe le lingue — lo stesso contenuto testuale mostrato in testa a /voyages/:id. Non tocca geometria, date, stato o pubblicazione: quelli restano di competenza dell'editor mappa in admin.",
+    scope: "voyages:write",
+    kind: "write",
+    inputSchema: {
+      voyage_id: z.string().uuid(),
+      name_it: z.string().min(1).max(200).optional(),
+      name_en: z.string().min(1).max(200).optional(),
+      description_it: z.string().max(4000).nullable().optional(),
+      description_en: z.string().max(4000).nullable().optional(),
+      ...clientRequestIdShape,
+    },
+    annotations: { destructiveHint: false, idempotentHint: true },
+    handler: async (args, context) => {
+      const voyage = await loadVoyage(context, args.voyage_id);
+
+      const patch: Record<string, unknown> = {};
+      if (args.name_it !== undefined) patch.name_it = args.name_it.trim();
+      if (args.name_en !== undefined) patch.name_en = args.name_en.trim();
+      if (args.description_it !== undefined) patch.description_it = args.description_it?.trim() || null;
+      if (args.description_en !== undefined) patch.description_en = args.description_en?.trim() || null;
+
+      if (Object.keys(patch).length === 0) {
+        return {
+          text: "Nessun campo da aggiornare.",
+          targetId: voyage.id,
+          data: { voyage_id: voyage.id, changed: false },
+        } satisfies ToolOutcome;
+      }
+
+      const { error } = await context.service.from("voyages").update(patch).eq("id", voyage.id);
+      if (error) throw new McpToolError("db_error", `Aggiornamento rotta fallito: ${error.message}`);
+
+      const fields = Object.keys(patch);
+      return {
+        text: `Rotta "${voyage.name_it || voyage.name}" aggiornata (${fields.join(", ")}).`,
+        targetId: voyage.id,
+        data: { voyage_id: voyage.id, changed: true, fields },
       } satisfies ToolOutcome;
     },
   });

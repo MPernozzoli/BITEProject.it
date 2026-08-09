@@ -41,8 +41,8 @@ export const MCP_SCOPE_LABELS: Record<McpScope, { it: string; en: string }> = {
   "mail:write": { it: "Rispondere, inoltrare e scrivere mail", en: "Reply, forward and write mail" },
   "voyages:read": { it: "Leggere le rotte e le tappe", en: "Read voyages and stops" },
   "voyages:write": {
-    it: "Modificare le tappe (descrizioni, POI, attività, foto)",
-    en: "Edit stops (descriptions, POIs, activities, photos)",
+    it: "Modificare rotte e tappe (nomi, descrizioni, POI, attività, foto)",
+    en: "Edit voyages and stops (names, descriptions, POIs, activities, photos)",
   },
 };
 
