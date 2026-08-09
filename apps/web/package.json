@@ -16,7 +16,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@pynkstudio/mailapp": "https://github.com/PynkStudio/pynkstudio-mailapp/archive/refs/tags/v0.4.0.tar.gz",
+    "@pynkstudio/mailapp": "https://github.com/PynkStudio/pynkstudio-mailapp/archive/refs/tags/v0.4.2.tar.gz",
     "@pynkstudio/newsletterapp": "https://github.com/PynkStudio/pynkstudio-newsletterapp/archive/refs/tags/v0.1.2.tar.gz",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
