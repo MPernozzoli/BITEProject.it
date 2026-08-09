@@ -1462,6 +1462,21 @@ html {
   line-height: 1.22;
 }
 
+.voyage-popup__detail-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 78%, hsl(220 28% 14%));
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.voyage-popup__detail-link:hover {
+  text-decoration: underline;
+}
+
 .voyage-popup__body {
   display: grid;
   gap: 9px;

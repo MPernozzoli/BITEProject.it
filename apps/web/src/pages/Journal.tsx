@@ -44,6 +44,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-presence";
 import {
+  buildVoyagePath,
   getArticleVoyageFocus,
   getLocalizedVoyageName,
   getLocalizedWaypointName,
@@ -600,6 +601,12 @@ const Journal = () => {
       );
     }
   }, [bookingLegsByVoyage, bookingPartySize, isMobile, lang, waypointsMap]);
+
+  const handleViewWaypointDetail = useCallback((voyageId: string, waypointId: string) => {
+    const voyage = voyages.find((v) => v.id === voyageId);
+    if (!voyage) return;
+    navigate(`${buildVoyagePath(voyage)}#tappa-${waypointId}`);
+  }, [navigate, voyages]);
 
   const buildLogbookBookingReturnPath = useCallback(
     (voyageId: string) => `/${lang}/logbook?booking=${encodeURIComponent(voyageId)}`,
@@ -1203,6 +1210,7 @@ const Journal = () => {
             bookingSelectionAnchor={bookingAnchor}
             selectedBookingLegs={selectedBookingLegs}
             onParticipate={handleParticipate}
+            onViewWaypointDetail={handleViewWaypointDetail}
             presenceMarkers={mapPresenceMarkers}
             photoPoints={photoPoints}
             flyToWaypointRef={flyToWaypointRef}

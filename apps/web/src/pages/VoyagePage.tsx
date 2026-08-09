@@ -652,7 +652,8 @@ const VoyagePage = () => {
                 return (
                   <article
                     key={waypoint.id}
-                    className={`overflow-hidden rounded-[28px] ${isBookend ? "glass-panel" : "glass-panel-soft"}`}
+                    id={`tappa-${waypoint.id}`}
+                    className={`scroll-mt-24 overflow-hidden rounded-[28px] ${isBookend ? "glass-panel" : "glass-panel-soft"}`}
                   >
                     {heroMedia && heroMedia.kind === "image" ? (
                       <div className="relative aspect-[16/8] w-full overflow-hidden sm:aspect-[16/7]">

@@ -264,9 +264,9 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
           .in("voyage_id", publishedVoyageIds),
         supabase
           .from("voyage_waypoints")
-          .select("created_at")
+          .select("updated_at")
           .in("voyage_id", publishedVoyageIds)
-          .order("created_at", { ascending: false })
+          .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
       ])
@@ -287,7 +287,7 @@ export async function fetchPublicContentVersion(): Promise<PublicContentVersion>
     voyagesCount: voyageCountResponse.count ?? 0,
     voyagesUpdatedAt: latestVoyageResponse.data?.updated_at ?? null,
     voyageWaypointsCount: waypointCountResponse.count ?? 0,
-    voyageWaypointsUpdatedAt: latestWaypointResponse.data?.created_at ?? null,
+    voyageWaypointsUpdatedAt: latestWaypointResponse.data?.updated_at ?? null,
   };
 }
 

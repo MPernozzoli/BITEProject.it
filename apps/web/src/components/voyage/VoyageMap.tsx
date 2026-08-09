@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import Supercluster from "supercluster";
 import {
+  buildVoyagePath,
   buildVoyageSegmentGeometry,
   getArticleVoyageFocus,
   getAssociatedArticleForWaypoint,
@@ -50,6 +51,7 @@ interface VoyageMapProps {
   bookingSelectionAnchor?: { voyageId: string; waypointId: string } | null;
   selectedBookingLegs?: BookableLeg[];
   onParticipate?: (voyageId: string) => void;
+  onViewWaypointDetail?: (voyageId: string, waypointId: string) => void;
   flyToWaypointRef?: MutableRefObject<((lat: number, lng: number, popupLabel?: string) => void) | null>;
   lang: "en" | "it";
   initialFitReady?: boolean;
@@ -72,26 +74,19 @@ const buildPopupModule = (tone: "article" | "booking" | "media" | "story", label
   </section>
 `;
 
-const buildPopupMediaModule = (waypoint: VoyageWaypoint, label: string) => {
+const buildPopupMediaModule = (waypoint: VoyageWaypoint, altFallback: string) => {
   const media = normalizeWaypointMedia(waypoint.media).find((item) => item.kind === "image" || item.kind === "video");
   if (!media) return "";
 
   const mediaName = media.name ? `<span class="voyage-popup__media-caption">${escapePopupHtml(media.name)}</span>` : "";
   const url = escapePopupHtml(media.url);
 
-  if (media.kind === "video") {
-    return buildPopupModule(
-      "media",
-      label,
-      `<video class="voyage-popup__media" src="${url}" muted playsinline preload="metadata"></video>${mediaName}`
-    );
-  }
+  const inner =
+    media.kind === "video"
+      ? `<video class="voyage-popup__media" src="${url}" muted playsinline preload="metadata"></video>${mediaName}`
+      : `<img class="voyage-popup__media" src="${url}" alt="${escapePopupHtml(media.name || altFallback)}" loading="lazy" />${mediaName}`;
 
-  return buildPopupModule(
-    "media",
-    label,
-    `<img class="voyage-popup__media" src="${url}" alt="${escapePopupHtml(media.name || label)}" loading="lazy" />${mediaName}`
-  );
+  return `<section class="voyage-popup__module voyage-popup__module--media">${inner}</section>`;
 };
 
 const buildComplexityHelpMarkup = (lang: "en" | "it", label: string, explanation: string) => {
@@ -315,6 +310,7 @@ const VoyageMap = ({
   bookingSelectionAnchor = null,
   selectedBookingLegs = [],
   onParticipate,
+  onViewWaypointDetail,
   flyToWaypointRef,
   lang,
   initialFitReady = true,
@@ -362,6 +358,8 @@ const VoyageMap = ({
   langRef.current = lang;
   const onParticipateRef = useRef(onParticipate);
   onParticipateRef.current = onParticipate;
+  const onViewWaypointDetailRef = useRef(onViewWaypointDetail);
+  onViewWaypointDetailRef.current = onViewWaypointDetail;
   const bookingSelectionAnchorRef = useRef(bookingSelectionAnchor);
   bookingSelectionAnchorRef.current = bookingSelectionAnchor;
   const photoPointsRef = useRef(photoPoints);
@@ -384,6 +382,7 @@ const VoyageMap = ({
       lng: number;
       lat: number;
       voyageId: string;
+      voyagePath: string;
       waypoint: VoyageWaypoint;
       sequenceHeading: string;
       name: string;
@@ -458,6 +457,7 @@ const VoyageMap = ({
           lng: w.lng,
           lat: w.lat,
           voyageId: voyage.id,
+          voyagePath: buildVoyagePath(voyage),
           waypoint: w,
           sequenceHeading,
           name,
@@ -1161,11 +1161,15 @@ const VoyageMap = ({
             + bookingHint
           )
         : "";
+      const detailHref = `${meta.voyagePath}#tappa-${meta.waypoint.id}`;
       const popupHtml = `
         <div class="voyage-popup" style="--voyage-popup-accent:${routeColor};">
           <div class="voyage-popup__header">
             ${meta.sequenceHeading ? `<span class="voyage-popup__badge">${escapePopupHtml(meta.sequenceHeading)}</span>` : ""}
             <div class="voyage-popup__title">${escapePopupHtml(meta.name || "—")}</div>
+            <a class="voyage-popup__detail-link" href="${detailHref}" data-view-detail="1">${
+              L === "it" ? "Vedi tappa nel viaggio" : "View stage in voyage"
+            }</a>
           </div>
           <div class="voyage-popup__body">
             ${mediaBlock}
@@ -1191,6 +1195,14 @@ const VoyageMap = ({
           event.preventDefault();
           event.stopPropagation();
           onParticipateRef.current?.(meta.voyageId);
+        });
+      });
+      p.getElement().querySelectorAll<HTMLAnchorElement>("[data-view-detail]").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (!onViewWaypointDetailRef.current) return;
+          event.preventDefault();
+          onViewWaypointDetailRef.current(meta.voyageId, meta.waypoint.id);
         });
       });
       const popupRoot = p.getElement();

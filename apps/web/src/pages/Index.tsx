@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { useAuth } from "@/hooks/useAuth";
+import { buildVoyagePath } from "@/lib/voyage-utils";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import { HERO_READY_EVENT } from "@/lib/hero-ready-event";
@@ -682,6 +683,12 @@ const Index = () => {
   });
   const voyages = publicContent?.voyages ?? liveVoyages;
 
+  const handleViewWaypointDetail = useCallback((voyageId: string, waypointId: string) => {
+    const voyage = voyages.find((v) => v.id === voyageId);
+    if (!voyage) return;
+    navigate(`${buildVoyagePath(voyage)}#tappa-${waypointId}`);
+  }, [navigate, voyages]);
+
   const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery<VoyageWaypoint[]>({
     queryKey: ["home-voyage-waypoints"],
     enabled: !publicContent && !isPublicContentLoading && liveVoyages.length > 0,
@@ -1238,6 +1245,7 @@ const Index = () => {
                   lang={lang}
                   initialFitReady={isHomeMapReady}
                   onArticleClick={(article) => navigate(`/logbook/${article.slug}`)}
+                  onViewWaypointDetail={handleViewWaypointDetail}
                   fallbackHeightClassName="aspect-[16/10]"
                   deferUntilVisible
                 />
