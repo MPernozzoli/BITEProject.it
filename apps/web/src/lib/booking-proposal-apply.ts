@@ -19,7 +19,6 @@ export type ApplyWithProposalResult =
 export async function applyVoyageBookingWithProposal(params: {
   voyageId: string;
   legIds: string[];
-  partySize: number;
   message: string | null;
   candidateInfo: Record<string, unknown>;
   proposal: ApplyWithProposalPayload;
@@ -36,7 +35,6 @@ export async function applyVoyageBookingWithProposal(params: {
       body: JSON.stringify({
         voyageId: params.voyageId,
         legIds: params.legIds,
-        partySize: params.partySize,
         message: params.message,
         candidateInfo: params.candidateInfo,
         proposalKind: params.proposal.proposalKind,
@@ -106,4 +104,24 @@ export async function uploadWorkawayProposalFiles(params: {
     _workaway_portfolio_url: null,
   });
   if (rpcError) throw new Error(rpcError.message);
+}
+
+/** Signed download link for a CV/portfolio file in the private workaway-applications bucket. */
+export async function getWorkawayFileSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from("workaway-applications").createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+}
+
+/** Candidate accepts the admin's counter-proposal on their contribution/workaway negotiation. */
+export async function acceptContributionCounter(
+  bookingRequestId: string,
+  message: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await untypedSupabase.rpc("accept_voyage_booking_contribution_counter", {
+    _booking_request_id: bookingRequestId,
+    _message: message,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

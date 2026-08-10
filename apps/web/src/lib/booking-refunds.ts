@@ -4,7 +4,8 @@ export type BookingRefundTrigger =
   | "admin_cancelled"
   | "admin_rejected"
   | "user_cancelled"
-  | "admin_plan_change_declined";
+  | "admin_plan_change_declined"
+  | "user_rejected_contribution_counter";
 
 /**
  * Narrow with `result.ok === false`, not `!result.ok`: the project compiles with

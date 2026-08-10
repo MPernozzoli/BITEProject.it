@@ -180,6 +180,30 @@ export interface WorkawayRole {
   sort_order: number;
 }
 
+export interface BookingContributionProposal {
+  id: string;
+  booking_request_id: string;
+  proposed_by: "candidate" | "admin";
+  status: "pending_admin_review" | "pending_user_approval" | "accepted" | "rejected" | "superseded";
+  proposal_kind: "contribution" | "workaway" | "hybrid";
+  standard_variable_cents: number;
+  proposed_variable_cents: number | null;
+  proposed_variable_percent: number | null;
+  workaway_role_keys: string[];
+  workaway_other_role_text: string | null;
+  workaway_message: string | null;
+  workaway_hours_commitment_type: "per_day" | "per_week" | null;
+  workaway_hours_commitment_value: number | null;
+  workaway_cv_storage_path: string | null;
+  workaway_portfolio_storage_path: string | null;
+  workaway_portfolio_url: string | null;
+  workaway_requests_compensation: boolean;
+  workaway_requested_compensation_cents: number | null;
+  candidate_message: string | null;
+  admin_note: string | null;
+  created_at: string;
+}
+
 export interface BookingTask {
   id: string;
   voyage_id: string;

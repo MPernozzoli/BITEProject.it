@@ -35,6 +35,7 @@ import {
 import { formatDepositEur, perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
+import { acceptContributionCounter, getWorkawayFileSignedUrl, uploadWorkawayProposalFiles } from "@/lib/booking-proposal-apply";
 import { getBookingBriefingContent } from "@/lib/booking-briefings";
 import {
   listMyParticipations,
@@ -46,6 +47,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
   type BookableLeg,
+  type BookingContributionProposal,
   type BookingRequest,
   type BookingRequestLeg,
   type BookingSettings,
@@ -156,6 +158,12 @@ const UserBookings = () => {
   const [paymentStarting, setPaymentStarting] = useState(false);
   const [reactivatingRequestId, setReactivatingRequestId] = useState<string | null>(null);
   const [planChangeMessages, setPlanChangeMessages] = useState<Record<string, string>>({});
+  const [contributionProposals, setContributionProposals] = useState<BookingContributionProposal[]>([]);
+  const [contributionCounterMessages, setContributionCounterMessages] = useState<Record<string, string>>({});
+  const [contributionCounterSaving, setContributionCounterSaving] = useState(false);
+  const [retryCvFile, setRetryCvFile] = useState<File | null>(null);
+  const [retryPortfolioFile, setRetryPortfolioFile] = useState<File | null>(null);
+  const [retryUploadSaving, setRetryUploadSaving] = useState(false);
   const [occupancy, setOccupancy] = useState<VoyageBookingOccupancyRow[]>([]);
   const [detailsRequestId, setDetailsRequestId] = useState<string | null>(null);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string; participantId?: string } | null>(
@@ -230,7 +238,7 @@ const UserBookings = () => {
     const voyageIds = [...new Set([...loadedVoyages.map((v) => v.id), ...requestedVoyageIds])];
     const requestIds = loadedRequests.map((request) => request.id);
 
-    const [legsRes, waypointsRes, requestLegsRes, settingsRes, tasksRes, completionsRes, depositsRes] = await Promise.all([
+    const [legsRes, waypointsRes, requestLegsRes, settingsRes, tasksRes, completionsRes, depositsRes, contributionProposalsRes] = await Promise.all([
       voyageIds.length
         ? typedSupabase
             .from("voyage_bookable_legs")
@@ -281,9 +289,16 @@ const UserBookings = () => {
             .in("booking_request_id", requestIds)
             .eq("status", "paid")
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_contribution_proposals")
+            .select("*")
+            .in("booking_request_id", requestIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (legsRes.error || waypointsRes.error || requestLegsRes.error || settingsRes.error || tasksRes.error || completionsRes.error || depositsRes.error) {
+    if (legsRes.error || waypointsRes.error || requestLegsRes.error || settingsRes.error || tasksRes.error || completionsRes.error || depositsRes.error || contributionProposalsRes.error) {
       toast.error(
         legsRes.error?.message ||
           waypointsRes.error?.message ||
@@ -292,6 +307,7 @@ const UserBookings = () => {
           tasksRes.error?.message ||
           completionsRes.error?.message ||
           depositsRes.error?.message ||
+          contributionProposalsRes.error?.message ||
           "Unable to load booking details"
       );
       setBusy(false);
@@ -303,6 +319,7 @@ const UserBookings = () => {
     setLegs(((legsRes.data as BookableLeg[] | null) || []));
     setWaypoints(((waypointsRes.data as BookingWaypoint[] | null) || []));
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
+    setContributionProposals(((contributionProposalsRes.data as BookingContributionProposal[] | null) || []));
     const paidDeposits = ((depositsRes.data as { booking_request_id: string; amount_cents: number }[] | null) || []);
     setPaidDepositRequestIds(new Set(paidDeposits.map((deposit) => deposit.booking_request_id)));
     setPaidEurByRequestId(
@@ -691,6 +708,100 @@ const UserBookings = () => {
     ? stringFromMetadata(detailsRequest.plan_change_metadata, "admin_message") ||
       stringFromMetadata(detailsRequest.plan_change_metadata, "admin_note")
     : null;
+
+  // Latest non-superseded contribution/workaway proposal for the booking currently open in
+  // the details dialog — rows come pre-sorted created_at desc from load().
+  const detailsContributionProposal = detailsRequest
+    ? contributionProposals.find(
+        (proposal) => proposal.booking_request_id === detailsRequest.id && proposal.status !== "superseded",
+      ) || null
+    : null;
+  const detailsContributionCounterPending =
+    detailsContributionProposal?.status === "pending_user_approval" && detailsContributionProposal.proposed_by === "admin";
+  const detailsContributionAwaitingReview = detailsContributionProposal?.status === "pending_admin_review";
+  const detailsContributionMissingFiles =
+    Boolean(detailsContributionProposal) &&
+    (detailsContributionProposal?.proposal_kind === "workaway" || detailsContributionProposal?.proposal_kind === "hybrid") &&
+    ["pending_admin_review", "pending_user_approval"].includes(detailsContributionProposal?.status ?? "") &&
+    !detailsContributionProposal?.workaway_cv_storage_path &&
+    !detailsContributionProposal?.workaway_portfolio_storage_path;
+
+  const respondToContributionCounter = async (action: "accept" | "reject") => {
+    if (!detailsRequest) return;
+    if (action === "reject" && !confirm(lang === "it" ? "Rifiutare la contro-proposta?" : "Reject the counter-proposal?")) {
+      return;
+    }
+    setContributionCounterSaving(true);
+    const message = contributionCounterMessages[detailsRequest.id]?.trim() || null;
+    if (action === "accept") {
+      const result = await acceptContributionCounter(detailsRequest.id, message);
+      setContributionCounterSaving(false);
+      if (result.ok === false) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        lang === "it"
+          ? "Contro-proposta accettata. Se resta un saldo da versare, ti verra chiesto a breve."
+          : "Counter-proposal accepted. If a balance remains, you'll be asked to pay it shortly."
+      );
+    } else {
+      const result = await updateBookingStatusWithRefund({
+        bookingRequestId: detailsRequest.id,
+        status: "rejected",
+        trigger: "user_rejected_contribution_counter",
+        adminNotes: message,
+      });
+      setContributionCounterSaving(false);
+      if (result.ok === false) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        lang === "it"
+          ? `Contro-proposta rifiutata. Rimborso automatico: ${formatDepositEur(result.refundAmountEur, "it")}.`
+          : `Counter-proposal rejected. Automatic refund: ${formatDepositEur(result.refundAmountEur, "en")}.`
+      );
+    }
+    setContributionCounterMessages((current) => ({ ...current, [detailsRequest.id]: "" }));
+    await loadData();
+  };
+
+  const retryWorkawayUpload = async () => {
+    if (!detailsRequest || !session?.user.id || (!retryCvFile && !retryPortfolioFile)) return;
+    setRetryUploadSaving(true);
+    try {
+      await uploadWorkawayProposalFiles({
+        bookingRequestId: detailsRequest.id,
+        userId: session.user.id,
+        cvFile: retryCvFile,
+        portfolioFile: retryPortfolioFile,
+      });
+      toast.success(lang === "it" ? "File caricati." : "Files uploaded.");
+      setRetryCvFile(null);
+      setRetryPortfolioFile(null);
+      await loadData();
+    } catch (error) {
+      toast.error(
+        lang === "it"
+          ? "Caricamento non riuscito. Riprova."
+          : "Upload failed. Try again."
+      );
+      console.error("[UserBookings] workaway file retry upload failed", error);
+    } finally {
+      setRetryUploadSaving(false);
+    }
+  };
+
+  const downloadOwnWorkawayFile = async (path: string | null) => {
+    if (!path) return;
+    const signedUrl = await getWorkawayFileSignedUrl(path);
+    if (!signedUrl) {
+      toast.error(lang === "it" ? "Impossibile generare il link al file." : "Could not generate the file link.");
+      return;
+    }
+    window.open(signedUrl, "_blank", "noopener,noreferrer");
+  };
 
   const validateBookingRequest = () => {
     if (!selectedVoyageId || selectedLegIds.length === 0) {
@@ -1816,6 +1927,154 @@ const UserBookings = () => {
                           : "Counterproposal sent: the team is reviewing it."}
                       </div>
                     )}
+                    {detailsContributionAwaitingReview && (
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                        {lang === "it"
+                          ? "La tua proposta di contributo/workaway e in revisione: ti avviseremo appena c'e una risposta."
+                          : "Your contribution/workaway proposal is under review: we'll notify you as soon as there's a response."}
+                      </div>
+                    )}
+                    {detailsContributionCounterPending && detailsContributionProposal && (
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                        <div className="flex items-start gap-2">
+                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
+                          <div>
+                            <p className="font-semibold">
+                              {lang === "it" ? "Contro-proposta sul contributo" : "Counter-proposal on the contribution"}
+                            </p>
+                            {detailsContributionProposal.admin_note && (
+                              <p className="mt-1 whitespace-pre-line text-sky-900/80">{detailsContributionProposal.admin_note}</p>
+                            )}
+                          </div>
+                        </div>
+                        {detailsContributionProposal.proposed_variable_cents != null && (
+                          <p className="mt-2 text-sky-900">
+                            {lang === "it"
+                              ? `Nuovo contributo variabile proposto: ${formatDepositEur(detailsContributionProposal.proposed_variable_cents / 100, "it")} (il fisso di €20 resta invariato).`
+                              : `New proposed variable contribution: ${formatDepositEur(detailsContributionProposal.proposed_variable_cents / 100, "en")} (the fixed €20 stays unchanged).`}
+                          </p>
+                        )}
+                        {(detailsContributionProposal.workaway_role_keys.length > 0 || detailsContributionProposal.workaway_other_role_text) && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {detailsContributionProposal.workaway_role_keys.map((key) => (
+                              <span key={key} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                                {key}
+                              </span>
+                            ))}
+                            {detailsContributionProposal.workaway_other_role_text && (
+                              <span className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                                {detailsContributionProposal.workaway_other_role_text}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {detailsContributionProposal.workaway_hours_commitment_value != null && (
+                          <p className="mt-1 text-xs text-sky-900/80">
+                            {lang === "it" ? "Ore: " : "Hours: "}
+                            {detailsContributionProposal.workaway_hours_commitment_value}{" "}
+                            {detailsContributionProposal.workaway_hours_commitment_type === "per_week"
+                              ? lang === "it" ? "a settimana" : "per week"
+                              : lang === "it" ? "al giorno" : "per day"}
+                          </p>
+                        )}
+                        <p className="mt-2 text-xs text-sky-900/80">
+                          {lang === "it"
+                            ? "Puoi solo accettare o rifiutare: non e possibile un ulteriore rilancio."
+                            : "You can only accept or reject: no further counter-offer is possible."}
+                        </p>
+                        <textarea
+                          value={contributionCounterMessages[detailsRequest.id] || ""}
+                          onChange={(event) =>
+                            setContributionCounterMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))
+                          }
+                          rows={2}
+                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                          placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
+                        />
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => void respondToContributionCounter("accept")}
+                            disabled={contributionCounterSaving}
+                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Accetta" : "Accept"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respondToContributionCounter("reject")}
+                            disabled={contributionCounterSaving}
+                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                          >
+                            {lang === "it" ? "Rifiuta" : "Reject"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {detailsContributionMissingFiles && (
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                        <p className="font-semibold">
+                          {lang === "it" ? "CV/portfolio non caricati" : "CV/portfolio not uploaded"}
+                        </p>
+                        <p className="mt-1 text-amber-900/80">
+                          {lang === "it"
+                            ? "Il caricamento potrebbe non essere andato a buon fine. Puoi riprovare qui."
+                            : "The upload may not have gone through. You can retry here."}
+                        </p>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-white/60 px-3 py-2 text-xs text-amber-900">
+                            <span className="truncate">{retryCvFile ? retryCvFile.name : lang === "it" ? "CV" : "CV"}</span>
+                            <input
+                              type="file"
+                              accept=".pdf,.doc,.docx"
+                              className="hidden"
+                              onChange={(event) => setRetryCvFile(event.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-white/60 px-3 py-2 text-xs text-amber-900">
+                            <span className="truncate">{retryPortfolioFile ? retryPortfolioFile.name : lang === "it" ? "Portfolio" : "Portfolio"}</span>
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={(event) => setRetryPortfolioFile(event.target.files?.[0] ?? null)}
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void retryWorkawayUpload()}
+                          disabled={retryUploadSaving || (!retryCvFile && !retryPortfolioFile)}
+                          className="mt-2 w-full rounded-full border border-amber-400 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                        >
+                          {retryUploadSaving
+                            ? lang === "it" ? "Caricamento..." : "Uploading..."
+                            : lang === "it" ? "Carica" : "Upload"}
+                        </button>
+                      </div>
+                    )}
+                    {detailsContributionProposal &&
+                      (detailsContributionProposal.workaway_cv_storage_path || detailsContributionProposal.workaway_portfolio_storage_path) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {detailsContributionProposal.workaway_cv_storage_path && (
+                            <button
+                              type="button"
+                              onClick={() => void downloadOwnWorkawayFile(detailsContributionProposal.workaway_cv_storage_path)}
+                              className="rounded-full border border-border/70 px-3 py-1 text-xs font-semibold text-foreground hover:border-accent/50"
+                            >
+                              {lang === "it" ? "Il tuo CV" : "Your CV"}
+                            </button>
+                          )}
+                          {detailsContributionProposal.workaway_portfolio_storage_path && (
+                            <button
+                              type="button"
+                              onClick={() => void downloadOwnWorkawayFile(detailsContributionProposal.workaway_portfolio_storage_path)}
+                              className="rounded-full border border-border/70 px-3 py-1 text-xs font-semibold text-foreground hover:border-accent/50"
+                            >
+                              {lang === "it" ? "Il tuo portfolio" : "Your portfolio"}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     {(detailsPredepartureInfo || detailsShowBriefings || detailsTermsContent || detailsVoyageTasks.length > 0) && (
                       <div className="mt-4 space-y-3 rounded-[18px] border border-border/70 bg-background/45 p-3">
                         {detailsPredepartureInfo && (

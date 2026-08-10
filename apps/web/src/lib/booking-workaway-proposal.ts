@@ -56,10 +56,23 @@ export function contributionProposalKind(proposal: ContributionProposal): Propos
   return null;
 }
 
-/** Percentage the proposed amount represents of the calculated variable contribution. */
-export function proposedVariancePercent(proposedVariableEur: number, standardVariableEur: number): number {
-  if (standardVariableEur <= 0) return 0;
-  return Math.round((proposedVariableEur / standardVariableEur) * 10000) / 100;
+/**
+ * Percentage the proposed amount represents of the calculated variable contribution, kept at
+ * full precision — this feeds the range validation below, so rounding it here would let a
+ * boundary value (e.g. 49.6% against a 50% minimum) pass or fail depending on rounding rather
+ * than on the actual bound. Returns null when there is no variable quota to be a percentage of
+ * (e.g. a very short leg costs €0) — in that case any non-negative amount is acceptable and no
+ * percentage comparison is meaningful at all.
+ */
+export function proposedVariancePercent(proposedVariableEur: number, standardVariableEur: number): number | null {
+  if (standardVariableEur <= 0) return null;
+  return (proposedVariableEur / standardVariableEur) * 100;
+}
+
+/** Same as {@link proposedVariancePercent}, rounded to a whole number for display in the UI. */
+export function proposedVariancePercentLabel(proposedVariableEur: number, standardVariableEur: number): number | null {
+  const percent = proposedVariancePercent(proposedVariableEur, standardVariableEur);
+  return percent == null ? null : Math.round(percent);
 }
 
 export function getContributionProposalValidationError(
@@ -80,7 +93,9 @@ export function getContributionProposalValidationError(
       return lang === "it" ? "Indica l'importo che proponi." : "Enter the amount you're proposing.";
     }
     const percent = proposedVariancePercent(proposal.proposedVariableEur, standardVariableEur);
-    if (percent < bounds.minPercent || percent > bounds.maxPercent) {
+    // percent is null when there is no variable quota at all (e.g. a €0 leg) — nothing to
+    // bound against, any non-negative amount already passed the check above.
+    if (percent != null && (percent < bounds.minPercent || percent > bounds.maxPercent)) {
       return lang === "it"
         ? `L'importo proposto deve essere tra il ${bounds.minPercent}% e il ${bounds.maxPercent}% della quota stimata.`
         : `The proposed amount must be between ${bounds.minPercent}% and ${bounds.maxPercent}% of the estimated contribution.`;

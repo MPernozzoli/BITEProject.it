@@ -2,13 +2,13 @@ import { useMemo, useState } from "react";
 import { Info, Upload, X } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatDepositEur } from "@/lib/booking-deposit";
 import {
   proposedVariancePercent,
+  proposedVariancePercentLabel,
   type ContributionProposal,
   type WorkawayHoursCommitmentType,
 } from "@/lib/booking-workaway-proposal";
@@ -50,6 +50,9 @@ const ContributionProposalForm = ({
 
   const percent = proposal.proposedVariableEur != null
     ? proposedVariancePercent(proposal.proposedVariableEur, standardVariableEur)
+    : null;
+  const percentLabel = proposal.proposedVariableEur != null
+    ? proposedVariancePercentLabel(proposal.proposedVariableEur, standardVariableEur)
     : null;
   const percentOutOfRange = percent != null && (percent < bounds.minPercent || percent > bounds.maxPercent);
 
@@ -140,11 +143,18 @@ const ContributionProposalForm = ({
                 }}
                 className="max-w-[10rem]"
               />
-              {percent != null && (
+              {proposal.proposedVariableEur != null && percentLabel == null && (
+                <p className="text-xs text-muted-foreground">
+                  {it
+                    ? "La quota variabile stimata e €0 per le tratte selezionate: puoi proporre qualsiasi importo."
+                    : "The estimated variable contribution is €0 for the selected legs: you can propose any amount."}
+                </p>
+              )}
+              {percentLabel != null && (
                 <p className={`text-xs ${percentOutOfRange ? "font-medium text-destructive" : "text-muted-foreground"}`}>
                   {it
-                    ? `Stai proponendo il ${percent}% della quota stimata${percent < 100 ? " (in meno)" : percent > 100 ? " (in piu)" : ""}.`
-                    : `You're proposing ${percent}% of the estimated contribution${percent < 100 ? " (lower)" : percent > 100 ? " (higher)" : ""}.`}
+                    ? `Stai proponendo il ${percentLabel}% della quota stimata${percentLabel < 100 ? " (in meno)" : percentLabel > 100 ? " (in piu)" : ""}.`
+                    : `You're proposing ${percentLabel}% of the estimated contribution${percentLabel < 100 ? " (lower)" : percentLabel > 100 ? " (higher)" : ""}.`}
                   {percentOutOfRange
                     ? it
                       ? ` Deve restare tra il ${bounds.minPercent}% e il ${bounds.maxPercent}%.`
@@ -365,9 +375,9 @@ const ContributionProposalForm = ({
               </div>
 
               <label className="flex items-center gap-3">
-                <Switch
+                <Checkbox
                   checked={proposal.workaway.requestsCompensation}
-                  onCheckedChange={(value) => updateWorkaway({ requestsCompensation: value })}
+                  onCheckedChange={(value) => updateWorkaway({ requestsCompensation: value === true })}
                 />
                 <span className="text-xs text-foreground">
                   {it
@@ -400,6 +410,14 @@ const ContributionProposalForm = ({
             </div>
           )}
         </div>
+      )}
+
+      {(proposal.wantsAlternativeContribution || proposal.wantsWorkaway) && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {it
+            ? "L'organizzatore puo accettare la tua proposta, rifiutarla o farti una contro-proposta: se ricevi una contro-proposta potrai solo accettarla o rifiutarla, senza ulteriori rilanci."
+            : "The organiser can accept your proposal, reject it, or send a counter-proposal: if you receive a counter-proposal you can only accept or reject it, with no further back-and-forth."}
+        </p>
       )}
     </div>
   );

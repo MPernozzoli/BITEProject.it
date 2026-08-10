@@ -845,7 +845,6 @@ const Journal = () => {
         const applyResult = await applyVoyageBookingWithProposal({
           voyageId: bookingAnchor.voyageId,
           legIds: selectedBookingLegIds,
-          partySize: 1,
           message: bookingMessage.trim() || null,
           candidateInfo: bookingCandidateInfo,
           proposal: attachedProposal,

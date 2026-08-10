@@ -3,24 +3,30 @@
  *
  * Same effect as calling request_voyage_booking directly (as the standard application flow
  * does from the browser), plus attaching a contribution/workaway proposal to the resulting
- * application in the same request. Kept as a separate endpoint rather than widening
- * request_voyage_booking itself — see the plan: that RPC is load-bearing (advisory lock,
- * capacity check, duplicate-leg guard) and the team already treats RPC-overload drift as a
- * real risk (see the explicit `drop function if exists` cleanups in the booking migrations).
+ * application — atomically, via request_voyage_booking_with_contribution_proposal. Kept as a
+ * separate endpoint rather than widening request_voyage_booking itself — see the plan: that RPC
+ * is load-bearing (advisory lock, capacity check, duplicate-leg guard) and the team already
+ * treats RPC-overload drift as a real risk (see the explicit `drop function if exists` cleanups
+ * in the booking migrations).
  *
  * The standard variable contribution is always recomputed here from the leg complexity — never
  * trusted from the client — and the proposed amount is validated against the voyage's
- * contribution_proposal_min/max_percent before anything is created, so a rejected proposal never
- * leaves a dangling pending_payment application behind.
+ * contribution_proposal_min/max_percent both here (fast feedback, no round trip) and again
+ * inside the RPC (authoritative, and — since request_voyage_booking_with_contribution_proposal
+ * runs both steps in one transaction — a rejected proposal now never leaves a dangling
+ * pending_payment application behind even if this pre-check somehow disagreed with the DB).
+ *
+ * party_size is always 1: contribution/workaway proposals are v1-scoped to solo applications,
+ * enforced server-side by the RPC itself (it does not even accept a party size argument).
  *
  * Body: {
- *   voyageId: string, legIds: string[], partySize?: number, message?: string | null,
- *   candidateInfo?: object,
+ *   voyageId: string, legIds: string[], message?: string | null, candidateInfo?: object,
  *   proposalKind: "contribution" | "workaway" | "hybrid",
  *   proposedVariableCents?: number | null,
  *   workaway?: {
  *     roleKeys?: string[], otherRoleText?: string | null, message?: string | null,
  *     hoursCommitmentType?: "per_day" | "per_week" | null, hoursCommitmentValue?: number | null,
+ *     portfolioUrl?: string | null,
  *     requestsCompensation?: boolean, requestedCompensationCents?: number | null,
  *   },
  *   candidateMessage?: string | null,
@@ -59,7 +65,6 @@ type WorkawayBody = {
 type Body = {
   voyageId?: string;
   legIds?: string[];
-  partySize?: number;
   message?: string | null;
   candidateInfo?: Record<string, unknown>;
   proposalKind?: string;
@@ -94,7 +99,6 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
   const voyageId = String(body.voyageId ?? "").trim();
   const legIds = Array.isArray(body.legIds) ? body.legIds.map((id) => String(id)).filter(Boolean) : [];
-  const partySize = Math.max(1, Math.floor(Number(body.partySize) || 1));
   const proposalKind = String(body.proposalKind ?? "").trim();
   const workaway = body.workaway ?? {};
 
@@ -172,12 +176,16 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       if (!Number.isFinite(proposedVariableCents) || proposedVariableCents < 0) {
         throw new ApplyWithProposalError(400, "invalid_proposed_variable_cents");
       }
-      const percent =
-        standardVariableCents > 0 ? (proposedVariableCents / standardVariableCents) * 100 : 0;
-      const minPercent = Number(settings?.contribution_proposal_min_percent ?? 50);
-      const maxPercent = Number(settings?.contribution_proposal_max_percent ?? 150);
-      if (percent < minPercent || percent > maxPercent) {
-        throw new ApplyWithProposalError(409, "proposal_out_of_range");
+      // No variable quota to be a percentage of (e.g. a very short leg): any non-negative
+      // amount is accepted as-is, matching the same fix applied inside the RPC — otherwise a
+      // €0 standard quota always resolves to 0%, which fails almost any positive minimum bound.
+      if (standardVariableCents > 0) {
+        const percent = (proposedVariableCents / standardVariableCents) * 100;
+        const minPercent = Number(settings?.contribution_proposal_min_percent ?? 50);
+        const maxPercent = Number(settings?.contribution_proposal_max_percent ?? 150);
+        if (percent < minPercent || percent > maxPercent) {
+          throw new ApplyWithProposalError(409, "proposal_out_of_range");
+        }
       }
     }
 
@@ -191,47 +199,42 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
     // From here on the application is created as the user themselves — every existing
     // invariant in request_voyage_booking (advisory lock, capacity, duplicate-leg guard,
-    // RLS) applies exactly as it does for the standard flow.
+    // RLS) applies exactly as it does for the standard flow. Both steps run inside the RPC's
+    // own transaction, so a failure here can never leave a paid-for-the-wrong-amount booking.
     const userDb = createUserScopedClient(token);
-    const { data: applyResult, error: applyError } = await userDb.rpc("request_voyage_booking", {
-      _voyage_id: voyageId,
-      _leg_ids: legIds,
-      _party_size: partySize,
-      _message: body.message ?? null,
-      _candidate_info: body.candidateInfo ?? {},
-    });
+    const { data: applyResult, error: applyError } = await userDb.rpc(
+      "request_voyage_booking_with_contribution_proposal",
+      {
+        _voyage_id: voyageId,
+        _leg_ids: legIds,
+        _message: body.message ?? null,
+        _candidate_info: body.candidateInfo ?? {},
+        _proposal_kind: proposalKind,
+        _standard_variable_cents: standardVariableCents,
+        _proposed_variable_cents: proposedVariableCents,
+        _workaway_role_keys: workaway.roleKeys ?? [],
+        _workaway_other_role_text: workaway.otherRoleText ?? null,
+        _workaway_message: workaway.message ?? null,
+        _workaway_hours_commitment_type: workaway.hoursCommitmentType ?? null,
+        _workaway_hours_commitment_value: workaway.hoursCommitmentValue ?? null,
+        _workaway_portfolio_url: workaway.portfolioUrl ?? null,
+        _workaway_requests_compensation: workaway.requestsCompensation ?? false,
+        _workaway_requested_compensation_cents: workaway.requestedCompensationCents ?? null,
+        _candidate_message: body.candidateMessage ?? null,
+      },
+    );
+
     if (applyError) {
+      if ((applyError as { code?: string }).code === "BK001") {
+        throw new ApplyWithProposalError(409, "duplicate_leg_booking");
+      }
       throw new ApplyWithProposalError(409, applyError.message);
     }
     const bookingRequestId = (Array.isArray(applyResult) ? applyResult[0] : applyResult)?.booking_request_id as
       | string
       | undefined;
     if (!bookingRequestId) {
-      throw new Error("request_voyage_booking_no_id");
-    }
-
-    const { error: attachError } = await serviceDb.rpc("attach_voyage_booking_contribution_proposal", {
-      _booking_request_id: bookingRequestId,
-      _proposal_kind: proposalKind,
-      _standard_variable_cents: standardVariableCents,
-      _proposed_variable_cents: proposedVariableCents,
-      _workaway_role_keys: workaway.roleKeys ?? [],
-      _workaway_other_role_text: workaway.otherRoleText ?? null,
-      _workaway_message: workaway.message ?? null,
-      _workaway_hours_commitment_type: workaway.hoursCommitmentType ?? null,
-      _workaway_hours_commitment_value: workaway.hoursCommitmentValue ?? null,
-      _workaway_cv_storage_path: null,
-      _workaway_portfolio_storage_path: null,
-      _workaway_portfolio_url: workaway.portfolioUrl ?? null,
-      _workaway_requests_compensation: workaway.requestsCompensation ?? false,
-      _workaway_requested_compensation_cents: workaway.requestedCompensationCents ?? null,
-      _candidate_message: body.candidateMessage ?? null,
-    });
-    if (attachError) {
-      // The application row already exists at this point (pending_payment, invisible to admin
-      // review). Leaving it in place is fine — it self-heals via expire_pending_voyage_booking_payments
-      // like any other abandoned application — but the caller must know the proposal failed.
-      throw new ApplyWithProposalError(409, attachError.message);
+      throw new Error("request_voyage_booking_with_contribution_proposal_no_id");
     }
 
     sendJson(res, 200, {
