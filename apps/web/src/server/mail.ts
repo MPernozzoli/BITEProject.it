@@ -10,7 +10,8 @@
 import webpush from "web-push";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { resolveMailboxConfig, type MailFromOption } from "@pynkstudio/mailapp/mailbox";
-import type { MailboxNodeContext, PushSubscriptionTarget } from "@pynkstudio/mailapp/node";
+import type { PushSubscriptionTarget } from "@pynkstudio/mailapp/mailbox/server";
+import type { MailboxNodeContext } from "@pynkstudio/mailapp/node";
 
 export const ORDINARY_MAIL_DOMAIN = "biteproject.it";
 export const AUTOMATIC_MAIL_DOMAIN = "mail.biteproject.it";

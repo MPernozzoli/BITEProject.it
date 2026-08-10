@@ -479,7 +479,7 @@ const VoyagePage = () => {
               const paragraphs = voyageDescription.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
               const [lede, ...rest] = paragraphs;
               return (
-                <div className="mb-6 max-w-2xl border-l-2 border-accent/30 pl-5">
+                <div className="mb-6 border-l-2 border-accent/30 pl-5">
                   <p className="editorial-body text-[15px] md:text-base text-muted-foreground leading-relaxed">{lede}</p>
                   {rest.length > 0 && (
                     <>
