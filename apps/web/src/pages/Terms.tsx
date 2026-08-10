@@ -15,7 +15,7 @@ const Terms = () => {
           ? "Questi Termini regolano l'uso di biteproject.it, la registrazione di un account, la partecipazione alla community e la partecipazione ai viaggi condivisi organizzati nell'ambito del progetto BITE. Prima di registrarti o richiedere di partecipare a un viaggio ti chiediamo di leggerli con attenzione: descrivono la natura non commerciale del progetto, i tuoi obblighi e i limiti di responsabilità."
           : "These Terms govern the use of biteproject.it, account registration, participation in the community, and participation in the shared voyages organized within the BITE project. Before you register or request to join a voyage, please read them carefully: they describe the non-commercial nature of the project, your obligations, and the limits of liability."
       }
-      lastUpdated={isIt ? "Ultimo aggiornamento: 8 agosto 2026" : "Last updated: August 8, 2026"}
+      lastUpdated={isIt ? "Ultimo aggiornamento: 11 agosto 2026" : "Last updated: August 11, 2026"}
     >
       <LegalSection title={isIt ? "Natura del progetto BITE" : "Nature of the BITE Project"}>
         <p>
@@ -169,6 +169,34 @@ const Terms = () => {
           {isIt
             ? "BITE non conserva credenziali bancarie né dati completi delle carte di pagamento. I pagamenti online sono gestiti dal fornitore Bunq secondo i suoi termini."
             : "BITE does not store banking credentials or full payment card data. Online payments are handled by the provider Bunq under its own terms."}
+        </p>
+      </LegalSection>
+
+      <LegalSection title={isIt ? "Proposta di contributo alternativo e workaway" : "Alternative Contribution Proposal and Workaway"}>
+        <p>
+          {isIt
+            ? "Per alcuni viaggi, se l'opzione è attiva, invece di accettare il contributo standard indicato puoi proporre un'alternativa: un importo diverso, o una collaborazione (ad esempio comunicazione social, foto, video, cucina di bordo o altre mansioni indicate come utili per quel viaggio), anche in combinazione tra loro."
+            : "For some voyages, where this option is enabled, instead of accepting the standard contribution shown you may propose an alternative: a different amount, or a workaway trade (for example social media, photography, video, galley duties, or other roles indicated as useful for that voyage), even combined with one another."}
+        </p>
+        <p>
+          {isIt
+            ? "La quota fissa minima (attualmente € 20,00 a persona) resta sempre dovuta per intero e viene versata subito al momento della richiesta, indipendentemente da qualsiasi proposta: non è negoziabile e nessuna proposta può ridurla. Ciò che puoi proporre in alternativa riguarda esclusivamente la parte restante del contributo, entro un tetto massimo comunicato al momento della richiesta."
+            : "The fixed minimum share (currently €20.00 per person) always remains due in full and is paid immediately upon request, regardless of any proposal: it is not negotiable and no proposal can reduce it. What you may propose an alternative for is solely the remaining part of the contribution, up to a ceiling communicated at the time of the request."}
+        </p>
+        <p>
+          {isIt
+            ? "Se proponi una collaborazione (workaway), l'impegno che indichi (ad esempio le ore giornaliere o settimanali che ti rendi disponibile) costituisce un impegno reale per la durata concordata del viaggio, non un'indicazione di massima. Puoi inoltre segnalare se ritieni di dover ricevere un compenso aggiuntivo oltre alla partecipazione al viaggio: in tal caso valutiamo la richiesta caso per caso, e un eventuale accordo in tal senso non costituisce di per sé un rapporto di lavoro subordinato con il progetto."
+            : "If you propose a workaway trade, the commitment you indicate (for example the daily or weekly hours you make yourself available for) constitutes a real commitment for the agreed duration of the voyage, not a rough indication. You may also indicate whether you believe you should receive compensation in addition to taking part in the voyage: in that case we evaluate the request case by case, and any resulting agreement does not in itself constitute an employment relationship with the project."}
+        </p>
+        <p>
+          {isIt
+            ? "La tua proposta viene esaminata dai referenti del progetto, che possono: accettarla così com'è; rifiutarla; oppure farti una controproposta con termini diversi. Se ricevi una controproposta puoi solo accettarla o rifiutarla: non è previsto un ulteriore rilancio da parte tua."
+            : "Your proposal is reviewed by the project's leads, who may: accept it as it is; decline it; or make you a counter-proposal with different terms. If you receive a counter-proposal you may only accept or decline it: no further counter-offer from you is possible."}
+        </p>
+        <p>
+          {isIt
+            ? "Se la tua proposta, o la controproposta che decidi di rifiutare, non porta a un accordo, la quota fissa già versata ti viene rimborsata automaticamente per intero. Se invece si raggiunge un accordo, l'eventuale importo residuo concordato ti viene richiesto in un'unica soluzione, e la candidatura può essere approvata solo dopo il suo versamento."
+            : "If your proposal, or a counter-proposal you decide to decline, does not lead to an agreement, the fixed share already paid is automatically refunded in full. If an agreement is reached instead, any remaining agreed amount is requested from you in a single payment, and the application can only be approved once it has been paid."}
         </p>
       </LegalSection>
 

@@ -264,8 +264,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
       const settings = bookingSettingsByVoyage[voyageId];
       const maxPercent = settings?.contribution_proposal_max_percent ?? 150;
       const standardTotalCents = (proposal?.standard_variable_cents ?? 0) + 2000;
-      const floorCents = Math.max(2000, Math.round(standardTotalCents * 0.5));
-      const maxCents = Math.max(floorCents, Math.round((standardTotalCents * maxPercent) / 100));
+      // The slider works in whole euros (step 1), so its own [min, max] are rounded to whole
+      // euros too — cents-precision bounds like "€160.46" produced an ugly, non-round slider
+      // range. The rounding direction is chosen so the slider can never offer a value the
+      // server (which validates the exact, unrounded cents) would reject: the floor is rounded
+      // UP (a higher floor still satisfies "at least the true floor"), the ceiling is rounded
+      // DOWN (a lower ceiling still satisfies "at most the true ceiling").
+      const floorCents = Math.ceil(Math.max(2000, standardTotalCents * 0.5) / 100) * 100;
+      const maxCents = Math.max(floorCents, Math.floor(((standardTotalCents * maxPercent) / 100) / 100) * 100);
       const candidateTotalCents = proposal?.proposed_variable_cents != null ? proposal.proposed_variable_cents + 2000 : null;
       const defaultCents = candidateTotalCents != null
         ? Math.min(maxCents, Math.max(floorCents, candidateTotalCents))

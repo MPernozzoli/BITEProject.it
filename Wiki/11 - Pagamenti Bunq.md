@@ -23,6 +23,7 @@ Ricalcolato in `apps/web/src/lib/booking-deposit.ts`, **mai** fidato dal client:
 - **Totale = importo per persona × dimensione gruppo (party size)**.
 - Copy UI: sempre "contributo alle spese", mai tariffa/biglietto/prezzo/charter.
 - Tooltip UI: spiegazione sintetica e non numerica; comunica che la quota viene stimata con un coefficiente chilometrico per ripartire uniformemente le spese vive del viaggio tra i partecipanti.
+- **Questo è il calcolo standard.** Per viaggio e candidatura singola, se attivato, il candidato può proporre un'alternativa (importo diverso e/o workaway) invece di accettarlo — il fisso resta comunque sempre dovuto per intero. Dettagli completi in [[13 - Booking Voyage]] § proposta di contributo alternativo e in `docs/payments-bunq.md`.
 
 ## Limite Bunq
 Bunq limita a **€500 per singola transazione**. `/request` ritorna `409 bunq_amount_exceeds_single_transaction_limit` se l'importo supera €500 → il client instrada l'utente al **bonifico bancario** (`apps/web/api/payments/bunq/bank-transfer.ts`, migrazione `bank_transfer_deposits`).

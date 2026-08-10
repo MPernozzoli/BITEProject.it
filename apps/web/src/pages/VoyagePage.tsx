@@ -38,6 +38,7 @@ import {
   contributionFixedMinimumEur,
   formatDepositEur,
   getContributionExplanation,
+  roundUpToNextEuro,
 } from "@/lib/booking-deposit";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
@@ -613,7 +614,7 @@ const VoyagePage = () => {
               {bookableLegs.length > 0 && (
                 <div className="mt-6 space-y-2">
                   {bookableLegs.map((leg) => {
-                    const price = legDepositEur(leg, contributionOpts);
+                    const price = roundUpToNextEuro(legDepositEur(leg, contributionOpts));
                     return (
                       <div
                         key={leg.id}

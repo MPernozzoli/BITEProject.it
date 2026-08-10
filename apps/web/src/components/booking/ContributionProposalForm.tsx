@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import { formatDepositEur, roundUpToNextEuro } from "@/lib/booking-deposit";
 import {
   standardTotalEur,
   type ContributionProposal,
@@ -92,9 +92,16 @@ const ContributionProposalForm = ({
   const [roleSearch, setRoleSearch] = useState("");
   const it = lang === "it";
 
-  const standardTotal = standardTotalEur(standardVariableEur, fixedMinimumEur);
-  const maxTotalEur = Math.max(fixedMinimumEur, Math.round((standardTotal * maxPercent) / 100));
-  const defaultTotalEur = Math.min(maxTotalEur, Math.max(fixedMinimumEur, Math.round(standardTotal / 2)));
+  // Raw (unrounded) total, used for the slider's own bounds — the server validates against the
+  // same raw math (in cents), so the ceiling below is floored rather than rounded to the nearest
+  // euro: rounding up (or to nearest) could let the slider offer a value that then fails
+  // server-side validation by a few cents right at the boundary.
+  const standardTotalRaw = standardTotalEur(standardVariableEur, fixedMinimumEur);
+  // Rounded up, matching the site-wide convention for displayed contribution figures
+  // (perPersonDepositEur/roundUpToNextEuro) — this is informational text only, not a bound.
+  const standardTotal = roundUpToNextEuro(standardTotalRaw);
+  const maxTotalEur = Math.max(fixedMinimumEur, Math.floor((standardTotalRaw * maxPercent) / 100));
+  const defaultTotalEur = Math.min(maxTotalEur, Math.max(fixedMinimumEur, Math.round(standardTotalRaw / 2)));
   const defaultVariableEur = Math.max(0, defaultTotalEur - fixedMinimumEur);
   const currentVariableEur = proposal.proposedVariableEur ?? defaultVariableEur;
   const currentTotalEur = currentVariableEur + fixedMinimumEur;

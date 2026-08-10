@@ -62,6 +62,67 @@ Computed server-side (never trusted from the client) in `src/lib/booking-deposit
 If Bunq env vars are missing, `/request` returns `503 not_configured`, the booking is still
 created, and the user sees a "contribution link to follow" message — nothing breaks.
 
+## Alternative contribution proposal & workaway (opt-in per voyage)
+
+Voyages with `voyage_booking_settings.contribution_proposal_enabled` and/or `workaway_enabled`
+let a solo candidate (`party_size` is fixed at 1 server-side — not offered for group bookings)
+propose an alternative to the standard contribution instead of accepting it outright: a
+different amount, a workaway trade (roles from the global `voyage_workaway_roles` catalog, CV/
+portfolio upload to the private `workaway-applications` bucket), or both.
+
+**The €20 fixed minimum is never part of the negotiation.** It is always collected in full
+through the same `pending_payment` gate as the standard flow, before the application is even
+visible to admin review — only the variable remainder is negotiable. Creation + proposal attach
+is atomic (`request_voyage_booking_with_contribution_proposal`, single transaction) so a failed
+attach can never leave a `pending_payment` application without its proposal recorded.
+
+**The UI works in TOTAL terms (fixed + variable), not variable alone.** An earlier iteration
+asked the candidate to propose only the variable share while the fixed €20 "added on top",
+which was confusing and had a real bug (a €0 variable estimate made the percent-of-variable
+floor mathematically unreachable for any positive minimum). The slider now represents the whole
+contribution: floor = the €20 fixed itself (structural, not a configurable percentage — there is
+no `contribution_proposal_min_percent` anymore, that column was dropped), ceiling =
+`contribution_proposal_max_percent`% of the standard total (variable + €20), default position =
+50% of the standard total. A workaway proposal always shows this same amount field (not a
+separate optional step) so the candidate is never left assuming work replaces the fixed share.
+
+**Negotiation is exactly one round.** Candidate proposes → admin
+`admin_accept_voyage_booking_contribution_proposal` / `admin_counter_voyage_booking_contribution_proposal`
+(counter floor: `max(€20, 50% of standard total)`) / reject (reuses the existing "Scarta"
+rejection path, no new code — `refundPolicyPercent` already returns 100% for `admin_rejected`).
+On a counter, the candidate can only `accept_voyage_booking_contribution_counter` or decline it
+via `POST /api/bookings/status` with the new trigger `user_rejected_contribution_counter` (100%
+refund of the €20 already paid) — there is no further back-and-forth.
+
+`admin_set_voyage_booking_status` additionally refuses `admin_approved`/`user_confirmed` while
+`voyage_booking_requests.contribution_proposal_status` is unresolved, or once accepted, while
+the negotiated variable balance (`voyage_booking_negotiated_balance_paid`) is still unpaid.
+
+**Zero-due edge case.** If the candidate already holds another active application on the same
+voyage, `shouldApplyContributionFixedMinimum` waives the €20 fixed to €0 for the new one — but
+`resolveDepositPayer` refuses to create a payment request for a €0 amount, so nothing would ever
+promote such a booking out of `pending_payment`. `settle_voyage_booking_payment_if_zero_due`
+(called by `POST /api/bookings/settle-if-zero-due`) closes that gap: it re-runs
+`resolveDepositPayer`'s authoritative price check server-side and, only if it confirms €0 is
+genuinely due (and no deposit row exists yet for the booking — defense against bypassing a real
+pending payment), promotes the booking directly.
+
+Key tables/functions: `voyage_workaway_roles`, `voyage_booking_contribution_proposals` (history,
+mirrors `voyage_booking_plan_changes`), `voyage_booking_requests.contribution_proposal_status` /
+`.contribution_fixed_only_payment` / `.contribution_resolved_variable_cents`,
+`attach_voyage_booking_contribution_proposal`. Migrations:
+`supabase/migrations/20260810090000_voyage_workaway_roles_and_settings.sql` through
+`20260811100000_contribution_proposal_total_based_slider.sql`. Client: `src/lib/booking-workaway-proposal.ts`,
+`src/lib/booking-proposal-apply.ts`, `src/components/booking/ContributionProposalForm.tsx`. Admin
+UI: `src/components/admin/VoyageCandidatesPanel.tsx`, per-voyage toggle in the "Candidature" tab of
+`src/pages/AdminVoyageBookings.tsx`.
+
+**Known gap, not addressed:** no financial deterrent against a no-show once a workaway proposal
+is *accepted* (see [[24 - Termini e Condizioni]] in the Wiki) — deliberately not solved with a
+"charge in full, refund at the end" holdback, since that would condition a refund on a subjective
+assessment of the work performed, which reads closer to withholding pay for a job than a charter
+deposit.
+
 ## Server code
 
 - `src/server/bunq/client.ts` — Bunq handshake (installation + device + session), request signing.

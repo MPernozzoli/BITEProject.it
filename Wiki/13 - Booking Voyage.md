@@ -3,7 +3,7 @@ tags: [booking, voyage, prenotazioni, funzionalita]
 ---
 # 13 - Booking Voyage
 
-⬅️ [[Home]] · sorgente: `apps/web/src/components/booking/`, `apps/web/src/lib/booking-*.ts`, `apps/web/api/bookings/`
+⬅️ [[Home]] · sorgente: `apps/web/src/components/booking/`, `apps/web/src/lib/booking-*.ts`, `apps/web/api/bookings/`, `apps/web/src/components/admin/VoyageCandidatesPanel.tsx`, `apps/web/src/pages/AdminVoyageBookings.tsx` (tab Candidature)
 
 ## Concetto
 Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più **tratte** (legs). Non è una vendita: è una partecipazione con **contributo alle spese** → [[11 - Pagamenti Bunq]].
@@ -54,6 +54,16 @@ Gli utenti possono **partecipare a un viaggio** (voyage) prenotando una o più *
 - **Rimborsi su annullamento/rifiuto:** le azioni terminali che possono dover restituire contributi pagati passano da `POST /api/bookings/status`, non direttamente dalle RPC client. Il server applica la policy di [[11 - Pagamenti Bunq]]: admin cancellazione/rifiuto 100%, utente 100% oltre 30 giorni dalla partenza, 50% tra 30 e 15 giorni, 0% sotto 15 giorni. Se l'utente rifiuta una proposta di modifica admin: **100%** se la modifica era per ragioni organizzative, **stesse fasce della rinuncia** se era per forza maggiore → [[24 - Termini e Condizioni]].
 - **Motivazione obbligatoria sulle proposte di modifica:** `admin_propose_voyage_booking_legs` richiede `_change_reason` (catalogo in `apps/web/src/lib/plan-change-reasons.ts`) e ne deriva server-side il flag `force_majeure`, che decide il rimborso in caso di rifiuto. Selettore unico senza spunta separata, così non esistono combinazioni contraddittorie. Motivazione assente ⇒ trattata come non forza maggiore (100%) → [[24 - Termini e Condizioni]].
 
+## Proposta di contributo alternativo e workaway (agosto 2026) → [[24 - Termini e Condizioni]]
+Estensione opt-in del passo 4-7 del flusso utente sopra, attivabile per singolo viaggio dal tab **Candidature** di `/admin/bookings` (`contribution_proposal_enabled`, `workaway_enabled` su `voyage_booking_settings`). Non tocca il flusso standard quando disattivata.
+
+- **Il fisso resta fuori dalla negoziazione:** € 20 a persona (stesso minimo del punto "Minimo fisso contributo" sopra) sempre dovuto per intero, pagato subito con lo stesso gate `pending_payment`/RPC `request_voyage_booking` — qui tramite la variante atomica `request_voyage_booking_with_contribution_proposal` (crea candidatura + allega proposta in un'unica transazione, party_size fissato a 1 lato server: **le proposte sono scoperte solo per candidature singole**, non per gruppi).
+- **Cosa si propone:** un importo diverso per la parte restante e/o un workaway (ruoli da un catalogo globale `voyage_workaway_roles`, attivabile per viaggio; CV/portfolio su bucket storage privato `workaway-applications`). La UI ragiona sul contributo **totale** (slider da € 20 fino a `contribution_proposal_max_percent`% del totale standard, default 50%) — non più sulla sola parte variabile.
+- **Negoziazione a un round:** tabella `voyage_booking_contribution_proposals` (storico, mirror di `voyage_booking_plan_changes`). Admin: `admin_accept_voyage_booking_contribution_proposal` / `admin_counter_voyage_booking_contribution_proposal` (pavimento contro-proposta `max(€20, 50% del totale)`) / rifiuto diretto (riusa "Scarta" esistente). Candidato su una contro-proposta: `accept_voyage_booking_contribution_counter` oppure rifiuto via `POST /api/bookings/status` con trigger `user_rejected_contribution_counter` (100% rimborso del fisso, come ogni rifiuto in questo flusso).
+- **Gate di approvazione esteso:** `admin_set_voyage_booking_status` blocca `admin_approved`/`user_confirmed` se `contribution_proposal_status` non è risolto, o se accettata con saldo negoziato ancora non pagato (`voyage_booking_negotiated_balance_paid`).
+- **Edge case € 0:** se il fisso è azzerato (candidato ha già un'altra candidatura attiva sullo stesso viaggio), `settle_voyage_booking_payment_if_zero_due` promuove la candidatura senza alcun deposito, altrimenti restava bloccata in `pending_payment` per sempre.
+- **Non normato nei T&C generali oltre alla sezione dedicata:** vedi flag legale su ore garantite/compenso richiesto in [[24 - Termini e Condizioni]].
+
 ## Privacy e policy legali → [[05 - Frontend - Pagine]]
 I **Termini d'uso** (`/terms`, bozza non validata legalmente) coprono registrazione, community e partecipazione ai viaggi, con l'inquadramento non commerciale, cosa il contributo non comprende, cambusa, modifiche per meteo/sicurezza e policy rimborsi → [[24 - Termini e Condizioni]].
 
@@ -64,7 +74,7 @@ Le pagine `PrivacyPolicy.tsx` e `CookiePolicy.tsx` sono aggiornate al 12 luglio 
 - notifiche transazionali, Web Push admin e strumenti tecnici di sessione/local storage necessari a booking e pagamenti.
 
 ## Lib coinvolte → [[07 - Frontend - Lib e Hooks]]
-`booking-application-draft.ts`, `booking-deposit.ts`, `booking-payment.ts`, `booking-refunds.ts`, `booking-participants.ts`, `booking-utils.ts`, `voyage-utils.ts`, `danger-reasons.ts`.
+`booking-application-draft.ts`, `booking-deposit.ts`, `booking-payment.ts`, `booking-refunds.ts`, `booking-participants.ts`, `booking-utils.ts`, `voyage-utils.ts`, `danger-reasons.ts`, `booking-workaway-proposal.ts` (shape/validazione proposta), `booking-proposal-apply.ts` (client per `apply-with-proposal`/upload CV-portfolio).
 
 ## Lato admin → [[16 - Admin]]
 - `AdminVoyageBookings.tsx` (`/admin/bookings`) — gestione prenotazioni; il drag Gantt genera proposte pending per l'utente

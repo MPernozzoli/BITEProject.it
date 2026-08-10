@@ -57,8 +57,10 @@ function roundCurrency(amount: number): number {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
-/** Round up to the next whole euro (e.g. €103.45 → €104.00), immune to float noise. */
-function roundUpToNextEuro(amount: number): number {
+/** Round up to the next whole euro (e.g. €103.45 → €104.00), immune to float noise. Exported so
+ * every other place on the site that shows a contribution figure — leg prices, proposal sliders —
+ * rounds it the same way instead of showing raw cents. */
+export function roundUpToNextEuro(amount: number): number {
   return Math.ceil(roundCurrency(amount));
 }
 

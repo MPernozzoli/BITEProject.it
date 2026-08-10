@@ -3,7 +3,7 @@ tags: [legale, termini, rimborsi, booking, funzionalita]
 ---
 # 24 - Termini e Condizioni
 
-⬅️ [[Home]] · sorgente: `apps/web/src/pages/Terms.tsx`, `apps/web/src/server/bunq/refunds.ts`, `apps/web/src/lib/plan-change-reasons.ts`
+⬅️ [[Home]] · sorgente: `apps/web/src/pages/Terms.tsx`, `apps/web/src/server/bunq/refunds.ts`, `apps/web/src/lib/plan-change-reasons.ts`, `apps/web/src/lib/booking-workaway-proposal.ts`, `apps/web/supabase/migrations/20260810*_contribution*.sql`, `20260811*_workaway*.sql`/`*_total_based_slider.sql`
 
 > ⚠️ **Bozza non validata legalmente.** Il testo è scritto per reggere l'inquadramento non commerciale, ma non è stato rivisto da un avvocato. Vedi [[#Cosa manca]].
 
@@ -11,7 +11,7 @@ tags: [legale, termini, rimborsi, booking, funzionalita]
 Pagina `/terms` (bilingue IT/EN, `LegalPageShell` come [[05 - Frontend - Pagine]] privacy/cookie) che copre **registrazione, community e partecipazione ai viaggi**. Il cardine di tutto il testo è la **natura non commerciale**: BITE non è agenzia, tour operator né vettore; i viaggi non sono pacchetti turistici; quello che i partecipanti versano è **contributo alle spese comuni**, non un prezzo → [[11 - Pagamenti Bunq]], [[13 - Booking Voyage]].
 
 ## Struttura della pagina
-17 sezioni: natura del progetto · accettazione · registrazione/account · community e contenuti · come funziona la partecipazione · **modifiche al viaggio, meteo e sicurezza** · contributo alle spese · **cancellazioni e rimborsi** · rischi e responsabilità · limitazione di responsabilità · forza maggiore · proprietà intellettuale · **foto, riprese e registrazioni** · protezione dati · modifiche ai Termini · legge e foro · contatti.
+18 sezioni: natura del progetto · accettazione · registrazione/account · community e contenuti · come funziona la partecipazione · **modifiche al viaggio, meteo e sicurezza** · contributo alle spese · **proposta di contributo alternativo e workaway** (nuova) · **cancellazioni e rimborsi** · rischi e responsabilità · limitazione di responsabilità · forza maggiore · proprietà intellettuale · **foto, riprese e registrazioni** · protezione dati · modifiche ai Termini · legge e foro · contatti.
 
 ## Regole di dominio scritte nei Termini
 - **Cosa NON comprende il contributo:** spese personali e alimentari, biglietti, attività scelte durante il viaggio (immersioni, tour guidati, musei, ristoranti, escursioni).
@@ -21,6 +21,18 @@ Pagina `/terms` (bilingue IT/EN, `LegalPageShell` come [[05 - Frontend - Pagine]
 - **Date e porti sempre orientativi:** possono cambiare anche all'improvviso e a viaggio iniziato. Il criterio guida è la **sicurezza dell'equipaggio**; le decisioni di chi conduce prevalgono su qualsiasi programma. Non sono inadempimento e non danno diritto a rimborsi extra.
 - **Trasferimenti a carico del partecipante:** raggiungere la partenza e rientrare dall'arrivo, più alloggio/vitto/trasporto per attese o cambi di programma (es. pernotto in attesa dell'imbarco, punto di ritrovo spostato da città X a Y).
 - **Consenso immagini:** la partecipazione implica accettare di essere fotografati/ripresi/registrati e la pubblicazione su tutte le piattaforme del progetto, con opt-out e rimozione via email per le pubblicazioni successive.
+
+## Proposta di contributo alternativo e workaway (nuova, agosto 2026)
+Estende il flusso di candidatura → [[13 - Booking Voyage]]. Concetto guida: la quota fissa (€ 20,00 a persona, `CONTRIBUTION_FIXED_MINIMUM_EUR` in `booking-deposit.ts`) **resta sempre dovuta per intero e non negoziabile**, versata subito con lo stesso gate `pending_payment` del flusso standard; solo la parte restante è negoziabile, sotto forma di importo diverso e/o collaborazione (workaway).
+
+- **Il modello è "total-based":** la UI (slider) e la validazione lato server ragionano sul contributo **totale** (fisso + variabile), non sulla sola parte variabile — evoluzione rispetto alla prima versione (vedi commit `9bff23d`), che generava confusione ("perché la cifra mostrata non include il fisso?") e un bug (percentuale minima irraggiungibile quando la quota variabile calcolata è € 0).
+- **Nessuna soglia minima configurabile:** eliminata `contribution_proposal_min_percent` (colonna droppata). Il pavimento è strutturale (il fisso), non una percentuale. Resta solo `contribution_proposal_max_percent` (default 150%), ora interpretato come % del **totale**.
+- **Workaway sempre con quota economica abbinata:** in UI, selezionare workaway mostra sempre (non più come opzione separata) il campo "quota che comunque riconosci", precompilato al 50% del totale stimato, editabile fino al minimo strutturale (il fisso).
+- **Contro-proposta admin:** stesso principio via slider, ma con un pavimento più alto — `max(€20, 50% del totale calcolato)` — per non permettere contro-proposte troppo generose per viaggi costosi.
+- **Un solo giro di negoziazione:** proposta candidato → admin accetta / rifiuta / contro-propone → se contro-propone, il candidato può solo accettare o rifiutare, nessun ulteriore rilancio (mirror ristretto del pattern `admin_propose_voyage_booking_legs` / `respond_voyage_booking_plan_change`).
+- **Rifiuto = rimborso automatico del fisso al 100%:** riusa il trigger `admin_rejected` esistente (nessun codice nuovo) più un nuovo trigger `user_rejected_contribution_counter` per quando è il candidato a rifiutare la contro-proposta admin.
+- **Edge case gestito:** se il fisso risulta € 0 (candidato ha già un'altra candidatura attiva sullo stesso viaggio, `shouldApplyContributionFixedMinimum` lo azzera), `settle_voyage_booking_payment_if_zero_due` promuove la candidatura senza alcun deposito — altrimenti restava bloccata in `pending_payment` per sempre, dato che `resolveDepositPayer` rifiuta di creare una richiesta di pagamento da € 0.
+- **Workaway = impegno reale, non indicativo:** il testo in `Terms.tsx` dice esplicitamente che le ore indicate (giornaliere/settimanali) sono un impegno vero per la durata del viaggio, non una stima di massima → vedi flag legale sotto.
 
 ## Policy rimborsi (allineata al codice)
 La fonte di verità è `refundPolicyPercent()` in `apps/web/src/server/bunq/refunds.ts`, applicata da `POST /api/bookings/status` → [[11 - Pagamenti Bunq]].
@@ -56,6 +68,8 @@ Quando l'admin propone una modifica di tratte, **deve** scegliere una motivazion
 - [ ] **Punto da segnalare al legale:** "le modifiche per forza maggiore non danno diritto a rimborsi ulteriori" tutela il progetto, ma se un cambio di **date** rende impossibile partecipare è di fatto una rinuncia indotta; con un consumatore la ragionevolezza può essere valutata diversamente.
 - [ ] **Dialog admin non provato interattivamente.** `/admin/bookings` richiede login. Verificati typecheck, 117 test e transform Vite, non il click reale.
 - [ ] **T&C mancanti per altre superfici:** crew/equipaggio e booking con clausole specifiche non sono ancora scritti (questa bozza copre solo il sito principale: registrazione + viaggi).
+- [ ] **Workaway: rischio di inquadramento come lavoro subordinato.** Richiedere ore garantite (giornaliere/settimanali) come "impegno reale" e consentire una richiesta di compenso aggiuntivo dal candidato avvicina la candidatura a un vero rapporto di lavoro, non a uno scambio informale vitto/alloggio-contenuti. Il testo attuale in `Terms.tsx` si limita a dire che l'eventuale accordo "non costituisce di per sé" un rapporto di lavoro subordinato — è una clausola di stile, non una garanzia legale. **Da far rivedere a un legale del lavoro/marittimo prima che la feature venga usata su viaggi reali con ore/compenso**, specialmente se si accumulano casi ricorrenti con la stessa persona (indice di subordinazione).
+- [ ] **Nessun deterrente economico contro il no-show dopo l'accettazione.** Deciso volutamente in fase di design: niente trattenuta legata a "ha lavorato bene o no" (si è scartata l'idea di far pagare comunque la quota intera e rimborsarla a fine viaggio, per non legare un rimborso a una valutazione soggettiva della prestazione — vedi discussione). Il fisso € 20 resta comunque **rimborsato** se la proposta viene rifiutata (nessuna penalità lì). Il buco è successivo: una volta che una proposta workaway (specialmente quella pura, senza componente economica) è stata **accettata**, non c'è più nessuna somma in gioco che disincentivi un candidato dal non presentarsi o non svolgere le mansioni concordate — resta solo la gestione reputazionale/discrezionale dell'admin sulle candidature successive.
 - [ ] **Nessun consenso versionato.** I Termini non sono accettati esplicitamente né tracciati per versione: non c'è modo di provare quale versione un utente abbia accettato. Da valutare insieme al flusso candidatura di [[13 - Booking Voyage]].
 
 ## Collegamenti
