@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Heart, Reply, Send } from "lucide-react";
+import { Clock, Heart, Reply, Send } from "lucide-react";
 import ProfileCard from "./ProfileCard";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/lib/i18n";
 
 interface Comment {
   id: string;
@@ -25,26 +26,82 @@ interface CommentSectionProps {
   onFocusHandled?: () => void;
 }
 
-const PENDING_COMMENT_DRAFT_KEY = "bite_pending_comment_draft";
+const GUEST_IDENTITY_KEY = "bite_guest_comment_identity";
+const PENDING_GUEST_COMMENTS_KEY = "bite_pending_guest_comments";
 
-type PendingCommentDraft = {
+type GuestIdentity = { name: string; email: string };
+
+type PendingGuestComment = {
+  pendingId: string;
   articleId: string;
   parentId: string | null;
-  text: string;
+  content: string;
+  guestName: string;
+  createdAt: string;
 };
 
-const readPendingDraft = (articleId: string): PendingCommentDraft | null => {
+const readGuestIdentity = (): GuestIdentity => {
   try {
-    const raw = window.localStorage.getItem(PENDING_COMMENT_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PendingCommentDraft>;
-    if (parsed?.articleId !== articleId || typeof parsed.text !== "string" || !parsed.text.trim()) {
-      return null;
-    }
-    return { articleId, parentId: parsed.parentId ?? null, text: parsed.text };
+    const raw = window.localStorage.getItem(GUEST_IDENTITY_KEY);
+    if (!raw) return { name: "", email: "" };
+    const parsed = JSON.parse(raw) as Partial<GuestIdentity>;
+    return { name: parsed.name ?? "", email: parsed.email ?? "" };
   } catch {
-    return null;
+    return { name: "", email: "" };
   }
+};
+
+const writeGuestIdentity = (identity: GuestIdentity) => {
+  try {
+    window.localStorage.setItem(GUEST_IDENTITY_KEY, JSON.stringify(identity));
+  } catch {
+    // best effort only
+  }
+};
+
+const readAllPendingGuestComments = (): PendingGuestComment[] => {
+  try {
+    const raw = window.localStorage.getItem(PENDING_GUEST_COMMENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as PendingGuestComment[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const addPendingGuestComment = (entry: PendingGuestComment) => {
+  const all = readAllPendingGuestComments();
+  all.push(entry);
+  try {
+    window.localStorage.setItem(PENDING_GUEST_COMMENTS_KEY, JSON.stringify(all));
+  } catch {
+    // best effort only
+  }
+};
+
+/**
+ * Drops any locally-tracked pending comment whose id now exists as a real,
+ * published comment (claim_pending_article_comments reuses the pending id as
+ * the article_comments id, so this is a plain id match — no heuristics).
+ * Covers the case where confirmation happened on a different device: this
+ * browser never got a sign-in event for that, but the next fetch still
+ * clears the now-stale "in attesa" card. Returns the pruned full list
+ * (all articles), already persisted to storage.
+ */
+const resolvePendingGuestComments = (publishedIds: Set<string>): PendingGuestComment[] => {
+  const all = readAllPendingGuestComments();
+  if (all.length === 0 || publishedIds.size === 0) return all;
+
+  const remaining = all.filter((c) => !publishedIds.has(c.pendingId));
+  if (remaining.length === all.length) return all;
+
+  try {
+    window.localStorage.setItem(PENDING_GUEST_COMMENTS_KEY, JSON.stringify(remaining));
+  } catch {
+    // best effort only
+  }
+  return remaining;
 };
 
 const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: CommentSectionProps) => {
@@ -53,47 +110,65 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [submittingReplyTo, setSubmittingReplyTo] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestError, setGuestError] = useState("");
+  const [pendingGuestComments, setPendingGuestComments] = useState<PendingGuestComment[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { lang } = useI18n();
 
   useEffect(() => {
     checkSession();
     fetchComments();
 
-    const draft = readPendingDraft(articleId);
-    if (draft) {
-      window.localStorage.removeItem(PENDING_COMMENT_DRAFT_KEY);
-      if (draft.parentId) {
-        setReplyTo(draft.parentId);
-        setReplyText(draft.text);
-      } else {
-        setNewComment(draft.text);
-      }
-    }
+    const identity = readGuestIdentity();
+    setGuestName(identity.name);
+    setGuestEmail(identity.email);
   }, [articleId]);
-
-  const saveDraftAndRedirect = (parentId: string | null, text: string) => {
-    const draft: PendingCommentDraft = { articleId, parentId, text };
-    window.localStorage.setItem(PENDING_COMMENT_DRAFT_KEY, JSON.stringify(draft));
-    navigate("/login", { state: { from: window.location.pathname } });
-  };
 
   useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id || null);
+      const nextUserId = session?.user?.id || null;
+      setAuthChecked(true);
+      setUserId((previous) => {
+        if (!previous && nextUserId) {
+          // Just signed in: re-fetching resolves any pending card this
+          // device's own login just claimed via claim_pending_article_comments.
+          fetchComments();
+        }
+        return nextUserId;
+      });
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    // Catches confirmations that happened elsewhere (e.g. the email link
+    // opened on another device) without needing a persistent realtime
+    // channel — same lazy-refresh-on-visibility idiom used for view counts.
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchComments();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    // fetchComments is stable across the component's lifetime for a given articleId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articleId]);
+
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     setUserId(session?.user?.id || null);
+    setAuthChecked(true);
   };
 
   const fetchComments = async () => {
@@ -142,6 +217,10 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
     topLevel.forEach((c) => { c.replies = childMap[c.id] || []; });
 
     setComments(topLevel);
+
+    const resolved = resolvePendingGuestComments(new Set(enriched.map((c) => c.id)));
+    setPendingGuestComments(resolved.filter((c) => c.articleId === articleId));
+
     setLoading(false);
   };
 
@@ -155,9 +234,15 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
     } = await supabase.auth.getSession();
     const currentUserId = session?.user?.id || userId;
 
+    const trimmedGuestName = guestName.trim();
+    const normalizedGuestEmail = guestEmail.trim().toLowerCase();
+
     if (!currentUserId) {
-      saveDraftAndRedirect(parentId, content);
-      return;
+      setGuestError("");
+      if (!trimmedGuestName || !normalizedGuestEmail.includes("@")) {
+        setGuestError("Inserisci nome ed email per lasciare un commento.");
+        return;
+      }
     }
 
     if (isReply) {
@@ -166,11 +251,12 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
       setIsSubmittingComment(true);
     }
 
-    const { error } = await supabase.from("article_comments").insert({
-      article_id: articleId,
-      profile_id: currentUserId,
-      parent_id: parentId,
-      content,
+    const { data, error } = await supabase.rpc("submit_article_comment", {
+      _article_id: articleId,
+      _content: content,
+      _parent_id: parentId,
+      _guest_name: currentUserId ? undefined : trimmedGuestName,
+      _guest_email: currentUserId ? undefined : normalizedGuestEmail,
     });
 
     if (error) {
@@ -183,6 +269,63 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
         setSubmittingReplyTo(null);
       } else {
         setIsSubmittingComment(false);
+      }
+      return;
+    }
+
+    const result = data as { status: "published" | "pending"; pending_id?: string } | null;
+
+    if (result?.status === "pending") {
+      writeGuestIdentity({ name: trimmedGuestName, email: normalizedGuestEmail });
+
+      const pendingEntry: PendingGuestComment = {
+        pendingId: result.pending_id!,
+        articleId,
+        parentId,
+        content,
+        guestName: trimmedGuestName,
+        createdAt: new Date().toISOString(),
+      };
+      addPendingGuestComment(pendingEntry);
+      setPendingGuestComments((prev) => [...prev, pendingEntry]);
+
+      setNewComment("");
+      setReplyTo(null);
+      setReplyText("");
+      if (isReply) {
+        setSubmittingReplyTo(null);
+      } else {
+        setIsSubmittingComment(false);
+      }
+
+      // Stays on the article: the confirmation email itself (link or code)
+      // finishes the job, on /login, without bouncing through a signup form.
+      const emailRedirectTo = new URL(
+        `/login?redirect=${encodeURIComponent(window.location.pathname)}`,
+        window.location.origin
+      ).toString();
+
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: normalizedGuestEmail,
+        options: {
+          shouldCreateUser: true,
+          data: { name: trimmedGuestName, lang },
+          emailRedirectTo,
+        },
+      });
+
+      if (otpError) {
+        toast({
+          title: "Email non inviata",
+          description:
+            "Il commento è salvato, ma non siamo riusciti a inviare la mail di conferma. Riprova tra poco.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Controlla la tua email",
+          description: `Ti abbiamo mandato un'email a ${normalizedGuestEmail}: confermala per pubblicare il commento.`,
+        });
       }
       return;
     }
@@ -313,6 +456,27 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
       </h3>
 
       <div className="mb-8">
+        {authChecked && !userId && (
+          <div className="glass-panel rounded-[28px] p-4 mb-3 flex flex-col sm:flex-row gap-3">
+            <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">
+              <input
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="Nome"
+                className="w-full bg-transparent px-4 py-2.5 text-sm font-sans focus:outline-none"
+              />
+            </div>
+            <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">
+              <input
+                type="email"
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+                placeholder="la-tua@email.com"
+                className="w-full bg-transparent px-4 py-2.5 text-sm font-sans focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
         <div className="glass-panel rounded-[28px] p-4 flex gap-3">
           <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">
             <textarea
@@ -333,16 +497,36 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
             <Send size={14} />
           </button>
         </div>
-        {!userId && (
+        {authChecked && !userId && (
           <p className="mt-2 text-xs font-sans text-muted-foreground">
-            Accedi per pubblicare il commento: il testo scritto non andrà perso.
+            {guestError || "Ti mandiamo un'email di conferma per pubblicare il commento: il testo non andrà perso."}
           </p>
         )}
       </div>
 
+      {pendingGuestComments.length > 0 && (
+        <div className="space-y-3 mb-4">
+          {pendingGuestComments.map((p) => (
+            <div
+              key={p.pendingId}
+              className="rounded-[24px] border border-dashed border-amber-500/50 bg-amber-500/5 p-4"
+            >
+              <div className="flex items-center gap-2 mb-1 text-xs font-sans font-medium text-amber-600">
+                <Clock size={12} /> In attesa di conferma email
+              </div>
+              <p className="text-xs font-sans text-muted-foreground mb-1">{p.guestName}</p>
+              <p className="text-sm font-sans text-foreground/90 whitespace-pre-wrap">{p.content}</p>
+              <p className="mt-2 text-[11px] font-sans text-muted-foreground">
+                Verrà pubblicato non appena confermi il codice inviato via email.
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-muted-foreground">Caricamento commenti...</p>
-      ) : comments.length === 0 ? (
+      ) : comments.length === 0 && pendingGuestComments.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nessun commento. Sii il primo a condividere il tuo pensiero.</p>
       ) : (
         <div className="space-y-4">

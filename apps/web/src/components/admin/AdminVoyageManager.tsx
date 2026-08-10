@@ -52,6 +52,7 @@ import {
   getStraightVoyageGeometry,
   hasVoyageDatesTbd,
   normalizeWaypointMedia,
+  slugifyVoyageName,
 } from "@/lib/voyage-utils";
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import WaypointEditorPanel from "@/components/admin/WaypointEditorPanel";
@@ -77,6 +78,9 @@ import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 interface VoyageFormState {
   name_it: string;
   name_en: string;
+  slug: string;
+  slug_it: string;
+  slug_en: string;
   description_it: string;
   description_en: string;
   type: "water" | "land";
@@ -129,6 +133,9 @@ const voyageStatusLabels: Record<Voyage["status"], string> = {
 const emptyVoyageForm: VoyageFormState = {
   name_it: "",
   name_en: "",
+  slug: "",
+  slug_it: "",
+  slug_en: "",
   description_it: "",
   description_en: "",
   type: "water",
@@ -556,6 +563,9 @@ const yieldToUi = () =>
 const getErrorMessage = (error: { message?: string | null } | null, fallback: string) =>
   error?.message || fallback;
 
+const isDuplicateVoyageSlugError = (error: { code?: string; message?: string | null } | null) =>
+  error?.code === "23505" && Boolean(error.message?.includes("voyages_slug"));
+
 const isMissingWaypointMetadataColumnError = (
   error: { message?: string | null; details?: string | null; hint?: string | null } | null
 ) => {
@@ -614,6 +624,9 @@ const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({
   name: (voyage?.name ?? voyage?.name_it ?? voyage?.name_en ?? "") as string,
   name_it: (voyage?.name_it ?? voyage?.name ?? "") as string,
   name_en: (voyage?.name_en ?? voyage?.name ?? "") as string,
+  slug: (voyage?.slug ?? "") as string,
+  slug_it: (voyage?.slug_it ?? null) as string | null,
+  slug_en: (voyage?.slug_en ?? null) as string | null,
   description: (voyage?.description ?? voyage?.description_it ?? voyage?.description_en ?? "") as string,
   description_it: (voyage?.description_it ?? voyage?.description ?? "") as string,
   description_en: (voyage?.description_en ?? voyage?.description ?? "") as string,
@@ -2148,6 +2161,9 @@ const AdminVoyageManager = ({
       const nextForm: VoyageFormState = {
         name_it: voyage.name_it || voyage.name || "",
         name_en: voyage.name_en || voyage.name || "",
+        slug: voyage.slug || "",
+        slug_it: voyage.slug_it || "",
+        slug_en: voyage.slug_en || "",
         description_it: voyage.description_it || voyage.description || "",
         description_en: voyage.description_en || voyage.description || "",
         type: voyage.type,
@@ -2204,10 +2220,16 @@ const AdminVoyageManager = ({
       : 0.9;
     const legacyName = nameEn || nameIt || "Untitled voyage";
     const legacyDescription = descriptionEn || descriptionIt || null;
+    const slug = voyageForm.slug.trim() || slugifyVoyageName(legacyName);
+    const slugIt = voyageForm.slug_it.trim() || null;
+    const slugEn = voyageForm.slug_en.trim() || null;
     const data: TablesInsert<"voyages"> = {
       name: legacyName,
       name_it: nameIt || null,
       name_en: nameEn || null,
+      slug,
+      slug_it: slugIt,
+      slug_en: slugEn,
       description: legacyDescription,
       description_it: descriptionIt || null,
       description_en: descriptionEn || null,
@@ -2230,8 +2252,9 @@ const AdminVoyageManager = ({
     };
     // Fallback for a database predating the date columns, where status was still
     // written by hand and status_override did not exist.
-    const legacyData: Pick<TablesInsert<"voyages">, "name" | "description" | "type" | "status" | "sort_order"> = {
+    const legacyData: Pick<TablesInsert<"voyages">, "name" | "slug" | "description" | "type" | "status" | "sort_order"> = {
       name: data.name,
+      slug: data.slug,
       description: data.description,
       type: data.type,
       status: voyageForm.status_override || voyageForm.status,
@@ -2247,7 +2270,11 @@ const AdminVoyageManager = ({
         appliedData = legacyData;
       }
       if (error) {
-        toast.error(getErrorMessage(error, "Unable to update voyage"));
+        toast.error(
+          isDuplicateVoyageSlugError(error)
+            ? "Slug già in uso da un altro viaggio: scegline uno diverso."
+            : getErrorMessage(error, "Unable to update voyage")
+        );
         return false;
       }
 
@@ -2283,7 +2310,11 @@ const AdminVoyageManager = ({
         ({ data: newVoyage, error } = await supabase.from("voyages").insert(legacyData).select().single());
       }
       if (error || !newVoyage) {
-        toast.error(getErrorMessage(error, "Unable to create voyage"));
+        toast.error(
+          isDuplicateVoyageSlugError(error)
+            ? "Slug già in uso da un altro viaggio: scegline uno diverso."
+            : getErrorMessage(error, "Unable to create voyage")
+        );
         return false;
       }
 
@@ -3121,9 +3152,28 @@ const AdminVoyageManager = ({
                     <input
                       type="text"
                       value={voyageForm.name_it}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, name_it: event.target.value }))}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setVoyageForm((form) => ({
+                          ...form,
+                          name_it: value,
+                          slug_it: !editingVoyage || !form.slug_it ? slugifyVoyageName(value) : form.slug_it,
+                          slug: !editingVoyage || !form.slug ? slugifyVoyageName(form.name_en || value) : form.slug,
+                        }));
+                      }}
                       className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug IT</label>
+                    <input
+                      type="text"
+                      value={voyageForm.slug_it}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, slug_it: event.target.value }))}
+                      placeholder="es. giro-di-sicilia"
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">URL pubblico in /it/voyages/. Lascia vuoto per usare lo slug canonico.</p>
                   </div>
                   <div>
                     <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Descrizione</label>
@@ -3142,9 +3192,28 @@ const AdminVoyageManager = ({
                     <input
                       type="text"
                       value={voyageForm.name_en}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, name_en: event.target.value }))}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setVoyageForm((form) => ({
+                          ...form,
+                          name_en: value,
+                          slug_en: !editingVoyage || !form.slug_en ? slugifyVoyageName(value) : form.slug_en,
+                          slug: !editingVoyage || !form.slug ? slugifyVoyageName(value || form.name_it) : form.slug,
+                        }));
+                      }}
                       className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug EN</label>
+                    <input
+                      type="text"
+                      value={voyageForm.slug_en}
+                      onChange={(event) => setVoyageForm((form) => ({ ...form, slug_en: event.target.value }))}
+                      placeholder="e.g. sicily-loop"
+                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">Public URL under /en/voyages/. Leave empty to fall back to the canonical slug.</p>
                   </div>
                   <div>
                     <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description</label>
@@ -3157,6 +3226,18 @@ const AdminVoyageManager = ({
                   </div>
                 </>
               )}
+              <div>
+                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug (canonico / fallback)</label>
+                <input
+                  type="text"
+                  value={voyageForm.slug}
+                  onChange={(event) => setVoyageForm((form) => ({ ...form, slug: event.target.value }))}
+                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  URL legacy / fallback quando manca lo slug per la lingua. Deve essere unico.
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

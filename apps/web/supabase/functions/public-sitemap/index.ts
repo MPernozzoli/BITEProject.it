@@ -39,15 +39,6 @@ const toIsoDate = (value?: string | null) => {
   return date.toISOString()
 }
 
-const slugifyVoyageName = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'voyage'
-
 type SitemapEntry = {
   /** Path WITHOUT lang prefix for bilingual routes, full path for single routes. */
   path: string
@@ -123,7 +114,7 @@ Deno.serve(async () => {
       .order('updated_at', { ascending: false, nullsFirst: false }),
     supabase
       .from('voyages')
-      .select('id, name, updated_at')
+      .select('id, slug, slug_it, slug_en, updated_at')
       .eq('is_published', true)
       .order('sort_order', { ascending: true }),
     supabase
@@ -153,6 +144,12 @@ Deno.serve(async () => {
     const s = (own && String(own).trim()) || (other && String(other).trim()) || row.slug
     return `/logbook/${s}`
   }
+  const voyagePathFor = (row: any, l: Lang) => {
+    const own = l === 'it' ? row.slug_it : row.slug_en
+    const other = l === 'it' ? row.slug_en : row.slug_it
+    const s = (own && String(own).trim()) || (other && String(other).trim()) || row.slug
+    return `/voyages/${s}`
+  }
   const storyPathFor = (row: any, l: Lang) => {
     const own = l === 'it' ? row.slug_it : row.slug_en
     const other = l === 'it' ? row.slug_en : row.slug_it
@@ -179,9 +176,10 @@ Deno.serve(async () => {
     }))
 
   const voyageEntries: SitemapEntry[] = (voyagesRes.data || [])
-    .filter((v) => v.id && v.name)
+    .filter((v) => v.id && v.slug)
     .map((v) => ({
-      path: `/voyages/${v.id}--${slugifyVoyageName(v.name)}`,
+      path: `/voyages/${v.slug}`,
+      localizedPaths: { it: voyagePathFor(v, 'it'), en: voyagePathFor(v, 'en') },
       lastmod: toIsoDate(v.updated_at),
       bilingual: true,
     }))

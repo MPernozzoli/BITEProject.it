@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Eye, Globe, UserCheck } from "lucide-react";
+import { Clock, Eye, Globe, Heart, MessageCircle, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -70,6 +70,10 @@ export default function AdminArticleInsightsDialog({ open, onOpenChange }: Props
     const dwellCount = rows.reduce((sum, r) => sum + (r.measured_dwell_count || 0), 0);
     const viewsIt = rows.reduce((sum, r) => sum + (r.views_it || 0), 0);
     const viewsEn = rows.reduce((sum, r) => sum + (r.views_en || 0), 0);
+    const totalLikes = rows.reduce((sum, r) => sum + (r.like_count || 0), 0);
+    const registeredLikes = rows.reduce((sum, r) => sum + (r.registered_likes || 0), 0);
+    const anonymousLikes = rows.reduce((sum, r) => sum + (r.anonymous_likes || 0), 0);
+    const totalComments = rows.reduce((sum, r) => sum + (r.comment_count || 0), 0);
     return {
       totalViews,
       registered,
@@ -77,6 +81,10 @@ export default function AdminArticleInsightsDialog({ open, onOpenChange }: Props
       tracked,
       avgDwellMs: dwellCount ? dwellWeightedMs / dwellCount : null,
       topLang: viewsIt === 0 && viewsEn === 0 ? null : viewsIt >= viewsEn ? "it" : "en",
+      totalLikes,
+      registeredLikes,
+      anonymousLikes,
+      totalComments,
     };
   }, [rows]);
 
@@ -114,6 +122,13 @@ export default function AdminArticleInsightsDialog({ open, onOpenChange }: Props
                   value={formatDwell(totals.avgDwellMs)}
                 />
                 <AggregateStat icon={Globe} label="Lingua top" value={langLabel(totals.topLang)} />
+                <AggregateStat
+                  icon={Heart}
+                  label="Mi piace"
+                  value={formatCount(totals.totalLikes)}
+                  hint={`${formatCount(totals.registeredLikes)} registrati / ${formatCount(totals.anonymousLikes)} anonimi`}
+                />
+                <AggregateStat icon={MessageCircle} label="Commenti" value={formatCount(totals.totalComments)} />
               </div>
 
               <div className="overflow-x-auto rounded-[16px] border border-border/60">
@@ -125,6 +140,8 @@ export default function AdminArticleInsightsDialog({ open, onOpenChange }: Props
                       <th className="px-3 py-2 text-right font-medium">Reg. / Anon.</th>
                       <th className="px-3 py-2 text-right font-medium">Tempo medio</th>
                       <th className="px-3 py-2 text-left font-medium">Lingua</th>
+                      <th className="px-3 py-2 text-right font-medium">Mi piace</th>
+                      <th className="px-3 py-2 text-right font-medium">Commenti</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -149,11 +166,17 @@ export default function AdminArticleInsightsDialog({ open, onOpenChange }: Props
                           {formatDwell(r.avg_dwell_ms)}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">{langLabel(r.top_lang)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {formatCount(r.like_count)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {formatCount(r.comment_count)}
+                        </td>
                       </tr>
                     ))}
                     {rows.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                           Nessun articolo con visualizzazioni.
                         </td>
                       </tr>

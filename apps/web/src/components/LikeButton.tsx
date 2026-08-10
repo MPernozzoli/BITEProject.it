@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getOrCreateVisitorKey } from "@/lib/visitor-key";
 
 interface LikeButtonProps {
   articleId: string;
@@ -12,60 +12,86 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
   const [liked, setLiked] = useState(false);
   const [count, setCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchLikes();
-    checkSession();
+    let cancelled = false;
+
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+
+      const { count: c } = await supabase
+        .from("article_likes")
+        .select("id", { count: "exact", head: true })
+        .eq("article_id", articleId);
+      if (!cancelled) setCount(c || 0);
+
+      const { data } = uid
+        ? await supabase
+            .from("article_likes")
+            .select("id")
+            .eq("article_id", articleId)
+            .eq("profile_id", uid)
+            .maybeSingle()
+        : await supabase
+            .from("article_likes")
+            .select("id")
+            .eq("article_id", articleId)
+            .eq("visitor_key", getOrCreateVisitorKey())
+            .maybeSingle();
+      if (!cancelled) setLiked(!!data);
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [articleId]);
 
-  const checkSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    setUserId(session?.user?.id || null);
-    if (session?.user?.id) {
-      const { data } = await supabase
-        .from("article_likes")
-        .select("id")
-        .eq("article_id", articleId)
-        .eq("profile_id", session.user.id)
-        .maybeSingle();
-      setLiked(!!data);
-    }
-  };
-
-  const fetchLikes = async () => {
-    const { count: c } = await supabase
-      .from("article_likes")
-      .select("id", { count: "exact", head: true })
-      .eq("article_id", articleId);
-    setCount(c || 0);
-  };
-
   const toggleLike = async () => {
-    if (!userId) {
-      navigate("/login", { state: { from: window.location.pathname } });
-      return;
-    }
-    if (liked) {
-      await supabase.from("article_likes").delete().eq("article_id", articleId).eq("profile_id", userId);
-      setCount((c) => Math.max(0, c - 1));
+    if (busy) return;
+    setBusy(true);
+
+    const nextLiked = !liked;
+    setLiked(nextLiked);
+    setCount((c) => Math.max(0, c + (nextLiked ? 1 : -1)));
+
+    const { data, error } = await supabase.rpc("toggle_article_like", {
+      _article_id: articleId,
+      _visitor_key: userId ? undefined : getOrCreateVisitorKey(),
+    });
+
+    if (error) {
+      console.error("Failed to toggle article like", { articleId, error });
+      setLiked(!nextLiked);
+      setCount((c) => Math.max(0, c - (nextLiked ? 1 : -1)));
     } else {
-      await supabase.from("article_likes").insert({ article_id: articleId, profile_id: userId });
-      setCount((c) => c + 1);
-      void supabase.functions.invoke("dispatch-engagement-notifications", {
-        body: { limit: 100 },
-      });
+      const result = data as { liked: boolean; count: number } | null;
+      if (result) {
+        setLiked(result.liked);
+        setCount(result.count);
+        if (result.liked && userId) {
+          void supabase.functions.invoke("dispatch-engagement-notifications", {
+            body: { limit: 100 },
+          });
+        }
+      }
     }
-    setLiked(!liked);
+
+    setBusy(false);
   };
 
   return (
     <button
       onClick={toggleLike}
+      disabled={busy}
       className={`inline-flex items-center gap-1.5 text-sm font-sans transition-colors ${
         liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
       }`}
-      title={userId ? (liked ? "Rimuovi mi piace" : "Mi piace") : "Accedi per mettere mi piace"}
+      title={liked ? "Rimuovi mi piace" : "Mi piace"}
     >
       <Heart size={size} fill={liked ? "currentColor" : "none"} />
       {count > 0 && <span>{count}</span>}

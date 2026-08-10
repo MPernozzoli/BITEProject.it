@@ -19,6 +19,10 @@ export type ArticleViewInsightRow = {
   views_en: number;
   top_lang: string | null;
   last_view_at: string | null;
+  like_count: number;
+  registered_likes: number;
+  anonymous_likes: number;
+  comment_count: number;
 };
 
 export type ArticleViewInsightDetail = {
@@ -42,6 +46,10 @@ export type ArticleViewInsightDetail = {
     views_unknown_lang: number;
     first_view_at: string | null;
     last_view_at: string | null;
+    like_count: number;
+    registered_likes: number;
+    anonymous_likes: number;
+    comment_count: number;
   };
   daily: Array<{ day: string; views: number; registered: number }>;
 };

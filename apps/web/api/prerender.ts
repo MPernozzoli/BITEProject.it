@@ -340,23 +340,13 @@ const slugFor = (row: any, lang: Lang): string => {
   return localizedField(row, "slug", lang) || String(row?.slug ?? "");
 };
 
-const slugifyVoyageName = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "voyage";
-
 const voyageName = (row: any, lang: Lang): string =>
   localizedField(row, "name", lang) || String(row?.name ?? "Voyage");
 
 const voyageDescription = (row: any, lang: Lang): string =>
   localizedField(row, "description", lang) || "";
 
-const voyagePath = (row: any) =>
-  `/voyages/${row.id}--${slugifyVoyageName(String(row.name_en || row.name_it || row.name || "voyage"))}`;
+const voyagePath = (row: any, lang: Lang) => `/voyages/${slugFor(row, lang)}`;
 
 const articleTitle = (row: any, lang: Lang): string =>
   localizedField(row, "title", lang) || String(row?.slug ?? "Logbook article");
@@ -377,7 +367,7 @@ const fetchPublishedArticles = (select = "id,slug,slug_it,slug_en,title_en,title
     `logbook_articles?select=${encodeURIComponent(select)}&status=eq.published&order=published_at.desc.nullslast&order=created_at.desc`
   );
 
-const fetchPublishedVoyages = (select = "id,name,name_en,name_it,description,description_en,description_it,start_date,end_date,updated_at,created_at,type,status") =>
+const fetchPublishedVoyages = (select = "id,name,name_en,name_it,slug,slug_it,slug_en,description,description_en,description_it,start_date,end_date,updated_at,created_at,type,status") =>
   supabaseFetch(`voyages?select=${encodeURIComponent(select)}&is_published=eq.true&order=sort_order.asc`);
 
 const fetchArticleAuthors = async (articleId: string): Promise<Array<{ id: string; name: string; avatar_url?: string | null }>> => {
@@ -452,7 +442,7 @@ const buildVoyagesIndex = async (lang: Lang): Promise<PageData> => {
   const voyages = (await fetchPublishedVoyages()) ?? [];
   const links: HtmlLink[] = voyages.flatMap((voyage) =>
     LANGS.map((itemLang) => ({
-      href: withLang(itemLang, voyagePath(voyage)),
+      href: withLang(itemLang, voyagePath(voyage, itemLang)),
       label: `${voyageName(voyage, itemLang)} (${itemLang})`,
       description: voyageDescription(voyage, itemLang),
       date: modifiedAt(voyage),
@@ -520,7 +510,7 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
     fetchArticleAuthors(article.id),
     fetchArticleTags(article.id),
     article.voyage_id
-      ? supabaseFetch(`voyages?select=id,name,name_en,name_it,description,description_en,description_it,updated_at,created_at,type,status&id=eq.${encodeURIComponent(article.voyage_id)}&is_published=eq.true&limit=1`)
+      ? supabaseFetch(`voyages?select=id,name,name_en,name_it,slug,slug_it,slug_en,description,description_en,description_it,updated_at,created_at,type,status&id=eq.${encodeURIComponent(article.voyage_id)}&is_published=eq.true&limit=1`)
       : Promise.resolve(null),
     supabaseFetch(relatedQuery),
   ]);
@@ -531,7 +521,7 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
   ];
   if (linkedVoyage) {
     internalLinks.push({
-      href: withLang(lang, voyagePath(linkedVoyage)),
+      href: withLang(lang, voyagePath(linkedVoyage, lang)),
       label: voyageName(linkedVoyage, lang),
       description: lang === "it" ? "Viaggio collegato" : "Linked voyage",
     });
@@ -570,7 +560,7 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
       mainEntityOfPage: canonicalUrl,
       image: article.cover_image || undefined,
       datePublished: article.published_at || undefined,
-      dateModified: article.updated_at || article.published_at || undefined,
+      dateModified: article.published_at || undefined,
       articleSection: article.category || "Logbook",
       keywords: tags.length ? tags : undefined,
       author: authors.length
@@ -626,12 +616,24 @@ const buildStoryPage = async (lang: Lang, slug: string): Promise<PageData> => {
   };
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
-  const id = ref.split("--")[0];
-  if (!id) return notFoundPage(lang);
-  const rows = await supabaseFetch(`voyages?select=*&id=eq.${encodeURIComponent(id)}&is_published=eq.true&limit=1`);
-  const voyage = rows?.[0];
+  if (!ref) return notFoundPage(lang);
+  const bySlug = await supabaseFetch(
+    `voyages?select=*&or=(slug.eq.${encodeURIComponent(ref)},slug_it.eq.${encodeURIComponent(ref)},slug_en.eq.${encodeURIComponent(ref)})&is_published=eq.true&limit=1`
+  );
+  let voyage = bySlug?.[0];
+  if (!voyage) {
+    // Legacy `<uuid>--<slug>` or bare `<uuid>` links.
+    const legacyId = ref.split("--")[0];
+    if (legacyId && UUID_PATTERN.test(legacyId)) {
+      const byId = await supabaseFetch(`voyages?select=*&id=eq.${encodeURIComponent(legacyId)}&is_published=eq.true&limit=1`);
+      voyage = byId?.[0];
+    }
+  }
   if (!voyage) return notFoundPage(lang);
+  const id = voyage.id;
 
   const name = voyageName(voyage, lang);
   const description =
@@ -639,14 +641,14 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
     (lang === "it"
       ? `Rotta pubblica "${name}" con partenza, arrivo, waypoint e date del viaggio a bordo di S/Y Spritz.`
       : `Public route "${name}" with departure, arrival, waypoints, and voyage dates aboard S/Y Spritz.`);
-  const path = voyagePath(voyage);
+  const path = voyagePath(voyage, lang);
   const [waypoints, articleRows, otherVoyages] = await Promise.all([
     supabaseFetch(`voyage_waypoints?select=name,name_it,name_en,description,description_it,description_en,lat,lng,event_date,date_start,date_end,sort_order&voyage_id=eq.${encodeURIComponent(id)}&order=sort_order.asc`),
     supabaseFetch(
       `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at,voyage_id&status=eq.published&voyage_id=eq.${encodeURIComponent(id)}&order=published_at.asc.nullslast`
     ),
     supabaseFetch(
-      `voyages?select=id,name,name_en,name_it,description,description_en,description_it,updated_at,created_at,type,status&is_published=eq.true&id=neq.${encodeURIComponent(id)}&order=sort_order.asc&limit=6`
+      `voyages?select=id,name,name_en,name_it,slug,slug_it,slug_en,description,description_en,description_it,updated_at,created_at,type,status&is_published=eq.true&id=neq.${encodeURIComponent(id)}&order=sort_order.asc&limit=6`
     ),
   ]);
   const articleLinks: HtmlLink[] = (articleRows ?? []).map((article) => ({
@@ -656,7 +658,7 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
     date: publishedAt(article),
   }));
   const voyageLinks: HtmlLink[] = (otherVoyages ?? []).map((entry) => ({
-    href: withLang(lang, voyagePath(entry)),
+    href: withLang(lang, voyagePath(entry, lang)),
     label: voyageName(entry, lang),
     description: voyageDescription(entry, lang),
     date: modifiedAt(entry),

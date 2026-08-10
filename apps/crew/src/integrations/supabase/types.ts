@@ -71,6 +71,210 @@ export type Database = {
           },
         ]
       }
+      admin_mcp_audit_log: {
+        Row: {
+          arguments: Json
+          client_request_id: string | null
+          completed_at: string | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          outcome: string
+          result: Json | null
+          target_id: string | null
+          token_id: string | null
+          tool: string
+          user_id: string | null
+        }
+        Insert: {
+          arguments?: Json
+          client_request_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          outcome?: string
+          result?: Json | null
+          target_id?: string | null
+          token_id?: string | null
+          tool: string
+          user_id?: string | null
+        }
+        Update: {
+          arguments?: Json
+          client_request_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          outcome?: string
+          result?: Json | null
+          target_id?: string | null
+          token_id?: string | null
+          tool?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_mcp_audit_log_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "admin_mcp_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_mcp_oauth_clients: {
+        Row: {
+          client_id: string
+          client_name: string
+          client_uri: string | null
+          created_at: string
+          disabled_at: string | null
+          grant_types: string[]
+          last_used_at: string | null
+          redirect_uris: string[]
+          software_id: string | null
+          token_endpoint_auth_method: string
+        }
+        Insert: {
+          client_id: string
+          client_name: string
+          client_uri?: string | null
+          created_at?: string
+          disabled_at?: string | null
+          grant_types?: string[]
+          last_used_at?: string | null
+          redirect_uris: string[]
+          software_id?: string | null
+          token_endpoint_auth_method?: string
+        }
+        Update: {
+          client_id?: string
+          client_name?: string
+          client_uri?: string | null
+          created_at?: string
+          disabled_at?: string | null
+          grant_types?: string[]
+          last_used_at?: string | null
+          redirect_uris?: string[]
+          software_id?: string | null
+          token_endpoint_auth_method?: string
+        }
+        Relationships: []
+      }
+      admin_mcp_oauth_codes: {
+        Row: {
+          client_id: string
+          code_challenge: string
+          code_challenge_method: string
+          code_hash: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          redirect_uri: string
+          resource: string | null
+          scopes: string[]
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          code_challenge: string
+          code_challenge_method?: string
+          code_hash: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          redirect_uri: string
+          resource?: string | null
+          scopes?: string[]
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          code_challenge?: string
+          code_challenge_method?: string
+          code_hash?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          redirect_uri?: string
+          resource?: string | null
+          scopes?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_mcp_oauth_codes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "admin_mcp_oauth_clients"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      admin_mcp_tokens: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          last_used_at: string | null
+          name: string
+          resource: string | null
+          revoked_at: string | null
+          scopes: string[]
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          kind?: string
+          last_used_at?: string | null
+          name: string
+          resource?: string | null
+          revoked_at?: string | null
+          scopes?: string[]
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          last_used_at?: string | null
+          name?: string
+          resource?: string | null
+          revoked_at?: string | null
+          scopes?: string[]
+          token_hash?: string
+          token_prefix?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_mcp_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "admin_mcp_oauth_clients"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
       article_authors: {
         Row: {
           article_id: string
@@ -178,19 +382,22 @@ export type Database = {
           article_id: string
           created_at: string
           id: string
-          profile_id: string
+          profile_id: string | null
+          visitor_key: string | null
         }
         Insert: {
           article_id: string
           created_at?: string
           id?: string
-          profile_id: string
+          profile_id?: string | null
+          visitor_key?: string | null
         }
         Update: {
           article_id?: string
           created_at?: string
           id?: string
-          profile_id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
         }
         Relationships: [
           {
@@ -220,21 +427,27 @@ export type Database = {
         Row: {
           article_id: string
           counted_at: string
+          dwell_ms: number | null
           id: string
+          lang: string | null
           profile_id: string | null
           visitor_key: string | null
         }
         Insert: {
           article_id: string
           counted_at?: string
+          dwell_ms?: number | null
           id?: string
+          lang?: string | null
           profile_id?: string | null
           visitor_key?: string | null
         }
         Update: {
           article_id?: string
           counted_at?: string
+          dwell_ms?: number | null
           id?: string
+          lang?: string | null
           profile_id?: string | null
           visitor_key?: string | null
         }
@@ -2653,29 +2866,233 @@ export type Database = {
           },
         ]
       }
+      newsletter_deliveries: {
+        Row: {
+          click_count: number
+          created_at: string
+          delivery_type: string
+          error_message: string | null
+          first_clicked_at: string | null
+          first_opened_at: string | null
+          id: string
+          last_clicked_at: string | null
+          last_clicked_url: string | null
+          last_opened_at: string | null
+          message_id: string
+          metadata: Json | null
+          newsletter_event_id: string | null
+          newsletter_message_id: string
+          open_count: number
+          recipient_email: string
+          recipient_language: string
+          status: string
+          subscriber_id: string | null
+          tracker_token: string
+        }
+        Insert: {
+          click_count?: number
+          created_at?: string
+          delivery_type: string
+          error_message?: string | null
+          first_clicked_at?: string | null
+          first_opened_at?: string | null
+          id?: string
+          last_clicked_at?: string | null
+          last_clicked_url?: string | null
+          last_opened_at?: string | null
+          message_id: string
+          metadata?: Json | null
+          newsletter_event_id?: string | null
+          newsletter_message_id: string
+          open_count?: number
+          recipient_email: string
+          recipient_language: string
+          status: string
+          subscriber_id?: string | null
+          tracker_token: string
+        }
+        Update: {
+          click_count?: number
+          created_at?: string
+          delivery_type?: string
+          error_message?: string | null
+          first_clicked_at?: string | null
+          first_opened_at?: string | null
+          id?: string
+          last_clicked_at?: string | null
+          last_clicked_url?: string | null
+          last_opened_at?: string | null
+          message_id?: string
+          metadata?: Json | null
+          newsletter_event_id?: string | null
+          newsletter_message_id?: string
+          open_count?: number
+          recipient_email?: string
+          recipient_language?: string
+          status?: string
+          subscriber_id?: string | null
+          tracker_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_deliveries_newsletter_event_id_fkey"
+            columns: ["newsletter_event_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_deliveries_newsletter_message_id_fkey"
+            columns: ["newsletter_message_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_deliveries_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_events: {
+        Row: {
+          email: string
+          event_type: string
+          id: string
+          occurred_at: string
+          preferred_language: string | null
+          processed_at: string | null
+          processing_note: string | null
+          subscriber_id: string | null
+        }
+        Insert: {
+          email: string
+          event_type: string
+          id?: string
+          occurred_at?: string
+          preferred_language?: string | null
+          processed_at?: string | null
+          processing_note?: string | null
+          subscriber_id?: string | null
+        }
+        Update: {
+          email?: string
+          event_type?: string
+          id?: string
+          occurred_at?: string
+          preferred_language?: string | null
+          processed_at?: string | null
+          processing_note?: string | null
+          subscriber_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_events_subscriber_id_fkey"
+            columns: ["subscriber_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_subscribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_messages: {
+        Row: {
+          automation_delay_minutes: number
+          automation_trigger: string | null
+          body_html_translations: Json
+          body_json_translations: Json
+          body_mode_translations: Json
+          created_at: string
+          created_by: string | null
+          from_name: string | null
+          id: string
+          kind: string
+          last_queued_at: string | null
+          name: string
+          preheader_translations: Json
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string
+          subject_translations: Json
+          updated_at: string
+        }
+        Insert: {
+          automation_delay_minutes?: number
+          automation_trigger?: string | null
+          body_html_translations?: Json
+          body_json_translations?: Json
+          body_mode_translations?: Json
+          created_at?: string
+          created_by?: string | null
+          from_name?: string | null
+          id?: string
+          kind: string
+          last_queued_at?: string | null
+          name: string
+          preheader_translations?: Json
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          subject_translations?: Json
+          updated_at?: string
+        }
+        Update: {
+          automation_delay_minutes?: number
+          automation_trigger?: string | null
+          body_html_translations?: Json
+          body_json_translations?: Json
+          body_mode_translations?: Json
+          created_at?: string
+          created_by?: string | null
+          from_name?: string | null
+          id?: string
+          kind?: string
+          last_queued_at?: string | null
+          name?: string
+          preheader_translations?: Json
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          subject_translations?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       newsletter_subscribers: {
         Row: {
           created_at: string
           email: string
           id: string
+          preferred_language: string | null
           profile_id: string
+          source: string | null
           subscribed: boolean
+          unsubscribed_at: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           email: string
           id?: string
+          preferred_language?: string | null
           profile_id: string
+          source?: string | null
           subscribed?: boolean
+          unsubscribed_at?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           email?: string
           id?: string
+          preferred_language?: string | null
           profile_id?: string
+          source?: string | null
           subscribed?: boolean
+          unsubscribed_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -3060,6 +3477,54 @@ export type Database = {
           },
         ]
       }
+      pending_article_comments: {
+        Row: {
+          article_id: string
+          client_token: string
+          content: string
+          created_at: string
+          guest_email: string
+          guest_name: string
+          id: string
+          parent_id: string | null
+        }
+        Insert: {
+          article_id: string
+          client_token?: string
+          content: string
+          created_at?: string
+          guest_email: string
+          guest_name: string
+          id?: string
+          parent_id?: string | null
+        }
+        Update: {
+          article_id?: string
+          client_token?: string
+          content?: string
+          created_at?: string
+          guest_email?: string
+          guest_name?: string
+          id?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_article_comments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_article_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_badges: {
         Row: {
           awarded_at: string
@@ -3215,6 +3680,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      request_rate_limits: {
+        Row: {
+          bucket: string
+          identifier: string
+          request_count: number
+          updated_at: string
+          window_started_at: string
+        }
+        Insert: {
+          bucket: string
+          identifier: string
+          request_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Update: {
+          bucket?: string
+          identifier?: string
+          request_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Relationships: []
       }
       route_legs: {
         Row: {
@@ -3862,6 +4351,7 @@ export type Database = {
           currency: string
           environment: string
           id: string
+          last_reminder_at: string | null
           paid_at: string | null
           participant_id: string | null
           party_size: number
@@ -3871,6 +4361,10 @@ export type Database = {
           reference: string
           refund_amount_cents: number
           refund_payment_id: number | null
+          refund_payout_queued: boolean
+          refund_pending: boolean
+          refund_pending_amount_cents: number
+          refund_pending_reason: string | null
           refund_policy: string | null
           refund_reference: string | null
           refunded_at: string | null
@@ -3886,6 +4380,7 @@ export type Database = {
           currency?: string
           environment: string
           id?: string
+          last_reminder_at?: string | null
           paid_at?: string | null
           participant_id?: string | null
           party_size: number
@@ -3895,6 +4390,10 @@ export type Database = {
           reference: string
           refund_amount_cents?: number
           refund_payment_id?: number | null
+          refund_payout_queued?: boolean
+          refund_pending?: boolean
+          refund_pending_amount_cents?: number
+          refund_pending_reason?: string | null
           refund_policy?: string | null
           refund_reference?: string | null
           refunded_at?: string | null
@@ -3910,6 +4409,7 @@ export type Database = {
           currency?: string
           environment?: string
           id?: string
+          last_reminder_at?: string | null
           paid_at?: string | null
           participant_id?: string | null
           party_size?: number
@@ -3919,6 +4419,10 @@ export type Database = {
           reference?: string
           refund_amount_cents?: number
           refund_payment_id?: number | null
+          refund_payout_queued?: boolean
+          refund_pending?: boolean
+          refund_pending_amount_cents?: number
+          refund_pending_reason?: string | null
           refund_policy?: string | null
           refund_reference?: string | null
           refunded_at?: string | null
@@ -4010,6 +4514,7 @@ export type Database = {
       }
       voyage_booking_notifications: {
         Row: {
+          attempts: number
           booking_request_id: string
           emailed_at: string | null
           error_message: string | null
@@ -4023,6 +4528,7 @@ export type Database = {
           recipient_profile_id: string
         }
         Insert: {
+          attempts?: number
           booking_request_id: string
           emailed_at?: string | null
           error_message?: string | null
@@ -4036,6 +4542,7 @@ export type Database = {
           recipient_profile_id: string
         }
         Update: {
+          attempts?: number
           booking_request_id?: string
           emailed_at?: string | null
           error_message?: string | null
@@ -4302,6 +4809,7 @@ export type Database = {
           confirmed_at: string | null
           expires_at: string | null
           id: string
+          is_comped: boolean
           is_crew: boolean
           message: string | null
           party_size: number
@@ -4323,6 +4831,7 @@ export type Database = {
           confirmed_at?: string | null
           expires_at?: string | null
           id?: string
+          is_comped?: boolean
           is_crew?: boolean
           message?: string | null
           party_size?: number
@@ -4344,6 +4853,7 @@ export type Database = {
           confirmed_at?: string | null
           expires_at?: string | null
           id?: string
+          is_comped?: boolean
           is_crew?: boolean
           message?: string | null
           party_size?: number
@@ -4547,6 +5057,7 @@ export type Database = {
       }
       voyage_waypoints: {
         Row: {
+          activities: Json
           actual_arrival_at: string | null
           actual_departure_at: string | null
           created_at: string
@@ -4563,17 +5074,21 @@ export type Database = {
           name: string | null
           name_en: string | null
           name_it: string | null
+          nearby_airports: Json
           planned_stop_duration_minutes: number
+          poi: Json
           sort_order: number
           stop_departure_time: string | null
           stop_hours: number | null
           stop_mode: string
           stop_nights: number | null
+          updated_at: string
           visibility_mode: string
           voyage_id: string
           waypoint_type: string
         }
         Insert: {
+          activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
           created_at?: string
@@ -4590,17 +5105,21 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          nearby_airports?: Json
           planned_stop_duration_minutes?: number
+          poi?: Json
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null
           stop_mode?: string
           stop_nights?: number | null
+          updated_at?: string
           visibility_mode?: string
           voyage_id: string
           waypoint_type?: string
         }
         Update: {
+          activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
           created_at?: string
@@ -4617,12 +5136,15 @@ export type Database = {
           name?: string | null
           name_en?: string | null
           name_it?: string | null
+          nearby_airports?: Json
           planned_stop_duration_minutes?: number
+          poi?: Json
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null
           stop_mode?: string
           stop_nights?: number | null
+          updated_at?: string
           visibility_mode?: string
           voyage_id?: string
           waypoint_type?: string
@@ -4665,6 +5187,9 @@ export type Database = {
           name: string
           name_en: string | null
           name_it: string | null
+          slug: string
+          slug_en: string | null
+          slug_it: string | null
           sort_order: number
           start_date: string | null
           start_date_flex_days: number | null
@@ -4695,6 +5220,9 @@ export type Database = {
           name?: string
           name_en?: string | null
           name_it?: string | null
+          slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_date_flex_days?: number | null
@@ -4725,6 +5253,9 @@ export type Database = {
           name?: string
           name_en?: string | null
           name_it?: string | null
+          slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_date_flex_days?: number | null
@@ -4897,6 +5428,47 @@ export type Database = {
         Args: { _profile_id: string }
         Returns: number
       }
+      admin_apply_pending_invite_legs: {
+        Args: {
+          _allow_over_capacity?: boolean
+          _booking_request_id: string
+          _leg_ids: string[]
+        }
+        Returns: {
+          over_capacity: boolean
+        }[]
+      }
+      admin_article_view_insight_one: {
+        Args: { _article_id: string }
+        Returns: Json
+      }
+      admin_article_view_insights: {
+        Args: never
+        Returns: {
+          anonymous_likes: number
+          anonymous_views: number
+          article_id: string
+          avg_dwell_ms: number
+          comment_count: number
+          distinct_registered: number
+          distinct_visitors: number
+          last_view_at: string
+          like_count: number
+          measured_dwell_count: number
+          published_at: string
+          registered_likes: number
+          registered_views: number
+          status: string
+          story_id: string
+          title_en: string
+          title_it: string
+          top_lang: string
+          tracked_views: number
+          view_count: number
+          views_en: number
+          views_it: number
+        }[]
+      }
       admin_booking_over_capacity: {
         Args: {
           _excluding_request_id?: string
@@ -4906,10 +5478,27 @@ export type Database = {
         }
         Returns: boolean
       }
+      admin_confirm_voyage_booking_payment: {
+        Args: {
+          _admin_note?: string
+          _amount_eur: number
+          _booking_request_id: string
+          _participant_id?: string
+          _reference?: string
+        }
+        Returns: {
+          amount_cents: number
+          booking_request_id: string
+          booking_status: Database["public"]["Enums"]["voyage_booking_status"]
+          deposit_id: string
+          reused_pending_deposit: boolean
+        }[]
+      }
       admin_create_voyage_booking: {
         Args: {
           _admin_notes?: string
           _allow_over_capacity?: boolean
+          _is_comped?: boolean
           _leg_ids: string[]
           _message?: string
           _party_size?: number
@@ -4928,6 +5517,7 @@ export type Database = {
           _allow_over_capacity?: boolean
           _email: string
           _first_name?: string
+          _is_comped?: boolean
           _last_name?: string
           _leg_ids: string[]
           _message?: string
@@ -4953,13 +5543,41 @@ export type Database = {
           profile_id: string
         }[]
       }
+      admin_list_pending_refunds: {
+        Args: never
+        Returns: {
+          account_holder: string
+          account_iban: string
+          amount_cents: number
+          booking_request_id: string
+          deposit_id: string
+          environment: string
+          payout_queued: boolean
+          pending_amount_cents: number
+          reason: string
+          reference: string
+          traveller_email: string
+          traveller_name: string
+          updated_at: string
+          voyage_id: string
+          voyage_name: string
+          voyage_name_en: string
+          voyage_name_it: string
+        }[]
+      }
       admin_propose_voyage_booking_legs: {
         Args: {
           _admin_note?: string
           _booking_request_id: string
+          _change_reason?: string
           _proposed_leg_ids: string[]
+          _require_settlement?: boolean
         }
         Returns: string
+      }
+      admin_resolve_pending_refund: {
+        Args: { _deposit_id: string }
+        Returns: undefined
       }
       admin_respond_voyage_booking_plan_change: {
         Args: {
@@ -5052,6 +5670,10 @@ export type Database = {
         Args: { _booking_request_id: string }
         Returns: undefined
       }
+      claim_pending_article_comments: {
+        Args: never
+        Returns: Json
+      }
       compute_voyage_schedule: {
         Args: { _use_actuals: boolean; _voyage_id: string }
         Returns: {
@@ -5070,6 +5692,15 @@ export type Database = {
       confirm_voyage_booking: {
         Args: { _booking_request_id: string }
         Returns: undefined
+      }
+      consume_rate_limit: {
+        Args: {
+          p_bucket: string
+          p_identifier: string
+          p_max_requests: number
+          p_window_seconds: number
+        }
+        Returns: boolean
       }
       deactivate_past_voyage_bookable_legs: { Args: never; Returns: number }
       decline_booking_participation: {
@@ -5144,6 +5775,7 @@ export type Database = {
         }
         Returns: string
       }
+      enqueue_voyage_booking_payment_reminders: { Args: never; Returns: number }
       expire_pending_booking_participants: { Args: never; Returns: number }
       expire_pending_voyage_booking_payments: { Args: never; Returns: number }
       get_my_participations: {
@@ -5200,7 +5832,7 @@ export type Database = {
         Returns: boolean
       }
       increment_article_view_count: {
-        Args: { _article_id: string; _visitor_key?: string }
+        Args: { _article_id: string; _lang?: string; _visitor_key?: string }
         Returns: number
       }
       invoke_editorial_edge_function: {
@@ -5208,6 +5840,7 @@ export type Database = {
         Returns: number
       }
       invoke_email_queue_worker: { Args: never; Returns: number }
+      invoke_newsletter_dispatch: { Args: never; Returns: number }
       list_due_community_live_event_push_reminders: {
         Args: { _limit?: number }
         Returns: {
@@ -5219,6 +5852,35 @@ export type Database = {
           start_push_due: boolean
           starts_at: string
           title: string
+        }[]
+      }
+      list_my_pending_payments: {
+        Args: never
+        Returns: {
+          amount_cents: number
+          booking_request_id: string
+          booking_status: string
+          expires_at: string
+          payment_method: string
+          reference: string
+          voyage_id: string
+          voyage_name: string
+          voyage_name_en: string
+          voyage_name_it: string
+        }[]
+      }
+      list_my_pending_refunds: {
+        Args: never
+        Returns: {
+          amount_cents: number
+          booking_request_id: string
+          deposit_id: string
+          payout_queued: boolean
+          reference: string
+          voyage_id: string
+          voyage_name: string
+          voyage_name_en: string
+          voyage_name_it: string
         }[]
       }
       list_my_voyage_availability_watches: {
@@ -5265,9 +5927,30 @@ export type Database = {
         }
         Returns: number
       }
+      newsletter_register_click: {
+        Args: { p_delivery_id: string; p_token: string; p_url: string }
+        Returns: boolean
+      }
+      newsletter_register_open: {
+        Args: { p_delivery_id: string; p_token: string }
+        Returns: boolean
+      }
+      plan_change_reason_is_force_majeure: {
+        Args: { _reason: string }
+        Returns: boolean
+      }
       promote_waitlisted_voyage_bookings: {
         Args: { _changed_leg_ids?: string[]; _voyage_id: string }
         Returns: number
+      }
+      purge_expired_rate_limits: { Args: never; Returns: number }
+      reactivate_expired_voyage_booking: {
+        Args: { _booking_request_id: string }
+        Returns: {
+          booking_request_id: string
+          booking_status: Database["public"]["Enums"]["voyage_booking_status"]
+          expires_at: string
+        }[]
       }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
@@ -5280,6 +5963,10 @@ export type Database = {
       reattribute_logbook_photo_voyages: { Args: never; Returns: number }
       reattribute_observation_voyages: { Args: never; Returns: number }
       rebuild_observations_export_view: { Args: never; Returns: undefined }
+      record_article_read_dwell: {
+        Args: { _article_id: string; _dwell_ms: number; _visitor_key: string }
+        Returns: undefined
+      }
       record_spritz_discovery: {
         Args: { _visitor_key?: string }
         Returns: string
@@ -5375,6 +6062,20 @@ export type Database = {
         Args: { _at: string; _kind: string; _waypoint_id: string }
         Returns: string
       }
+      settle_voyage_booking_payment: {
+        Args: { _booking_request_id: string }
+        Returns: Database["public"]["Enums"]["voyage_booking_status"]
+      }
+      submit_article_comment: {
+        Args: {
+          _article_id: string
+          _content: string
+          _guest_email?: string
+          _guest_name?: string
+          _parent_id?: string
+        }
+        Returns: Json
+      }
       sync_voyage_bookable_legs: {
         Args: { _voyage_id: string }
         Returns: number
@@ -5383,6 +6084,10 @@ export type Database = {
         Args: { _voyage_id: string }
         Returns: number
       }
+      toggle_article_like: {
+        Args: { _article_id: string; _visitor_key?: string }
+        Returns: Json
+      }
       user_propose_voyage_booking_legs: {
         Args: {
           _booking_request_id: string
@@ -5390,6 +6095,18 @@ export type Database = {
           _user_message?: string
         }
         Returns: string
+      }
+      voyage_booking_has_paid_deposit: {
+        Args: { _booking_request_id: string }
+        Returns: boolean
+      }
+      voyage_booking_payment_deadline_hours: {
+        Args: { _payment_method: string }
+        Returns: number
+      }
+      voyage_booking_payment_exempt: {
+        Args: { _booking_request_id: string }
+        Returns: boolean
       }
       voyage_crew_profile_ids: { Args: never; Returns: string[] }
       voyage_derived_status: {
@@ -5435,6 +6152,7 @@ export type Database = {
         | "cancelled"
         | "expired"
       voyage_booking_status:
+        | "pending_payment"
         | "requested"
         | "waitlisted"
         | "admin_approved"
@@ -5592,6 +6310,7 @@ export const Constants = {
         "expired",
       ],
       voyage_booking_status: [
+        "pending_payment",
         "requested",
         "waitlisted",
         "admin_approved",

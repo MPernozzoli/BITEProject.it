@@ -457,7 +457,7 @@ const VoyageMap = ({
           lng: w.lng,
           lat: w.lat,
           voyageId: voyage.id,
-          voyagePath: buildVoyagePath(voyage),
+          voyagePath: buildVoyagePath(voyage, lang),
           waypoint: w,
           sequenceHeading,
           name,

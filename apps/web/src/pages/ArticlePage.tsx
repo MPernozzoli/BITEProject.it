@@ -540,7 +540,7 @@ const ArticlePage = () => {
           mainEntityOfPage: `${window.location.origin}/${lang}${articlePathForLang(article as any, lang)}`,
           image: imageUrls.length ? imageUrls : undefined,
           datePublished: article.published_at || undefined,
-          dateModified: article.updated_at || article.published_at || undefined,
+          dateModified: article.published_at || undefined,
           articleSection: article.category || "Logbook",
           keywords: seoKeywords.length ? seoKeywords : tags.map((tag: any) => tag.name).filter(Boolean),
           author: authorNames.length

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import {
+  bilingualSlugOrFilter,
   buildVoyagePath,
   formatWaypointMoment,
   formatVoyageDateRange,
@@ -12,13 +13,14 @@ import {
   formatIsoDate,
   formatWaypointStopDuration,
   getAssociatedArticleForWaypoint,
+  getLegacyVoyageIdFromRouteParam,
   getLocalizedVoyageDescription,
   getLocalizedVoyageName,
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
-  getVoyageIdFromRouteParam,
   normalizeWaypointActivities,
+  slugForLang,
   normalizeWaypointAirports,
   normalizeWaypointMedia,
   normalizeWaypointPoi,
@@ -28,7 +30,7 @@ import {
   type Voyage,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
-import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { applySeo, withLang, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
 import {
   perPersonDepositEur,
@@ -45,6 +47,7 @@ import {
   Activity,
   ArrowLeft,
   CalendarCheck,
+  ChevronDown,
   ChevronLeft,
   Clock,
   ChevronRight,
@@ -89,17 +92,52 @@ const bookingRpcClient = supabase as unknown as SupabaseRpcClient;
 const VoyagePage = () => {
   const { voyageRef } = useParams();
   const location = useLocation();
-  const voyageId = getVoyageIdFromRouteParam(voyageRef);
+  const legacyVoyageId = useMemo(() => getLegacyVoyageIdFromRouteParam(voyageRef), [voyageRef]);
   const referencedLegId = useMemo(() => new URLSearchParams(location.search).get("leg"), [location.search]);
   const { lang } = useI18n();
   const locale = lang === "it" ? "it-IT" : "en-US";
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
-  const snapshotVoyage = useMemo(
-    () => publicContent?.voyages.find((entry) => entry.id === voyageId) ?? null,
-    [publicContent, voyageId]
-  );
+  const snapshotVoyage = useMemo(() => {
+    if (!publicContent || !voyageRef) return null;
+    const bySlug = publicContent.voyages.find(
+      (entry) => entry.slug === voyageRef || entry.slug_it === voyageRef || entry.slug_en === voyageRef
+    );
+    if (bySlug) return bySlug;
+    return legacyVoyageId ? publicContent.voyages.find((entry) => entry.id === legacyVoyageId) ?? null : null;
+  }, [publicContent, voyageRef, legacyVoyageId]);
+
+  const { data: liveVoyage, isLoading: isLiveVoyageLoading } = useQuery<Voyage | null>({
+    queryKey: ["voyage", voyageRef],
+    enabled: Boolean(voyageRef) && !publicContent && !isPublicContentLoading,
+    queryFn: async () => {
+      const safeRef = (voyageRef ?? "").trim();
+      if (!safeRef) return null;
+      const { data, error } = await supabase
+        .from("voyages")
+        .select("*")
+        .or(bilingualSlugOrFilter(safeRef))
+        .eq("is_published", true)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) return data as Voyage;
+      if (!legacyVoyageId) return null;
+      const { data: legacyData, error: legacyError } = await supabase
+        .from("voyages")
+        .select("*")
+        .eq("id", legacyVoyageId)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (legacyError) throw legacyError;
+      return (legacyData || null) as Voyage | null;
+    },
+  });
+  const voyage = snapshotVoyage ?? liveVoyage;
+  const voyageId = voyage?.id ?? null;
+  const isLoading = !publicContent && (isPublicContentLoading || isLiveVoyageLoading);
+
   const snapshotWaypoints = useMemo(
     () => publicContent?.voyageWaypoints.filter((entry) => entry.voyage_id === voyageId) ?? null,
     [publicContent, voyageId]
@@ -108,18 +146,6 @@ const VoyagePage = () => {
     () => publicContent?.articles.filter((entry) => entry.voyage_id === voyageId) ?? null,
     [publicContent, voyageId]
   );
-
-  const { data: liveVoyage, isLoading: isLiveVoyageLoading } = useQuery<Voyage | null>({
-    queryKey: ["voyage", voyageId],
-    enabled: Boolean(voyageId) && !publicContent && !isPublicContentLoading,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("voyages").select("*").eq("id", voyageId).eq("is_published", true).maybeSingle();
-      if (error) throw error;
-      return (data || null) as Voyage | null;
-    },
-  });
-  const voyage = snapshotVoyage ?? liveVoyage;
-  const isLoading = !publicContent && (isPublicContentLoading || isLiveVoyageLoading);
 
   const { data: liveWaypoints = [] } = useQuery<VoyageWaypoint[]>({
     queryKey: ["voyage-waypoints", voyageId],
@@ -230,7 +256,7 @@ const VoyagePage = () => {
     }
     return { value: Math.round(totalWaypointDistance(waypoints)), unit: "NM" as const };
   }, [voyage, waypoints]);
-  const canonicalPath = voyage ? buildVoyagePath(voyage) : voyageId ? `/voyages/${voyageId}` : "/voyages";
+  const canonicalPath = voyage ? buildVoyagePath(voyage, lang) : "/voyages";
   const departureLabel = departureEntry
     ? getLocalizedWaypointName(departureEntry.waypoint, lang, departureEntry.originalIndex)
     : null;
@@ -401,6 +427,13 @@ const VoyagePage = () => {
     );
   }
 
+  // Legacy `/voyages/<uuid>--<slug>` links and wrong-language slugs land here
+  // via the id/legacy fallback above; redirect to the canonical slug URL.
+  const canonicalSlug = slugForLang(voyage, lang);
+  if (canonicalSlug && voyageRef !== canonicalSlug) {
+    return <Navigate to={`${withLang(lang, canonicalPath)}${location.search}${location.hash}`} replace />;
+  }
+
   const dateRange = formatVoyageDateRange(voyage, locale);
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
 
@@ -442,9 +475,35 @@ const VoyagePage = () => {
         {/* Overlapping info card */}
         <div className="page-section-wide relative z-10 -mt-10 px-4 md:-mt-14 md:px-8">
           <div className="glass-panel rounded-[32px] p-6 md:p-8">
-            {voyageDescription && (
-              <p className="editorial-body text-base md:text-lg text-muted-foreground leading-relaxed mb-6 max-w-3xl">{voyageDescription}</p>
-            )}
+            {voyageDescription && (() => {
+              const paragraphs = voyageDescription.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+              const [lede, ...rest] = paragraphs;
+              return (
+                <div className="mb-6 max-w-2xl border-l-2 border-accent/30 pl-5">
+                  <p className="editorial-body text-[15px] md:text-base text-muted-foreground leading-relaxed">{lede}</p>
+                  {rest.length > 0 && (
+                    <>
+                      {isDescriptionExpanded &&
+                        rest.map((paragraph, index) => (
+                          <p key={index} className="editorial-body text-[15px] md:text-base text-muted-foreground leading-relaxed mt-3">
+                            {paragraph}
+                          </p>
+                        ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsDescriptionExpanded((expanded) => !expanded)}
+                        className="mt-3 inline-flex items-center gap-1 text-[11px] font-sans uppercase tracking-[0.2em] text-accent transition-colors hover:text-accent/80"
+                      >
+                        {isDescriptionExpanded
+                          ? (lang === "it" ? "Mostra meno" : "Show less")
+                          : (lang === "it" ? "Leggi il racconto completo" : "Read the full story")}
+                        <ChevronDown size={12} className={isDescriptionExpanded ? "rotate-180 transition-transform" : "transition-transform"} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="glass-panel-soft rounded-[24px] p-4">
                 <p className="flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">

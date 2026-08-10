@@ -2,7 +2,7 @@ import * as React from "react";
 import { AtSign, BookOpen, ExternalLink, Map, Route, X } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { CommunityLinkedResource, CommunityReferenceKind, linkedResourcesFrom, slugify } from "@/lib/community";
+import { CommunityLinkedResource, CommunityReferenceKind, linkedResourcesFrom } from "@/lib/community";
 import TiptapRenderer from "@/components/TiptapRenderer";
 
 const crewSupabase = supabase as unknown as {
@@ -27,8 +27,8 @@ const iconFor = (kind: CommunityReferenceKind) => {
 const localizedTitle = (row: Record<string, unknown>, fallback = "Contenuto") =>
   String(row.title_it || row.title_en || row.name_it || row.name_en || row.name || fallback);
 
-const voyagePath = (voyage: { id: string; name?: string | null; name_it?: string | null; name_en?: string | null }) =>
-  `/voyages/${voyage.id}--${slugify(voyage.name_en || voyage.name_it || voyage.name || "voyage")}`;
+const voyagePath = (voyage: { id: string; slug?: string | null; slug_it?: string | null }) =>
+  `/voyages/${voyage.slug_it || voyage.slug || voyage.id}`;
 
 const escapeLike = (value: string) => value.replace(/[%_]/g, (match) => `\\${match}`);
 
@@ -254,12 +254,12 @@ export const searchCommunityReferences = async (kind: CommunityReferenceKind, qu
   if (kind === "voyage") {
     const request = crewSupabase
       .from("voyages")
-      .select("id,name,name_it,name_en,start_date,end_date")
+      .select("id,name,name_it,name_en,slug,slug_it,start_date,end_date")
       .eq("is_published", true)
       .order("sort_order", { ascending: true })
       .limit(8);
     const { data } = clean ? await request.or(`name.ilike.${like},name_it.ilike.${like},name_en.ilike.${like}`) : await request;
-    return (data ?? []).map((row: { id: string; name?: string | null; name_it?: string | null; name_en?: string | null; start_date?: string | null; end_date?: string | null }) => ({
+    return (data ?? []).map((row: { id: string; name?: string | null; name_it?: string | null; name_en?: string | null; slug?: string | null; slug_it?: string | null; start_date?: string | null; end_date?: string | null }) => ({
       kind: "voyage" as const,
       id: row.id,
       label: row.name_it || row.name_en || row.name || "Viaggio",
@@ -270,7 +270,7 @@ export const searchCommunityReferences = async (kind: CommunityReferenceKind, qu
 
   const { data } = await crewSupabase
     .from("voyage_bookable_legs")
-    .select("id,sort_order,planned_nautical_miles,voyage_id,voyages(id,name,name_it,name_en),from:voyage_waypoints!voyage_bookable_legs_from_waypoint_id_fkey(name,name_it,name_en),to:voyage_waypoints!voyage_bookable_legs_to_waypoint_id_fkey(name,name_it,name_en)")
+    .select("id,sort_order,planned_nautical_miles,voyage_id,voyages(id,name,name_it,name_en,slug,slug_it),from:voyage_waypoints!voyage_bookable_legs_from_waypoint_id_fkey(name,name_it,name_en),to:voyage_waypoints!voyage_bookable_legs_to_waypoint_id_fkey(name,name_it,name_en)")
     .order("sort_order", { ascending: true })
     .limit(12);
 
@@ -286,7 +286,7 @@ export const searchCommunityReferences = async (kind: CommunityReferenceKind, qu
         id: String(row.id),
         label,
         subtitle: `${voyageLabel} · ${Number(row.planned_nautical_miles || 0).toFixed(1)} NM`,
-        href: `${voyagePath(voyage || { id: row.voyage_id, name: "voyage" })}?leg=${row.id}`,
+        href: `${voyagePath(voyage || { id: row.voyage_id })}?leg=${row.id}`,
         voyageId: String(row.voyage_id),
       };
     })

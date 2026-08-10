@@ -686,8 +686,8 @@ const Index = () => {
   const handleViewWaypointDetail = useCallback((voyageId: string, waypointId: string) => {
     const voyage = voyages.find((v) => v.id === voyageId);
     if (!voyage) return;
-    navigate(`${buildVoyagePath(voyage)}#tappa-${waypointId}`);
-  }, [navigate, voyages]);
+    navigate(`${buildVoyagePath(voyage, lang)}#tappa-${waypointId}`);
+  }, [lang, navigate, voyages]);
 
   const { data: liveAllWaypoints = [], isLoading: isLiveWaypointsLoading } = useQuery<VoyageWaypoint[]>({
     queryKey: ["home-voyage-waypoints"],

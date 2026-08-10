@@ -605,8 +605,8 @@ const Journal = () => {
   const handleViewWaypointDetail = useCallback((voyageId: string, waypointId: string) => {
     const voyage = voyages.find((v) => v.id === voyageId);
     if (!voyage) return;
-    navigate(`${buildVoyagePath(voyage)}#tappa-${waypointId}`);
-  }, [navigate, voyages]);
+    navigate(`${buildVoyagePath(voyage, lang)}#tappa-${waypointId}`);
+  }, [lang, navigate, voyages]);
 
   const buildLogbookBookingReturnPath = useCallback(
     (voyageId: string) => `/${lang}/logbook?booking=${encodeURIComponent(voyageId)}`,

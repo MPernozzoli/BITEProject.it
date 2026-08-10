@@ -154,7 +154,7 @@ const VoyagesPage = () => {
         hasPart: voyages.map((voyage) => ({
           "@type": "Trip",
           name: getLocalizedVoyageName(voyage, lang),
-          url: `${window.location.origin}${buildVoyagePath(voyage)}`,
+          url: `${window.location.origin}${buildVoyagePath(voyage, lang)}`,
         })),
         publisher: { "@id": ORGANIZATION_ID },
         isPartOf: { "@id": WEBSITE_ID },
@@ -225,7 +225,7 @@ const VoyagesPage = () => {
             return (
               <Link
                 key={voyage.id}
-                to={buildVoyagePath(voyage)}
+                to={buildVoyagePath(voyage, lang)}
                 className="group glass-panel rounded-[32px] px-6 py-6 md:px-8 md:py-7 hover:border-accent transition-colors"
               >
                 <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">

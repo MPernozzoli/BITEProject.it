@@ -298,6 +298,7 @@ type VoyageRow = {
   name: string
   name_en: string | null
   name_it: string | null
+  slug: string
   description: string | null
   description_en: string | null
   description_it: string | null
@@ -519,11 +520,10 @@ const getWaypointTitle = (waypoint: Pick<WaypointRow, 'name' | 'name_en' | 'name
     `${Math.abs(waypoint.lat).toFixed(2)}, ${Math.abs(waypoint.lng).toFixed(2)}`
   ) || `Waypoint ${index + 1}`
 
-const getVoyagePath = (voyage: Pick<VoyageRow, 'id' | 'name' | 'name_en' | 'name_it'>) =>
-  `/voyages/${voyage.id}--${slugify(getVoyageTitle(voyage))}`
+const getVoyagePath = (voyage: Pick<VoyageRow, 'slug'>) => `/voyages/${voyage.slug}`
 
 const getArticleUrl = (article: Pick<ArticleRow, 'slug'>) => `${SITE_URL}/logbook/${article.slug}`
-const getVoyageUrl = (voyage: Pick<VoyageRow, 'id' | 'name' | 'name_en' | 'name_it'>) => `${SITE_URL}${getVoyagePath(voyage)}`
+const getVoyageUrl = (voyage: Pick<VoyageRow, 'slug'>) => `${SITE_URL}${getVoyagePath(voyage)}`
 const getStoryUrl = (story: Pick<StoryRow, 'slug'>) => `${SITE_URL}/logbook/story/${story.slug}`
 const getProfileUrl = (profileId: string) => `${SITE_URL}/profile/${profileId}`
 
@@ -704,7 +704,7 @@ export async function buildPublicSemanticDataset(
       .order('published_at', { ascending: false, nullsFirst: false }),
     supabase
       .from('voyages')
-      .select('id, name, name_en, name_it, description, description_en, description_it, start_date, end_date, status, type, updated_at, cached_geometry')
+      .select('id, name, name_en, name_it, slug, description, description_en, description_it, start_date, end_date, status, type, updated_at, cached_geometry')
       .eq('is_published', true)
       .order('sort_order', { ascending: true }),
     supabase

@@ -22,6 +22,7 @@ import { invokeOptionalNewsletterFunction } from "@/lib/newsletter";
 import { validateSessionOrSignOut } from "@/lib/supabase-auth";
 import { fetchIsProfileComplete } from "@/lib/profile-completeness";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 type AuthMode = "login" | "signup";
 type AuthStep = "email" | "verify";
@@ -381,6 +382,7 @@ const UserLogin = () => {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
 
   const authMode: AuthMode = location.pathname === "/signup" ? "signup" : "login";
   const searchParams = new URLSearchParams(location.search);
@@ -396,6 +398,24 @@ const UserLogin = () => {
   const nameReady = authMode === "login" || !!nameInput.trim();
 
   const completeAuthNavigation = async (userId: string) => {
+    const { data: claimData, error: claimError } = await supabase.rpc(
+      "claim_pending_article_comments"
+    );
+    if (claimError) {
+      console.error("Failed to claim pending comments", claimError);
+    } else {
+      const publishedCount = (claimData as { published_count?: number } | null)?.published_count ?? 0;
+      if (publishedCount > 0) {
+        toast({
+          title: publishedCount === 1 ? "Commento pubblicato" : `${publishedCount} commenti pubblicati`,
+          description:
+            publishedCount === 1
+              ? "Il tuo commento è ora visibile."
+              : "I tuoi commenti in attesa sono ora visibili.",
+        });
+      }
+    }
+
     const complete = await fetchIsProfileComplete(userId);
     if (complete) {
       goToTrustedRedirect(navigate, redirectTo);

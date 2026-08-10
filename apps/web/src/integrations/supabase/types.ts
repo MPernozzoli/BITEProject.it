@@ -382,19 +382,22 @@ export type Database = {
           article_id: string
           created_at: string
           id: string
-          profile_id: string
+          profile_id: string | null
+          visitor_key: string | null
         }
         Insert: {
           article_id: string
           created_at?: string
           id?: string
-          profile_id: string
+          profile_id?: string | null
+          visitor_key?: string | null
         }
         Update: {
           article_id?: string
           created_at?: string
           id?: string
-          profile_id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
         }
         Relationships: [
           {
@@ -3474,6 +3477,54 @@ export type Database = {
           },
         ]
       }
+      pending_article_comments: {
+        Row: {
+          article_id: string
+          client_token: string
+          content: string
+          created_at: string
+          guest_email: string
+          guest_name: string
+          id: string
+          parent_id: string | null
+        }
+        Insert: {
+          article_id: string
+          client_token?: string
+          content: string
+          created_at?: string
+          guest_email: string
+          guest_name: string
+          id?: string
+          parent_id?: string | null
+        }
+        Update: {
+          article_id?: string
+          client_token?: string
+          content?: string
+          created_at?: string
+          guest_email?: string
+          guest_name?: string
+          id?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_article_comments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_article_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "article_comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_badges: {
         Row: {
           awarded_at: string
@@ -5136,6 +5187,9 @@ export type Database = {
           name: string
           name_en: string | null
           name_it: string | null
+          slug: string
+          slug_en: string | null
+          slug_it: string | null
           sort_order: number
           start_date: string | null
           start_date_flex_days: number | null
@@ -5166,6 +5220,9 @@ export type Database = {
           name?: string
           name_en?: string | null
           name_it?: string | null
+          slug: string
+          slug_en?: string | null
+          slug_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_date_flex_days?: number | null
@@ -5196,6 +5253,9 @@ export type Database = {
           name?: string
           name_en?: string | null
           name_it?: string | null
+          slug?: string
+          slug_en?: string | null
+          slug_it?: string | null
           sort_order?: number
           start_date?: string | null
           start_date_flex_days?: number | null
@@ -5385,14 +5445,18 @@ export type Database = {
       admin_article_view_insights: {
         Args: never
         Returns: {
+          anonymous_likes: number
           anonymous_views: number
           article_id: string
           avg_dwell_ms: number
+          comment_count: number
           distinct_registered: number
           distinct_visitors: number
           last_view_at: string
+          like_count: number
           measured_dwell_count: number
           published_at: string
+          registered_likes: number
           registered_views: number
           status: string
           story_id: string
@@ -5605,6 +5669,10 @@ export type Database = {
       cancel_voyage_booking: {
         Args: { _booking_request_id: string }
         Returns: undefined
+      }
+      claim_pending_article_comments: {
+        Args: never
+        Returns: Json
       }
       compute_voyage_schedule: {
         Args: { _use_actuals: boolean; _voyage_id: string }
@@ -5998,6 +6066,16 @@ export type Database = {
         Args: { _booking_request_id: string }
         Returns: Database["public"]["Enums"]["voyage_booking_status"]
       }
+      submit_article_comment: {
+        Args: {
+          _article_id: string
+          _content: string
+          _guest_email?: string
+          _guest_name?: string
+          _parent_id?: string
+        }
+        Returns: Json
+      }
       sync_voyage_bookable_legs: {
         Args: { _voyage_id: string }
         Returns: number
@@ -6005,6 +6083,10 @@ export type Database = {
       sync_voyage_bookable_legs_plan: {
         Args: { _voyage_id: string }
         Returns: number
+      }
+      toggle_article_like: {
+        Args: { _article_id: string; _visitor_key?: string }
+        Returns: Json
       }
       user_propose_voyage_booking_legs: {
         Args: {

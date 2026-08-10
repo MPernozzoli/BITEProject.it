@@ -75,6 +75,21 @@ function patchArticleViewCountInCache(
   });
 }
 
+async function markArticleReadForProfile(articleId: string, userId?: string) {
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from("article_reads")
+    .upsert(
+      { article_id: articleId, profile_id: userId },
+      { onConflict: "article_id,profile_id", ignoreDuplicates: true }
+    );
+
+  if (error) {
+    console.error("Failed to mark article as read", { articleId, error });
+  }
+}
+
 async function dismissArticlePublicationNotifications(articleId: string, userId?: string) {
   if (!userId) return;
 
@@ -142,11 +157,12 @@ export function useRegisterArticleRead(articleSlug?: string) {
 
       throw error;
     },
-    onSuccess: (count, { articleId }) => {
+    onSuccess: async (count, { articleId }) => {
       patchArticleViewCountInCache(queryClient, articleId, count, articleSlug);
       void dismissArticlePublicationNotifications(articleId, userId);
 
       if (userId) {
+        await markArticleReadForProfile(articleId, userId);
         queryClient.invalidateQueries({ queryKey: ["article-reads", userId] });
       }
     },

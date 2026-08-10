@@ -1,4 +1,5 @@
 import type { Language } from "@/lib/i18n";
+import { bilingualSlugOrFilter, slugForLang, type WithBilingualSlugs } from "@/lib/article-slug";
 
 const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
 const OSRM_BASE_URL = "https://router.project-osrm.org";
@@ -721,9 +722,6 @@ export function slugifyVoyageName(value: string): string {
     .replace(/^-+|-+$/g, "") || "voyage";
 }
 
-const getVoyageSlugSource = (voyage: Pick<Voyage, "name" | "name_en" | "name_it">) =>
-  voyage.name_en?.trim() || voyage.name_it?.trim() || voyage.name;
-
 export function getLocalizedVoyageName(
   voyage: Pick<Voyage, "name" | "name_en" | "name_it">,
   lang: Language
@@ -746,15 +744,28 @@ export function getLocalizedVoyageDescription(
   return value || null;
 }
 
-export function buildVoyagePath(voyage: Pick<Voyage, "id" | "name" | "name_en" | "name_it">): string {
-  return `/voyages/${voyage.id}--${slugifyVoyageName(getVoyageSlugSource(voyage))}`;
+export function buildVoyagePath(
+  voyage: Pick<Voyage, "id" | "slug" | "slug_en" | "slug_it">,
+  lang: Language
+): string {
+  const slug = slugForLang(voyage, lang);
+  return `/voyages/${slug || voyage.id}`;
 }
 
-export function getVoyageIdFromRouteParam(value?: string | null): string | null {
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Legacy voyage links were `/voyages/<uuid>` or `/voyages/<uuid>--<slug>`.
+ * Detects those so VoyagePage can fall back to an id lookup and redirect to
+ * the canonical slug URL.
+ */
+export function getLegacyVoyageIdFromRouteParam(value?: string | null): string | null {
   if (!value) return null;
   const [id] = value.split("--");
-  return id || null;
+  return id && UUID_PATTERN.test(id) ? id : null;
 }
+
+export { bilingualSlugOrFilter, slugForLang, type WithBilingualSlugs };
 
 export function formatIsoDate(value?: string | null, locale = "en-US"): string | null {
   if (!value) return null;
@@ -1637,6 +1648,10 @@ export interface Voyage {
   name: string;
   name_en: string | null;
   name_it: string | null;
+  /** Canonical / legacy fallback slug (always present). See slugForLang in lib/article-slug.ts. */
+  slug: string;
+  slug_en?: string | null;
+  slug_it?: string | null;
   description: string;
   description_en: string | null;
   description_it: string | null;

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Clock, Eye, Globe, UserCheck, Users } from "lucide-react";
+import { BookOpen, Clock, Eye, Globe, Heart, MessageCircle, UserCheck, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -133,6 +133,13 @@ export default function AdminArticleInsightDialog({ open, onOpenChange, articleI
                 value={formatDwell(s.avg_dwell_ms)}
                 hint={s.measured_dwell_count ? `su ${formatCount(s.measured_dwell_count)} letture` : "in raccolta"}
               />
+              <Stat
+                icon={Heart}
+                label="Mi piace"
+                value={formatCount(s.like_count)}
+                hint={`${formatCount(s.registered_likes)} registrati / ${formatCount(s.anonymous_likes)} anonimi`}
+              />
+              <Stat icon={MessageCircle} label="Commenti" value={formatCount(s.comment_count)} />
             </div>
 
             <div className="space-y-2">
@@ -143,6 +150,18 @@ export default function AdminArticleInsightDialog({ open, onOpenChange, articleI
                 segments={[
                   { label: "Registrati", value: s.registered_views, className: "bg-accent/80" },
                   { label: "Anonimi", value: s.anonymous_views, className: "bg-muted-foreground/40" },
+                ]}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                <Heart className="size-3.5" /> Mi piace: registrati vs anonimi
+              </p>
+              <SplitBar
+                segments={[
+                  { label: "Registrati", value: s.registered_likes, className: "bg-red-500/70" },
+                  { label: "Anonimi", value: s.anonymous_likes, className: "bg-muted-foreground/40" },
                 ]}
               />
             </div>

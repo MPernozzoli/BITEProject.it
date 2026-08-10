@@ -347,7 +347,7 @@ const VoyageLegend = ({
           />
           <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
           <Link
-            to={buildVoyagePath(voyage)}
+            to={buildVoyagePath(voyage, lang)}
             onClick={(e) => e.stopPropagation()}
             className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-[9px] font-sans font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-accent hover:text-accent"
             title={lang === "it" ? "Vedi il viaggio completo" : "View full voyage"}
@@ -467,7 +467,7 @@ const VoyageLegend = ({
           ))}
           {articles.length > 2 && (
             <Link
-              to={`${buildVoyagePath(voyage)}#articoli-collegati`}
+              to={`${buildVoyagePath(voyage, lang)}#articoli-collegati`}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-accent hover:text-foreground transition-colors"
             >

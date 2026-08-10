@@ -6,13 +6,16 @@ const MAIN_SITE = "https://biteproject.it";
 const LANG = "en";
 
 /**
- * Mirrors slugifyVoyageName() / buildVoyagePath() in apps/web/src/lib/voyage-utils.ts.
- * It is copied rather than imported because that module resolves `@/lib/i18n`, an alias
- * that points at apps/web in the main site and at apps/data here.
+ * Mirrors slugifyVoyageName() in apps/web/src/lib/voyage-utils.ts. It is copied rather
+ * than imported because that module resolves `@/lib/i18n`, an alias that points at
+ * apps/web in the main site and at apps/data here.
  *
- * Safe to copy: the main site reads back only the id before the `--`
- * (getVoyageIdFromRouteParam), so the slug is cosmetic. If the two ever drift, the link
- * still resolves to the right voyage.
+ * The main site's canonical voyage URLs are now `/voyages/<slug>` (no id prefix), read
+ * from a `slug`/`slug_en` column this portal's synced `voyages` table doesn't carry.
+ * This `<uuid>--<slug>` form is treated by the main site as a legacy link: it looks up
+ * the voyage by id and redirects to the canonical slug URL, so it still resolves to the
+ * right voyage — just via one extra redirect. Safe to leave as-is unless that legacy
+ * fallback is ever removed on the main site.
  */
 const slugifyVoyageName = (value: string): string =>
   value
