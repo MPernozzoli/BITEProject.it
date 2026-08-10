@@ -23,6 +23,8 @@ type AdminBookingEvent =
   | 'admin_payment_received'
   | 'admin_plan_change'
   | 'admin_balance_deadline_missed'
+  | 'admin_contribution_proposal_received'
+  | 'admin_contribution_proposal_resolved'
 
 /**
  * A delay reaches admins as admin_plan_change, but there is nothing to approve:
@@ -66,6 +68,8 @@ const COPY = {
       admin_plan_change: 'Cambio planning da approvare.',
       schedule_delayed: 'Viaggio in ritardo: avvisati.',
       admin_balance_deadline_missed: 'Saldo non versato entro la scadenza.',
+      admin_contribution_proposal_received: 'Nuova proposta di contributo/workaway.',
+      admin_contribution_proposal_resolved: 'Il candidato ha risposto alla contro-proposta.',
     },
     intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -80,6 +84,10 @@ const COPY = {
         return `${prefix}un ospite non ha versato il proprio saldo entro la scadenza su ${voyageName}: la sua partecipazione e stata annullata automaticamente e il posto liberato. Il resto della prenotazione di ${traveler} resta confermato. L'acconto e trattenuto di default; puoi comunque rimborsarlo dalla pagina Rimborsi.`
       if (eventType === 'admin_balance_deadline_missed')
         return `${prefix}${traveler} non ha versato il saldo entro la scadenza su ${voyageName}: la prenotazione e stata annullata automaticamente. L'acconto e trattenuto di default; puoi comunque rimborsarlo dalla pagina Rimborsi.`
+      if (eventType === 'admin_contribution_proposal_received')
+        return `${prefix}${traveler} ha proposto un contributo o workaway alternativo per ${voyageName}. Apri la gestione booking per esaminarla.`
+      if (eventType === 'admin_contribution_proposal_resolved')
+        return `${prefix}${traveler} ha risposto alla tua contro-proposta di contributo per ${voyageName}. Controlla l'esito nella gestione booking.`
       return `${prefix}${traveler} ha inviato una nuova richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri gestione booking',
@@ -112,6 +120,8 @@ const COPY = {
       admin_plan_change: 'Da approvare',
       schedule_delayed: 'In ritardo',
       admin_balance_deadline_missed: 'Decaduto per mancato saldo',
+      admin_contribution_proposal_received: 'Proposta da esaminare',
+      admin_contribution_proposal_resolved: 'Risposta del candidato',
     },
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
@@ -127,6 +137,8 @@ const COPY = {
       admin_plan_change: 'Plan change approval needed.',
       schedule_delayed: 'Voyage running late: travellers told.',
       admin_balance_deadline_missed: 'Balance deadline missed.',
+      admin_contribution_proposal_received: 'New contribution/workaway proposal.',
+      admin_contribution_proposal_resolved: 'Traveller responded to the counter-proposal.',
     },
     intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -141,6 +153,10 @@ const COPY = {
         return `${prefix}a guest did not pay their balance by the deadline on ${voyageName}: their participation was cancelled automatically and the seat released. The rest of ${traveler}'s booking stays confirmed. The deposit is withheld by default; you can still refund it from the Refunds page.`
       if (eventType === 'admin_balance_deadline_missed')
         return `${prefix}${traveler} did not pay the balance by the deadline on ${voyageName}: the booking was cancelled automatically. The deposit is withheld by default; you can still refund it from the Refunds page.`
+      if (eventType === 'admin_contribution_proposal_received')
+        return `${prefix}${traveler} proposed an alternative contribution or workaway for ${voyageName}. Open booking management to review it.`
+      if (eventType === 'admin_contribution_proposal_resolved')
+        return `${prefix}${traveler} responded to your contribution counter-proposal for ${voyageName}. Check the outcome in booking management.`
       return `${prefix}${traveler} submitted a new berth request for ${voyageName}.`
     },
     cta: 'Open booking management',
@@ -173,6 +189,8 @@ const COPY = {
       admin_plan_change: 'Needs approval',
       schedule_delayed: 'Running late',
       admin_balance_deadline_missed: 'Lapsed — balance missed',
+      admin_contribution_proposal_received: 'Proposal to review',
+      admin_contribution_proposal_resolved: 'Traveller response',
     },
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
@@ -187,6 +205,8 @@ function normalizeEventType(value?: string | null): AdminBookingEvent {
     'admin_payment_received',
     'admin_plan_change',
     'admin_balance_deadline_missed',
+    'admin_contribution_proposal_received',
+    'admin_contribution_proposal_resolved',
   ]
   return allowed.includes(value as AdminBookingEvent) ? (value as AdminBookingEvent) : 'admin_new_booking'
 }

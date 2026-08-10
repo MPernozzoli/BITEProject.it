@@ -30,12 +30,13 @@ function isRefundTrigger(value: string): value is RefundTrigger {
     value === "admin_cancelled" ||
     value === "admin_rejected" ||
     value === "user_cancelled" ||
-    value === "admin_plan_change_declined"
+    value === "admin_plan_change_declined" ||
+    value === "user_rejected_contribution_counter"
   );
 }
 
 function eventFor(trigger: RefundTrigger): "cancelled" | "rejected" {
-  return trigger === "admin_rejected" ? "rejected" : "cancelled";
+  return trigger === "admin_rejected" || trigger === "user_rejected_contribution_counter" ? "rejected" : "cancelled";
 }
 
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {
@@ -65,7 +66,8 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
     sendJson(res, 400, { error: "invalid_refund_request" });
     return;
   }
-  if ((trigger === "admin_rejected" && status !== "rejected") || (trigger !== "admin_rejected" && status !== "cancelled")) {
+  const expectedStatus = eventFor(trigger);
+  if (status !== expectedStatus) {
     sendJson(res, 400, { error: "status_trigger_mismatch" });
     return;
   }

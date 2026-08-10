@@ -33,6 +33,10 @@ type BookingEvent =
   | 'plan_change_auto_accepted'
   | 'balance_reminder'
   | 'balance_deadline_missed'
+  | 'contribution_proposal_received'
+  | 'contribution_proposal_accepted'
+  | 'contribution_proposal_countered'
+  | 'contribution_proposal_rejected'
 
 /**
  * A delay arrives as plan_change_pending, but reads nothing like one: the legs are
@@ -105,6 +109,10 @@ const COPY = {
       schedule_delayed: 'Il viaggio sta procedendo in ritardo.',
       balance_reminder: 'Il saldo scade a breve.',
       balance_deadline_missed: 'Scadenza saldo non rispettata.',
+      contribution_proposal_received: 'Proposta ricevuta.',
+      contribution_proposal_accepted: 'Proposta accettata.',
+      contribution_proposal_countered: 'Contro-proposta ricevuta.',
+      contribution_proposal_rejected: 'Proposta non accettata.',
     },
     intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -129,6 +137,10 @@ const COPY = {
       if (eventType === 'balance_deadline_missed') return `${prefix}la scadenza per versare il saldo di ${voyageName} e passata: la prenotazione e stata annullata e l'acconto versato non e rimborsabile.`
       if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
+      if (eventType === 'contribution_proposal_received') return `${prefix}abbiamo ricevuto la tua proposta di contributo/workaway per ${voyageName}. La esamineremo e ti risponderemo a breve.`
+      if (eventType === 'contribution_proposal_accepted') return `${prefix}la tua proposta per ${voyageName} e stata accettata. Se resta un saldo da versare, apri la tua area booking per completare il pagamento.`
+      if (eventType === 'contribution_proposal_countered') return `${prefix}per ${voyageName} ti proponiamo una contro-proposta sul contributo. Apri la tua area booking per accettarla o rifiutarla.`
+      if (eventType === 'contribution_proposal_rejected') return `${prefix}la tua proposta per ${voyageName} non e stata accettata. Se avevi gia versato il contributo fisso, il rimborso e automatico.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri booking',
@@ -196,6 +208,10 @@ const COPY = {
       schedule_delayed: 'In ritardo',
       balance_reminder: 'Saldo in scadenza',
       balance_deadline_missed: 'Decaduto per mancato saldo',
+      contribution_proposal_received: 'Proposta in revisione',
+      contribution_proposal_accepted: 'Proposta accettata',
+      contribution_proposal_countered: 'Contro-proposta ricevuta',
+      contribution_proposal_rejected: 'Proposta non accettata',
     },
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
@@ -221,6 +237,10 @@ const COPY = {
       schedule_delayed: 'The voyage is running late.',
       balance_reminder: 'The balance is due soon.',
       balance_deadline_missed: 'Balance deadline missed.',
+      contribution_proposal_received: 'Proposal received.',
+      contribution_proposal_accepted: 'Proposal accepted.',
+      contribution_proposal_countered: 'Counter-proposal received.',
+      contribution_proposal_rejected: 'Proposal not accepted.',
     },
     intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -245,6 +265,10 @@ const COPY = {
       if (eventType === 'balance_deadline_missed') return `${prefix}the deadline to pay the balance for ${voyageName} has passed: the booking was cancelled and the deposit you paid is not refundable.`
       if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
+      if (eventType === 'contribution_proposal_received') return `${prefix}we received your contribution/workaway proposal for ${voyageName}. We will review it and get back to you soon.`
+      if (eventType === 'contribution_proposal_accepted') return `${prefix}your proposal for ${voyageName} was accepted. If a balance remains, open your booking area to complete the payment.`
+      if (eventType === 'contribution_proposal_countered') return `${prefix}we have a counter-proposal on the contribution for ${voyageName}. Open your booking area to accept or reject it.`
+      if (eventType === 'contribution_proposal_rejected') return `${prefix}your proposal for ${voyageName} was not accepted. If you had already paid the fixed contribution, the refund is automatic.`
       return `${prefix}we received your berth request for ${voyageName}.`
     },
     cta: 'Open bookings',
@@ -312,6 +336,10 @@ const COPY = {
       schedule_delayed: 'Running late',
       balance_reminder: 'Balance due soon',
       balance_deadline_missed: 'Lapsed — balance missed',
+      contribution_proposal_received: 'Proposal under review',
+      contribution_proposal_accepted: 'Proposal accepted',
+      contribution_proposal_countered: 'Counter-proposal received',
+      contribution_proposal_rejected: 'Proposal not accepted',
     },
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
@@ -336,6 +364,10 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'plan_change_auto_accepted',
     'balance_reminder',
     'balance_deadline_missed',
+    'contribution_proposal_received',
+    'contribution_proposal_accepted',
+    'contribution_proposal_countered',
+    'contribution_proposal_rejected',
   ]
   return allowed.includes(value as BookingEvent) ? (value as BookingEvent) : 'requested'
 }

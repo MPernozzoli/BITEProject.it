@@ -211,6 +211,8 @@ const ADMIN_EVENT_TYPES = new Set([
   'admin_payment_received',
   'admin_plan_change',
   'admin_balance_deadline_missed',
+  'admin_contribution_proposal_received',
+  'admin_contribution_proposal_resolved',
 ])
 
 function buildAdminPushMessage(params: {
@@ -273,6 +275,18 @@ function buildAdminPushMessage(params: {
         body: `${traveler}'s booking for ${voyageName}${legs} lapsed for a missed balance payment.`,
       }
     }
+    if (params.eventType === 'admin_contribution_proposal_received') {
+      return {
+        title: 'New contribution proposal',
+        body: `${traveler} proposed an alternative contribution/workaway for ${voyageName}${legs}.`,
+      }
+    }
+    if (params.eventType === 'admin_contribution_proposal_resolved') {
+      return {
+        title: 'Traveller responded',
+        body: `${traveler} responded to your counter-proposal for ${voyageName}${legs}.`,
+      }
+    }
     return {
       title: 'New berth request',
       body: `${traveler} requested to join ${voyageName}${legs}.`,
@@ -319,6 +333,18 @@ function buildAdminPushMessage(params: {
     return {
       title: 'Saldo non versato entro la scadenza',
       body: `La prenotazione di ${traveler} per ${voyageName}${legs} e decaduta per mancato saldo.`,
+    }
+  }
+  if (params.eventType === 'admin_contribution_proposal_received') {
+    return {
+      title: 'Nuova proposta di contributo',
+      body: `${traveler} ha proposto un contributo/workaway alternativo per ${voyageName}${legs}.`,
+    }
+  }
+  if (params.eventType === 'admin_contribution_proposal_resolved') {
+    return {
+      title: 'Risposta del candidato',
+      body: `${traveler} ha risposto alla tua contro-proposta per ${voyageName}${legs}.`,
     }
   }
   return {
@@ -387,6 +413,18 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'balance_deadline_missed') {
       return { title: 'Balance deadline missed', body: `Your booking for ${voyageName}${legs} lapsed for a missed balance payment.` }
     }
+    if (params.eventType === 'contribution_proposal_received') {
+      return { title: 'Proposal received', body: `We received your contribution/workaway proposal for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'contribution_proposal_accepted') {
+      return { title: 'Proposal accepted', body: `Your proposal for ${voyageName}${legs} was accepted.` }
+    }
+    if (params.eventType === 'contribution_proposal_countered') {
+      return { title: 'Counter-proposal received', body: `We have a counter-proposal for ${voyageName}${legs}.` }
+    }
+    if (params.eventType === 'contribution_proposal_rejected') {
+      return { title: 'Proposal not accepted', body: `Your proposal for ${voyageName}${legs} was not accepted.` }
+    }
     return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
   }
 
@@ -437,6 +475,18 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'balance_deadline_missed') {
     return { title: 'Scadenza saldo non rispettata', body: `La tua prenotazione per ${voyageName}${legs} e decaduta per mancato saldo.` }
+  }
+  if (params.eventType === 'contribution_proposal_received') {
+    return { title: 'Proposta ricevuta', body: `Abbiamo ricevuto la tua proposta per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'contribution_proposal_accepted') {
+    return { title: 'Proposta accettata', body: `La tua proposta per ${voyageName}${legs} e stata accettata.` }
+  }
+  if (params.eventType === 'contribution_proposal_countered') {
+    return { title: 'Contro-proposta ricevuta', body: `Abbiamo una contro-proposta per ${voyageName}${legs}.` }
+  }
+  if (params.eventType === 'contribution_proposal_rejected') {
+    return { title: 'Proposta non accettata', body: `La tua proposta per ${voyageName}${legs} non e stata accettata.` }
   }
   return { title: 'Aggiornamento booking viaggio', body: `C'e un aggiornamento per ${voyageName}${legs}.` }
 }

@@ -112,6 +112,12 @@ export interface BookingRequest {
   /** Admin-granted "omaggio": the booking is exempt from the contribution payment gate. */
   is_comped?: boolean;
   payment_mode?: "lead_pays_all" | "each_pays_own";
+  contribution_proposal_status?: "none" | "pending_admin_review" | "pending_user_approval" | "accepted" | "rejected";
+  contribution_proposal_metadata?: Record<string, unknown> | null;
+  /** True while a contribution/workaway proposal is unresolved: only the €20 fixed minimum is collected up front. */
+  contribution_fixed_only_payment?: boolean;
+  /** The variable contribution actually agreed after negotiation (0 for a pure workaway trade). */
+  contribution_resolved_variable_cents?: number | null;
 }
 
 export interface BookingRequestLeg {
@@ -158,6 +164,20 @@ export interface BookingSettings {
   second_briefing_content_en?: string | null;
   terms_content_it: string | null;
   terms_content_en: string | null;
+  contribution_proposal_enabled: boolean;
+  contribution_proposal_min_percent: number;
+  contribution_proposal_max_percent: number;
+  workaway_enabled: boolean;
+  workaway_role_keys: string[];
+}
+
+export interface WorkawayRole {
+  id: string;
+  key: string;
+  label_it: string;
+  label_en: string;
+  active: boolean;
+  sort_order: number;
 }
 
 export interface BookingTask {

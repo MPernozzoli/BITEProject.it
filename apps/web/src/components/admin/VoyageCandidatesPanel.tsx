@@ -12,6 +12,7 @@ import {
   type BookingVoyage,
   type BookingWaypoint,
   type VoyageBookingStatus,
+  type WorkawayRole,
   formatBookingDate,
   formatBookingWindow,
   getBookingStatusClass,
@@ -21,8 +22,33 @@ import {
   getLocalizedBookingVoyageName,
 } from "@/lib/booking-utils";
 import { experienceOptions, getCandidateLanguageLabel, languageLevelOptions, normalizeCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
+import { formatDepositEur } from "@/lib/booking-deposit";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import ProfileAvatar from "@/components/ProfileAvatar";
+
+type BookingContributionProposal = {
+  id: string;
+  booking_request_id: string;
+  proposed_by: "candidate" | "admin";
+  status: "pending_admin_review" | "pending_user_approval" | "accepted" | "rejected" | "superseded";
+  proposal_kind: "contribution" | "workaway" | "hybrid";
+  standard_variable_cents: number;
+  proposed_variable_cents: number | null;
+  proposed_variable_percent: number | null;
+  workaway_role_keys: string[];
+  workaway_other_role_text: string | null;
+  workaway_message: string | null;
+  workaway_hours_commitment_type: "per_day" | "per_week" | null;
+  workaway_hours_commitment_value: number | null;
+  workaway_cv_storage_path: string | null;
+  workaway_portfolio_storage_path: string | null;
+  workaway_portfolio_url: string | null;
+  workaway_requests_compensation: boolean;
+  workaway_requested_compensation_cents: number | null;
+  candidate_message: string | null;
+  admin_note: string | null;
+  created_at: string;
+};
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -94,6 +120,11 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   const [waypoints, setWaypoints] = useState<BookingWaypoint[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
   const [deposits, setDeposits] = useState<BookingDeposit[]>([]);
+  const [contributionProposals, setContributionProposals] = useState<BookingContributionProposal[]>([]);
+  const [workawayRoles, setWorkawayRoles] = useState<WorkawayRole[]>([]);
+  /** Admin's counter-proposal input for the negotiated variable amount, per request (EUR string). */
+  const [contributionCounterEur, setContributionCounterEur] = useState<Record<string, string>>({});
+  const [contributionCounterNote, setContributionCounterNote] = useState<Record<string, string>>({});
   const [proposalLegIds, setProposalLegIds] = useState<Record<string, string[]>>({});
   const [proposalNotes, setProposalNotes] = useState<Record<string, string>>({});
   /** Why each proposal is being made — decides the refund if the candidate declines it. */
@@ -108,7 +139,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     const requestsQuery = voyageId
       ? typedSupabase.from("voyage_booking_requests").select("*").eq("voyage_id", voyageId).order("requested_at", { ascending: false })
       : typedSupabase.from("voyage_booking_requests").select("*").order("requested_at", { ascending: false });
-    const [requestsRes, voyagesRes, waypointsRes, legsRes] = await Promise.all([
+    const [requestsRes, voyagesRes, waypointsRes, legsRes, workawayRolesRes] = await Promise.all([
       requestsQuery,
       typedSupabase
         .from("voyages")
@@ -122,6 +153,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
         .from("voyage_bookable_legs")
         .select("*")
         .order("sort_order", { ascending: true }),
+      typedSupabase.from("voyage_workaway_roles").select("*"),
     ]);
 
     if (requestsRes.error || voyagesRes.error || waypointsRes.error || legsRes.error) {
@@ -130,10 +162,12 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
       return;
     }
 
+    setWorkawayRoles((workawayRolesRes.data as WorkawayRole[] | null) || []);
+
     const loadedRequests = ((requestsRes.data as BookingRequest[] | null) || []).filter((request) => !request.is_crew);
     const requestIds = loadedRequests.map((request) => request.id);
     const profileIds = [...new Set(loadedRequests.map((request) => request.profile_id))];
-    const [requestLegsRes, profilesRes, depositsRes] = await Promise.all([
+    const [requestLegsRes, profilesRes, depositsRes, contributionProposalsRes] = await Promise.all([
       requestIds.length
         ? typedSupabase.from("voyage_booking_request_legs").select("*").in("booking_request_id", requestIds)
         : Promise.resolve({ data: [], error: null }),
@@ -150,10 +184,23 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             .in("booking_request_id", requestIds)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
+      requestIds.length
+        ? typedSupabase
+            .from("voyage_booking_contribution_proposals")
+            .select("*")
+            .in("booking_request_id", requestIds)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    if (requestLegsRes.error || profilesRes.error || depositsRes.error) {
-      toast.error(requestLegsRes.error?.message || profilesRes.error?.message || depositsRes.error?.message || "Unable to load candidate details");
+    if (requestLegsRes.error || profilesRes.error || depositsRes.error || contributionProposalsRes.error) {
+      toast.error(
+        requestLegsRes.error?.message ||
+          profilesRes.error?.message ||
+          depositsRes.error?.message ||
+          contributionProposalsRes.error?.message ||
+          "Unable to load candidate details",
+      );
       setLoading(false);
       return;
     }
@@ -165,6 +212,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     setRequestLegs((requestLegsRes.data as BookingRequestLeg[] | null) || []);
     setProfiles((profilesRes.data as CandidateProfile[] | null) || []);
     setDeposits((depositsRes.data as BookingDeposit[] | null) || []);
+    setContributionProposals((contributionProposalsRes.data as BookingContributionProposal[] | null) || []);
     setLoading(false);
   }, [voyageId]);
 
@@ -200,6 +248,19 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     }
     return map;
   }, [deposits]);
+  // Latest non-superseded proposal per request (rows come pre-sorted created_at desc from load()).
+  const latestContributionProposalByRequest = useMemo(() => {
+    const map: Record<string, BookingContributionProposal> = {};
+    for (const proposal of contributionProposals) {
+      if (proposal.status === "superseded") continue;
+      if (!map[proposal.booking_request_id]) map[proposal.booking_request_id] = proposal;
+    }
+    return map;
+  }, [contributionProposals]);
+  const workawayRoleLabel = useCallback(
+    (key: string) => workawayRoles.find((role) => role.key === key)?.label_it || key,
+    [workawayRoles],
+  );
 
   // Deliberately does NOT include plan_change_status === "pending_user_approval": that means an
   // ADMIN-sent proposal is awaiting the TRAVELLER, not something for the admin to review here —
@@ -328,6 +389,53 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     await load();
   };
 
+  const acceptContributionProposal = async (request: BookingRequest) => {
+    setSavingId(request.id);
+    const { error } = await typedSupabase.rpc("admin_accept_voyage_booking_contribution_proposal", {
+      _booking_request_id: request.id,
+      _admin_note: contributionCounterNote[request.id] || null,
+    });
+    setSavingId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Proposta accettata. Se resta un saldo da versare, verra richiesto al candidato.");
+    await load();
+  };
+
+  const counterContributionProposal = async (request: BookingRequest) => {
+    const rawEur = contributionCounterEur[request.id];
+    const counterEur = Number(rawEur);
+    if (!rawEur || !Number.isFinite(counterEur) || counterEur < 0) {
+      toast.error("Indica un importo valido per la contro-proposta.");
+      return;
+    }
+    setSavingId(request.id);
+    const { error } = await typedSupabase.rpc("admin_counter_voyage_booking_contribution_proposal", {
+      _booking_request_id: request.id,
+      _proposed_variable_cents: Math.round(counterEur * 100),
+      _admin_note: contributionCounterNote[request.id] || null,
+    });
+    setSavingId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Contro-proposta inviata al candidato.");
+    await load();
+  };
+
+  const downloadWorkawayFile = async (path: string | null) => {
+    if (!path) return;
+    const { data, error } = await supabase.storage.from("workaway-applications").createSignedUrl(path, 60);
+    if (error || !data?.signedUrl) {
+      toast.error("Impossibile generare il link al file.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+
   const profileSocialLinks = (profile?: CandidateProfile) => {
     if (!profile) return [];
     return [
@@ -454,6 +562,10 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             const socialLinks = profileSocialLinks(profile);
             const requestDeposits = depositsByRequest[request.id] || [];
             const hasPendingDeposit = requestDeposits.some((deposit) => deposit.status === "pending");
+            const contributionProposal = latestContributionProposalByRequest[request.id];
+            const hasUnresolvedContributionProposal =
+              contributionProposal &&
+              (contributionProposal.status === "pending_admin_review" || contributionProposal.status === "pending_user_approval");
             return (
               <article key={request.id} className="rounded-[30px] border border-border/70 bg-background/40 p-5 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -669,6 +781,173 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                       </button>
                     </div>
 
+                    {contributionProposal && (
+                      <div className="border-t border-border/70 pt-4">
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                          Negoziazione contributo / workaway
+                        </p>
+                        <div className="mt-2 rounded-2xl border border-border/70 bg-background/60 p-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                                contributionProposal.status === "accepted"
+                                  ? "border-emerald-300/70 bg-emerald-100/70 text-emerald-900"
+                                  : contributionProposal.status === "rejected"
+                                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                                    : "border-amber-300/70 bg-amber-100/70 text-amber-900"
+                              }`}
+                            >
+                              {contributionProposal.status === "pending_admin_review"
+                                ? "In attesa di revisione"
+                                : contributionProposal.status === "pending_user_approval"
+                                  ? "Contro-proposta in attesa del candidato"
+                                  : contributionProposal.status === "accepted"
+                                    ? "Accettata"
+                                    : "Rifiutata"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {contributionProposal.proposed_by === "candidate" ? "Proposta del candidato" : "Contro-proposta admin"}
+                            </span>
+                          </div>
+
+                          {(contributionProposal.proposal_kind === "contribution" || contributionProposal.proposal_kind === "hybrid") && (
+                            <p className="mt-2 text-xs text-foreground">
+                              Contributo variabile proposto:{" "}
+                              <span className="font-semibold">
+                                {contributionProposal.proposed_variable_cents != null
+                                  ? formatDepositEur(contributionProposal.proposed_variable_cents / 100, "it")
+                                  : "—"}
+                              </span>{" "}
+                              su una quota standard di {formatDepositEur(contributionProposal.standard_variable_cents / 100, "it")}
+                              {contributionProposal.proposed_variable_percent != null
+                                ? ` (${contributionProposal.proposed_variable_percent}%)`
+                                : ""}
+                              . Il fisso di €20 resta invariato.
+                            </p>
+                          )}
+
+                          {(contributionProposal.proposal_kind === "workaway" || contributionProposal.proposal_kind === "hybrid") && (
+                            <div className="mt-2 text-xs text-foreground">
+                              <p className="font-semibold">Workaway proposto</p>
+                              {contributionProposal.workaway_role_keys.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  {contributionProposal.workaway_role_keys.map((key) => (
+                                    <span key={key} className="rounded-full border border-border/70 bg-background/40 px-2.5 py-1 text-[11px]">
+                                      {workawayRoleLabel(key)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {contributionProposal.workaway_other_role_text && (
+                                <p className="mt-1 text-muted-foreground">Altro: {contributionProposal.workaway_other_role_text}</p>
+                              )}
+                              {contributionProposal.workaway_message && (
+                                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{contributionProposal.workaway_message}</p>
+                              )}
+                              {contributionProposal.workaway_hours_commitment_value != null && (
+                                <p className="mt-1 text-muted-foreground">
+                                  Ore garantite: {contributionProposal.workaway_hours_commitment_value}{" "}
+                                  {contributionProposal.workaway_hours_commitment_type === "per_week" ? "a settimana" : "al giorno"}
+                                </p>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {contributionProposal.workaway_cv_storage_path && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadWorkawayFile(contributionProposal.workaway_cv_storage_path)}
+                                    className="glass-chip inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:text-accent"
+                                  >
+                                    <ExternalLink size={11} /> CV
+                                  </button>
+                                )}
+                                {contributionProposal.workaway_portfolio_storage_path && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadWorkawayFile(contributionProposal.workaway_portfolio_storage_path)}
+                                    className="glass-chip inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:text-accent"
+                                  >
+                                    <ExternalLink size={11} /> Portfolio
+                                  </button>
+                                )}
+                                {contributionProposal.workaway_portfolio_url && (
+                                  <a
+                                    href={contributionProposal.workaway_portfolio_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="glass-chip inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-foreground hover:text-accent"
+                                  >
+                                    <ExternalLink size={11} /> Link
+                                  </a>
+                                )}
+                              </div>
+                              {contributionProposal.workaway_requests_compensation && (
+                                <p className="mt-2 rounded-xl border border-sky-300/70 bg-sky-100/70 p-2 text-[11px] font-semibold text-sky-900">
+                                  Il candidato richiede inoltre un compenso di{" "}
+                                  {contributionProposal.workaway_requested_compensation_cents != null
+                                    ? formatDepositEur(contributionProposal.workaway_requested_compensation_cents / 100, "it")
+                                    : "importo non specificato"}{" "}
+                                  in aggiunta al viaggio.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {contributionProposal.candidate_message && (
+                            <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+                              Messaggio del candidato: {contributionProposal.candidate_message}
+                            </p>
+                          )}
+                        </div>
+
+                        {hasUnresolvedContributionProposal && contributionProposal.proposed_by === "candidate" && (
+                          <div className="mt-3">
+                            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={contributionCounterEur[request.id] || ""}
+                                onChange={(event) =>
+                                  setContributionCounterEur((current) => ({ ...current, [request.id]: event.target.value }))
+                                }
+                                placeholder="Contro-proposta (EUR)"
+                                className="w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void counterContributionProposal(request)}
+                                disabled={savingId === request.id}
+                                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                              >
+                                Contro-proponi
+                              </button>
+                            </div>
+                            <textarea
+                              value={contributionCounterNote[request.id] || ""}
+                              onChange={(event) =>
+                                setContributionCounterNote((current) => ({ ...current, [request.id]: event.target.value }))
+                              }
+                              rows={2}
+                              className="mt-2 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                              placeholder="Nota per il candidato (facoltativa)"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void acceptContributionProposal(request)}
+                              disabled={savingId === request.id}
+                              className="glass-chip mt-2 inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                            >
+                              {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                              Accetta come proposto
+                            </button>
+                            <p className="mt-1.5 text-[11px] text-muted-foreground">
+                              Per rifiutare la proposta usa "Scarta" qui sotto: il contributo fisso gia versato viene rimborsato automaticamente.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="border-t border-border/70 pt-4">
                       <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Messaggio decisione</p>
                       <textarea
@@ -682,8 +961,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         <button
                           type="button"
                           onClick={() => void setStatus(request, "admin_approved")}
-                          disabled={savingId === request.id || hasPendingDeposit}
-                          title={hasPendingDeposit ? "Pagamento contributo in attesa di conferma Bunq." : undefined}
+                          disabled={savingId === request.id || hasPendingDeposit || Boolean(hasUnresolvedContributionProposal)}
+                          title={
+                            hasPendingDeposit
+                              ? "Pagamento contributo in attesa di conferma Bunq."
+                              : hasUnresolvedContributionProposal
+                                ? "Proposta di contributo/workaway non ancora risolta."
+                                : undefined
+                          }
                           className="glass-chip inline-flex flex-1 items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
                         >
                           {savingId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}

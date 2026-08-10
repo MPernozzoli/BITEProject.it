@@ -21,12 +21,21 @@ import BankTransferDialog from "@/components/booking/BankTransferDialog";
 import PaymentMethodDialog from "@/components/booking/PaymentMethodDialog";
 import {
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
+  contributionFixedMinimumEur,
+  legDepositEur,
   perPersonDepositEur,
   shouldApplyContributionFixedMinimum,
   totalDepositEur,
   type PriorVoyageContributionBooking,
 } from "@/lib/booking-deposit";
 import { startDepositPayment } from "@/lib/booking-payment";
+import { applyVoyageBookingWithProposal, uploadWorkawayProposalFiles } from "@/lib/booking-proposal-apply";
+import {
+  contributionProposalKind,
+  emptyContributionProposal,
+  toApplyWithProposalPayload,
+  type ContributionProposal,
+} from "@/lib/booking-workaway-proposal";
 import {
   buildCandidateInfoPrefill,
   emptyCandidateInfo,
@@ -60,14 +69,24 @@ import {
   type BookableLegAvailability,
   type BookingRequest,
   type BookingWaypoint,
+  type WorkawayRole,
   getLegLabel,
   getLegRangeBetweenWaypoints,
   isVoyageBookableNow,
 } from "@/lib/booking-utils";
 
 type SupabaseRpcResponse<T> = { data: T | null; error: { message?: string } | null };
+type SupabaseUntypedResponse = { data: unknown; error: { message: string } | null };
+type SupabaseUntypedQueryBuilder = PromiseLike<SupabaseUntypedResponse> & {
+  select: (columns?: string) => SupabaseUntypedQueryBuilder;
+  eq: (column: string, value: unknown) => SupabaseUntypedQueryBuilder;
+  order: (column: string, options?: { ascending?: boolean }) => SupabaseUntypedQueryBuilder;
+  maybeSingle: () => PromiseLike<SupabaseUntypedResponse>;
+};
 type SupabaseRpcClient = {
   rpc: <T = unknown>(fn: string, args?: Record<string, unknown>) => Promise<SupabaseRpcResponse<T>>;
+  /** Escape hatch for tables/columns not yet in the generated Supabase types (new migrations). */
+  from: (table: string) => SupabaseUntypedQueryBuilder;
 };
 const bookingRpcClient = supabase as unknown as SupabaseRpcClient;
 
@@ -127,6 +146,9 @@ const Journal = () => {
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingCandidateInfo, setBookingCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [bookingCandidateInfoTouched, setBookingCandidateInfoTouched] = useState(false);
+  const [bookingProposal, setBookingProposal] = useState<ContributionProposal>(emptyContributionProposal);
+  const [bookingCvFile, setBookingCvFile] = useState<File | null>(null);
+  const [bookingPortfolioFile, setBookingPortfolioFile] = useState<File | null>(null);
   const [bookingSidebarStep, setBookingSidebarStep] = useState<"legs" | "about">("legs");
   const [bookingSidebarResetKey, setBookingSidebarResetKey] = useState("initial");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
@@ -196,6 +218,42 @@ const Journal = () => {
         preferredLanguage: profileRes.data?.preferred_language,
         secondaryLanguage: profileRes.data?.secondary_language,
       });
+    },
+  });
+
+  const { data: bookingProposalSettings } = useQuery({
+    queryKey: ["booking-proposal-settings", bookingAnchor?.voyageId],
+    enabled: Boolean(bookingAnchor?.voyageId),
+    queryFn: async () => {
+      const { data, error } = await bookingRpcClient
+        .from("voyage_booking_settings")
+        .select(
+          "contribution_proposal_enabled, contribution_proposal_min_percent, contribution_proposal_max_percent, workaway_enabled, workaway_role_keys",
+        )
+        .eq("voyage_id", bookingAnchor!.voyageId)
+        .maybeSingle();
+      if (error) return null;
+      return data as {
+        contribution_proposal_enabled: boolean;
+        contribution_proposal_min_percent: number;
+        contribution_proposal_max_percent: number;
+        workaway_enabled: boolean;
+        workaway_role_keys: string[];
+      } | null;
+    },
+  });
+
+  const { data: workawayRoles = [] } = useQuery({
+    queryKey: ["workaway-roles"],
+    enabled: Boolean(bookingProposalSettings?.workaway_enabled),
+    queryFn: async () => {
+      const { data, error } = await bookingRpcClient
+        .from("voyage_workaway_roles")
+        .select("*")
+        .eq("active", true)
+        .order("sort_order", { ascending: true });
+      if (error) return [];
+      return data as WorkawayRole[];
     },
   });
 
@@ -550,6 +608,9 @@ const Journal = () => {
     setBookingPartySize(1);
     setBookingSidebarStep("legs");
     setBookingSidebarResetKey(`clear-${Date.now()}`);
+    setBookingProposal(emptyContributionProposal);
+    setBookingCvFile(null);
+    setBookingPortfolioFile(null);
   }, [bookingCandidateInfoPrefill]);
 
   const handleParticipate = useCallback((voyageId: string) => {
@@ -770,36 +831,98 @@ const Journal = () => {
       return;
     }
 
+    // Proposals (alternative contribution / workaway) are v1-scoped to solo applications —
+    // the party is negotiated as one block, no per-guest split.
+    const attachedProposal =
+      Math.max(1, bookingPartySize) === 1 ? toApplyWithProposalPayload(bookingProposal) : null;
+
     setBookingSubmitting(true);
     try {
-      type RequestBookingRow = { booking_request_id?: string; booking_status?: BookingRequest["status"] };
-      const { data, error } = await bookingRpcClient.rpc<RequestBookingRow[] | RequestBookingRow>("request_voyage_booking", {
-        _voyage_id: bookingAnchor.voyageId,
-        _leg_ids: selectedBookingLegIds,
-        _party_size: Math.max(1, bookingPartySize),
-        _message: bookingMessage.trim() || null,
-        _candidate_info: bookingCandidateInfo,
-      });
+      let bookingRequestId: string | undefined;
+      let fixedOnlyAmountEur: number | null = null;
 
-      if (error) {
-        if ((error as { code?: string }).code === "BK001") {
+      if (attachedProposal) {
+        const applyResult = await applyVoyageBookingWithProposal({
+          voyageId: bookingAnchor.voyageId,
+          legIds: selectedBookingLegIds,
+          partySize: 1,
+          message: bookingMessage.trim() || null,
+          candidateInfo: bookingCandidateInfo,
+          proposal: attachedProposal,
+          candidateMessage: bookingProposal.candidateMessage.trim() || null,
+        });
+        if (applyResult.ok === false) {
           toast.error(
-            lang === "it"
-              ? "Hai già aderito a una di queste tratte."
-              : "You've already joined one of these legs."
+            applyResult.error === "proposal_out_of_range"
+              ? lang === "it"
+                ? "L'importo proposto è fuori dal range consentito."
+                : "The proposed amount is outside the allowed range."
+              : lang === "it"
+                ? "Invio della proposta non riuscito."
+                : "Couldn't submit your proposal."
           );
           return;
         }
-        throw error;
-      }
-      const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
-      toast.info(
-        lang === "it"
-          ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
-          : "One last step: pay the contribution to submit your application."
-      );
+        bookingRequestId = applyResult.bookingRequestId;
+        fixedOnlyAmountEur = contributionFixedMinimumEur(
+          shouldApplyContributionFixedMinimum(myActiveVoyageContributionBookings, bookingAnchor.voyageId)
+            ? undefined
+            : 0,
+        );
 
-      const bookingRequestId = result?.booking_request_id;
+        if (bookingRequestId && session?.user.id && (bookingCvFile || bookingPortfolioFile)) {
+          try {
+            await uploadWorkawayProposalFiles({
+              bookingRequestId,
+              userId: session.user.id,
+              cvFile: bookingCvFile,
+              portfolioFile: bookingPortfolioFile,
+            });
+          } catch (uploadError) {
+            console.error("[Journal] workaway file upload failed", uploadError);
+            toast.warning(
+              lang === "it"
+                ? "Candidatura inviata, ma il caricamento dei file non e riuscito. Potrai riprovare in seguito."
+                : "Application sent, but the file upload failed. You can try again later."
+            );
+          }
+        }
+
+        toast.info(
+          lang === "it"
+            ? "Ultimo passo: versa la quota fissa per inviare la candidatura. L'eventuale saldo verra richiesto dopo la revisione."
+            : "One last step: pay the fixed share to submit your application. Any balance will be requested after review."
+        );
+      } else {
+        type RequestBookingRow = { booking_request_id?: string; booking_status?: BookingRequest["status"] };
+        const { data, error } = await bookingRpcClient.rpc<RequestBookingRow[] | RequestBookingRow>("request_voyage_booking", {
+          _voyage_id: bookingAnchor.voyageId,
+          _leg_ids: selectedBookingLegIds,
+          _party_size: Math.max(1, bookingPartySize),
+          _message: bookingMessage.trim() || null,
+          _candidate_info: bookingCandidateInfo,
+        });
+
+        if (error) {
+          if ((error as { code?: string }).code === "BK001") {
+            toast.error(
+              lang === "it"
+                ? "Hai già aderito a una di queste tratte."
+                : "You've already joined one of these legs."
+            );
+            return;
+          }
+          throw error;
+        }
+        const result = (Array.isArray(data) ? data[0] : data) as RequestBookingRow | null;
+        bookingRequestId = result?.booking_request_id;
+        toast.info(
+          lang === "it"
+            ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
+            : "One last step: pay the contribution to submit your application."
+        );
+      }
+
       const submittedVoyageId = bookingAnchor.voyageId;
       clearLocalBookingApplicationDraft(submittedVoyageId);
       if (session?.user.id) {
@@ -818,7 +941,9 @@ const Journal = () => {
 
       // Solo booking: ask explicitly how the user wants to pay before opening Bunq or bank details.
       if (bookingRequestId) {
-        const soloAmountEur = totalDepositEur(selectedBookingLegs, Math.max(1, bookingPartySize), bookingContributionOptions);
+        const soloAmountEur =
+          fixedOnlyAmountEur ??
+          totalDepositEur(selectedBookingLegs, Math.max(1, bookingPartySize), bookingContributionOptions);
         setBookingConfirmOpen(false);
         setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
         clearBookingSelection();
@@ -844,10 +969,14 @@ const Journal = () => {
     bookingAnchor,
     bookingLegsById,
     bookingCandidateInfo,
+    bookingCvFile,
     bookingMessage,
     bookingPartySize,
+    bookingPortfolioFile,
+    bookingProposal,
     clearBookingSelection,
     lang,
+    myActiveVoyageContributionBookings,
     navigate,
     refetchBookingLegs,
     redirectGuestToLoginForBooking,
@@ -1138,6 +1267,11 @@ const Journal = () => {
     [bookingSummaryVoyage?.booking_contribution_per_nm_eur, bookingSummaryVoyage?.id, myActiveVoyageContributionBookings],
   );
 
+  const bookingStandardVariableEur = useMemo(
+    () => selectedBookingLegs.reduce((acc, leg) => acc + legDepositEur(leg, bookingContributionOptions), 0),
+    [selectedBookingLegs, bookingContributionOptions],
+  );
+
   const filteredVoyages = useMemo(() => {
     const list =
       voyageTypeFilter === "all" ? [...voyages] : voyages.filter((voyage) => voyage.type === voyageTypeFilter);
@@ -1272,9 +1406,37 @@ const Journal = () => {
             message={bookingMessage}
             requiresPayment
             showPaymentMethodChoice={false}
-            depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
-            depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
+            fixedOnlyPayment={Boolean(
+              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
+            )}
+            depositPerPersonEur={
+              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
+                ? contributionFixedMinimumEur(bookingContributionOptions.fixedMinimumEur)
+                : perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)
+            }
+            depositTotalEur={
+              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
+                ? contributionFixedMinimumEur(bookingContributionOptions.fixedMinimumEur)
+                : totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)
+            }
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
+            standardVariableEur={bookingStandardVariableEur}
+            contributionProposalEnabled={
+              Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.contribution_proposal_enabled)
+            }
+            contributionProposalBounds={{
+              minPercent: bookingProposalSettings?.contribution_proposal_min_percent ?? 50,
+              maxPercent: bookingProposalSettings?.contribution_proposal_max_percent ?? 150,
+            }}
+            workawayEnabled={Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.workaway_enabled)}
+            workawayRoles={workawayRoles}
+            activeWorkawayRoleKeys={bookingProposalSettings?.workaway_role_keys ?? []}
+            proposal={bookingProposal}
+            onProposalChange={setBookingProposal}
+            cvFile={bookingCvFile}
+            onCvFileChange={setBookingCvFile}
+            portfolioFile={bookingPortfolioFile}
+            onPortfolioFileChange={setBookingPortfolioFile}
             submitting={bookingSubmitting}
             onConfirm={() => void submitBookingFromLogbook()}
           />

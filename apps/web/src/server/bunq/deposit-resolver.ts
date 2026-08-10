@@ -10,6 +10,7 @@ import {
   perPersonDepositEur,
   depositForPayerEur,
   depositTargetEur,
+  contributionFixedMinimumEur,
   type DepositLeg,
   type PaymentMode,
 } from "../../lib/booking-deposit.js";
@@ -188,7 +189,9 @@ export async function resolveDepositPayer(
 
   const { data: request, error: requestError } = await db
     .from("voyage_booking_requests")
-    .select("id, profile_id, voyage_id, party_size, status, payment_mode, expires_at")
+    .select(
+      "id, profile_id, voyage_id, party_size, status, payment_mode, expires_at, contribution_fixed_only_payment, contribution_proposal_status, contribution_resolved_variable_cents",
+    )
     .eq("id", bookingRequestId)
     .maybeSingle();
   if (requestError) throw new Error(requestError.message);
@@ -281,9 +284,43 @@ export async function resolveDepositPayer(
     contributionPerNmEur,
     fixedMinimumEur: payerAlreadyHasVoyageBooking ? 0 : undefined,
   };
-  const perPersonEur = perPersonDepositEur(legs, contributionOpts);
-  const dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
-  const depositTarget = depositTargetEur(dueEur);
+  const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
+
+  const contributionProposalStatus =
+    (request as { contribution_proposal_status?: string | null }).contribution_proposal_status ?? "none";
+  const contributionFixedOnlyPayment = Boolean(
+    (request as { contribution_fixed_only_payment?: boolean | null }).contribution_fixed_only_payment,
+  );
+  const contributionResolvedVariableCents =
+    (request as { contribution_resolved_variable_cents?: number | null }).contribution_resolved_variable_cents ?? null;
+
+  let perPersonEur: number;
+  let dueEur: number;
+  let depositTarget: number;
+
+  if (
+    contributionFixedOnlyPayment &&
+    (contributionProposalStatus === "pending_admin_review" || contributionProposalStatus === "pending_user_approval")
+  ) {
+    // A contribution/workaway proposal is still being negotiated: only the fixed minimum is
+    // collected up front — the variable part is not charged until the negotiation resolves.
+    perPersonEur = contributionFixedMinimumEur(contributionOpts.fixedMinimumEur);
+    dueEur = Math.round((perPersonEur * coveredPersons + Number.EPSILON) * 100) / 100;
+    depositTarget = dueEur; // 100% up front — always far under the €499 Bunq cap.
+  } else if (contributionProposalStatus === "accepted") {
+    // Negotiation resolved: the agreed variable amount (0 for a pure workaway trade) is
+    // requested alongside the fixed minimum, as a single balance payment — no further
+    // acconto/saldo split. alreadyPaidEur below (the €20 already settled) is what turns this
+    // into "just the delta", exactly like a route-change settlement does.
+    const resolvedVariableEur = Math.max(0, contributionResolvedVariableCents ?? 0) / 100;
+    perPersonEur = contributionFixedMinimumEur(contributionOpts.fixedMinimumEur) + resolvedVariableEur;
+    dueEur = Math.round((perPersonEur * coveredPersons + Number.EPSILON) * 100) / 100;
+    depositTarget = dueEur;
+  } else {
+    perPersonEur = perPersonDepositEur(legs, contributionOpts);
+    dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
+    depositTarget = depositTargetEur(dueEur);
+  }
 
   // Charge only what is still outstanding, and only up to the deposit target until it is fully
   // reached — the first payment(s) collect the upfront deposit (50% of dueEur, capped at €499),
@@ -351,7 +388,6 @@ export async function resolveDepositPayer(
   // resolver is shared by both methods. Blocking it here would make large contributions
   // (e.g. a long multi-leg reroute) impossible to pay by any method.
 
-  const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
   return {
     db,
     user,

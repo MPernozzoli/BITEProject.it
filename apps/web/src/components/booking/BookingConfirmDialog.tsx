@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { depositTargetEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import ContributionProposalForm from "@/components/booking/ContributionProposalForm";
 import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
 import {
@@ -22,8 +23,14 @@ import {
   getLegComplexity,
   getLegDangerLevel,
   type BookableLeg,
+  type WorkawayRole,
 } from "@/lib/booking-utils";
 import { getDangerReasonDef, getDangerReasonLabels } from "@/lib/danger-reasons";
+import {
+  contributionProposalKind,
+  getContributionProposalValidationError,
+  type ContributionProposal,
+} from "@/lib/booking-workaway-proposal";
 
 /** Complexity level at/above which the confirm dialog surfaces the challenging-leg warning. */
 const CHALLENGING_COMPLEXITY_THRESHOLD = 4;
@@ -159,6 +166,21 @@ interface BookingConfirmDialogProps {
   mode?: "confirmation" | "application";
   submitting?: boolean;
   onConfirm: (paymentMethod: PaymentMethodChoice) => void;
+  /** When true, the payment box collects only the €20 fixed minimum — a proposal is attached and the rest is negotiated first. */
+  fixedOnlyPayment?: boolean;
+  /** The variable contribution the system would otherwise ask for (used for the proposal's % feedback). */
+  standardVariableEur?: number;
+  contributionProposalEnabled?: boolean;
+  contributionProposalBounds?: { minPercent: number; maxPercent: number };
+  workawayEnabled?: boolean;
+  workawayRoles?: WorkawayRole[];
+  activeWorkawayRoleKeys?: string[];
+  proposal?: ContributionProposal;
+  onProposalChange?: (proposal: ContributionProposal) => void;
+  cvFile?: File | null;
+  onCvFileChange?: (file: File | null) => void;
+  portfolioFile?: File | null;
+  onPortfolioFileChange?: (file: File | null) => void;
 }
 
 export type PaymentMethodChoice = "bunq_link" | "bank_transfer";
@@ -182,6 +204,19 @@ const BookingConfirmDialog = ({
   mode = "confirmation",
   submitting = false,
   onConfirm,
+  fixedOnlyPayment = false,
+  standardVariableEur = 0,
+  contributionProposalEnabled = false,
+  contributionProposalBounds = { minPercent: 50, maxPercent: 150 },
+  workawayEnabled = false,
+  workawayRoles = [],
+  activeWorkawayRoleKeys = [],
+  proposal,
+  onProposalChange,
+  cvFile = null,
+  onCvFileChange,
+  portfolioFile = null,
+  onPortfolioFileChange,
 }: BookingConfirmDialogProps) => {
   const conditions = useMemo(
     () => BOOKING_CONDITIONS.filter((condition) => requiresPayment || !condition.paymentOnly),
@@ -223,6 +258,19 @@ const BookingConfirmDialog = ({
   const allAccepted = conditions.every(
     (condition) => condition.optional || accepted[condition.id]
   );
+
+  const proposalError = useMemo(() => {
+    if (!proposal || !onProposalChange) return null;
+    if (!contributionProposalKind(proposal)) return null;
+    return getContributionProposalValidationError(
+      proposal,
+      standardVariableEur,
+      contributionProposalBounds,
+      lang === "it" ? "it" : "en"
+    );
+  }, [proposal, onProposalChange, standardVariableEur, contributionProposalBounds, lang]);
+
+  const canConfirm = allAccepted && !proposalError;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -325,6 +373,35 @@ const BookingConfirmDialog = ({
             </div>
           )}
 
+          {requiresPayment &&
+            proposal &&
+            onProposalChange &&
+            (contributionProposalEnabled || workawayEnabled) && (
+              <div className="mb-4 rounded-2xl border border-border/70 bg-muted/25 p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {lang === "it" ? "Proponi un'alternativa (facoltativo)" : "Propose an alternative (optional)"}
+                </p>
+                <ContributionProposalForm
+                  lang={lang}
+                  proposal={proposal}
+                  onChange={onProposalChange}
+                  standardVariableEur={standardVariableEur}
+                  contributionProposalEnabled={contributionProposalEnabled}
+                  workawayEnabled={workawayEnabled}
+                  bounds={contributionProposalBounds}
+                  workawayRoles={workawayRoles}
+                  activeWorkawayRoleKeys={activeWorkawayRoleKeys}
+                  cvFile={cvFile}
+                  onCvFileChange={onCvFileChange ?? (() => {})}
+                  portfolioFile={portfolioFile}
+                  onPortfolioFileChange={onPortfolioFileChange ?? (() => {})}
+                />
+                {proposalError && (
+                  <p className="mt-3 text-xs font-medium text-destructive">{proposalError}</p>
+                )}
+              </div>
+            )}
+
           {requiresPayment && typeof depositTotalEur === "number" && (
             <div className="mb-4 rounded-2xl border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
               <div className="flex items-baseline justify-between gap-3">
@@ -361,9 +438,13 @@ const BookingConfirmDialog = ({
                 </p>
               )}
               <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-200">
-                {lang === "it"
-                  ? `Acconto da versare ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza della tua tratta: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
-                  : `Deposit due now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance due within 15 days of your leg's departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
+                {fixedOnlyPayment
+                  ? lang === "it"
+                    ? `Da versare ora: ${formatDepositEur(depositTotalEur, "it")} (quota fissa). L'eventuale saldo verra richiesto solo dopo la revisione della tua proposta.`
+                    : `Due now: ${formatDepositEur(depositTotalEur, "en")} (fixed share). Any remaining balance will only be requested after your proposal is reviewed.`
+                  : lang === "it"
+                    ? `Acconto da versare ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza della tua tratta: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
+                    : `Deposit due now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance due within 15 days of your leg's departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
               </p>
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
                 {lang === "it"
@@ -472,7 +553,7 @@ const BookingConfirmDialog = ({
           <Button
             type="button"
             onClick={() => onConfirm(paymentMethod)}
-            disabled={!allAccepted || submitting}
+            disabled={!canConfirm || submitting}
             className="gap-2"
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <TicketCheck size={16} />}

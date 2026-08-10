@@ -17,7 +17,11 @@ export type RefundTrigger =
   | "user_cancelled"
   | "admin_plan_change_declined"
   /** The balance-deadline sweep forfeited the deposit — 0% by default, admin-overridable upward. */
-  | "balance_deadline_missed";
+  | "balance_deadline_missed"
+  /** The candidate rejected the admin's contribution/workaway counter-proposal — a failed
+   * negotiation before any seat was ever held, not a late withdrawal, so it always refunds
+   * in full regardless of the withdrawal-window tiers. */
+  | "user_rejected_contribution_counter";
 
 export type RefundSummary = {
   refundable: boolean;
@@ -37,6 +41,7 @@ type BookingRefundContext = {
   voyage_id: string;
   status: string;
   plan_change_status?: string | null;
+  contribution_proposal_status?: string | null;
 };
 
 type DepositRefundRow = {
@@ -137,7 +142,7 @@ export async function assertRefundActionAllowed(
 ): Promise<BookingRefundContext> {
   const { data, error } = await db
     .from("voyage_booking_requests")
-    .select("id, profile_id, voyage_id, status, plan_change_status")
+    .select("id, profile_id, voyage_id, status, plan_change_status, contribution_proposal_status")
     .eq("id", bookingRequestId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -148,12 +153,22 @@ export async function assertRefundActionAllowed(
     throw Object.assign(new Error("booking_not_active"), { status: 409 });
   }
 
-  if (trigger === "user_cancelled" || trigger === "admin_plan_change_declined") {
+  if (
+    trigger === "user_cancelled" ||
+    trigger === "admin_plan_change_declined" ||
+    trigger === "user_rejected_contribution_counter"
+  ) {
     if (booking.profile_id !== user.id) {
       throw Object.assign(new Error("booking_not_found"), { status: 404 });
     }
     if (trigger === "admin_plan_change_declined" && booking.plan_change_status !== "pending_user_approval") {
       throw Object.assign(new Error("plan_change_not_pending"), { status: 409 });
+    }
+    if (
+      trigger === "user_rejected_contribution_counter" &&
+      booking.contribution_proposal_status !== "pending_user_approval"
+    ) {
+      throw Object.assign(new Error("contribution_counter_not_pending"), { status: 409 });
     }
     return booking;
   }
@@ -232,7 +247,14 @@ export async function refundPolicyPercent(
   trigger: RefundTrigger,
 ): Promise<number> {
   // We cancelled or rejected: the traveller keeps none of the risk, so always refund in full.
-  if (trigger === "admin_cancelled" || trigger === "admin_rejected") {
+  // A rejected counter-proposal is the same shape — the negotiation failed before any seat was
+  // ever held, so the withdrawal tiers (meant for someone backing out of a confirmed place) do
+  // not apply.
+  if (
+    trigger === "admin_cancelled" ||
+    trigger === "admin_rejected" ||
+    trigger === "user_rejected_contribution_counter"
+  ) {
     return 100;
   }
 
@@ -818,6 +840,21 @@ export async function markBookingCancelledAfterRefund(
       : { status: "rejected", updated_at: new Date().toISOString() };
   const { error: updateError } = await db.from("voyage_booking_requests").update(patch).eq("id", booking.id);
   if (updateError) throw new Error(updateError.message);
+
+  // A booking being cancelled/rejected while a contribution/workaway negotiation is still open
+  // (admin outright rejecting a proposal, or the candidate rejecting a counter-proposal) leaves
+  // that negotiation dangling otherwise. Harmless no-op for the common case of a booking with no
+  // proposal at all — the WHERE clauses simply match nothing.
+  await db
+    .from("voyage_booking_contribution_proposals")
+    .update({ status: "rejected", resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("booking_request_id", booking.id)
+    .in("status", ["pending_admin_review", "pending_user_approval"]);
+  await db
+    .from("voyage_booking_requests")
+    .update({ contribution_proposal_status: "rejected" })
+    .eq("id", booking.id)
+    .in("contribution_proposal_status", ["pending_admin_review", "pending_user_approval"]);
 
   await db.rpc("enqueue_voyage_booking_notification", {
     _booking_request_id: booking.id,
