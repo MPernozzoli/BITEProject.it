@@ -33,7 +33,9 @@
  * }
  * Auth: Supabase access token in the Authorization: Bearer header.
  */
-import { legDepositEur, type DepositLeg } from "../../src/lib/booking-deposit.js";
+import { CONTRIBUTION_FIXED_MINIMUM_EUR, legDepositEur, type DepositLeg } from "../../src/lib/booking-deposit.js";
+
+const FIXED_MINIMUM_CENTS = Math.round(CONTRIBUTION_FIXED_MINIMUM_EUR * 100);
 import { createAuthClient, createServiceClient, createUserScopedClient } from "../../src/server/bunq/supabase.js";
 import {
   bearerToken,
@@ -122,15 +124,12 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
     const { data: settingsRow, error: settingsError } = await serviceDb
       .from("voyage_booking_settings")
-      .select(
-        "contribution_proposal_enabled, contribution_proposal_min_percent, contribution_proposal_max_percent, workaway_enabled",
-      )
+      .select("contribution_proposal_enabled, contribution_proposal_max_percent, workaway_enabled")
       .eq("voyage_id", voyageId)
       .maybeSingle();
     if (settingsError) throw new Error(settingsError.message);
     const settings = settingsRow as {
       contribution_proposal_enabled: boolean;
-      contribution_proposal_min_percent: number;
       contribution_proposal_max_percent: number;
       workaway_enabled: boolean;
     } | null;
@@ -176,16 +175,15 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       if (!Number.isFinite(proposedVariableCents) || proposedVariableCents < 0) {
         throw new ApplyWithProposalError(400, "invalid_proposed_variable_cents");
       }
-      // No variable quota to be a percentage of (e.g. a very short leg): any non-negative
-      // amount is accepted as-is, matching the same fix applied inside the RPC — otherwise a
-      // €0 standard quota always resolves to 0%, which fails almost any positive minimum bound.
-      if (standardVariableCents > 0) {
-        const percent = (proposedVariableCents / standardVariableCents) * 100;
-        const minPercent = Number(settings?.contribution_proposal_min_percent ?? 50);
-        const maxPercent = Number(settings?.contribution_proposal_max_percent ?? 150);
-        if (percent < minPercent || percent > maxPercent) {
-          throw new ApplyWithProposalError(409, "proposal_out_of_range");
-        }
+      // There is no floor beyond >= 0 above: the €20 fixed is the real minimum and is always
+      // collected separately (before the proposal is even reviewed), so "propose €0 variable"
+      // is already the most generous a candidate can be. The ceiling is measured against the
+      // TOTAL standard contribution (variable + the €20 fixed), not the variable share alone.
+      const standardTotalCents = standardVariableCents + FIXED_MINIMUM_CENTS;
+      const percentOfTotal = ((proposedVariableCents + FIXED_MINIMUM_CENTS) / standardTotalCents) * 100;
+      const maxPercent = Number(settings?.contribution_proposal_max_percent ?? 150);
+      if (percentOfTotal > maxPercent) {
+        throw new ApplyWithProposalError(409, "proposal_out_of_range");
       }
     }
 

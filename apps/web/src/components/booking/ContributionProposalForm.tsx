@@ -7,8 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatDepositEur } from "@/lib/booking-deposit";
 import {
-  proposedVariancePercent,
-  proposedVariancePercentLabel,
+  standardTotalEur,
   type ContributionProposal,
   type WorkawayHoursCommitmentType,
 } from "@/lib/booking-workaway-proposal";
@@ -19,9 +18,12 @@ type ContributionProposalFormProps = {
   proposal: ContributionProposal;
   onChange: (proposal: ContributionProposal) => void;
   standardVariableEur: number;
+  /** This candidate's actual fixed minimum (normally €20, 0 only when waived). */
+  fixedMinimumEur: number;
   contributionProposalEnabled: boolean;
   workawayEnabled: boolean;
-  bounds: { minPercent: number; maxPercent: number };
+  /** Ceiling, as a % of the total standard contribution (variable + fixed). No floor beyond the fixed minimum itself. */
+  maxPercent: number;
   workawayRoles: WorkawayRole[];
   activeWorkawayRoleKeys: string[];
   cvFile: File | null;
@@ -30,14 +32,56 @@ type ContributionProposalFormProps = {
   onPortfolioFileChange: (file: File | null) => void;
 };
 
+/** A slider over the TOTAL contribution (fixed + variable) — its own [min, max] makes an
+ * out-of-range value physically impossible to pick, so there's nothing left to validate here. */
+const AmountTotalSlider = ({
+  lang,
+  totalEur,
+  minEur,
+  maxEur,
+  standardTotal,
+  onChangeTotal,
+}: {
+  lang: Language;
+  totalEur: number;
+  minEur: number;
+  maxEur: number;
+  standardTotal: number;
+  onChangeTotal: (totalEur: number) => void;
+}) => {
+  const it = lang === "it";
+  const percent = standardTotal > 0 ? Math.round((totalEur / standardTotal) * 100) : 0;
+  return (
+    <div>
+      <input
+        type="range"
+        min={minEur}
+        max={Math.max(minEur, maxEur)}
+        step={1}
+        value={Math.min(Math.max(totalEur, minEur), Math.max(minEur, maxEur))}
+        onChange={(event) => onChangeTotal(Number(event.target.value))}
+        className="mt-2 w-full accent-accent"
+      />
+      <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>{formatDepositEur(minEur, it ? "it" : "en")}</span>
+        <span className="text-sm font-semibold text-foreground">
+          {formatDepositEur(totalEur, it ? "it" : "en")} · {percent}%
+        </span>
+        <span>{formatDepositEur(maxEur, it ? "it" : "en")}</span>
+      </div>
+    </div>
+  );
+};
+
 const ContributionProposalForm = ({
   lang,
   proposal,
   onChange,
   standardVariableEur,
+  fixedMinimumEur,
   contributionProposalEnabled,
   workawayEnabled,
-  bounds,
+  maxPercent,
   workawayRoles,
   activeWorkawayRoleKeys,
   cvFile,
@@ -48,13 +92,16 @@ const ContributionProposalForm = ({
   const [roleSearch, setRoleSearch] = useState("");
   const it = lang === "it";
 
-  const percent = proposal.proposedVariableEur != null
-    ? proposedVariancePercent(proposal.proposedVariableEur, standardVariableEur)
-    : null;
-  const percentLabel = proposal.proposedVariableEur != null
-    ? proposedVariancePercentLabel(proposal.proposedVariableEur, standardVariableEur)
-    : null;
-  const percentOutOfRange = percent != null && (percent < bounds.minPercent || percent > bounds.maxPercent);
+  const standardTotal = standardTotalEur(standardVariableEur, fixedMinimumEur);
+  const maxTotalEur = Math.max(fixedMinimumEur, Math.round((standardTotal * maxPercent) / 100));
+  const defaultTotalEur = Math.min(maxTotalEur, Math.max(fixedMinimumEur, Math.round(standardTotal / 2)));
+  const defaultVariableEur = Math.max(0, defaultTotalEur - fixedMinimumEur);
+  const currentVariableEur = proposal.proposedVariableEur ?? defaultVariableEur;
+  const currentTotalEur = currentVariableEur + fixedMinimumEur;
+
+  const setTotalEur = (totalEur: number) => {
+    onChange({ ...proposal, proposedVariableEur: Math.max(0, Math.round(totalEur) - fixedMinimumEur) });
+  };
 
   const activeRoles = useMemo(
     () => workawayRoles.filter((role) => activeWorkawayRoleKeys.includes(role.key)),
@@ -110,58 +157,46 @@ const ContributionProposalForm = ({
           <label className="flex items-start gap-3">
             <Checkbox
               checked={proposal.wantsAlternativeContribution}
-              onCheckedChange={(value) =>
-                onChange({ ...proposal, wantsAlternativeContribution: value === true })
-              }
+              onCheckedChange={(value) => {
+                const checked = value === true;
+                onChange({
+                  ...proposal,
+                  wantsAlternativeContribution: checked,
+                  // Mutually exclusive with workaway: workaway always carries its own amount
+                  // field, so there is no separate "both at once" state to represent.
+                  wantsWorkaway: checked ? false : proposal.wantsWorkaway,
+                  proposedVariableEur: checked ? proposal.proposedVariableEur ?? defaultVariableEur : proposal.proposedVariableEur,
+                });
+              }}
               className="mt-0.5 shrink-0"
             />
             <span className="text-sm font-medium text-foreground">
-              {it ? "Voglio proporre un contributo diverso" : "I want to propose a different contribution"}
+              {it
+                ? "Voglio proporre un contributo economico diverso, senza lavorare a bordo"
+                : "I want to propose a different economic contribution, without working on board"}
             </span>
           </label>
 
           {proposal.wantsAlternativeContribution && (
-            <div className="mt-3 space-y-2 pl-7">
-              <Label htmlFor="proposed-variable-eur" className="text-xs text-muted-foreground">
+            <div className="mt-3 space-y-1 pl-7">
+              <Label className="text-xs text-muted-foreground">
                 {it
-                  ? `Quota variabile stimata: ${formatDepositEur(standardVariableEur, "it")} (+ €20 fisso invariato)`
-                  : `Estimated variable contribution: ${formatDepositEur(standardVariableEur, "en")} (+ unchanged €20 fixed)`}
+                  ? `Contributo totale che proponi (fisso + variabile). Quota normalmente calcolata per questo viaggio: ${formatDepositEur(standardTotal, "it")}.`
+                  : `Total contribution you're proposing (fixed + variable). Normally calculated quota for this voyage: ${formatDepositEur(standardTotal, "en")}.`}
               </Label>
-              <Input
-                id="proposed-variable-eur"
-                type="number"
-                min={0}
-                step={1}
-                inputMode="decimal"
-                value={proposal.proposedVariableEur ?? ""}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  onChange({
-                    ...proposal,
-                    proposedVariableEur: value === "" ? null : Math.max(0, Number(value)),
-                  });
-                }}
-                className="max-w-[10rem]"
+              <AmountTotalSlider
+                lang={lang}
+                totalEur={currentTotalEur}
+                minEur={fixedMinimumEur}
+                maxEur={maxTotalEur}
+                standardTotal={standardTotal}
+                onChangeTotal={setTotalEur}
               />
-              {proposal.proposedVariableEur != null && percentLabel == null && (
-                <p className="text-xs text-muted-foreground">
-                  {it
-                    ? "La quota variabile stimata e €0 per le tratte selezionate: puoi proporre qualsiasi importo."
-                    : "The estimated variable contribution is €0 for the selected legs: you can propose any amount."}
-                </p>
-              )}
-              {percentLabel != null && (
-                <p className={`text-xs ${percentOutOfRange ? "font-medium text-destructive" : "text-muted-foreground"}`}>
-                  {it
-                    ? `Stai proponendo il ${percentLabel}% della quota stimata${percentLabel < 100 ? " (in meno)" : percentLabel > 100 ? " (in piu)" : ""}.`
-                    : `You're proposing ${percentLabel}% of the estimated contribution${percentLabel < 100 ? " (lower)" : percentLabel > 100 ? " (higher)" : ""}.`}
-                  {percentOutOfRange
-                    ? it
-                      ? ` Deve restare tra il ${bounds.minPercent}% e il ${bounds.maxPercent}%.`
-                      : ` It must stay between ${bounds.minPercent}% and ${bounds.maxPercent}%.`
-                    : ""}
-                </p>
-              )}
+              <p className="pt-1 text-xs text-muted-foreground">
+                {it
+                  ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile.`
+                  : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable.`}
+              </p>
             </div>
           )}
         </div>
@@ -172,18 +207,50 @@ const ContributionProposalForm = ({
           <label className="flex items-start gap-3">
             <Checkbox
               checked={proposal.wantsWorkaway}
-              onCheckedChange={(value) => onChange({ ...proposal, wantsWorkaway: value === true })}
+              onCheckedChange={(value) => {
+                const checked = value === true;
+                onChange({
+                  ...proposal,
+                  wantsWorkaway: checked,
+                  // Mutually exclusive with the pure-economic checkbox above.
+                  wantsAlternativeContribution: checked ? false : proposal.wantsAlternativeContribution,
+                  // Prefill at half the standard total the first time this is turned on, to
+                  // suggest the work covers the other half — kept if already customised.
+                  proposedVariableEur: checked ? proposal.proposedVariableEur ?? defaultVariableEur : proposal.proposedVariableEur,
+                });
+              }}
               className="mt-0.5 shrink-0"
             />
             <span className="text-sm font-medium text-foreground">
               {it
-                ? "Voglio proporre una collaborazione (workaway) invece del contributo, o in parte"
-                : "I want to propose a workaway trade instead of, or alongside, the contribution"}
+                ? "Voglio proporre di lavorare a bordo (workaway)"
+                : "I want to propose working on board (workaway)"}
             </span>
           </label>
 
           {proposal.wantsWorkaway && (
             <div className="mt-3 space-y-4 pl-7">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  {it
+                    ? `Contributo economico che comunque riconosci, oltre al lavoro. Quota normalmente calcolata per questo viaggio: ${formatDepositEur(standardTotal, "it")}.`
+                    : `Economic contribution you still recognise, on top of the work. Normally calculated quota for this voyage: ${formatDepositEur(standardTotal, "en")}.`}
+                </Label>
+                <AmountTotalSlider
+                  lang={lang}
+                  totalEur={currentTotalEur}
+                  minEur={fixedMinimumEur}
+                  maxEur={maxTotalEur}
+                  standardTotal={standardTotal}
+                  onChangeTotal={setTotalEur}
+                />
+                <p className="pt-1 text-xs text-muted-foreground">
+                  {it
+                    ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile: il lavoro copre solo l'eventuale differenza rispetto alla quota normale.`
+                    : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable: the work only covers the gap below the normal quota.`}
+                </p>
+              </div>
+
               {activeRoles.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">

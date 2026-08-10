@@ -165,7 +165,7 @@ export interface BookingSettings {
   terms_content_it: string | null;
   terms_content_en: string | null;
   contribution_proposal_enabled: boolean;
-  contribution_proposal_min_percent: number;
+  /** Ceiling, as a % of the TOTAL standard contribution (variable + the €20 fixed). No configurable floor: the fixed minimum always is one. */
   contribution_proposal_max_percent: number;
   workaway_enabled: boolean;
   workaway_role_keys: string[];

@@ -48,37 +48,57 @@ export const emptyContributionProposal: ContributionProposal = {
   candidateMessage: "",
 };
 
-/** null when neither alternative is selected — i.e. the candidate stayed on the standard quote. */
+/**
+ * null when neither alternative is selected — i.e. the candidate stayed on the standard quote.
+ * The two top-level choices are mutually exclusive in the UI (workaway always carries its own
+ * amount field, so there is no separate "both at once" state to represent): workaway is "hybrid"
+ * once it has an amount attached (the normal case — the field is always shown, prefilled), or
+ * bare "workaway" only in the transient moment the candidate has cleared that field.
+ */
 export function contributionProposalKind(proposal: ContributionProposal): ProposalKind | null {
-  if (proposal.wantsAlternativeContribution && proposal.wantsWorkaway) return "hybrid";
+  if (proposal.wantsWorkaway) return proposal.proposedVariableEur != null ? "hybrid" : "workaway";
   if (proposal.wantsAlternativeContribution) return "contribution";
-  if (proposal.wantsWorkaway) return "workaway";
   return null;
 }
 
-/**
- * Percentage the proposed amount represents of the calculated variable contribution, kept at
- * full precision — this feeds the range validation below, so rounding it here would let a
- * boundary value (e.g. 49.6% against a 50% minimum) pass or fail depending on rounding rather
- * than on the actual bound. Returns null when there is no variable quota to be a percentage of
- * (e.g. a very short leg costs €0) — in that case any non-negative amount is acceptable and no
- * percentage comparison is meaningful at all.
- */
-export function proposedVariancePercent(proposedVariableEur: number, standardVariableEur: number): number | null {
-  if (standardVariableEur <= 0) return null;
-  return (proposedVariableEur / standardVariableEur) * 100;
+/** The normal total contribution for this application: the negotiable variable share plus the
+ * €20 fixed minimum (0 only in the rare case where it's waived — see shouldApplyContributionFixedMinimum
+ * in booking-deposit.ts). This is the number the slider UI works in, since "propose the variable
+ * part, the fixed always adds on top separately" was confusing in practice. */
+export function standardTotalEur(standardVariableEur: number, fixedMinimumEur: number): number {
+  return standardVariableEur + fixedMinimumEur;
 }
 
-/** Same as {@link proposedVariancePercent}, rounded to a whole number for display in the UI. */
-export function proposedVariancePercentLabel(proposedVariableEur: number, standardVariableEur: number): number | null {
-  const percent = proposedVariancePercent(proposedVariableEur, standardVariableEur);
-  return percent == null ? null : Math.round(percent);
+/**
+ * Percentage the proposed TOTAL (variable + fixed) represents of the standard TOTAL, kept at
+ * full precision for the range check below. There is no floor beyond the fixed minimum itself
+ * (already enforced structurally — see getContributionProposalValidationError), so only ever
+ * used against a ceiling.
+ */
+export function proposedTotalPercent(
+  proposedVariableEur: number,
+  standardVariableEur: number,
+  fixedMinimumEur: number,
+): number {
+  const standardTotal = standardTotalEur(standardVariableEur, fixedMinimumEur);
+  if (standardTotal <= 0) return 0;
+  return ((proposedVariableEur + fixedMinimumEur) / standardTotal) * 100;
+}
+
+/** Same as {@link proposedTotalPercent}, rounded to a whole number for display in the UI. */
+export function proposedTotalPercentLabel(
+  proposedVariableEur: number,
+  standardVariableEur: number,
+  fixedMinimumEur: number,
+): number {
+  return Math.round(proposedTotalPercent(proposedVariableEur, standardVariableEur, fixedMinimumEur));
 }
 
 export function getContributionProposalValidationError(
   proposal: ContributionProposal,
   standardVariableEur: number,
-  bounds: { minPercent: number; maxPercent: number },
+  fixedMinimumEur: number,
+  maxPercent: number,
   lang: "it" | "en",
 ): string | null {
   const kind = contributionProposalKind(proposal);
@@ -88,18 +108,17 @@ export function getContributionProposalValidationError(
       : "Select at least one alternative: a different contribution or workaway.";
   }
 
-  if (proposal.wantsAlternativeContribution) {
-    if (proposal.proposedVariableEur == null || proposal.proposedVariableEur < 0) {
-      return lang === "it" ? "Indica l'importo che proponi." : "Enter the amount you're proposing.";
-    }
-    const percent = proposedVariancePercent(proposal.proposedVariableEur, standardVariableEur);
-    // percent is null when there is no variable quota at all (e.g. a €0 leg) — nothing to
-    // bound against, any non-negative amount already passed the check above.
-    if (percent != null && (percent < bounds.minPercent || percent > bounds.maxPercent)) {
-      return lang === "it"
-        ? `L'importo proposto deve essere tra il ${bounds.minPercent}% e il ${bounds.maxPercent}% della quota stimata.`
-        : `The proposed amount must be between ${bounds.minPercent}% and ${bounds.maxPercent}% of the estimated contribution.`;
-    }
+  // The amount field is always shown (and always required) once either alternative is picked —
+  // it represents the TOTAL contribution (fixed + variable). There is no floor beyond the fixed
+  // minimum itself: the UI slider physically cannot go below it, so nothing more to check here.
+  if (proposal.proposedVariableEur == null || proposal.proposedVariableEur < 0) {
+    return lang === "it" ? "Indica l'importo che proponi." : "Enter the amount you're proposing.";
+  }
+  const percent = proposedTotalPercent(proposal.proposedVariableEur, standardVariableEur, fixedMinimumEur);
+  if (percent > maxPercent) {
+    return lang === "it"
+      ? "Oltre una certa soglia l'importo non sarebbe più un contributo alle spese vive, ma assomiglierebbe a un pagamento per un servizio: per questo non possiamo accettarlo. Prova con una cifra più vicina alla stima."
+      : "Beyond a certain point the amount would no longer be a contribution to costs, but would look like a payment for a service: we can't accept it. Try an amount closer to the estimate.";
   }
 
   if (proposal.wantsWorkaway) {
@@ -148,9 +167,7 @@ export function toApplyWithProposalPayload(proposal: ContributionProposal): Appl
   return {
     proposalKind: kind,
     proposedVariableCents:
-      proposal.wantsAlternativeContribution && proposal.proposedVariableEur != null
-        ? Math.round(proposal.proposedVariableEur * 100)
-        : null,
+      proposal.proposedVariableEur != null ? Math.round(proposal.proposedVariableEur * 100) : null,
     workaway: {
       roleKeys: proposal.workaway.roleKeys,
       otherRoleText: proposal.workaway.otherRoleText.trim() || null,

@@ -156,6 +156,48 @@ export async function startBankTransferDeposit(
   return { ok: false, error: "no_bank_details" };
 }
 
+export type SettleIfZeroDueResult = { ok: true } | { ok: false; amountDue: true; amountEur: number } | { ok: false; error: string };
+
+/**
+ * Promotes a booking out of pending_payment with no deposit at all, for the one case where
+ * that's legitimate: the server-side recompute confirms €0 is genuinely due (most commonly a
+ * contribution-proposal application whose fixed share was waived because the candidate already
+ * holds another active application on the same voyage).
+ */
+export async function settleBookingIfZeroDue(
+  bookingRequestId: string,
+  participantId?: string,
+): Promise<SettleIfZeroDueResult> {
+  const token = await authToken();
+  if (!token) return { ok: false, error: "unauthenticated" };
+
+  let response: Response;
+  try {
+    response = await fetch("/api/bookings/settle-if-zero-due", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ bookingRequestId, participantId }),
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    /* ignore malformed body */
+  }
+
+  if (response.status === 409 && payload.error === "amount_due") {
+    return { ok: false, amountDue: true, amountEur: Number(payload.amountEur ?? 0) };
+  }
+  if (!response.ok) {
+    return { ok: false, error: String(payload.error ?? `http_${response.status}`) };
+  }
+  return { ok: true };
+}
+
 export type DepositStatus = "none" | "pending" | "paid" | "refunded" | "failed" | "cancelled";
 
 /** Polls the current settlement status of a booking's contribution deposit. */

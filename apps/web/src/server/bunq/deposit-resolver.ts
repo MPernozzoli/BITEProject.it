@@ -518,6 +518,23 @@ export async function settleBookingPayment(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Promotes a booking whose resolveDepositPayer call just confirmed is genuinely €0 due (e.g. its
+ * fixed share was waived because the candidate already holds another active application on the
+ * same voyage) — there is no deposit to ever pay, so nothing would otherwise move it out of
+ * pending_payment. The SQL side refuses to run if any deposit row already exists for the booking,
+ * so this can never bypass a real payment that's merely still pending.
+ */
+export async function settleBookingPaymentIfZeroDue(
+  db: SupabaseClient,
+  bookingRequestId: string,
+): Promise<void> {
+  const { error } = await db.rpc("settle_voyage_booking_payment_if_zero_due", {
+    _booking_request_id: bookingRequestId,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export type ExistingDepositRow = {
   id: string;
   status: string;

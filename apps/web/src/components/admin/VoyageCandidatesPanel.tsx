@@ -102,8 +102,10 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   const [contributionProposals, setContributionProposals] = useState<BookingContributionProposal[]>([]);
   const [workawayRoles, setWorkawayRoles] = useState<WorkawayRole[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings[]>([]);
-  /** Admin's counter-proposal input for the negotiated variable amount, per request (EUR string). */
+  /** Admin's counter-proposal slider position, per request — the TOTAL (fixed + variable), in EUR. */
   const [contributionCounterEur, setContributionCounterEur] = useState<Record<string, string>>({});
+  /** When true, the counter leaves the candidate's proposed amount untouched (workaway-terms-only counter). */
+  const [contributionCounterSkipAmount, setContributionCounterSkipAmount] = useState<Record<string, boolean>>({});
   const [contributionCounterNote, setContributionCounterNote] = useState<Record<string, string>>({});
   /** Workaway terms the admin is countering with, per request — undefined keeps the candidate's original. */
   const [contributionCounterRoleKeys, setContributionCounterRoleKeys] = useState<Record<string, string[]>>({});
@@ -250,6 +252,29 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     [bookingSettings],
   );
 
+  /**
+   * The admin's counter-proposal range, in cents of the TOTAL contribution (variable + the €20
+   * fixed): floor is the greater of €20 and half the standard total (a counter should not
+   * casually undercut what the fixed minimum alone already guarantees — see the audit-fix
+   * migration), ceiling is the voyage's configured max percent of that same total. Shared
+   * between the render loop and counterContributionProposal so both agree on the same numbers.
+   */
+  const counterAmountRangeCents = useCallback(
+    (proposal: BookingContributionProposal | undefined, voyageId: string) => {
+      const settings = bookingSettingsByVoyage[voyageId];
+      const maxPercent = settings?.contribution_proposal_max_percent ?? 150;
+      const standardTotalCents = (proposal?.standard_variable_cents ?? 0) + 2000;
+      const floorCents = Math.max(2000, Math.round(standardTotalCents * 0.5));
+      const maxCents = Math.max(floorCents, Math.round((standardTotalCents * maxPercent) / 100));
+      const candidateTotalCents = proposal?.proposed_variable_cents != null ? proposal.proposed_variable_cents + 2000 : null;
+      const defaultCents = candidateTotalCents != null
+        ? Math.min(maxCents, Math.max(floorCents, candidateTotalCents))
+        : floorCents;
+      return { standardTotalCents, floorCents, maxCents, defaultCents };
+    },
+    [bookingSettingsByVoyage],
+  );
+
   // Deliberately does NOT include plan_change_status === "pending_user_approval": that means an
   // ADMIN-sent proposal is awaiting the TRAVELLER, not something for the admin to review here —
   // counting it made a change the admin proposed look like a candidacy the guest had requested.
@@ -394,17 +419,20 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   };
 
   const counterContributionProposal = async (request: BookingRequest) => {
-    const rawEur = contributionCounterEur[request.id];
-    const hasEurInput = Boolean(rawEur && rawEur.trim());
-    const counterEur = hasEurInput ? Number(rawEur) : null;
-    if (hasEurInput && (!Number.isFinite(counterEur) || (counterEur as number) < 0)) {
-      toast.error("Indica un importo valido per la contro-proposta.");
-      return;
-    }
+    const skipAmount = contributionCounterSkipAmount[request.id] ?? false;
     const counterRoleKeys = contributionCounterRoleKeys[request.id];
-    if (!hasEurInput && (!counterRoleKeys || counterRoleKeys.length === 0)) {
+    if (skipAmount && (!counterRoleKeys || counterRoleKeys.length === 0)) {
       toast.error("Indica un importo e/o le mansioni che vuoi contro-proporre.");
       return;
+    }
+    let proposedVariableCents: number | null = null;
+    if (!skipAmount) {
+      const proposal = latestContributionProposalByRequest[request.id];
+      const { floorCents, maxCents, defaultCents } = counterAmountRangeCents(proposal, request.voyage_id);
+      const totalCents = contributionCounterEur[request.id] != null
+        ? Math.round(Number(contributionCounterEur[request.id]) * 100)
+        : defaultCents;
+      proposedVariableCents = Math.min(maxCents, Math.max(floorCents, totalCents)) - 2000;
     }
     if (!confirm("Inviare questa contro-proposta al candidato? Potra solo accettarla o rifiutarla, senza ulteriori rilanci.")) {
       return;
@@ -412,7 +440,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     setSavingId(request.id);
     const { error } = await typedSupabase.rpc("admin_counter_voyage_booking_contribution_proposal", {
       _booking_request_id: request.id,
-      _proposed_variable_cents: hasEurInput ? Math.round((counterEur as number) * 100) : null,
+      _proposed_variable_cents: proposedVariableCents,
       _admin_note: contributionCounterNote[request.id] || null,
       _workaway_role_keys: counterRoleKeys && counterRoleKeys.length > 0 ? counterRoleKeys : null,
     });
@@ -572,18 +600,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
               request.contribution_proposal_status === "accepted" &&
               (request.contribution_resolved_variable_cents ?? 0) > 0 &&
               negotiatedBalancePaidCents < 2000 * Math.max(1, request.party_size) + (request.contribution_resolved_variable_cents ?? 0);
-            const requestBookingSettings = bookingSettingsByVoyage[request.voyage_id];
-            const counterRawEur = contributionCounterEur[request.id];
-            const counterEurValue = counterRawEur ? Number(counterRawEur) : null;
-            const counterPercent =
-              counterEurValue != null && Number.isFinite(counterEurValue) && contributionProposal && contributionProposal.standard_variable_cents > 0
-                ? Math.round(((counterEurValue * 100) / contributionProposal.standard_variable_cents) * 100)
-                : null;
-            const counterOutOfRange =
-              counterPercent != null &&
-              requestBookingSettings &&
-              (counterPercent < requestBookingSettings.contribution_proposal_min_percent ||
-                counterPercent > requestBookingSettings.contribution_proposal_max_percent);
+            const counterRange = counterAmountRangeCents(contributionProposal, request.voyage_id);
+            const counterSkipAmount = contributionCounterSkipAmount[request.id] ?? false;
+            const counterTotalCents = contributionCounterEur[request.id] != null
+              ? Math.round(Number(contributionCounterEur[request.id]) * 100)
+              : counterRange.defaultCents;
+            const counterPercent = counterRange.standardTotalCents > 0
+              ? Math.round((counterTotalCents / counterRange.standardTotalCents) * 100)
+              : null;
             return (
               <article key={request.id} className="rounded-[30px] border border-border/70 bg-background/40 p-5 md:p-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -919,35 +943,37 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
 
                         {hasUnresolvedContributionProposal && contributionProposal.proposed_by === "candidate" && (
                           <div className="mt-3">
-                            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
                               <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                value={contributionCounterEur[request.id] || ""}
+                                type="checkbox"
+                                checked={counterSkipAmount}
                                 onChange={(event) =>
-                                  setContributionCounterEur((current) => ({ ...current, [request.id]: event.target.value }))
+                                  setContributionCounterSkipAmount((current) => ({ ...current, [request.id]: event.target.checked }))
                                 }
-                                placeholder="Contro-proposta (EUR) — lascia vuoto per non toccare l'importo"
-                                className="w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                                className="h-3.5 w-3.5"
                               />
-                              <button
-                                type="button"
-                                onClick={() => void counterContributionProposal(request)}
-                                disabled={savingId === request.id}
-                                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
-                              >
-                                Contro-proponi
-                              </button>
-                            </div>
-                            {counterPercent != null && (
-                              <p className={`mt-1 text-[11px] ${counterOutOfRange ? "font-semibold text-amber-700" : "text-muted-foreground"}`}>
-                                Equivale al {counterPercent}% della quota standard
-                                {requestBookingSettings
-                                  ? ` (range configurato per il candidato: ${requestBookingSettings.contribution_proposal_min_percent}%–${requestBookingSettings.contribution_proposal_max_percent}%)`
-                                  : ""}
-                                {counterOutOfRange ? " — fuori dal range che vale per il candidato, ma tu come admin puoi comunque inviarla." : ""}
-                              </p>
+                              Non modificare l'importo (contro-proponi solo su mansioni/ore)
+                            </label>
+                            {!counterSkipAmount && (
+                              <div className="mt-2">
+                                <input
+                                  type="range"
+                                  min={counterRange.floorCents / 100}
+                                  max={counterRange.maxCents / 100}
+                                  step={1}
+                                  value={counterTotalCents / 100}
+                                  onChange={(event) =>
+                                    setContributionCounterEur((current) => ({ ...current, [request.id]: event.target.value }))
+                                  }
+                                  className="w-full accent-accent"
+                                />
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                  {formatDepositEur(counterRange.floorCents / 100, "it")} — contro-proponi{" "}
+                                  <strong className="text-foreground">{formatDepositEur(counterTotalCents / 100, "it")}</strong>
+                                  {counterPercent != null ? ` (${counterPercent}% della quota standard)` : ""} —{" "}
+                                  {formatDepositEur(counterRange.maxCents / 100, "it")}
+                                </p>
+                              </div>
                             )}
                             {(contributionProposal.proposal_kind === "workaway" || contributionProposal.proposal_kind === "hybrid") && (
                               <div className="mt-2">
@@ -995,6 +1021,14 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                               className="mt-2 w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
                               placeholder="Nota per il candidato (facoltativa)"
                             />
+                            <button
+                              type="button"
+                              onClick={() => void counterContributionProposal(request)}
+                              disabled={savingId === request.id}
+                              className="glass-chip mt-2 inline-flex w-full items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-foreground hover:text-accent disabled:opacity-50"
+                            >
+                              Contro-proponi
+                            </button>
                             <button
                               type="button"
                               onClick={() => void acceptContributionProposal(request)}

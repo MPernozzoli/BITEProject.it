@@ -170,8 +170,10 @@ interface BookingConfirmDialogProps {
   fixedOnlyPayment?: boolean;
   /** The variable contribution the system would otherwise ask for (used for the proposal's % feedback). */
   standardVariableEur?: number;
+  /** This candidate's actual fixed minimum (normally €20, 0 only when waived — see shouldApplyContributionFixedMinimum). */
+  fixedMinimumEur?: number;
   contributionProposalEnabled?: boolean;
-  contributionProposalBounds?: { minPercent: number; maxPercent: number };
+  contributionProposalMaxPercent?: number;
   workawayEnabled?: boolean;
   workawayRoles?: WorkawayRole[];
   activeWorkawayRoleKeys?: string[];
@@ -206,8 +208,9 @@ const BookingConfirmDialog = ({
   onConfirm,
   fixedOnlyPayment = false,
   standardVariableEur = 0,
+  fixedMinimumEur = 20,
   contributionProposalEnabled = false,
-  contributionProposalBounds = { minPercent: 50, maxPercent: 150 },
+  contributionProposalMaxPercent = 150,
   workawayEnabled = false,
   workawayRoles = [],
   activeWorkawayRoleKeys = [],
@@ -265,10 +268,11 @@ const BookingConfirmDialog = ({
     return getContributionProposalValidationError(
       proposal,
       standardVariableEur,
-      contributionProposalBounds,
+      fixedMinimumEur,
+      contributionProposalMaxPercent,
       lang === "it" ? "it" : "en"
     );
-  }, [proposal, onProposalChange, standardVariableEur, contributionProposalBounds, lang]);
+  }, [proposal, onProposalChange, standardVariableEur, fixedMinimumEur, contributionProposalMaxPercent, lang]);
 
   const canConfirm = allAccepted && !proposalError;
 
@@ -386,9 +390,10 @@ const BookingConfirmDialog = ({
                   proposal={proposal}
                   onChange={onProposalChange}
                   standardVariableEur={standardVariableEur}
+                  fixedMinimumEur={fixedMinimumEur}
                   contributionProposalEnabled={contributionProposalEnabled}
                   workawayEnabled={workawayEnabled}
-                  bounds={contributionProposalBounds}
+                  maxPercent={contributionProposalMaxPercent}
                   workawayRoles={workawayRoles}
                   activeWorkawayRoleKeys={activeWorkawayRoleKeys}
                   cvFile={cvFile}
@@ -402,7 +407,20 @@ const BookingConfirmDialog = ({
               </div>
             )}
 
-          {requiresPayment && typeof depositTotalEur === "number" && (
+          {requiresPayment && typeof depositTotalEur === "number" && depositTotalEur <= 0 && (
+            <div className="mb-4 rounded-2xl border border-emerald-300/70 bg-emerald-50/70 p-4 text-sm dark:border-emerald-400/30 dark:bg-emerald-400/10">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-300">
+                {lang === "it" ? "Nessun contributo fisso da versare ora" : "No fixed contribution due now"}
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-emerald-900/90 dark:text-emerald-100/80">
+                {lang === "it"
+                  ? "Hai già una candidatura attiva su questo viaggio che copre la quota fissa: non ti viene richiesta di nuovo."
+                  : "You already have an active application on this voyage covering the fixed share: it's not being asked of you again."}
+              </p>
+            </div>
+          )}
+
+          {requiresPayment && typeof depositTotalEur === "number" && depositTotalEur > 0 && (
             <div className="mb-4 rounded-2xl border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">

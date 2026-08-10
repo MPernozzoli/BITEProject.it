@@ -28,7 +28,7 @@ import {
   totalDepositEur,
   type PriorVoyageContributionBooking,
 } from "@/lib/booking-deposit";
-import { startDepositPayment } from "@/lib/booking-payment";
+import { settleBookingIfZeroDue, startDepositPayment } from "@/lib/booking-payment";
 import { applyVoyageBookingWithProposal, uploadWorkawayProposalFiles } from "@/lib/booking-proposal-apply";
 import {
   contributionProposalKind,
@@ -228,14 +228,13 @@ const Journal = () => {
       const { data, error } = await bookingRpcClient
         .from("voyage_booking_settings")
         .select(
-          "contribution_proposal_enabled, contribution_proposal_min_percent, contribution_proposal_max_percent, workaway_enabled, workaway_role_keys",
+          "contribution_proposal_enabled, contribution_proposal_max_percent, workaway_enabled, workaway_role_keys",
         )
         .eq("voyage_id", bookingAnchor!.voyageId)
         .maybeSingle();
       if (error) return null;
       return data as {
         contribution_proposal_enabled: boolean;
-        contribution_proposal_min_percent: number;
         contribution_proposal_max_percent: number;
         workaway_enabled: boolean;
         workaway_role_keys: string[];
@@ -938,6 +937,33 @@ const Journal = () => {
         return;
       }
 
+      // A proposal whose fixed share resolved to €0 (already covered by another active
+      // application on this voyage) has nothing to pay at all — settle it directly instead of
+      // opening a payment dialog for a zero amount.
+      if (bookingRequestId && fixedOnlyAmountEur != null && fixedOnlyAmountEur <= 0) {
+        const settled = await settleBookingIfZeroDue(bookingRequestId);
+        setBookingConfirmOpen(false);
+        clearBookingSelection();
+        void refetchBookingLegs();
+        if (settled.ok) {
+          toast.success(
+            lang === "it"
+              ? "Candidatura inviata: nessun contributo fisso da versare, gia coperto da una tua candidatura attiva su questo viaggio."
+              : "Application submitted: no fixed contribution due, already covered by your active application on this voyage."
+          );
+        } else {
+          // Extremely unlikely (our own estimate said €0, the server disagreed) — the booking
+          // still exists in pending_payment, so send them to pay normally rather than lose it.
+          navigate("/bookings");
+          toast.warning(
+            lang === "it"
+              ? "Candidatura creata, ma risulta ancora un importo da versare: completa il pagamento dalla tua area prenotazioni."
+              : "Application created, but an amount is still due: complete the payment from your bookings area."
+          );
+        }
+        return;
+      }
+
       // Solo booking: ask explicitly how the user wants to pay before opening Bunq or bank details.
       if (bookingRequestId) {
         const soloAmountEur =
@@ -1270,6 +1296,10 @@ const Journal = () => {
     () => selectedBookingLegs.reduce((acc, leg) => acc + legDepositEur(leg, bookingContributionOptions), 0),
     [selectedBookingLegs, bookingContributionOptions],
   );
+  const bookingFixedMinimumEur = useMemo(
+    () => contributionFixedMinimumEur(bookingContributionOptions.fixedMinimumEur),
+    [bookingContributionOptions],
+  );
 
   const filteredVoyages = useMemo(() => {
     const list =
@@ -1410,23 +1440,21 @@ const Journal = () => {
             )}
             depositPerPersonEur={
               Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
-                ? contributionFixedMinimumEur(bookingContributionOptions.fixedMinimumEur)
+                ? bookingFixedMinimumEur
                 : perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)
             }
             depositTotalEur={
               Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
-                ? contributionFixedMinimumEur(bookingContributionOptions.fixedMinimumEur)
+                ? bookingFixedMinimumEur
                 : totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)
             }
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             standardVariableEur={bookingStandardVariableEur}
+            fixedMinimumEur={bookingFixedMinimumEur}
             contributionProposalEnabled={
               Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.contribution_proposal_enabled)
             }
-            contributionProposalBounds={{
-              minPercent: bookingProposalSettings?.contribution_proposal_min_percent ?? 50,
-              maxPercent: bookingProposalSettings?.contribution_proposal_max_percent ?? 150,
-            }}
+            contributionProposalMaxPercent={bookingProposalSettings?.contribution_proposal_max_percent ?? 150}
             workawayEnabled={Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.workaway_enabled)}
             workawayRoles={workawayRoles}
             activeWorkawayRoleKeys={bookingProposalSettings?.workaway_role_keys ?? []}
