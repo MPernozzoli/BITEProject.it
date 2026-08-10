@@ -64,8 +64,8 @@ function formatPeriodLabel(range: DigestRange, language: string): string {
 
 function formatIssueLabel(periodLabel: string, language: string): string {
   return normalizeLanguage(newsletterConfig, language) === 'en'
-    ? `Weekly digest · ${periodLabel}`
-    : `Digest settimanale · ${periodLabel}`
+    ? `Onboard news · ${periodLabel}`
+    : `Notizie di bordo · ${periodLabel}`
 }
 
 Deno.serve(async (req) => {

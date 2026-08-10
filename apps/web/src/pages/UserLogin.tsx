@@ -140,7 +140,7 @@ const AUTH_COPY = {
       rememberHint: "Disattivalo se stai usando un computer condiviso o pubblico.",
       newsletterLabel: "Iscrivimi anche alla newsletter",
       newsletterHint:
-        "Ricevi aggiornamenti editoriali e digest periodici; puoi disiscriverti quando vuoi.",
+        "Ricevi aggiornamenti editoriali e le notizie di bordo periodiche; puoi disiscriverti quando vuoi.",
       divider: "oppure",
       google: "Continua con Google",
       passkey: "Accedi con passkey",
@@ -256,7 +256,7 @@ const AUTH_COPY = {
       rememberHint: "Turn it off if you're using a shared or public computer.",
       newsletterLabel: "Subscribe me to the newsletter too",
       newsletterHint:
-        "Enabled by default. You will receive editorial updates and periodic digests, and you can unsubscribe anytime.",
+        "Enabled by default. You will receive editorial updates and our periodic onboard news, and you can unsubscribe anytime.",
       divider: "or",
       google: "Continue with Google",
       passkey: "Sign in with passkey",

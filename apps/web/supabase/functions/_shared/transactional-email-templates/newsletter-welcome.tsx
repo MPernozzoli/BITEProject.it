@@ -26,7 +26,7 @@ const COPY = {
     secondaryCta: 'Scopri il progetto',
     cards: [
       'Nuovi articoli appena pubblicati, con link diretti.',
-      'Storie a cui sei iscritto, recap periodici e selezioni editoriali.',
+      'Storie a cui sei iscritto, le Notizie di bordo periodiche e selezioni editoriali.',
       'Un tono visivo coerente con il sito: niente template anonimi, solo BITE.',
     ],
     footerReason:
@@ -42,7 +42,7 @@ const COPY = {
     secondaryCta: 'Explore the project',
     cards: [
       'Freshly published articles with direct links.',
-      'Story notifications, periodic digests, and editorial selections.',
+      'Story notifications, our periodic Onboard News roundup, and editorial selections.',
       'A visual language that matches the site instead of a generic email template.',
     ],
     footerReason:

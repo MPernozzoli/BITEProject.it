@@ -2,6 +2,7 @@ import * as React from 'npm:react@18.3.1'
 import { PUBLIC_SITE_URL } from '../email-config.ts'
 import type { TemplateEntry } from './registry.ts'
 import {
+  buildGreetingName,
   EditorialEmailShell,
   EmailArticleCard,
   EmailBodyText,
@@ -23,33 +24,38 @@ type NewsletterDigestProps = {
 
 const COPY = {
   it: {
-    eyebrow: 'Digest',
-    preview: 'Tutti gli articoli usciti di recente su BITE',
-    title: (periodLabel?: string | null) =>
-      periodLabel?.trim() ? `Il recap di ${periodLabel}` : 'Il recap degli ultimi articoli',
-    intro: (count: number) =>
-      `Qui trovi ${count} articol${count === 1 ? 'o' : 'i'} pubblicat${count === 1 ? 'o' : 'i'} di recente, con link diretti e cover.`,
-    primaryCta: 'Apri il logbook',
+    eyebrow: 'Notizie Di Bordo',
+    preview: 'Le ultime notizie di bordo di BITE',
+    title: 'Le notizie di bordo',
+    intro: (count: number, name: string) => {
+      const verb = count === 1 ? 'aspetta' : 'aspettano'
+      const noun = count === 1 ? 'nuovo articolo' : 'nuovi articoli'
+      return `${name ? `${name}, ti` : 'Ti'} ${verb} ${count} ${noun} da leggere questa settimana.`
+    },
+    primaryCta: 'Apri il diario di bordo',
     readLabel: 'Leggi articolo',
-    empty: 'In questa finestra non ci sono nuovi articoli da inviare.',
-    footerReason: 'Ricevi questo digest perché sei iscritto agli Appunti dalla barca di BITE.',
+    empty: 'Questa settimana non ci sono nuove notizie di bordo da condividere.',
+    footerReason: 'Ricevi le notizie di bordo perché sei iscritto agli Appunti dalla barca di BITE.',
   },
   en: {
-    eyebrow: 'Digest',
-    preview: 'All the latest articles published on BITE',
-    title: (periodLabel?: string | null) =>
-      periodLabel?.trim() ? `Your ${periodLabel} roundup` : 'Your latest article roundup',
-    intro: (count: number) =>
-      `Here are ${count} recently published article${count === 1 ? '' : 's'}, each with a direct link and cover image.`,
+    eyebrow: 'Onboard News',
+    preview: 'The latest onboard news from BITE',
+    title: 'The latest onboard news',
+    intro: (count: number, name: string) => {
+      const verb = count === 1 ? 'is' : 'are'
+      const noun = count === 1 ? 'new article' : 'new articles'
+      return `${name ? `${name}, ` : ''}${count} ${noun} ${verb} waiting for you to read this week.`
+    },
     primaryCta: 'Open the logbook',
     readLabel: 'Read article',
-    empty: 'There are no new articles in this window.',
-    footerReason: "You are receiving this digest because you subscribed to BITE's Notes from the boat.",
+    empty: 'No onboard news to share this week.',
+    footerReason: "You're receiving onboard news because you're subscribed to BITE's Notes from the boat.",
   },
 } as const
 
 const NewsletterDigestEmail = ({
   language,
+  recipientName,
   periodLabel,
   articleCount,
   heroImageUrl,
@@ -60,15 +66,17 @@ const NewsletterDigestEmail = ({
   const copy = COPY[lang]
   const resolvedArticles = articles ?? []
   const resolvedCount = articleCount ?? resolvedArticles.length
+  const greetingName = buildGreetingName(recipientName)
 
   return (
     <EditorialEmailShell
       language={lang}
       preview={copy.preview}
       eyebrow={copy.eyebrow}
-      title={copy.title(periodLabel)}
+      title={copy.title}
       heroImageUrl={heroImageUrl ?? resolvedArticles[0]?.coverImageUrl}
-      intro={<EmailBodyText>{copy.intro(resolvedCount)}</EmailBodyText>}
+      heroCaption={periodLabel}
+      intro={<EmailBodyText>{copy.intro(resolvedCount, greetingName)}</EmailBodyText>}
       primaryCta={{ label: copy.primaryCta, url: `${PUBLIC_SITE_URL}/journal` }}
       footerReason={copy.footerReason}
       unsubscribeUrl={unsubscribeUrl}
@@ -98,12 +106,13 @@ export const template = {
       : resolveEmailLanguage(
             typeof data.language === 'string' ? data.language : null
           ) === 'en'
-        ? 'BITE article digest'
-        : 'Digest articoli BITE',
+        ? 'Onboard news — BITE'
+        : 'Notizie di bordo — BITE',
   displayName: 'Newsletter digest',
   previewData: {
     language: 'it',
-    issueLabel: 'Digest settimanale',
+    recipientName: 'Massimo',
+    issueLabel: 'Notizie di bordo',
     periodLabel: '1 aprile 2026',
     articleCount: 2,
     heroImageUrl: `${PUBLIC_SITE_URL}/og-image.jpeg`,
