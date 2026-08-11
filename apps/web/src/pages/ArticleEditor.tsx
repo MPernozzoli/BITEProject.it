@@ -640,12 +640,27 @@ const ArticleEditor = () => {
   useBeforeUnloadPrompt(hasLocalChangesRef.current && !saving && !leaveBusy);
 
   const generateSlug = (title: string) =>
-    title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
+    title
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80);
 
   const handleTitleEnChange = (val: string) => {
     setTitleEn(val);
     if (isNew || !slug) setSlug(generateSlug(val));
     if (isNew || !slugEn) setSlugEn(generateSlug(val));
+  };
+
+  const handleTitleItChange = (val: string) => {
+    setTitleIt(val);
+    if (isNew || !slugIt) setSlugIt(generateSlug(val));
+    // Canonico segue l'IT solo se manca un titolo EN da cui derivarlo.
+    if ((isNew || !slug) && !titleEn.trim()) setSlug(generateSlug(val));
   };
 
   const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
@@ -2223,7 +2238,7 @@ const ArticleEditor = () => {
             {activeTab === "en" ? (
               <input type="text" value={titleEn} onChange={(e) => handleTitleEnChange(e.target.value)} placeholder="Article title (English)" className="w-full bg-transparent font-serif text-3xl md:text-4xl font-bold focus:outline-none placeholder:text-muted-foreground/30" />
             ) : (
-              <input type="text" value={titleIt} onChange={(e) => setTitleIt(e.target.value)} placeholder="Titolo articolo (Italiano)" className="w-full bg-transparent font-serif text-3xl md:text-4xl font-bold focus:outline-none placeholder:text-muted-foreground/30" />
+              <input type="text" value={titleIt} onChange={(e) => handleTitleItChange(e.target.value)} placeholder="Titolo articolo (Italiano)" className="w-full bg-transparent font-serif text-3xl md:text-4xl font-bold focus:outline-none placeholder:text-muted-foreground/30" />
             )}
 
             {activeTab === "en" ? (
@@ -2489,44 +2504,49 @@ const ArticleEditor = () => {
               <p className="text-[10px] text-muted-foreground mt-1 font-sans">Uso interno admin — non sostituisce la categoria pubblica.</p>
             </div>
 
-            {/* Slug */}
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug (canonico / fallback)</label>
-              <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
-              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
-                URL legacy / fallback. Resta usato come default se manca lo slug per la lingua.
-              </p>
-            </div>
+            {/* Slug (opzioni avanzate) */}
+            <details className="border-t border-border/70 pt-3">
+              <summary className="cursor-pointer text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground">
+                Opzioni avanzate — Slug
+              </summary>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug EN</label>
+                  <input
+                    type="text"
+                    value={slugEn}
+                    onChange={(e) => setSlugEn(e.target.value)}
+                    placeholder="es. first-time-sailors"
+                    className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                    URL pubblico in /en/logbook/. Generato automaticamente dal titolo inglese, modificabile a mano.
+                  </p>
+                </div>
 
-            {/* Slug EN */}
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug EN</label>
-              <input
-                type="text"
-                value={slugEn}
-                onChange={(e) => setSlugEn(e.target.value)}
-                placeholder="es. first-time-sailors"
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
-                URL pubblico in /en/logbook/. Lascia vuoto per usare lo slug canonico.
-              </p>
-            </div>
+                <div>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug IT</label>
+                  <input
+                    type="text"
+                    value={slugIt}
+                    onChange={(e) => setSlugIt(e.target.value)}
+                    placeholder="es. primi-velisti"
+                    className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                    URL pubblico in /it/logbook/. Generato automaticamente dal titolo italiano, modificabile a mano.
+                  </p>
+                </div>
 
-            {/* Slug IT */}
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug IT</label>
-              <input
-                type="text"
-                value={slugIt}
-                onChange={(e) => setSlugIt(e.target.value)}
-                placeholder="es. primi-velisti"
-                className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1 font-sans">
-                URL pubblico in /it/logbook/ — chiave SEO per il mercato italiano.
-              </p>
-            </div>
+                <div>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug canonico (legacy)</label>
+                  <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
+                  <p className="text-[10px] text-muted-foreground mt-1 font-sans">
+                    Generato automaticamente dal titolo (EN, o IT se manca l'EN). Usato come fallback dove il sito non distingue ancora per lingua.
+                  </p>
+                </div>
+              </div>
+            </details>
 
             {/* Tags */}
             <div>
