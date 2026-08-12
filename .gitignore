@@ -51,3 +51,6 @@ supabase/.branches/
 !.env.example
 .vercel
 AGENTS.md
+
+# Local backups/exports - may contain application data, never commit
+backups/

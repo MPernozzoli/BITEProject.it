@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check, Clock, Loader2, ShieldCheck, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatIban, isValidBic, isValidIban, normalizeIban } from "@/lib/iban";
@@ -28,16 +29,43 @@ type FormState = { holder: string; iban: string; bic: string };
 type DoneState = { amountEur: number; reference: string; queued: boolean };
 type RowState = { submitting: boolean; done: DoneState | null; error: string | null };
 
-const ERROR_LABELS: Record<string, string> = {
-  invalid_iban: "L'IBAN inserito non è valido. Controlla e riprova.",
-  invalid_bic: "Il BIC/SWIFT inserito non è valido.",
-  account_holder_required: "Inserisci l'intestatario del conto.",
-  refund_not_found: "Questo rimborso non è più disponibile.",
-  nothing_to_refund: "Non risulta alcun importo da rimborsare.",
-  refund_already_processing: "Il rimborso è già in elaborazione.",
-  refund_environment_mismatch: "Rimborso non disponibile in questo ambiente.",
-  bunq_not_configured: "Il servizio di rimborso non è al momento disponibile. Riprova più tardi.",
-  unauthenticated: "Sessione scaduta: accedi di nuovo.",
+const ERROR_LABELS: Record<string, { it: string; en: string }> = {
+  invalid_iban: {
+    it: "L'IBAN inserito non è valido. Controlla e riprova.",
+    en: "The IBAN you entered is not valid. Check it and try again.",
+  },
+  invalid_bic: {
+    it: "Il BIC/SWIFT inserito non è valido.",
+    en: "The BIC/SWIFT you entered is not valid.",
+  },
+  account_holder_required: {
+    it: "Inserisci l'intestatario del conto.",
+    en: "Enter the account holder's name.",
+  },
+  refund_not_found: {
+    it: "Questo rimborso non è più disponibile.",
+    en: "This refund is no longer available.",
+  },
+  nothing_to_refund: {
+    it: "Non risulta alcun importo da rimborsare.",
+    en: "There is no amount to refund.",
+  },
+  refund_already_processing: {
+    it: "Il rimborso è già in elaborazione.",
+    en: "The refund is already being processed.",
+  },
+  refund_environment_mismatch: {
+    it: "Rimborso non disponibile in questo ambiente.",
+    en: "Refund not available in this environment.",
+  },
+  bunq_not_configured: {
+    it: "Il servizio di rimborso non è al momento disponibile. Riprova più tardi.",
+    en: "The refund service is not available right now. Please try again later.",
+  },
+  unauthenticated: {
+    it: "Sessione scaduta: accedi di nuovo.",
+    en: "Your session has expired: please sign in again.",
+  },
 };
 
 function eur(cents: number | null | undefined): string {
@@ -45,18 +73,26 @@ function eur(cents: number | null | undefined): string {
   return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
 }
 
-function voyageLabel(row: PendingRefund): string {
-  return row.voyage_name_it || row.voyage_name || row.voyage_name_en || "il tuo viaggio";
+function voyageLabel(row: PendingRefund, it: boolean): string {
+  return (
+    (it ? row.voyage_name_it || row.voyage_name || row.voyage_name_en : row.voyage_name_en || row.voyage_name || row.voyage_name_it) ||
+    (it ? "il tuo viaggio" : "your voyage")
+  );
 }
 
-function friendlyError(code: string): string {
-  return ERROR_LABELS[code] || (code ? `Rimborso non riuscito: ${code}` : "Rimborso non riuscito. Riprova.");
+function friendlyError(code: string, it: boolean): string {
+  const label = ERROR_LABELS[code];
+  if (label) return it ? label.it : label.en;
+  if (code) return it ? `Rimborso non riuscito: ${code}` : `Refund failed: ${code}`;
+  return it ? "Rimborso non riuscito. Riprova." : "Refund failed. Please try again.";
 }
 
 export default function BookingRefund() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang } = useI18n();
+  const it = lang === "it";
 
   const [refunds, setRefunds] = useState<PendingRefund[]>([]);
   const [fetching, setFetching] = useState(true);
@@ -151,7 +187,7 @@ export default function BookingRefund() {
   };
 
   const updateFormError = (id: string, code: string) => {
-    setRowState((current) => ({ ...current, [id]: { submitting: false, done: null, error: friendlyError(code) } }));
+    setRowState((current) => ({ ...current, [id]: { submitting: false, done: null, error: friendlyError(code, it) } }));
   };
 
   const showPageSpinner = loading || (session?.user.id && fetching);
@@ -164,25 +200,28 @@ export default function BookingRefund() {
             to="/bookings"
             className="glass-chip mb-6 inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft size={14} /> Le mie prenotazioni
+            <ArrowLeft size={14} /> {it ? "Le mie prenotazioni" : "My bookings"}
           </Link>
           <h1 className="editorial-heading flex items-center gap-3 text-3xl md:text-4xl">
-            <Wallet className="opacity-70" size={30} /> Rimborso della quota
+            <Wallet className="opacity-70" size={30} /> {it ? "Rimborso della quota" : "Refund of your contribution"}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Inserisci le coordinate bancarie su cui ricevere il riaccredito. L'importo è già impostato in base alla tua
-            situazione e non è modificabile. Appena confermi, avviamo subito il bonifico.
+            {it
+              ? "Inserisci le coordinate bancarie su cui ricevere il riaccredito. L'importo è già impostato in base alla tua situazione e non è modificabile. Appena confermi, avviamo subito il bonifico."
+              : "Enter the bank details where you want to receive the refund. The amount is already set based on your situation and cannot be changed. As soon as you confirm, we start the transfer right away."}
           </p>
         </section>
 
         {showPageSpinner ? (
           <div className="glass-panel flex items-center justify-center gap-2 rounded-[34px] py-16 text-muted-foreground">
-            <Loader2 className="animate-spin" size={18} /> Caricamento…
+            <Loader2 className="animate-spin" size={18} /> {it ? "Caricamento…" : "Loading…"}
           </div>
         ) : refunds.length === 0 ? (
           <section className="glass-panel flex flex-col items-center gap-2 rounded-[34px] py-16 text-center text-muted-foreground">
             <Check size={26} className="opacity-60" />
-            <p className="text-sm">Non risultano rimborsi in sospeso sul tuo account.</p>
+            <p className="text-sm">
+              {it ? "Non risultano rimborsi in sospeso sul tuo account." : "There are no pending refunds on your account."}
+            </p>
           </section>
         ) : (
           refunds.map((row) => {
@@ -192,11 +231,13 @@ export default function BookingRefund() {
               <section key={row.deposit_id} className="glass-panel rounded-[34px] px-6 py-7 md:px-8">
                 <div className="mb-5 flex items-end justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">{voyageLabel(row)}</p>
-                    <p className="text-xs text-muted-foreground/80">Rif. {row.reference || "—"}</p>
+                    <p className="text-sm text-muted-foreground">{voyageLabel(row, it)}</p>
+                    <p className="text-xs text-muted-foreground/80">
+                      {it ? "Rif." : "Ref."} {row.reference || "—"}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Importo</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{it ? "Importo" : "Amount"}</p>
                     <p className="text-2xl font-semibold">{eur(row.amount_cents)}</p>
                   </div>
                 </div>
@@ -209,11 +250,21 @@ export default function BookingRefund() {
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/20">
                         <Check className="text-emerald-500" size={22} />
                       </div>
-                      <p className="font-semibold">Rimborso avviato</p>
+                      <p className="font-semibold">{it ? "Rimborso avviato" : "Refund started"}</p>
                       <p className="text-sm text-muted-foreground">
-                        Abbiamo avviato il bonifico di {eur(Math.round(state.done.amountEur * 100))} verso l'IBAN
-                        indicato. Riceverai l'accredito a breve. Riferimento:{" "}
-                        <span className="font-mono">{state.done.reference}</span>.
+                        {it ? (
+                          <>
+                            Abbiamo avviato il bonifico di {eur(Math.round(state.done.amountEur * 100))} verso l'IBAN
+                            indicato. Riceverai l'accredito a breve. Riferimento:{" "}
+                            <span className="font-mono">{state.done.reference}</span>.
+                          </>
+                        ) : (
+                          <>
+                            We started the transfer of {eur(Math.round(state.done.amountEur * 100))} to the IBAN you
+                            provided. You will receive the credit shortly. Reference:{" "}
+                            <span className="font-mono">{state.done.reference}</span>.
+                          </>
+                        )}
                       </p>
                     </div>
                   ) : (
@@ -221,10 +272,11 @@ export default function BookingRefund() {
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-500/20">
                         <Clock className="text-sky-500" size={22} />
                       </div>
-                      <p className="font-semibold">Richiesta presa in carico</p>
+                      <p className="font-semibold">{it ? "Richiesta presa in carico" : "Request received"}</p>
                       <p className="text-sm text-muted-foreground">
-                        Abbiamo registrato le tue coordinate bancarie. Il rimborso è in lavorazione e riceverai
-                        l'accredito a breve. Non serve fare altro.
+                        {it
+                          ? "Abbiamo registrato le tue coordinate bancarie. Il rimborso è in lavorazione e riceverai l'accredito a breve. Non serve fare altro."
+                          : "We have recorded your bank details. The refund is being processed and you will receive the credit shortly. You do not need to do anything else."}
                       </p>
                     </div>
                   )
@@ -238,13 +290,13 @@ export default function BookingRefund() {
                   >
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium" htmlFor={`holder-${row.deposit_id}`}>
-                        Intestatario del conto
+                        {it ? "Intestatario del conto" : "Account holder"}
                       </label>
                       <Input
                         id={`holder-${row.deposit_id}`}
                         value={form.holder}
                         onChange={(event) => updateForm(row.deposit_id, { holder: event.target.value })}
-                        placeholder="Nome e cognome"
+                        placeholder={it ? "Nome e cognome" : "First and last name"}
                         autoComplete="name"
                         disabled={state.submitting}
                       />
@@ -267,13 +319,13 @@ export default function BookingRefund() {
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium" htmlFor={`bic-${row.deposit_id}`}>
-                        BIC / SWIFT <span className="text-muted-foreground">(opzionale)</span>
+                        BIC / SWIFT <span className="text-muted-foreground">{it ? "(opzionale)" : "(optional)"}</span>
                       </label>
                       <Input
                         id={`bic-${row.deposit_id}`}
                         value={form.bic}
                         onChange={(event) => updateForm(row.deposit_id, { bic: event.target.value.toUpperCase() })}
-                        placeholder="Solo per conti esteri"
+                        placeholder={it ? "Solo per conti esteri" : "Only for foreign accounts"}
                         autoComplete="off"
                         spellCheck={false}
                         className="font-mono"
@@ -289,10 +341,20 @@ export default function BookingRefund() {
 
                     <Button type="submit" className="w-full" disabled={state.submitting}>
                       {state.submitting ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-                      <span className="ml-2">{state.submitting ? "Invio in corso…" : `Conferma e ricevi ${eur(row.amount_cents)}`}</span>
+                      <span className="ml-2">
+                        {state.submitting
+                          ? it
+                            ? "Invio in corso…"
+                            : "Submitting…"
+                          : it
+                            ? `Conferma e ricevi ${eur(row.amount_cents)}`
+                            : `Confirm and receive ${eur(row.amount_cents)}`}
+                      </span>
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">
-                      Verifica bene l'IBAN: un codice errato può far fallire o deviare il bonifico.
+                      {it
+                        ? "Verifica bene l'IBAN: un codice errato può far fallire o deviare il bonifico."
+                        : "Double-check the IBAN: an incorrect code can cause the transfer to fail or be misdirected."}
                     </p>
                   </form>
                 )}

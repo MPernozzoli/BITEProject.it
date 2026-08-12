@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
 import { isInjectedServiceKey } from '../_shared/service-auth.ts'
+import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,6 +29,11 @@ type PushSubscriptionRow = {
   p256dh: string
   auth: string
   enabled: boolean
+}
+
+type ProfileLanguageRow = {
+  id: string
+  preferred_language: string | null
 }
 
 function jsonResponse(data: Record<string, unknown>, status = 200): Response {
@@ -64,12 +70,39 @@ function isAuthorizedRequest(req: Request): boolean {
   return claims?.role === 'service_role'
 }
 
-function formatStartsAt(value: string): string {
-  return new Intl.DateTimeFormat('it-IT', {
+function formatStartsAt(value: string, language: string): string {
+  return new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'it-IT', {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: 'Europe/Rome',
   }).format(new Date(value))
+}
+
+function buildPushMessage(params: {
+  kind: 'start' | 'advance'
+  eventTitle: string
+  startsAt: string
+  language: string
+}): { title: string; body: string } {
+  const { kind, eventTitle, startsAt, language } = params
+
+  if (language === 'en') {
+    return {
+      title: kind === 'start' ? 'The BITE Crew live is on' : 'The BITE Crew live is about to start',
+      body:
+        kind === 'start'
+          ? `${eventTitle} is live now.`
+          : `${eventTitle} starts at ${startsAt}.`,
+    }
+  }
+
+  return {
+    title: kind === 'start' ? 'La live BITE Crew è iniziata' : 'La live BITE Crew sta per iniziare',
+    body:
+      kind === 'start'
+        ? `${eventTitle} è live adesso.`
+        : `${eventTitle} inizia alle ${startsAt}.`,
+  }
 }
 
 async function sendPushNotification(params: {
@@ -137,9 +170,28 @@ Deno.serve(async (req) => {
   const reminders = (data ?? []) as DueReminder[]
   let processed = 0
 
+  const profileIds = [...new Set(reminders.map((reminder) => reminder.profile_id))]
+  const languageByProfileId = new Map<string, string>()
+  if (profileIds.length) {
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, preferred_language')
+      .in('id', profileIds)
+
+    if (profilesError) {
+      console.error('Failed to load recipient languages for community live reminders', profilesError)
+    } else {
+      for (const profile of (profilesData ?? []) as ProfileLanguageRow[]) {
+        languageByProfileId.set(profile.id, normalizeLanguage(profile.preferred_language))
+      }
+    }
+  }
+
   for (const reminder of reminders) {
     const kind = reminder.start_push_due ? 'start' : reminder.advance_push_due ? 'advance' : null
     if (!kind) continue
+
+    const language = languageByProfileId.get(reminder.profile_id) ?? normalizeLanguage(null)
 
     const { data: subscriptionsData, error: subscriptionsError } = await supabase
       .from('push_subscriptions')
@@ -159,12 +211,13 @@ Deno.serve(async (req) => {
     const subscriptions = (subscriptionsData ?? []) as PushSubscriptionRow[]
     if (!subscriptions.length) continue
 
-    const title = kind === 'start' ? 'La live BITE Crew è iniziata' : 'La live BITE Crew sta per iniziare'
-    const startsAt = formatStartsAt(reminder.starts_at)
-    const body =
-      kind === 'start'
-        ? `${reminder.title} è live adesso.`
-        : `${reminder.title} inizia alle ${startsAt}.`
+    const startsAt = formatStartsAt(reminder.starts_at, language)
+    const { title, body } = buildPushMessage({
+      kind,
+      eventTitle: reminder.title,
+      startsAt,
+      language,
+    })
 
     const results = await Promise.allSettled(
       subscriptions.map((subscription) =>
