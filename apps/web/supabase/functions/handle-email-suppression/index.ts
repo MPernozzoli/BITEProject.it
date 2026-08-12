@@ -9,7 +9,7 @@
  */
 import { createSuppressionHandler } from '../_shared/newsletterapp.ts'
 import { serveNewsletter } from '../_shared/newsletter.ts'
-import { isInjectedServiceKey } from '../_shared/service-auth.ts'
+import { isInjectedServiceKey, timingSafeEqual } from '../_shared/service-auth.ts'
 
 function parseJwtClaims(token: string): Record<string, unknown> | null {
   const parts = token.split('.')
@@ -40,7 +40,7 @@ function authorize(request: Request): boolean {
   if (parseJwtClaims(token)?.role === 'service_role') return true
 
   const secret = Deno.env.get('EMAIL_SUPPRESSION_WEBHOOK_SECRET')
-  return Boolean(secret && token === secret)
+  return Boolean(secret && timingSafeEqual(token, secret))
 }
 
 serveNewsletter((source) => createSuppressionHandler(source, { authorize }))

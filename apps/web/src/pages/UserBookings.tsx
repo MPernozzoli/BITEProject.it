@@ -205,7 +205,13 @@ const UserBookings = () => {
     ]);
 
     if (voyagesRes.error || requestsRes.error || profileRes.error || watchesRes.error) {
-      toast.error(voyagesRes.error?.message || requestsRes.error?.message || profileRes.error?.message || watchesRes.error?.message || "Unable to load bookings");
+      const loadErrorDetail =
+        voyagesRes.error?.message || requestsRes.error?.message || profileRes.error?.message || watchesRes.error?.message;
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile caricare le tue prenotazioni. Riprova più tardi.${loadErrorDetail ? ` (${loadErrorDetail})` : ""}`
+          : `Unable to load your bookings. Please try again later.${loadErrorDetail ? ` (${loadErrorDetail})` : ""}`
+      );
       setBusy(false);
       return;
     }
@@ -229,7 +235,11 @@ const UserBookings = () => {
         .select("id,name,name_it,name_en,status,booking_enabled,booking_max_guests,booking_contribution_per_nm_eur,start_date,end_date")
         .in("id", missingVoyageIds);
       if (archivedVoyagesError) {
-        toast.error(archivedVoyagesError.message);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile caricare alcuni viaggi passati. (${archivedVoyagesError.message})`
+            : `Unable to load some past voyages. (${archivedVoyagesError.message})`
+        );
       } else {
         loadedVoyages = [...loadedVoyages, ...((archivedVoyages as BookingVoyage[] | null) || [])];
       }
@@ -299,16 +309,19 @@ const UserBookings = () => {
     ]);
 
     if (legsRes.error || waypointsRes.error || requestLegsRes.error || settingsRes.error || tasksRes.error || completionsRes.error || depositsRes.error || contributionProposalsRes.error) {
-      toast.error(
+      const detailsErrorDetail =
         legsRes.error?.message ||
-          waypointsRes.error?.message ||
-          requestLegsRes.error?.message ||
-          settingsRes.error?.message ||
-          tasksRes.error?.message ||
-          completionsRes.error?.message ||
-          depositsRes.error?.message ||
-          contributionProposalsRes.error?.message ||
-          "Unable to load booking details"
+        waypointsRes.error?.message ||
+        requestLegsRes.error?.message ||
+        settingsRes.error?.message ||
+        tasksRes.error?.message ||
+        completionsRes.error?.message ||
+        depositsRes.error?.message ||
+        contributionProposalsRes.error?.message;
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile caricare i dettagli delle prenotazioni. Riprova più tardi.${detailsErrorDetail ? ` (${detailsErrorDetail})` : ""}`
+          : `Unable to load booking details. Please try again later.${detailsErrorDetail ? ` (${detailsErrorDetail})` : ""}`
       );
       setBusy(false);
       return;
@@ -737,7 +750,11 @@ const UserBookings = () => {
       const result = await acceptContributionCounter(detailsRequest.id, message);
       setContributionCounterSaving(false);
       if (result.ok === false) {
-        toast.error(result.error);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile accettare la contro-proposta. Riprova. (${result.error})`
+            : `Unable to accept the counter-proposal. Please try again. (${result.error})`
+        );
         return;
       }
       toast.success(
@@ -754,7 +771,11 @@ const UserBookings = () => {
       });
       setContributionCounterSaving(false);
       if (result.ok === false) {
-        toast.error(result.error);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile rifiutare la contro-proposta. Riprova. (${result.error})`
+            : `Unable to reject the counter-proposal. Please try again. (${result.error})`
+        );
         return;
       }
       toast.success(
@@ -867,7 +888,11 @@ const UserBookings = () => {
     });
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile aggiornare le notifiche. Riprova. (${error.message})`
+          : `Unable to update notifications. Please try again. (${error.message})`
+      );
       return;
     }
     toast.success(
@@ -914,7 +939,11 @@ const UserBookings = () => {
             : "You've already joined one of these legs."
         );
       } else {
-        toast.error(error.message);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile inviare la candidatura. Riprova. (${error.message})`
+            : `Unable to submit the application. Please try again. (${error.message})`
+        );
       }
       return;
     }
@@ -988,7 +1017,11 @@ const UserBookings = () => {
             : "You already have another active application on one of these legs."
         );
       } else {
-        toast.error(error.message);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile riproporre la candidatura. Riprova. (${error.message})`
+            : `Unable to re-propose the application. Please try again. (${error.message})`
+        );
       }
       return;
     }
@@ -1010,8 +1043,13 @@ const UserBookings = () => {
     setSaving(true);
     const { error } = await typedSupabase.rpc("confirm_voyage_booking", { _booking_request_id: requestId });
     setSaving(false);
-    if (error) toast.error(error.message);
-    else {
+    if (error) {
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile confermare la partecipazione. Riprova. (${error.message})`
+          : `Unable to confirm participation. Please try again. (${error.message})`
+      );
+    } else {
       toast.success(lang === "it" ? "Partecipazione confermata." : "Participation confirmed.");
       await loadData();
     }
@@ -1026,8 +1064,13 @@ const UserBookings = () => {
       trigger: request.plan_change_status === "pending_user_approval" ? "admin_plan_change_declined" : "user_cancelled",
     });
     setSaving(false);
-    if (result.ok === false) toast.error(result.error);
-    else {
+    if (result.ok === false) {
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile annullare la partecipazione. Riprova. (${result.error})`
+          : `Unable to cancel the participation. Please try again. (${result.error})`
+      );
+    } else {
       const refundMessage =
         result.refundAmountEur > 0
           ? lang === "it"
@@ -1053,7 +1096,11 @@ const UserBookings = () => {
         });
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile aggiornare la checklist. Riprova. (${error.message})`
+          : `Unable to update the checklist. Please try again. (${error.message})`
+      );
       return;
     }
     await loadData();
@@ -1069,7 +1116,11 @@ const UserBookings = () => {
     });
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile inviare la richiesta di modifica. Riprova. (${error.message})`
+          : `Unable to send the change request. Please try again. (${error.message})`
+      );
       return;
     }
     toast.success(lang === "it" ? "Richiesta di modifica inviata al team." : "Change request sent to the team.");
@@ -1087,7 +1138,11 @@ const UserBookings = () => {
       });
       setSaving(false);
       if (result.ok === false) {
-        toast.error(result.error);
+        toast.error(
+          lang === "it"
+            ? `Non è stato possibile annullare la partecipazione. Riprova. (${result.error})`
+            : `Unable to cancel the participation. Please try again. (${result.error})`
+        );
         return;
       }
       const refundMessage =
@@ -1115,7 +1170,11 @@ const UserBookings = () => {
     });
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile inviare la risposta. Riprova. (${error.message})`
+          : `Unable to send the response. Please try again. (${error.message})`
+      );
       return;
     }
     setPlanChangeMessages((current) => ({ ...current, [requestId]: "" }));
@@ -1167,7 +1226,12 @@ const UserBookings = () => {
       setAcceptCandidateInfo(candidateInfoPrefill);
       await loadParticipations();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error");
+      const detail = error instanceof Error ? error.message : null;
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile accettare l'invito. Riprova.${detail ? ` (${detail})` : ""}`
+          : `Unable to accept the invitation. Please try again.${detail ? ` (${detail})` : ""}`
+      );
     } finally {
       setAcceptSubmitting(false);
     }
@@ -1225,7 +1289,12 @@ const UserBookings = () => {
       toast.success(lang === "it" ? "Invito rifiutato." : "Invitation declined.");
       await loadParticipations();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error");
+      const detail = error instanceof Error ? error.message : null;
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile rifiutare l'invito. Riprova.${detail ? ` (${detail})` : ""}`
+          : `Unable to decline the invitation. Please try again.${detail ? ` (${detail})` : ""}`
+      );
     }
   };
 

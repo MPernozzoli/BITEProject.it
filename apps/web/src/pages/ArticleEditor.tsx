@@ -31,7 +31,7 @@ import { getArticleTranslationGaps } from "@/lib/article-translation-gaps";
 import { EDITORIAL_TYPE_LABELS, type EditorialArticleType } from "@/lib/editorial-plan";
 import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 import ArticleReader from "@/components/ArticleReader";
-import type { Language } from "@/lib/i18n";
+import { useI18n, type Language } from "@/lib/i18n";
 
 type ArticleLanguage = "en" | "it";
 type ArticleSeoOptimization = Database["public"]["Tables"]["article_seo_optimizations"]["Row"];
@@ -70,6 +70,9 @@ type ArticleEditorDraft = {
   slug: string;
   slugIt: string;
   slugEn: string;
+  slugManuallyEdited: boolean;
+  slugItManuallyEdited: boolean;
+  slugEnManuallyEdited: boolean;
   excerptEn: string;
   excerptIt: string;
   contentEn: object;
@@ -95,12 +98,16 @@ type ArticleEditorDraft = {
   voyageSegEnd: number | null;
 };
 
-const getSaveErrorMessage = (error: { code?: string; message?: string }) => {
-  if (error.code === "23505") return "Esiste già un articolo con questo slug.";
-  if (error.message?.includes("instagram_story_")) {
-    return "Il database non è aggiornato: applica la migration delle colonne Instagram Stories.";
+const getSaveErrorMessage = (error: { code?: string; message?: string }, lang: Language) => {
+  if (error.code === "23505") {
+    return lang === "it" ? "Esiste già un articolo con questo slug." : "An article with this slug already exists.";
   }
-  return "Salvataggio non riuscito.";
+  if (error.message?.includes("instagram_story_")) {
+    return lang === "it"
+      ? "Il database non è aggiornato: applica la migration delle colonne Instagram Stories."
+      : "The database is not up to date: apply the migration for the Instagram Stories columns.";
+  }
+  return lang === "it" ? "Salvataggio non riuscito." : "Save failed.";
 };
 
 const getWaypointOptionLabel = (waypoint: VoyageWaypoint, index: number, total: number) => {
@@ -136,6 +143,7 @@ const ArticleEditor = () => {
   const isNew = id === "new";
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang } = useI18n();
   const coverInputRef = useRef<HTMLInputElement>(null);
   const instagramEnInputRef = useRef<HTMLInputElement>(null);
   const instagramItInputRef = useRef<HTMLInputElement>(null);
@@ -158,6 +166,10 @@ const ArticleEditor = () => {
   const [slug, setSlug] = useState("");
   const [slugIt, setSlugIt] = useState("");
   const [slugEn, setSlugEn] = useState("");
+  /** true quando l'utente ha modificato lo slug a mano dal campo dedicato: blocca l'auto-generazione dal titolo. */
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [slugItManuallyEdited, setSlugItManuallyEdited] = useState(false);
+  const [slugEnManuallyEdited, setSlugEnManuallyEdited] = useState(false);
   const [excerptEn, setExcerptEn] = useState("");
   const [excerptIt, setExcerptIt] = useState("");
   const [contentEn, setContentEn] = useState<object>({});
@@ -231,8 +243,6 @@ const ArticleEditor = () => {
     setPublishChoiceOpen(false);
   }, [id]);
 
-  useEffect(() => { init(); }, [id]);
-
   useEffect(() => {
     hydratedDraftRef.current = false;
     skipNextDraftSaveRef.current = true;
@@ -243,7 +253,10 @@ const ArticleEditor = () => {
     leaveDialogOpenRef.current = leaveDialogOpen;
   }, [leaveDialogOpen]);
 
-  const loginPath = () => navigate("/login", { state: { from: `/admin/article/${id}` } });
+  const loginPath = useCallback(
+    () => navigate("/login", { state: { from: `/admin/article/${id}` } }),
+    [navigate, id]
+  );
 
   const applyDraft = useCallback((draft: ArticleEditorDraft) => {
     setTitleEn(draft.titleEn || "");
@@ -251,6 +264,9 @@ const ArticleEditor = () => {
     setSlug(draft.slug || "");
     setSlugIt(draft.slugIt || "");
     setSlugEn(draft.slugEn || "");
+    setSlugManuallyEdited(Boolean(draft.slugManuallyEdited));
+    setSlugItManuallyEdited(Boolean(draft.slugItManuallyEdited));
+    setSlugEnManuallyEdited(Boolean(draft.slugEnManuallyEdited));
     setExcerptEn(draft.excerptEn || "");
     setExcerptIt(draft.excerptIt || "");
     setContentEn(draft.contentEn || {});
@@ -300,57 +316,12 @@ const ArticleEditor = () => {
     try {
       applyDraft(JSON.parse(rawDraft) as ArticleEditorDraft);
       hasLocalChangesRef.current = true;
-      toast.message("Bozza locale ripristinata.");
+      toast.message(lang === "it" ? "Bozza locale ripristinata." : "Local draft restored.");
     } catch (error) {
       console.error("Failed to restore local article draft", error);
       window.localStorage.removeItem(draftStorageKey);
     }
-  }, [applyDraft, draftStorageKey]);
-
-  const init = async () => {
-    const { session } = await validateSessionOrSignOut();
-    if (!session) {
-      loginPath();
-      return;
-    }
-
-    const { data: isAdmin, error: adminError } = await supabase.rpc("has_role", {
-      _user_id: session.user.id,
-      _role: "admin",
-    });
-    if (adminError) {
-      console.error("Admin check failed", adminError);
-      loginPath();
-      return;
-    }
-    if (!isAdmin) {
-      toast.error("Accesso non autorizzato");
-      navigate("/", { replace: true });
-      return;
-    }
-
-    setCurrentUserId(session.user.id);
-
-    // Load tags, stories, and voyages
-    const [tagsRes, storiesRes, voyagesRes] = await Promise.all([
-      supabase.from("tags").select("*").order("name"),
-      supabase.from("stories").select("id, title_en, title_it, slug").order("title_en"),
-      supabase.from("voyages").select("*").order("sort_order", { ascending: true }),
-    ]);
-    setAllTags(tagsRes.data || []);
-    setAllStories(storiesRes.data || []);
-    setAllVoyages((voyagesRes.data || []) as unknown as Voyage[]);
-
-    if (isNew) {
-      setAuthorIds([session.user.id]);
-      setInitialPublishedAt(null);
-      setServerScheduledAt(null);
-      setSeoOptimization(null);
-      restoreDraftFromStorage();
-    } else {
-      loadArticle(session.user.id);
-    }
-  };
+  }, [applyDraft, draftStorageKey, lang]);
 
   const loadSeoOptimization = useCallback(async (articleId?: string | null) => {
     if (!articleId || articleId === "new") {
@@ -373,7 +344,7 @@ const ArticleEditor = () => {
     setSeoOptimization((data as ArticleSeoOptimization | null) ?? null);
   }, []);
 
-  const loadArticle = async (userId: string) => {
+  const loadArticle = useCallback(async (userId: string) => {
     const { data, error } = await supabase.from("logbook_articles").select("*").eq("id", id).single();
     if (error && isAuthFailureError(error)) {
       await supabase.auth.signOut();
@@ -395,6 +366,10 @@ const ArticleEditor = () => {
     setSlug(data.slug || "");
     setSlugIt(((data as any).slug_it as string | null) || "");
     setSlugEn(((data as any).slug_en as string | null) || "");
+    // Dati appena caricati dal server: nessuna modifica manuale ancora in corso in questa sessione.
+    setSlugManuallyEdited(false);
+    setSlugItManuallyEdited(false);
+    setSlugEnManuallyEdited(false);
     setExcerptEn(data.excerpt_en || "");
     setExcerptIt(data.excerpt_it || "");
     setContentEn(data.content_en as object || {});
@@ -464,7 +439,56 @@ const ArticleEditor = () => {
 
     await loadSeoOptimization(id);
     restoreDraftFromStorage();
-  };
+  }, [id, navigate, loginPath, loadSeoOptimization, restoreDraftFromStorage]);
+
+  const init = useCallback(async () => {
+    const { session } = await validateSessionOrSignOut();
+    if (!session) {
+      loginPath();
+      return;
+    }
+
+    const { data: isAdmin, error: adminError } = await supabase.rpc("has_role", {
+      _user_id: session.user.id,
+      _role: "admin",
+    });
+    if (adminError) {
+      console.error("Admin check failed", adminError);
+      loginPath();
+      return;
+    }
+    if (!isAdmin) {
+      toast.error(lang === "it" ? "Accesso non autorizzato" : "Access denied");
+      navigate("/", { replace: true });
+      return;
+    }
+
+    setCurrentUserId(session.user.id);
+
+    // Load tags, stories, and voyages
+    const [tagsRes, storiesRes, voyagesRes] = await Promise.all([
+      supabase.from("tags").select("*").order("name"),
+      supabase.from("stories").select("id, title_en, title_it, slug").order("title_en"),
+      supabase.from("voyages").select("*").order("sort_order", { ascending: true }),
+    ]);
+    setAllTags(tagsRes.data || []);
+    setAllStories(storiesRes.data || []);
+    setAllVoyages((voyagesRes.data || []) as unknown as Voyage[]);
+
+    if (isNew) {
+      setAuthorIds([session.user.id]);
+      setInitialPublishedAt(null);
+      setServerScheduledAt(null);
+      setSeoOptimization(null);
+      restoreDraftFromStorage();
+    } else {
+      loadArticle(session.user.id);
+    }
+  }, [loginPath, navigate, lang, isNew, restoreDraftFromStorage, loadArticle]);
+
+  useEffect(() => {
+    init();
+  }, [init]);
 
   const selectPointWaypoint = useCallback((index: number | null) => {
     if (index == null) {
@@ -580,6 +604,9 @@ const ArticleEditor = () => {
       slug,
       slugIt,
       slugEn,
+      slugManuallyEdited,
+      slugItManuallyEdited,
+      slugEnManuallyEdited,
       excerptEn,
       excerptIt,
       contentEn: contentEn as object,
@@ -631,6 +658,9 @@ const ArticleEditor = () => {
     slug,
     slugIt,
     slugEn,
+    slugManuallyEdited,
+    slugItManuallyEdited,
+    slugEnManuallyEdited,
     titleEn,
     titleIt,
     voyageSegEnd,
@@ -652,15 +682,16 @@ const ArticleEditor = () => {
 
   const handleTitleEnChange = (val: string) => {
     setTitleEn(val);
-    if (isNew || !slug) setSlug(generateSlug(val));
-    if (isNew || !slugEn) setSlugEn(generateSlug(val));
+    // Auto-genera lo slug dal titolo finché l'utente non lo ha modificato a mano nel campo dedicato.
+    if (!slugManuallyEdited && (isNew || !slug)) setSlug(generateSlug(val));
+    if (!slugEnManuallyEdited && (isNew || !slugEn)) setSlugEn(generateSlug(val));
   };
 
   const handleTitleItChange = (val: string) => {
     setTitleIt(val);
-    if (isNew || !slugIt) setSlugIt(generateSlug(val));
-    // Canonico segue l'IT solo se manca un titolo EN da cui derivarlo.
-    if ((isNew || !slug) && !titleEn.trim()) setSlug(generateSlug(val));
+    if (!slugItManuallyEdited && (isNew || !slugIt)) setSlugIt(generateSlug(val));
+    // Canonico segue l'IT solo se manca un titolo EN da cui derivarlo e lo slug non è stato modificato a mano.
+    if (!slugManuallyEdited && (isNew || !slug) && !titleEn.trim()) setSlug(generateSlug(val));
   };
 
   const uploadArticleImage = async (file: File, folder: string, errorMessage: string) => {
@@ -681,7 +712,11 @@ const ArticleEditor = () => {
   };
 
   const handleCoverUpload = async (file: File) => {
-    const publicUrl = await uploadArticleImage(file, "covers", "Upload copertina non riuscito.");
+    const publicUrl = await uploadArticleImage(
+      file,
+      "covers",
+      lang === "it" ? "Upload copertina non riuscito." : "Cover upload failed."
+    );
     if (!publicUrl) return;
     setCoverImage(publicUrl);
     setCoverFocal({ ...DEFAULT_COVER_FOCAL });
@@ -697,7 +732,7 @@ const ArticleEditor = () => {
     const publicUrl = await uploadArticleImage(
       file,
       `instagram-stories/${language}`,
-      "Upload immagine Instagram Stories non riuscito."
+      lang === "it" ? "Upload immagine Instagram Stories non riuscito." : "Instagram Stories image upload failed."
     );
     if (!publicUrl) return;
 
@@ -720,7 +755,9 @@ const ArticleEditor = () => {
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
     if (!name) {
-      toast.message("Inserisci un tag valido (lettere e numeri).");
+      toast.message(
+        lang === "it" ? "Inserisci un tag valido (lettere e numeri)." : "Enter a valid tag (letters and numbers)."
+      );
       return;
     }
     const existing = allTags.find((t) => t.name.toLowerCase() === name);
@@ -742,7 +779,11 @@ const ArticleEditor = () => {
         return;
       }
       console.error(error);
-      toast.error("Impossibile aggiungere il tag. Controlla di essere autenticato.");
+      toast.error(
+        lang === "it"
+          ? "Impossibile aggiungere il tag. Controlla di essere autenticato."
+          : "Could not add the tag. Check that you are signed in."
+      );
       if (isAuthFailureError(error)) {
         await supabase.auth.signOut();
         loginPath();
@@ -780,11 +821,15 @@ const ArticleEditor = () => {
         content_it: contentIt,
       });
       if (!result.ok) {
-        toast.error("error" in result ? result.error : "Errore di traduzione");
+        toast.error("error" in result ? result.error : lang === "it" ? "Errore di traduzione" : "Translation error");
         return { ok: false };
       }
       if (result.skipped) {
-        toast.message("Niente da tradurre: compila titolo, estratto o corpo in una lingua e lascia vuoti i campi nell’altra.");
+        toast.message(
+          lang === "it"
+            ? "Niente da tradurre: compila titolo, estratto o corpo in una lingua e lascia vuoti i campi nell’altra."
+            : "Nothing to translate: fill in title, excerpt or body in one language and leave the other language's fields empty."
+        );
         return { ok: true };
       }
       const f = result.fields;
@@ -802,12 +847,12 @@ const ArticleEditor = () => {
       setExcerptIt(next.excerptIt);
       setContentEn(next.contentEn);
       setContentIt(next.contentIt);
-      toast.success("Traduzione applicata.");
+      toast.success(lang === "it" ? "Traduzione applicata." : "Translation applied.");
       return { ok: true, editorialSnapshot: next };
     } finally {
       setAiTranslating(false);
     }
-  }, [titleEn, titleIt, excerptEn, excerptIt, contentEn, contentIt]);
+  }, [titleEn, titleIt, excerptEn, excerptIt, contentEn, contentIt, lang]);
 
   const handleAiTranslateMissing = useCallback(() => {
     void runArticleAiTranslation();
@@ -819,7 +864,9 @@ const ArticleEditor = () => {
   ): Promise<boolean> => {
     const targetId = articleId && articleId !== "new" ? articleId : id;
     if (!targetId || targetId === "new") {
-      if (!options?.quiet) toast.error("Salva l'articolo prima di generare la SEO.");
+      if (!options?.quiet) {
+        toast.error(lang === "it" ? "Salva l'articolo prima di generare la SEO." : "Save the article before generating SEO.");
+      }
       return false;
     }
 
@@ -860,26 +907,34 @@ const ArticleEditor = () => {
       const payload = data as { error?: string; skipped?: string } | null;
       if (payload?.error) throw new Error(payload.error);
       if (payload?.skipped === "not_published") {
-        if (!options?.quiet) toast.info("La SEO automatica si genera solo sugli articoli pubblicati.");
+        if (!options?.quiet) {
+          toast.info(
+            lang === "it"
+              ? "La SEO automatica si genera solo sugli articoli pubblicati."
+              : "Automatic SEO is generated only for published articles."
+          );
+        }
         return false;
       }
       if (payload?.skipped === "unchanged") {
         await loadSeoOptimization(targetId);
-        if (!options?.quiet) toast.info("SEO già aggiornata: nessuna modifica da rigenerare.");
+        if (!options?.quiet) {
+          toast.info(lang === "it" ? "SEO già aggiornata: nessuna modifica da rigenerare." : "SEO already up to date: nothing to regenerate.");
+        }
         return true;
       }
 
       await loadSeoOptimization(targetId);
-      if (!options?.quiet) toast.success("Ottimizzazione SEO generata.");
+      if (!options?.quiet) toast.success(lang === "it" ? "Ottimizzazione SEO generata." : "SEO optimization generated.");
       return true;
     } catch (error) {
       console.error("SEO optimization failed:", error);
-      if (!options?.quiet) toast.error("Ottimizzazione SEO non riuscita.");
+      if (!options?.quiet) toast.error(lang === "it" ? "Ottimizzazione SEO non riuscita." : "SEO optimization failed.");
       return false;
     } finally {
       if (showBusyState) setSeoOptimizing(false);
     }
-  }, [id, loadSeoOptimization]);
+  }, [id, loadSeoOptimization, lang]);
 
   const saveArticle = useCallback(async (
     action: "draft" | "publish",
@@ -896,7 +951,7 @@ const ArticleEditor = () => {
 
     const { session: live } = await validateSessionOrSignOut();
     if (!live) {
-      toast.error("Sessione non valida. Effettua di nuovo l’accesso.");
+      toast.error(lang === "it" ? "Sessione non valida. Effettua di nuovo l’accesso." : "Invalid session. Please sign in again.");
       navigate("/login", { state: { from: `/admin/article/${id}` } });
       return false;
     }
@@ -906,7 +961,11 @@ const ArticleEditor = () => {
     const trimmedSlug = slug.trim();
 
     if (!trimmedSlug) {
-      toast.error("Inserisci almeno un titolo inglese o uno slug prima di salvare.");
+      toast.error(
+        lang === "it"
+          ? "Inserisci almeno un titolo inglese o uno slug prima di salvare."
+          : "Enter at least an English title or a slug before saving."
+      );
       return false;
     }
 
@@ -916,14 +975,22 @@ const ArticleEditor = () => {
       if (associationMode === "point") {
         const selectedIndex = voyageSegStart ?? voyageSegEnd;
         if (selectedIndex == null) {
-          toast.error("Seleziona un waypoint della rotta per associare l'articolo a un punto.");
+          toast.error(
+            lang === "it"
+              ? "Seleziona un waypoint della rotta per associare l'articolo a un punto."
+              : "Select a route waypoint to associate the article with a point."
+          );
           return false;
         }
         normalizedVoyageSegStart = selectedIndex;
         normalizedVoyageSegEnd = selectedIndex;
       } else if (associationMode === "segment") {
         if (voyageSegStart == null || voyageSegEnd == null || voyageSegEnd <= voyageSegStart) {
-          toast.error("Seleziona due waypoint della rotta per definire il segmento.");
+          toast.error(
+            lang === "it"
+              ? "Seleziona due waypoint della rotta per definire il segmento."
+              : "Select two route waypoints to define the segment."
+          );
           return false;
         }
         normalizedVoyageSegStart = Math.min(voyageSegStart, voyageSegEnd);
@@ -1070,7 +1137,7 @@ const ArticleEditor = () => {
         if (isAuthFailureError(error)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/new` } });
-        } else toast.error(getSaveErrorMessage(error));
+        } else toast.error(getSaveErrorMessage(error, lang));
         setSaving(false);
         return false;
       }
@@ -1088,7 +1155,7 @@ const ArticleEditor = () => {
         if (isAuthFailureError(upErr)) {
           await supabase.auth.signOut();
           navigate("/login", { state: { from: `/admin/article/${id}` } });
-        } else toast.error(getSaveErrorMessage(upErr));
+        } else toast.error(getSaveErrorMessage(upErr, lang));
         setSaving(false);
         return false;
       }
@@ -1104,7 +1171,7 @@ const ArticleEditor = () => {
       const relationDeleteError = authorsDeleteRes.error || tagsDeleteRes.error;
       if (relationDeleteError) {
         console.error("Article relation cleanup failed:", relationDeleteError);
-        toast.error("Salvataggio autori o tag non riuscito.");
+        toast.error(lang === "it" ? "Salvataggio autori o tag non riuscito." : "Failed to save authors or tags.");
         setSaving(false);
         return false;
       }
@@ -1124,7 +1191,7 @@ const ArticleEditor = () => {
       const relationInsertError = insertResults.find((result) => result.error)?.error;
       if (relationInsertError) {
         console.error("Article relation save failed:", relationInsertError);
-        toast.error("Salvataggio autori o tag non riuscito.");
+        toast.error(lang === "it" ? "Salvataggio autori o tag non riuscito." : "Failed to save authors or tags.");
         setSaving(false);
         return false;
       }
@@ -1233,6 +1300,7 @@ const ArticleEditor = () => {
     persistedArticleStatus,
     initialPublishedAt,
     runSeoOptimization,
+    lang,
   ]);
 
   const translationOfferLabels = useMemo(() => {
@@ -1395,9 +1463,13 @@ const ArticleEditor = () => {
     } catch {
       /* ignore */
     }
-    toast.success("Bozza salvata. Imposta data e slot dal Piano editoriale in dashboard.");
+    toast.success(
+      lang === "it"
+        ? "Bozza salvata. Imposta data e slot dal Piano editoriale in dashboard."
+        : "Draft saved. Set date and slot from the Editorial Plan in the dashboard."
+    );
     navigate("/admin");
-  }, [navigate, saveArticle]);
+  }, [navigate, saveArticle, lang]);
 
   const handlePublishChoicePublishNow = useCallback(() => {
     void (async () => {
@@ -2515,7 +2587,10 @@ const ArticleEditor = () => {
                   <input
                     type="text"
                     value={slugEn}
-                    onChange={(e) => setSlugEn(e.target.value)}
+                    onChange={(e) => {
+                      setSlugEn(e.target.value);
+                      setSlugEnManuallyEdited(true);
+                    }}
                     placeholder="es. first-time-sailors"
                     className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
@@ -2529,7 +2604,10 @@ const ArticleEditor = () => {
                   <input
                     type="text"
                     value={slugIt}
-                    onChange={(e) => setSlugIt(e.target.value)}
+                    onChange={(e) => {
+                      setSlugIt(e.target.value);
+                      setSlugItManuallyEdited(true);
+                    }}
                     placeholder="es. primi-velisti"
                     className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
@@ -2540,7 +2618,15 @@ const ArticleEditor = () => {
 
                 <div>
                   <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug canonico (legacy)</label>
-                  <input type="text" value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors" />
+                  <input
+                    type="text"
+                    value={slug}
+                    onChange={(e) => {
+                      setSlug(e.target.value);
+                      setSlugManuallyEdited(true);
+                    }}
+                    className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                  />
                   <p className="text-[10px] text-muted-foreground mt-1 font-sans">
                     Generato automaticamente dal titolo (EN, o IT se manca l'EN). Usato come fallback dove il sito non distingue ancora per lingua.
                   </p>

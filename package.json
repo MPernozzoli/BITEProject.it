@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "workspaces": [
     "apps/web",
     "apps/pack",
@@ -17,7 +20,7 @@
     "build:data": "VITE_BASE_PATH=/Data/ npm run build --workspace @biteproject/data",
     "build:crew": "VITE_BASE_PATH=/Crew/ npm run build --workspace @biteproject/crew",
     "build:dev": "npm run build:dev --workspace @biteproject/web",
-    "lint": "npm run lint --workspace @biteproject/web",
+    "lint": "npm run lint --workspaces --if-present",
     "preview": "npm run preview --workspace @biteproject/web",
     "test": "npm run test --workspace @biteproject/web",
     "test:watch": "npm run test:watch --workspace @biteproject/web"

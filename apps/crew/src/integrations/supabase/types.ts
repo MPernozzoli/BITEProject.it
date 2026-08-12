@@ -4342,6 +4342,112 @@ export type Database = {
           },
         ]
       }
+      voyage_booking_contribution_proposals: {
+        Row: {
+          admin_note: string | null
+          booking_request_id: string
+          candidate_message: string | null
+          created_at: string
+          id: string
+          metadata: Json
+          proposal_kind: string
+          proposed_by: string
+          proposed_variable_cents: number | null
+          proposed_variable_percent: number | null
+          resolved_at: string | null
+          standard_variable_cents: number
+          status: string
+          updated_at: string
+          voyage_id: string
+          workaway_cv_storage_path: string | null
+          workaway_hours_commitment_type: string | null
+          workaway_hours_commitment_value: number | null
+          workaway_message: string | null
+          workaway_other_role_text: string | null
+          workaway_portfolio_storage_path: string | null
+          workaway_portfolio_url: string | null
+          workaway_requested_compensation_cents: number | null
+          workaway_requests_compensation: boolean
+          workaway_role_keys: string[]
+        }
+        Insert: {
+          admin_note?: string | null
+          booking_request_id: string
+          candidate_message?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          proposal_kind: string
+          proposed_by: string
+          proposed_variable_cents?: number | null
+          proposed_variable_percent?: number | null
+          resolved_at?: string | null
+          standard_variable_cents: number
+          status?: string
+          updated_at?: string
+          voyage_id: string
+          workaway_cv_storage_path?: string | null
+          workaway_hours_commitment_type?: string | null
+          workaway_hours_commitment_value?: number | null
+          workaway_message?: string | null
+          workaway_other_role_text?: string | null
+          workaway_portfolio_storage_path?: string | null
+          workaway_portfolio_url?: string | null
+          workaway_requested_compensation_cents?: number | null
+          workaway_requests_compensation?: boolean
+          workaway_role_keys?: string[]
+        }
+        Update: {
+          admin_note?: string | null
+          booking_request_id?: string
+          candidate_message?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json
+          proposal_kind?: string
+          proposed_by?: string
+          proposed_variable_cents?: number | null
+          proposed_variable_percent?: number | null
+          resolved_at?: string | null
+          standard_variable_cents?: number
+          status?: string
+          updated_at?: string
+          voyage_id?: string
+          workaway_cv_storage_path?: string | null
+          workaway_hours_commitment_type?: string | null
+          workaway_hours_commitment_value?: number | null
+          workaway_message?: string | null
+          workaway_other_role_text?: string | null
+          workaway_portfolio_storage_path?: string | null
+          workaway_portfolio_url?: string | null
+          workaway_requested_compensation_cents?: number | null
+          workaway_requests_compensation?: boolean
+          workaway_role_keys?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voyage_booking_contribution_proposals_booking_request_id_fkey"
+            columns: ["booking_request_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_booking_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_booking_contribution_proposals_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "observations_export"
+            referencedColumns: ["voyage_id"]
+          },
+          {
+            foreignKeyName: "voyage_booking_contribution_proposals_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voyage_booking_deposits: {
         Row: {
           amount_cents: number
@@ -4582,9 +4688,13 @@ export type Database = {
       voyage_booking_participants: {
         Row: {
           accepted_at: string | null
+          balance_reminder_sent_at: string | null
           booking_request_id: string
           candidate_info: Json
           conditions_accepted_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
           created_at: string
           email: string
           expires_at: string | null
@@ -4600,9 +4710,13 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          balance_reminder_sent_at?: string | null
           booking_request_id: string
           candidate_info?: Json
           conditions_accepted_at?: string | null
+          contribution_deposit_cents?: number | null
+          contribution_due_cents?: number | null
+          contribution_due_stamped_at?: string | null
           created_at?: string
           email: string
           expires_at?: string | null
@@ -4618,9 +4732,13 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          balance_reminder_sent_at?: string | null
           booking_request_id?: string
           candidate_info?: Json
           conditions_accepted_at?: string | null
+          contribution_deposit_cents?: number | null
+          contribution_due_cents?: number | null
+          contribution_due_stamped_at?: string | null
           created_at?: string
           email?: string
           expires_at?: string | null
@@ -4804,9 +4922,18 @@ export type Database = {
       voyage_booking_requests: {
         Row: {
           admin_notes: string | null
+          balance_forfeited_at: string | null
+          balance_reminder_sent_at: string | null
           cancelled_at: string | null
           candidate_info: Json
           confirmed_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
+          contribution_fixed_only_payment: boolean
+          contribution_proposal_metadata: Json
+          contribution_proposal_status: string
+          contribution_resolved_variable_cents: number | null
           expires_at: string | null
           id: string
           is_comped: boolean
@@ -4826,9 +4953,18 @@ export type Database = {
         }
         Insert: {
           admin_notes?: string | null
+          balance_forfeited_at?: string | null
+          balance_reminder_sent_at?: string | null
           cancelled_at?: string | null
           candidate_info?: Json
           confirmed_at?: string | null
+          contribution_deposit_cents?: number | null
+          contribution_due_cents?: number | null
+          contribution_due_stamped_at?: string | null
+          contribution_fixed_only_payment?: boolean
+          contribution_proposal_metadata?: Json
+          contribution_proposal_status?: string
+          contribution_resolved_variable_cents?: number | null
           expires_at?: string | null
           id?: string
           is_comped?: boolean
@@ -4848,9 +4984,18 @@ export type Database = {
         }
         Update: {
           admin_notes?: string | null
+          balance_forfeited_at?: string | null
+          balance_reminder_sent_at?: string | null
           cancelled_at?: string | null
           candidate_info?: Json
           confirmed_at?: string | null
+          contribution_deposit_cents?: number | null
+          contribution_due_cents?: number | null
+          contribution_due_stamped_at?: string | null
+          contribution_fixed_only_payment?: boolean
+          contribution_proposal_metadata?: Json
+          contribution_proposal_status?: string
+          contribution_resolved_variable_cents?: number | null
           expires_at?: string | null
           id?: string
           is_comped?: boolean
@@ -4904,6 +5049,8 @@ export type Database = {
           briefing_content_en: string | null
           briefing_content_it: string | null
           confirmation_deadline_hours: number
+          contribution_proposal_enabled: boolean
+          contribution_proposal_max_percent: number
           created_at: string
           first_briefing_content_en: string | null
           first_briefing_content_it: string | null
@@ -4916,11 +5063,15 @@ export type Database = {
           terms_content_it: string | null
           updated_at: string
           voyage_id: string
+          workaway_enabled: boolean
+          workaway_role_keys: string[]
         }
         Insert: {
           briefing_content_en?: string | null
           briefing_content_it?: string | null
           confirmation_deadline_hours?: number
+          contribution_proposal_enabled?: boolean
+          contribution_proposal_max_percent?: number
           created_at?: string
           first_briefing_content_en?: string | null
           first_briefing_content_it?: string | null
@@ -4933,11 +5084,15 @@ export type Database = {
           terms_content_it?: string | null
           updated_at?: string
           voyage_id: string
+          workaway_enabled?: boolean
+          workaway_role_keys?: string[]
         }
         Update: {
           briefing_content_en?: string | null
           briefing_content_it?: string | null
           confirmation_deadline_hours?: number
+          contribution_proposal_enabled?: boolean
+          contribution_proposal_max_percent?: number
           created_at?: string
           first_briefing_content_en?: string | null
           first_briefing_content_it?: string | null
@@ -4950,6 +5105,8 @@ export type Database = {
           terms_content_it?: string | null
           updated_at?: string
           voyage_id?: string
+          workaway_enabled?: boolean
+          workaway_role_keys?: string[]
         }
         Relationships: [
           {
@@ -5165,6 +5322,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      voyage_workaway_roles: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          key: string
+          label_en: string
+          label_it: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          key: string
+          label_en: string
+          label_it: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          key?: string
+          label_en?: string
+          label_it?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       voyages: {
         Row: {
@@ -5401,9 +5591,13 @@ export type Database = {
         Args: { _candidate_info?: Json; _participant_id: string }
         Returns: {
           accepted_at: string | null
+          balance_reminder_sent_at: string | null
           booking_request_id: string
           candidate_info: Json
           conditions_accepted_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
           created_at: string
           email: string
           expires_at: string | null
@@ -5424,9 +5618,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      accept_voyage_booking_contribution_counter: {
+        Args: { _booking_request_id: string; _message?: string }
+        Returns: string
+      }
       active_membership_tier_order: {
         Args: { _profile_id: string }
         Returns: number
+      }
+      admin_accept_voyage_booking_contribution_proposal: {
+        Args: { _admin_note?: string; _booking_request_id: string }
+        Returns: string
       }
       admin_apply_pending_invite_legs: {
         Args: {
@@ -5494,6 +5696,18 @@ export type Database = {
           reused_pending_deposit: boolean
         }[]
       }
+      admin_counter_voyage_booking_contribution_proposal: {
+        Args: {
+          _admin_note?: string
+          _booking_request_id: string
+          _proposed_variable_cents?: number
+          _workaway_hours_commitment_type?: string
+          _workaway_hours_commitment_value?: number
+          _workaway_other_role_text?: string
+          _workaway_role_keys?: string[]
+        }
+        Returns: string
+      }
       admin_create_voyage_booking: {
         Args: {
           _admin_notes?: string
@@ -5541,6 +5755,24 @@ export type Database = {
           is_moderator: boolean
           name: string
           profile_id: string
+        }[]
+      }
+      admin_list_forfeited_deposits: {
+        Args: never
+        Returns: {
+          amount_cents: number
+          booking_request_id: string
+          deposit_id: string
+          environment: string
+          reference: string
+          refund_amount_cents: number
+          traveller_email: string
+          traveller_name: string
+          updated_at: string
+          voyage_id: string
+          voyage_name: string
+          voyage_name_en: string
+          voyage_name_it: string
         }[]
       }
       admin_list_pending_refunds: {
@@ -5617,6 +5849,26 @@ export type Database = {
         Args: { _notify?: boolean; _voyage_id: string }
         Returns: number
       }
+      attach_voyage_booking_contribution_proposal: {
+        Args: {
+          _booking_request_id: string
+          _candidate_message?: string
+          _proposal_kind: string
+          _proposed_variable_cents?: number
+          _standard_variable_cents: number
+          _workaway_cv_storage_path?: string
+          _workaway_hours_commitment_type?: string
+          _workaway_hours_commitment_value?: number
+          _workaway_message?: string
+          _workaway_other_role_text?: string
+          _workaway_portfolio_storage_path?: string
+          _workaway_portfolio_url?: string
+          _workaway_requested_compensation_cents?: number
+          _workaway_requests_compensation?: boolean
+          _workaway_role_keys?: string[]
+        }
+        Returns: string
+      }
       booking_leg_effective_date: {
         Args: {
           _ends_at_window_end: string
@@ -5670,10 +5922,7 @@ export type Database = {
         Args: { _booking_request_id: string }
         Returns: undefined
       }
-      claim_pending_article_comments: {
-        Args: never
-        Returns: Json
-      }
+      claim_pending_article_comments: { Args: never; Returns: Json }
       compute_voyage_schedule: {
         Args: { _use_actuals: boolean; _voyage_id: string }
         Returns: {
@@ -5707,9 +5956,13 @@ export type Database = {
         Args: { _participant_id: string }
         Returns: {
           accepted_at: string | null
+          balance_reminder_sent_at: string | null
           booking_request_id: string
           candidate_info: Json
           conditions_accepted_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
           created_at: string
           email: string
           expires_at: string | null
@@ -5767,6 +6020,7 @@ export type Database = {
         }
         Returns: number
       }
+      enqueue_voyage_booking_balance_reminders: { Args: never; Returns: number }
       enqueue_voyage_booking_notification: {
         Args: {
           _booking_request_id: string
@@ -5778,6 +6032,15 @@ export type Database = {
       enqueue_voyage_booking_payment_reminders: { Args: never; Returns: number }
       expire_pending_booking_participants: { Args: never; Returns: number }
       expire_pending_voyage_booking_payments: { Args: never; Returns: number }
+      expire_stale_voyage_booking_topup_deposits: {
+        Args: never
+        Returns: number
+      }
+      expire_unpaid_voyage_booking_balance: { Args: never; Returns: number }
+      expire_unpaid_voyage_booking_guest_shares: {
+        Args: never
+        Returns: number
+      }
       get_my_participations: {
         Args: never
         Returns: {
@@ -5990,6 +6253,30 @@ export type Database = {
           booking_status: Database["public"]["Enums"]["voyage_booking_status"]
         }[]
       }
+      request_voyage_booking_with_contribution_proposal: {
+        Args: {
+          _candidate_info: Json
+          _candidate_message?: string
+          _leg_ids: string[]
+          _message: string
+          _proposal_kind: string
+          _proposed_variable_cents?: number
+          _standard_variable_cents: number
+          _voyage_id: string
+          _workaway_hours_commitment_type?: string
+          _workaway_hours_commitment_value?: number
+          _workaway_message?: string
+          _workaway_other_role_text?: string
+          _workaway_portfolio_url?: string
+          _workaway_requested_compensation_cents?: number
+          _workaway_requests_compensation?: boolean
+          _workaway_role_keys?: string[]
+        }
+        Returns: {
+          booking_request_id: string
+          booking_status: Database["public"]["Enums"]["voyage_booking_status"]
+        }[]
+      }
       resolve_voyage_for_photo: { Args: { taken_at: string }; Returns: string }
       resolve_voyage_for_timestamp: { Args: { ts: string }; Returns: string }
       respond_voyage_booking_plan_change: {
@@ -6008,9 +6295,13 @@ export type Database = {
         }
         Returns: {
           accepted_at: string | null
+          balance_reminder_sent_at: string | null
           booking_request_id: string
           candidate_info: Json
           conditions_accepted_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
           created_at: string
           email: string
           expires_at: string | null
@@ -6066,6 +6357,11 @@ export type Database = {
         Args: { _booking_request_id: string }
         Returns: Database["public"]["Enums"]["voyage_booking_status"]
       }
+      settle_voyage_booking_payment_if_zero_due: {
+        Args: { _booking_request_id: string }
+        Returns: Database["public"]["Enums"]["voyage_booking_status"]
+      }
+      slugify_text: { Args: { value: string }; Returns: string }
       submit_article_comment: {
         Args: {
           _article_id: string
@@ -6088,6 +6384,15 @@ export type Database = {
         Args: { _article_id: string; _visitor_key?: string }
         Returns: Json
       }
+      update_voyage_booking_contribution_proposal_files: {
+        Args: {
+          _booking_request_id: string
+          _workaway_cv_storage_path?: string
+          _workaway_portfolio_storage_path?: string
+          _workaway_portfolio_url?: string
+        }
+        Returns: string
+      }
       user_propose_voyage_booking_legs: {
         Args: {
           _booking_request_id: string
@@ -6096,7 +6401,19 @@ export type Database = {
         }
         Returns: string
       }
+      voyage_booking_balance_deadline: {
+        Args: { _booking_request_id: string }
+        Returns: string
+      }
+      voyage_booking_contribution_snapshot_is_fresh: {
+        Args: { _booking_request_id: string; _stamped_at: string }
+        Returns: boolean
+      }
       voyage_booking_has_paid_deposit: {
+        Args: { _booking_request_id: string }
+        Returns: boolean
+      }
+      voyage_booking_negotiated_balance_paid: {
         Args: { _booking_request_id: string }
         Returns: boolean
       }
