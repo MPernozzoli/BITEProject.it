@@ -11,21 +11,11 @@ import { useI18n } from "@/lib/i18n";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
-  Edit,
-  Trash2,
-  X,
-  ChevronUp,
-  ChevronDown,
-  ChevronRight,
   Ship,
   Mountain,
-  Eye,
-  EyeOff,
   LocateFixed,
   Clock3,
   Loader2,
-  Search,
-  GripVertical,
   Maximize2,
   Minimize2,
   PanelRightClose,
@@ -40,13 +30,11 @@ import {
   reverseGeocodePlaceLocalized,
   buildWaypointDefaultName,
   buildWaypointDefaultLocalizedNames,
-  formatWaypointCoordinateLabel,
   isWaypointCoordinateLabel,
   buildVoyageGeometry,
   geocodePlaces,
   haversineNM,
   getLocalizedWaypointName,
-  getLocalizedVoyageName,
   getWaypointEffectiveType,
   getWaypointSequenceHeading,
   getStraightVoyageGeometry,
@@ -56,6 +44,10 @@ import {
 } from "@/lib/voyage-utils";
 import type { GeocodedPlace, Voyage, VoyageWaypoint, VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 import WaypointEditorPanel from "@/components/admin/WaypointEditorPanel";
+import VoyageListPanel from "@/components/admin/VoyageListPanel";
+import VoyageAddressSearchPanel from "@/components/admin/VoyageAddressSearchPanel";
+import VoyageFormPanel from "@/components/admin/VoyageFormPanel";
+import WaypointListPanel from "@/components/admin/WaypointListPanel";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { invokeTranslateEditorContent } from "@/lib/translate-editor-content";
 import {
@@ -75,7 +67,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useBeforeUnloadPrompt } from "@/hooks/useBeforeUnloadPrompt";
 
-interface VoyageFormState {
+export interface VoyageFormState {
   name_it: string;
   name_en: string;
   slug: string;
@@ -104,7 +96,7 @@ interface VoyageFormState {
   end_date_flex_days: string;
 }
 
-interface VoyageListFilters {
+export interface VoyageListFilters {
   type: "all" | Voyage["type"];
   publicationStatus: "all" | "published" | "draft";
   /** Quale campo usare per il filtro date (stesso intervallo Da / A). */
@@ -113,7 +105,7 @@ interface VoyageListFilters {
   dateTo: string;
 }
 
-interface VoyageListSort {
+export interface VoyageListSort {
   field: "created_at" | "start_date" | "type" | "publicationStatus";
   direction: "asc" | "desc";
 }
@@ -123,12 +115,6 @@ interface PendingWaypointDelete {
   waypointId: string;
   label: string;
 }
-
-const voyageStatusLabels: Record<Voyage["status"], string> = {
-  planned: "Planned",
-  active: "Active",
-  completed: "Completed",
-};
 
 const emptyVoyageForm: VoyageFormState = {
   name_it: "",
@@ -168,11 +154,6 @@ const defaultVoyageListSort: VoyageListSort = {
   field: "created_at",
   direction: "desc",
 };
-
-const popupLanguageOptions = [
-  { code: "it", label: "Italiano" },
-  { code: "en", label: "English" },
-] as const;
 
 const sortWaypoints = (waypoints: VoyageWaypoint[]) =>
   [...waypoints].sort((a, b) => a.sort_order - b.sort_order);
@@ -872,8 +853,6 @@ const AdminVoyageManager = ({
   const [routeListFiltersAdvanced, setRouteListFiltersAdvanced] = useState(false);
   const initialVoyageFormSnapshotRef = useRef(serializeVoyageForm(emptyVoyageForm));
   const isVoyageFormDirty = showVoyageForm && serializeVoyageForm(voyageForm) !== initialVoyageFormSnapshotRef.current;
-  /** What the voyage's status actually is: the override when forced, the derived cache otherwise. */
-  const voyageFormStatus = voyageForm.status_override || voyageForm.status;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapWorkspaceRef = useRef<HTMLDivElement>(null);
@@ -888,6 +867,8 @@ const AdminVoyageManager = ({
   const storedRouteDraftRef = useRef(initialStoredRouteDraft);
   const storedVoyageFormDraftRef = useRef(initialStoredVoyageFormDraft);
   const selectedVoyageRef = useRef<string | null>(null);
+  /** Mirrors `lang` for callbacks that must not change identity on language toggle (see effect below). */
+  const langRef = useRef(lang);
   const geometryRequestRef = useRef<Record<string, number>>({});
   const geometryOverrideRef = useRef<Record<string, [number, number][]>>({});
   const geometryDebounceTimersRef = useRef<Record<string, number>>({});
@@ -1009,6 +990,10 @@ const AdminVoyageManager = ({
   useEffect(() => {
     selectedVoyageRef.current = selectedVoyageId;
   }, [selectedVoyageId]);
+
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
 
   useEffect(() => {
     if (controlledSelectedVoyageId === undefined) return;
@@ -1460,7 +1445,7 @@ const AdminVoyageManager = ({
       const currentWaypoints = waypointsRef.current[voyageId] || [];
       const boundedIndex = Math.max(0, Math.min(insertIndex, currentWaypoints.length));
       const provisionalNames = buildWaypointDefaultLocalizedNames(boundedIndex, lat, lng);
-      const provisionalName = provisionalNames[lang];
+      const provisionalName = provisionalNames[langRef.current];
       const nextWaypoints = [...currentWaypoints];
       const createdWaypoint = normalizeWaypoint({
         id: createLocalWaypointId(),
@@ -1515,13 +1500,13 @@ const AdminVoyageManager = ({
       if (suggestedNames.it === provisionalNames.it && suggestedNames.en === provisionalNames.en) return true;
 
       await updateWaypoint(voyageId, createdWaypoint.id, {
-        name: suggestedNames[lang],
+        name: suggestedNames[langRef.current],
         name_it: suggestedNames.it,
         name_en: suggestedNames.en,
       });
       return true;
     },
-    [commitWaypoints, lang, primeGeometryOverrideAfterWaypointEdit, setWaypointEditorPanelId, updateWaypoint]
+    [commitWaypoints, primeGeometryOverrideAfterWaypointEdit, setWaypointEditorPanelId, updateWaypoint]
   );
 
   const deleteWaypoint = useCallback((voyageId: string, waypointId: string) => {
@@ -1748,6 +1733,26 @@ const AdminVoyageManager = ({
   const selectedWaypointLegEstimates = useMemo(
     () => deriveWaypointLegEstimates(selectedWaypoints, selectedVoyage?.booking_planning_speed_kn ?? 5),
     [selectedVoyage?.booking_planning_speed_kn, selectedWaypoints]
+  );
+  /** Pre-computed per-waypoint date/leg label, so WaypointListPanel doesn't need to import buildWaypointAdminDateLabel (module-private here) or the raw suggestion/estimate maps. */
+  const selectedWaypointEventLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        selectedWaypoints.map((waypoint, index) => {
+          const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
+          const label = selectedVoyageDatesTbd
+            ? selectedWaypointLegEstimates[waypoint.id]?.label
+              ? `Dal WPT prec.: ${selectedWaypointLegEstimates[waypoint.id]?.label}`
+              : null
+            : buildWaypointAdminDateLabel(
+                waypoint,
+                selectedWaypointDateSuggestions[waypoint.id],
+                effectiveType
+              );
+          return [waypoint.id, label];
+        })
+      ) as Record<string, string | null>,
+    [selectedWaypoints, selectedVoyageDatesTbd, selectedWaypointLegEstimates, selectedWaypointDateSuggestions]
   );
 
   // Resolves the waypoint currently open in the editor panel, with its index/total.
@@ -2923,186 +2928,29 @@ const AdminVoyageManager = ({
     return () => document.removeEventListener("click", handleDocumentClick, true);
   }, [handleSaveBeforeLeave, isVoyageFormDirty, location.hash, location.pathname, location.search, navigate]);
 
-  const renderWaypointList = (maxHeightClass: string) => (
-    <>
-      <div className={`space-y-0 overflow-y-auto ${maxHeightClass}`}>
-        {selectedWaypoints.map((waypoint, index) => {
-          const effectiveType = getWaypointEffectiveType(waypoint, index, selectedWaypoints.length);
-          const displayName = getLocalizedWaypointName(waypoint, lang, index);
-          const visibilityLabel = waypoint.visibility_mode === "manual"
-            ? effectiveType === "narrative"
-              ? "Manual narrative waypoint"
-              : "Manual technical waypoint"
-            : effectiveType === "narrative"
-              ? "Auto public end waypoint"
-              : "Auto technical waypoint";
-          const eventLabel = selectedVoyageDatesTbd
-            ? selectedWaypointLegEstimates[waypoint.id]?.label
-              ? `Dal WPT prec.: ${selectedWaypointLegEstimates[waypoint.id]?.label}`
-              : null
-            : buildWaypointAdminDateLabel(
-                waypoint,
-                selectedWaypointDateSuggestions[waypoint.id],
-                effectiveType
-              );
-
-          return (
-            <div
-              key={waypoint.id}
-              onDragOver={(event) => {
-                if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                event.preventDefault();
-                if (dragOverWaypointId !== waypoint.id) {
-                  setDragOverWaypointId(waypoint.id);
-                }
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (!draggedWaypointId || draggedWaypointId === waypoint.id) return;
-                const fromIndex = selectedWaypoints.findIndex((item) => item.id === draggedWaypointId);
-                const toIndex = selectedWaypoints.findIndex((item) => item.id === waypoint.id);
-                setDraggedWaypointId(null);
-                setDragOverWaypointId(null);
-                void reorderWaypoint(waypoint.voyage_id, fromIndex, toIndex);
-              }}
-              onDragLeave={(event) => {
-                if (!(event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node | null)) {
-                  setDragOverWaypointId((current) => (current === waypoint.id ? null : current));
-                }
-              }}
-              className={`flex items-center gap-2 py-2 px-2 border-b border-border/50 group text-xs transition-colors ${
-                dragOverWaypointId === waypoint.id ? "bg-accent/10" : ""
-              } ${draggedWaypointId === waypoint.id ? "opacity-50" : ""}`}
-            >
-              <button
-                type="button"
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", waypoint.id);
-                  setDraggedWaypointId(waypoint.id);
-                  setDragOverWaypointId(waypoint.id);
-                }}
-                onDragEnd={() => {
-                  setDraggedWaypointId(null);
-                  setDragOverWaypointId(null);
-                }}
-                className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
-                title="Drag to reorder waypoint"
-              >
-                <GripVertical size={12} />
-              </button>
-              <span className="text-muted-foreground/40 w-5 shrink-0 font-sans">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <button
-                type="button"
-                onClick={() => void toggleWaypointVisibility(waypoint, index, selectedWaypoints.length)}
-                className="p-0.5 text-muted-foreground hover:text-foreground"
-                title={`${visibilityLabel}. Click to toggle quickly.`}
-              >
-                {effectiveType === "technical" ? (
-                  <EyeOff size={10} className="text-muted-foreground shrink-0" />
-                ) : (
-                  <Eye size={10} className="text-accent shrink-0" />
-                )}
-              </button>
-              <div className="flex-1 min-w-0">
-                {editingWaypointNameId === waypoint.id ? (
-                  <input
-                    type="text"
-                    value={editingWaypointNameValue}
-                    onChange={(event) => setEditingWaypointNameValue(event.target.value)}
-                    onBlur={() => void submitWaypointNameEdit(waypoint, index)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void submitWaypointNameEdit(waypoint, index);
-                      }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        cancelWaypointNameEdit();
-                      }
-                    }}
-                    autoFocus
-                    disabled={savingWaypointNameId === waypoint.id}
-                    className="block w-full border border-border bg-background px-2 py-1 font-sans text-xs text-foreground outline-none focus:border-foreground"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onDoubleClick={() => beginWaypointNameEdit(waypoint, index)}
-                    className="font-sans truncate block w-full text-left hover:text-foreground transition-colors"
-                    title="Double click to rename"
-                  >
-                    {displayName || buildWaypointDefaultName(index, waypoint.lat, waypoint.lng)}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => openWaypointPopup(waypoint.id)}
-                  className="text-[10px] text-muted-foreground font-sans text-left hover:text-foreground transition-colors"
-                >
-                  {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
-                  {eventLabel ? ` · ${eventLabel}` : ""}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => void deleteWaypoint(waypoint.voyage_id, waypoint.id)}
-                className="p-1 text-muted-foreground hover:text-destructive"
-                title="Delete waypoint"
-              >
-                <Trash2 size={12} />
-              </button>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  onClick={() => openWaypointPopup(waypoint.id)}
-                  className="p-1 text-muted-foreground hover:text-foreground"
-                  title="Edit waypoint"
-                >
-                  <Edit size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveWaypoint(waypoint, "up")}
-                  disabled={index === 0}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                >
-                  <ChevronUp size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveWaypoint(waypoint, "down")}
-                  disabled={index === selectedWaypoints.length - 1}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-20"
-                >
-                  <ChevronDown size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    focusWaypointOnMap(waypoint.id);
-                  }}
-                  className="p-1 text-muted-foreground hover:text-foreground"
-                  title="Center waypoint on map"
-                >
-                  <LocateFixed size={12} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {selectedWaypoints.length === 0 && (
-        <p className="text-center text-xs text-muted-foreground py-6">
-          The next click on the map will create the first waypoint.
-        </p>
-      )}
-    </>
-  );
+  const waypointListPanelProps = {
+    selectedWaypoints,
+    lang,
+    eventLabels: selectedWaypointEventLabels,
+    draggedWaypointId,
+    setDraggedWaypointId,
+    dragOverWaypointId,
+    setDragOverWaypointId,
+    editingWaypointNameId,
+    editingWaypointNameValue,
+    setEditingWaypointNameValue,
+    savingWaypointNameId,
+    onReorder: (voyageId: string, fromIndex: number, toIndex: number) => void reorderWaypoint(voyageId, fromIndex, toIndex),
+    onToggleVisibility: (waypoint: VoyageWaypoint, index: number, total: number) =>
+      void toggleWaypointVisibility(waypoint, index, total),
+    onBeginNameEdit: beginWaypointNameEdit,
+    onCancelNameEdit: cancelWaypointNameEdit,
+    onSubmitNameEdit: (waypoint: VoyageWaypoint, index: number) => void submitWaypointNameEdit(waypoint, index),
+    onOpenPopup: (waypointId: string) => openWaypointPopup(waypointId),
+    onDelete: (voyageId: string, waypointId: string) => void deleteWaypoint(voyageId, waypointId),
+    onMove: (waypoint: VoyageWaypoint, direction: "up" | "down") => moveWaypoint(waypoint, direction),
+    onFocusOnMap: focusWaypointOnMap,
+  };
 
   return (
     <>
@@ -3118,752 +2966,37 @@ const AdminVoyageManager = ({
       </div>
 
       {showVoyageForm && (
-        <div className="border border-border p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-sans font-medium">{editingVoyage ? "Edit Voyage" : "New Voyage"}</h4>
-            <button onClick={closeVoyageForm} className="text-muted-foreground hover:text-foreground">
-              <X size={16} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <p className="text-[10px] font-sans font-semibold uppercase tracking-[0.14em] text-muted-foreground">Testi viaggio</p>
-              <div className="flex gap-1.5 rounded-[14px] border border-border p-1 bg-muted/30">
-                {popupLanguageOptions.map(({ code, label }) => (
-                  <button
-                    key={`voyage-lang-${code}`}
-                    type="button"
-                    onClick={() => setVoyageFormLang(code)}
-                    className={`flex-1 rounded-[10px] px-3 py-2 text-xs font-sans font-semibold transition-colors ${
-                      voyageFormLang === code
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {voyageFormLang === "it" ? (
-                <>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Nome</label>
-                    <input
-                      type="text"
-                      value={voyageForm.name_it}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setVoyageForm((form) => ({
-                          ...form,
-                          name_it: value,
-                          slug_it: !editingVoyage || !form.slug_it ? slugifyVoyageName(value) : form.slug_it,
-                          slug: !editingVoyage || !form.slug ? slugifyVoyageName(form.name_en || value) : form.slug,
-                        }));
-                      }}
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug IT</label>
-                    <input
-                      type="text"
-                      value={voyageForm.slug_it}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, slug_it: event.target.value }))}
-                      placeholder="es. giro-di-sicilia"
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                    />
-                    <p className="mt-1 text-[10px] text-muted-foreground">URL pubblico in /it/voyages/. Lascia vuoto per usare lo slug canonico.</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Descrizione</label>
-                    <textarea
-                      value={voyageForm.description_it}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, description_it: event.target.value }))}
-                      rows={3}
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Name</label>
-                    <input
-                      type="text"
-                      value={voyageForm.name_en}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setVoyageForm((form) => ({
-                          ...form,
-                          name_en: value,
-                          slug_en: !editingVoyage || !form.slug_en ? slugifyVoyageName(value) : form.slug_en,
-                          slug: !editingVoyage || !form.slug ? slugifyVoyageName(value || form.name_it) : form.slug,
-                        }));
-                      }}
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug EN</label>
-                    <input
-                      type="text"
-                      value={voyageForm.slug_en}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, slug_en: event.target.value }))}
-                      placeholder="e.g. sicily-loop"
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                    />
-                    <p className="mt-1 text-[10px] text-muted-foreground">Public URL under /en/voyages/. Leave empty to fall back to the canonical slug.</p>
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Description</label>
-                    <textarea
-                      value={voyageForm.description_en}
-                      onChange={(event) => setVoyageForm((form) => ({ ...form, description_en: event.target.value }))}
-                      rows={3}
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent resize-none"
-                    />
-                  </div>
-                </>
-              )}
-              <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Slug (canonico / fallback)</label>
-                <input
-                  type="text"
-                  value={voyageForm.slug}
-                  onChange={(event) => setVoyageForm((form) => ({ ...form, slug: event.target.value }))}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                />
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  URL legacy / fallback quando manca lo slug per la lingua. Deve essere unico.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Type</label>
-                <select
-                  value={voyageForm.type}
-                  onChange={(event) => {
-                    const nextType = event.target.value as Voyage["type"];
-                    setVoyageForm((form) => ({
-                      ...form,
-                      type: nextType,
-                      waterway_autoroute: nextType === "land" ? false : form.waterway_autoroute,
-                    }));
-                  }}
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                >
-                  <option value="water">🚢 Water</option>
-                  <option value="land">🚐 Land</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">Status</label>
-                <select
-                  value={voyageForm.status_override}
-                  onChange={(event) =>
-                    setVoyageForm((form) => {
-                      const nextOverride = event.target.value as VoyageFormState["status_override"];
-                      const effective = nextOverride || form.status;
-                      return {
-                        ...form,
-                        status_override: nextOverride,
-                        dates_tbd: effective === "planned" ? form.dates_tbd : false,
-                      };
-                    })
-                  }
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                >
-                  <option value="">Automatico — {voyageStatusLabels[voyageForm.status]}</option>
-                  <option value="planned">Forza Planned</option>
-                  <option value="active">Forza Active</option>
-                  <option value="completed">Forza Completed</option>
-                </select>
-                <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
-                  {voyageForm.status_override
-                    ? "Stato forzato a mano: resta questo finche non torni su Automatico."
-                    : "Derivato da date effettive e previste: passato = concluso, in corso = attivo, futuro = programmato."}
-                </p>
-              </div>
-            </div>
-
-            {voyageForm.type === "water" && (
-              <div className="rounded-[20px] border border-border px-4 py-3">
-                <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-                  Tipo di navigazione
-                </span>
-                <div
-                  role="radiogroup"
-                  aria-label="Tipo di navigazione"
-                  className="mt-3 grid grid-cols-2 gap-1 rounded-[14px] border border-border bg-muted/30 p-1"
-                >
-                  {([
-                    {
-                      value: false,
-                      label: "Mare",
-                      hint: "Rotta in alto mare: la linea segue i waypoint in linea retta.",
-                    },
-                    {
-                      value: true,
-                      label: "Canali · fiumi",
-                      hint: "Autoroute su vie navigabili (OpenStreetMap via BRouter): la linea segue canali e fiumi tra i waypoint.",
-                    },
-                  ] as const).map((option) => {
-                    const active = voyageForm.waterway_autoroute === option.value;
-                    return (
-                      <button
-                        key={option.label}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() =>
-                          setVoyageForm((form) => ({ ...form, waterway_autoroute: option.value }))
-                        }
-                        className={`rounded-[10px] px-3 py-2 text-xs font-sans uppercase tracking-[0.16em] transition-colors ${
-                          active
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-transparent text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="mt-2 block text-[11px] font-sans text-muted-foreground">
-                  {voyageForm.waterway_autoroute
-                    ? "Autoroute su vie navigabili: i waypoint devono essere vicini all’asse del canale/fiume; dove non c’è grafo utile quel tratto resta in linea retta. Sul sito resta un voyage acqua come gli altri."
-                    : "Alto mare: nessun instradamento, la rotta collega i waypoint in linea retta."}
-                </span>
-              </div>
-            )}
-
-            <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
-              <input
-                type="checkbox"
-                checked={voyageForm.is_published}
-                onChange={(event) => setVoyageForm((form) => ({ ...form, is_published: event.target.checked }))}
-                className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
-              />
-              <span className="min-w-0">
-                <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-                  {voyageForm.is_published ? "Published route" : "Draft route"}
-                </span>
-                <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
-                  {voyageForm.is_published
-                    ? "Visible on public maps and route pages."
-                    : "Hidden from public maps and route pages until published."}
-                </span>
-              </span>
-            </label>
-
-            <div className="rounded-[20px] border border-border px-4 py-3">
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={voyageForm.booking_enabled}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({ ...form, booking_enabled: event.target.checked }))
-                  }
-                  className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))]"
-                />
-                <span className="min-w-0">
-                  <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-                    {voyageForm.booking_enabled ? "Booking aperto" : "Booking disattivato"}
-                  </span>
-                  <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
-                    Consente agli utenti registrati di richiedere imbarco sulle tratte pubbliche del viaggio.
-                  </span>
-                </span>
-              </label>
-              {voyageForm.booking_enabled && (
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                      Persone max
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={voyageForm.booking_max_guests}
-                      onChange={(event) =>
-                        setVoyageForm((form) => ({ ...form, booking_max_guests: event.target.value }))
-                      }
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                      Velocità kn
-                    </label>
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      value={voyageForm.booking_planning_speed_kn}
-                      onChange={(event) =>
-                        setVoyageForm((form) => ({ ...form, booking_planning_speed_kn: event.target.value }))
-                      }
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                      €/NM contributo
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={voyageForm.booking_contribution_per_nm_eur}
-                      onChange={(event) =>
-                        setVoyageForm((form) => ({ ...form, booking_contribution_per_nm_eur: event.target.value }))
-                      }
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                    <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
-                      Default 0,90 euro per miglio nautico pianificato.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <label className="flex items-start gap-3 rounded-[20px] border border-border px-4 py-3">
-            <input
-              type="checkbox"
-              checked={voyageForm.dates_tbd}
-              disabled={voyageFormStatus !== "planned"}
-              onChange={(event) =>
-                setVoyageForm((form) => ({
-                  ...form,
-                  dates_tbd: event.target.checked,
-                  ...(event.target.checked
-                    ? {
-                        start_date: "",
-                        start_time: "",
-                        start_date_flex_days: "0",
-                        end_date: "",
-                        end_time: "",
-                        end_date_flex_days: "0",
-                      }
-                    : {}),
-                }))
-              }
-              className="mt-0.5 h-4 w-4 accent-[hsl(var(--accent))] disabled:opacity-50"
-            />
-            <span className="min-w-0">
-              <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-                Date da definirsi
-              </span>
-              <span className="mt-1 block text-[11px] font-sans text-muted-foreground">
-                {voyageFormStatus === "planned"
-                  ? "Usalo per viaggi desiderati ma non ancora calendarizzati. Salva il viaggio senza date fissate."
-                  : "Disponibile solo per viaggi con stato Planned."}
-              </span>
-            </span>
-          </label>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">Start</label>
-              <div className="grid grid-cols-[1fr_140px] gap-3">
-                <input
-                  type="date"
-                  value={voyageForm.start_date}
-                  disabled={voyageForm.dates_tbd}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({
-                      ...form,
-                      dates_tbd: false,
-                      start_date: event.target.value,
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
-                />
-                <input
-                  type="time"
-                  value={voyageForm.start_time}
-                  disabled={voyageForm.dates_tbd}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({
-                      ...form,
-                      dates_tbd: false,
-                      start_time: event.target.value,
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
-                />
-              </div>
-              {voyageFormStatus === "planned" && !voyageForm.dates_tbd && (
-                <div className="grid grid-cols-[1fr_120px] gap-3">
-                  <div className="text-[11px] font-sans text-muted-foreground flex items-center">
-                    Finestra partenza
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">±</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={voyageForm.start_date_flex_days}
-                      onChange={(event) =>
-                        setVoyageForm((form) => ({
-                          ...form,
-                          start_date_flex_days: event.target.value,
-                        }))
-                      }
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                </div>
-              )}
-              <p className="text-[11px] text-muted-foreground font-sans">
-                {voyageForm.dates_tbd
-                  ? "Date e orario verranno definiti più avanti."
-                  : voyageFormStatus === "planned"
-                    ? "Per i viaggi planned puoi indicare anche una flessibilità di ± giorni."
-                    : "Time is optional."}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">
-                End · arrivo stimato
-              </label>
-              <div className="grid grid-cols-[1fr_140px] gap-3">
-                <input
-                  type="date"
-                  value={voyageForm.end_date}
-                  disabled={voyageForm.dates_tbd}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({
-                      ...form,
-                      dates_tbd: false,
-                      end_date: event.target.value,
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
-                />
-                <input
-                  type="time"
-                  value={voyageForm.end_time}
-                  disabled={voyageForm.dates_tbd}
-                  onChange={(event) =>
-                    setVoyageForm((form) => ({
-                      ...form,
-                      dates_tbd: false,
-                      end_time: event.target.value,
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent disabled:opacity-50"
-                />
-              </div>
-              {voyageFormStatus === "planned" && !voyageForm.dates_tbd && (
-                <div className="grid grid-cols-[1fr_120px] gap-3">
-                  <div className="text-[11px] font-sans text-muted-foreground flex items-center">
-                    Finestra arrivo
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">±</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={voyageForm.end_date_flex_days}
-                      onChange={(event) =>
-                        setVoyageForm((form) => ({
-                          ...form,
-                          end_date_flex_days: event.target.value,
-                        }))
-                      }
-                      className="w-full bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                </div>
-              )}
-              {!voyageForm.dates_tbd && estimatedVoyageArrival && (
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans text-muted-foreground">
-                  <span>
-                    Arrivo stimato all&apos;ultimo waypoint:{" "}
-                    <span className="text-foreground">
-                      {estimatedVoyageArrival.date} · {estimatedVoyageArrival.time}
-                    </span>{" "}
-                    (a {Number(voyageForm.booking_planning_speed_kn) || 5} kn + soste)
-                  </span>
-                  {(voyageForm.end_date !== estimatedVoyageArrival.date ||
-                    voyageForm.end_time !== estimatedVoyageArrival.time) && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setVoyageForm((form) => ({
-                          ...form,
-                          dates_tbd: false,
-                          end_date: estimatedVoyageArrival.date,
-                          end_time: estimatedVoyageArrival.time,
-                        }))
-                      }
-                      className="rounded-[8px] border border-border px-2 py-1 text-[10.5px] uppercase tracking-[0.14em] text-foreground transition-colors hover:bg-muted"
-                    >
-                      Usa stima
-                    </button>
-                  )}
-                </div>
-              )}
-              <p className="text-[11px] text-muted-foreground font-sans">
-                {voyageForm.dates_tbd
-                  ? "Anche la finestra di arrivo resta aperta finché non viene pianificata."
-                  : estimatedVoyageArrival
-                    ? "Precompilata dai waypoint (distanza / velocità + soste). Puoi comunque modificarla a mano."
-                    : voyageFormStatus === "planned"
-                      ? "Usa ± giorni per rappresentare una finestra flessibile."
-                      : "Leave blank if the arrival is still open."}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void saveVoyage()}
-            disabled={isSavingVoyage}
-            aria-busy={isSavingVoyage}
-            className="bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
-          >
-            {isSavingVoyage ? <Loader2 size={14} className="animate-spin shrink-0" /> : null}
-            {isSavingVoyage ? "Salvataggio…" : editingVoyage ? "Update" : "Create"}
-          </button>
-        </div>
+        <VoyageFormPanel
+          voyageForm={voyageForm}
+          setVoyageForm={setVoyageForm}
+          voyageFormLang={voyageFormLang}
+          setVoyageFormLang={setVoyageFormLang}
+          editingVoyage={editingVoyage}
+          estimatedVoyageArrival={estimatedVoyageArrival}
+          closeVoyageForm={closeVoyageForm}
+          saveVoyage={() => void saveVoyage()}
+          isSavingVoyage={isSavingVoyage}
+        />
       )}
 
-      <div className="rounded-[16px] border border-border/70 bg-muted/10 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setRouteListFiltersExpanded((open) => !open)}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left font-sans hover:bg-muted/30 transition-colors"
-          aria-expanded={routeListFiltersExpanded}
-        >
-          {routeListFiltersExpanded ? (
-            <ChevronDown className="shrink-0 text-muted-foreground" size={16} aria-hidden />
-          ) : (
-            <ChevronRight className="shrink-0 text-muted-foreground" size={16} aria-hidden />
-          )}
-          <div className="min-w-0 flex-1">
-            <span className="text-sm font-medium text-foreground">Filtri rotte</span>
-            <span className="ml-2 text-[11px] text-muted-foreground">
-              {visibleVoyages.length}/{voyages.length} visibili
-              {hasActiveFilters ? " · filtri attivi" : ""}
-            </span>
-          </div>
-          {hasActiveFilters ? (
-            <span
-              role="presentation"
-              className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-sans uppercase tracking-wider text-foreground"
-            >
-              Attivi
-            </span>
-          ) : null}
-        </button>
-
-        {routeListFiltersExpanded ? (
-          <div className="border-t border-border/60 px-3 pb-2.5 pt-1 space-y-2">
-            <div className="flex flex-wrap items-end gap-x-2 gap-y-2">
-              <div className="min-w-[7.5rem] flex-1">
-                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                  Tipologia
-                </label>
-                <select
-                  value={listFilters.type}
-                  onChange={(event) =>
-                    setListFilters((current) => ({ ...current, type: event.target.value as VoyageListFilters["type"] }))
-                  }
-                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                >
-                  <option value="all">Tutte</option>
-                  <option value="water">Acqua</option>
-                  <option value="land">Terra</option>
-                </select>
-              </div>
-
-              <div className="min-w-[7.5rem] flex-1">
-                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                  Stato
-                </label>
-                <select
-                  value={listFilters.publicationStatus}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      publicationStatus: event.target.value as VoyageListFilters["publicationStatus"],
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                >
-                  <option value="all">Tutte</option>
-                  <option value="published">Pubblicate</option>
-                  <option value="draft">Bozze</option>
-                </select>
-              </div>
-
-              <div className="min-w-[9.5rem] flex-1">
-                <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                  Data (filtro)
-                </label>
-                <select
-                  value={listFilters.dateFilterMode}
-                  onChange={(event) =>
-                    setListFilters((current) => ({
-                      ...current,
-                      dateFilterMode: event.target.value as VoyageListFilters["dateFilterMode"],
-                    }))
-                  }
-                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                >
-                  <option value="created">Creazione</option>
-                  <option value="departure">Partenza viaggio</option>
-                </select>
-              </div>
-
-              <div className="flex min-w-0 flex-[2] flex-wrap items-end gap-x-1.5 gap-y-1">
-                <div className="min-w-[6.5rem] flex-1">
-                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                    Da
-                  </label>
-                  <input
-                    type="date"
-                    value={listFilters.dateFrom}
-                    onChange={(event) => setListFilters((current) => ({ ...current, dateFrom: event.target.value }))}
-                    className="w-full min-w-0 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                  />
-                </div>
-                <div className="min-w-[6.5rem] flex-1">
-                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                    A
-                  </label>
-                  <input
-                    type="date"
-                    value={listFilters.dateTo}
-                    onChange={(event) => setListFilters((current) => ({ ...current, dateTo: event.target.value }))}
-                    className="w-full min-w-0 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setRouteListFiltersAdvanced((v) => !v)}
-                className="text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {routeListFiltersAdvanced ? "Nascondi avanzate" : "Avanzate"}
-              </button>
-              {hasActiveFilters ? (
-                <button
-                  type="button"
-                  onClick={() => setListFilters(emptyVoyageListFilters)}
-                  className="text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Reset filtri
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setRouteListFiltersExpanded(false)}
-                className="ml-auto text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Chiudi
-              </button>
-            </div>
-
-            {routeListFiltersAdvanced ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-border/40">
-                <div>
-                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                    Ordina per
-                  </label>
-                  <select
-                    value={listSort.field}
-                    onChange={(event) =>
-                      setListSort((current) => ({ ...current, field: event.target.value as VoyageListSort["field"] }))
-                    }
-                    className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                  >
-                    <option value="created_at">Data creazione</option>
-                    <option value="start_date">Data partenza</option>
-                    <option value="type">Tipologia</option>
-                    <option value="publicationStatus">Stato</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-sans tracking-[0.14em] uppercase text-muted-foreground mb-0.5 block">
-                    Direzione
-                  </label>
-                  <select
-                    value={listSort.direction}
-                    onChange={(event) =>
-                      setListSort((current) => ({
-                        ...current,
-                        direction: event.target.value as VoyageListSort["direction"],
-                      }))
-                    }
-                    className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent"
-                  >
-                    <option value="desc">Decrescente</option>
-                    <option value="asc">Crescente</option>
-                  </select>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="rounded-[20px] border border-border/70 bg-background/40 p-3 space-y-2">
-        <p className="text-xs font-sans font-medium text-foreground">Elenco rotte</p>
-        {visibleVoyages.length === 0 ? (
-          <p className="text-xs text-muted-foreground font-sans py-1">Nessuna rotta con i filtri attuali.</p>
-        ) : (
-          <div className="space-y-1.5 max-h-[min(240px,40vh)] overflow-y-auto pr-1">
-            {visibleVoyages.map((voyage) => {
-              const displayName = getLocalizedVoyageName(voyage, lang);
-              const isActive = selectedVoyageId === voyage.id;
-              return (
-                <div key={voyage.id} className="flex items-stretch gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => void selectVoyage(voyage.id)}
-                    className={`flex-1 min-w-0 rounded-[14px] border px-3 py-2 text-left text-sm font-sans transition-colors ${
-                      isActive
-                        ? "border-accent bg-accent/10 text-foreground"
-                        : "border-border/70 bg-background/60 hover:border-accent/50 text-foreground"
-                    }`}
-                  >
-                    <span className="block truncate">{displayName}</span>
-                    <span className="mt-0.5 block text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                      {voyage.type} · {voyage.status}
-                      {!voyage.is_published ? " · bozza" : ""}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openVoyageForm(voyage)}
-                    className="shrink-0 self-stretch inline-flex items-center justify-center rounded-[14px] border border-border/70 bg-background/80 px-2.5 text-muted-foreground hover:border-accent hover:text-foreground transition-colors"
-                    title="Modifica nome, descrizione e dettagli viaggio (non i waypoint)"
-                    aria-label="Modifica info viaggio"
-                  >
-                    <Edit size={15} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <VoyageListPanel
+        voyages={voyages}
+        visibleVoyages={visibleVoyages}
+        hasActiveFilters={hasActiveFilters}
+        listFilters={listFilters}
+        setListFilters={setListFilters}
+        listSort={listSort}
+        setListSort={setListSort}
+        routeListFiltersExpanded={routeListFiltersExpanded}
+        setRouteListFiltersExpanded={setRouteListFiltersExpanded}
+        routeListFiltersAdvanced={routeListFiltersAdvanced}
+        setRouteListFiltersAdvanced={setRouteListFiltersAdvanced}
+        selectedVoyageId={selectedVoyageId}
+        lang={lang}
+        onSelectVoyage={(voyageId) => void selectVoyage(voyageId)}
+        onEditVoyage={openVoyageForm}
+        onResetFilters={() => setListFilters(emptyVoyageListFilters)}
+      />
 
       <div
         ref={mapWorkspaceRef}
@@ -4031,7 +3164,10 @@ const AdminVoyageManager = ({
                         Clicca un marker sulla mappa o una riga della lista per aprire l'inspector del waypoint.
                       </p>
                     </div>
-                    {renderWaypointList(isMapWorkspaceFullscreen ? "max-h-[calc(45vh-132px)] lg:max-h-[calc(100vh-132px)]" : "max-h-[360px]")}
+                    <WaypointListPanel
+                      {...waypointListPanelProps}
+                      maxHeightClass={isMapWorkspaceFullscreen ? "max-h-[calc(45vh-132px)] lg:max-h-[calc(100vh-132px)]" : "max-h-[360px]"}
+                    />
                   </div>
                 )}
               </div>
@@ -4048,65 +3184,15 @@ const AdminVoyageManager = ({
             <div className="p-4 border-t border-border space-y-4">
               {selectedVoyage?.type === "land" && (
                 <div className="rounded-[22px] border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-sans font-medium">Cerca indirizzi e POI</h4>
-                      <p className="text-xs text-muted-foreground font-sans">
-                        Cerca un luogo, centrati sulla mappa e aggiungilo direttamente come waypoint.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={landSearchQuery}
-                      onChange={(event) => setLandSearchQuery(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        void runLandSearch();
-                      }}
-                      placeholder="Indirizzo, città, POI, stazione..."
-                      className="flex-1 bg-transparent border border-border px-3 py-2 text-sm font-sans focus:outline-none focus:border-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void runLandSearch()}
-                      disabled={landSearchLoading}
-                      className="inline-flex items-center justify-center gap-2 border border-border px-3 py-2 text-sm font-sans text-muted-foreground hover:text-foreground disabled:opacity-60"
-                      title="Cerca sulla mappa"
-                    >
-                      {landSearchLoading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                    </button>
-                  </div>
-
-                  {landSearchResults.length > 0 && (
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                      {landSearchResults.map((result, index) => (
-                        <div
-                          key={`${result.lat}-${result.lng}-${index}`}
-                          className="flex items-start gap-2 rounded-[18px] border border-border/60 bg-background/60 px-3 py-2"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => focusSearchResult(result)}
-                            className="flex-1 min-w-0 text-left"
-                          >
-                            <span className="block text-sm font-sans text-foreground truncate">{result.name.split(",")[0]}</span>
-                            <span className="block text-[11px] text-muted-foreground font-sans break-words">{result.name}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void addSearchResultWaypoint(result)}
-                            className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-sans text-foreground hover:border-accent hover:text-accent"
-                          >
-                            Aggiungi
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <VoyageAddressSearchPanel
+                    landSearchQuery={landSearchQuery}
+                    setLandSearchQuery={setLandSearchQuery}
+                    landSearchResults={landSearchResults}
+                    landSearchLoading={landSearchLoading}
+                    onSearch={() => void runLandSearch()}
+                    onFocusResult={focusSearchResult}
+                    onAddResult={(result) => void addSearchResultWaypoint(result)}
+                  />
 
                   <div className="rounded-[18px] border border-border/60 bg-background/60 px-3 py-3">
                     <div className="flex items-start justify-between gap-3">
@@ -4253,7 +3339,7 @@ const AdminVoyageManager = ({
                 ) : null}
               </div>
 
-              {renderWaypointList("max-h-[260px]")}
+              <WaypointListPanel {...waypointListPanelProps} maxHeightClass="max-h-[260px]" />
             </div>
           )}
       </div>

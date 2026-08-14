@@ -10,7 +10,7 @@ tags: [community, membership, sub-app, pagamenti, booking]
 Implementazione iniziale completata e isolata:
 
 - sub-app Vite `apps/crew` (`@biteproject/crew`) servita con base `/Crew/`;
-- sottodominio previsto `crew.biteproject.it`, riscritto a `/Crew` da `middleware.ts`/`apps/web/middleware.ts`;
+- sottodominio previsto `crew.biteproject.it`, riscritto a `/Crew` da `middleware.ts` alla root (unico middleware esistente → [[18 - Deploy e Configurazione]]);
 - nessun link aggiunto alla navbar o alle rotte dell'app principale;
 - `robots: noindex,nofollow` su `/Crew/*`;
 - stesso account Supabase tramite storage auth condiviso su `.biteproject.it`;

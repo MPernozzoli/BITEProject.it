@@ -16,15 +16,37 @@ tags: [comandi, workflow, script, dx]
 | `npm run build:crew` | build `apps/crew` con base `/Crew/` → [[23 - Community]] |
 | `npm run build:dev` | build development di `@biteproject/web` |
 | `npm run preview` | preview di `@biteproject/web` |
-| `npm run lint` | ESLint di `@biteproject/web` |
+| `npm run lint` | ESLint su **tutti** i workspace con uno script `lint` (`--workspaces --if-present`), non più solo `apps/web` |
 | `npm run test` | Vitest di `@biteproject/web` (run singolo) |
 | `npm run test:watch` | Vitest di `@biteproject/web` in watch |
 | `npm run --workspace @biteproject/web seo:sitemap` | genera sitemap (`apps/web/scripts/generate-sitemap.mjs`) |
 
+## Type-check — non c'è nessuno script npm che lo faccia
+
+**`npm run build` non esegue type-check** (`"build": "npm run seo:sitemap && vite build"`, e Vite transpila senza controllare i tipi). Una build verde non dice niente sui type error: vanno cercati esplicitamente.
+
+```bash
+cd apps/web && npx tsc --noEmit -p tsconfig.app.json
+```
+
+Usare **`tsconfig.app.json`, non `tsconfig.json`**: quest'ultimo è solo un project reference con `files: []`, controlla zero file ed esce pulito qualunque cosa sia rotta — falsa sicurezza. Per le sub-app vale lo stesso schema (`apps/crew/tsconfig.app.json`, ecc.).
+
+La verifica completa prima di un commit è quindi **due comandi**: `tsc --noEmit -p tsconfig.app.json` *e* `npm run build --workspace @biteproject/web`.
+
+> Nota: `noUnusedLocals` / `noUnusedParameters` sono disattivati. Dopo un refactor che sposta codice fuori da un file, gli import rimasti inutilizzati nel file di partenza **non vengono segnalati da nessun tool**: vanno cercati a mano.
+
+### Errori TypeScript preesistenti (baseline nota)
+Girando `tsc` su `apps/web` compaiono errori **non introdotti dalle modifiche in corso**. Prima di attribuirsi una regressione, confrontare l'output con questa lista:
+- `VoyageWaypoint` (`src/lib/voyage-utils.ts`) richiede `updated_at`, ma `normalizeWaypoint` in `AdminVoyageManager.tsx` e le fixture di `src/test/voyage-utils.test.ts` costruiscono l'oggetto senza fornirlo.
+- `src/pages/VoyagePage.tsx` referenzia `fixedMinimumEur` su un tipo che ora espone solo `contributionPerNmEur`.
+
+Se compaiono **solo** questi (a numeri di riga eventualmente diversi), il lavoro in corso è pulito.
+
 ## Testing
-- **Unit/component:** Vitest + Testing Library → `apps/web/src/test/`, config `apps/web/vitest.config.ts`.
+- **Unit/component:** Vitest + Testing Library → `apps/web/src/test/`, config `apps/web/vitest.config.ts`. Copertura reale bassa (~7-8%): nessuna pagina o componente admin è coperto da test.
 - **E2E:** Playwright → `apps/web/playwright.config.ts`, `apps/web/playwright-fixture.ts`.
 - **Lint:** ESLint segnala gli `any` come warning progressivi; gli errori bloccanti restano riservati a bug probabili (es. Rules of Hooks, import non supportati, direttive TS unsafe).
+- ⚠️ **`npm run lint` è inaffidabile:** `eslint` si blocca a tempo indefinito (osservato anche su `eslint --version`, con processi zombie da terminare a mano). Causa non diagnosticata. Un problema correlato ma distinto — il symlink `node_modules/.bin/eslint` dirottato dalla cache npm-compat di Deno, tipicamente dopo un `npx deno@2 check` lanciato dalla root invece che da `apps/web` — si risolve con `rm -rf node_modules/.deno && npm install`. Finché il blocco non è capito, non usare il lint come gate di verifica: usare `tsc` + build.
 - **Bundle check:** `npm run build` mostra la distribuzione dei chunk Vite. I vendor pesanti sono separati in chunk cacheabili; i warning su dimensioni grezze vanno valutati guardando anche il peso gzip e se il chunk è lazy.
 
 ## Supabase (CLI, se usata)
@@ -66,7 +88,13 @@ I test dei tool girano con il resto della suite: `src/test/mcp-*.test.ts` usano 
 
 ## Note package manager
 Usare npm come package manager operativo del progetto. `package-lock.json` è il lockfile da aggiornare quando si interviene sulle dipendenze.
-Per `@pynkstudio/mailapp` e `@pynkstudio/newsletterapp` usare il tarball GitHub pubblico già presente in `package.json`, **pinnato a un tag** (`archive/refs/tags/vX.Y.Z.tar.gz`): non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel. Per mailapp l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale); newsletterapp non ha peer dependencies.
+Per `@pynkstudio/mailapp` e `@pynkstudio/newsletterapp` usare il tarball GitHub pubblico già presente in `package.json`: non `refs/heads/main`, e non la forma `github:owner/repo#tag` che npm può risolvere via SSH e che fallisce su Vercel.
+
+I due package usano **granularità di pin diverse, di proposito**:
+- `@pynkstudio/mailapp` → **commit SHA** (`archive/<sha>.tar.gz`). Un tag git è mutabile — si può ripuntare — e un tarball GitHub non ha integrity hash nel lock, quindi il pin a tag non garantisce che due install a distanza di tempo scarichino lo stesso codice.
+- `@pynkstudio/newsletterapp` → **tag** (`archive/refs/tags/vX.Y.Z.tar.gz`), lasciato tale intenzionalmente: `apps/web/supabase/functions/_shared/newsletterapp.ts` dichiara quel pin-per-tag come unica fonte di verità della versione, e i due pin devono restare identici (sotto). Non convertirlo a SHA senza aggiornare in coppia anche quel file.
+
+Per mailapp l'install richiede `--legacy-peer-deps` finché il package dichiara peer React 19 e questa app resta su React 18 (il mailbox runtime usato qui non è React, quindi il peer non è un problema reale); newsletterapp non ha peer dependencies.
 
 Quando si cambia la logica mail o newsletter, l'intervento va fatto **nel package**, non qui —
 `~/Documents/Unreal Projects/siti/pynkstudio-mailapp` e `~/Documents/Unreal Projects/siti/pynkstudio-newsletterapp`:

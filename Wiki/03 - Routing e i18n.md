@@ -13,6 +13,17 @@ tags: [routing, i18n, react-router]
 - Il documento Vite monta direttamente l'app React: la vecchia boot splash non è più collegata al caricamento iniziale delle rotte, quindi `/`, `/it` e `/en` mostrano subito il sito.
 - **Redirect legacy**: vecchi URL senza prefisso (`/logbook`, `/voyages`, `/about`→`/crew`, `/linktree`→`/links`, ecc.) vengono reindirizzati alla variante localizzata via `LegacyLangRedirect` e componenti dedicati (`LegacyVoyageRedirect`, `LegacyArticleRedirect`, `LegacyStoryRedirect`).
 
+## Superfici bilingui oltre le rotte
+
+Il bilinguismo non riguarda solo le pagine: vale per **qualunque** testo che raggiunga un utente reale — toast ed errori UI, email transazionali, push. Le superfici allineate di recente:
+
+- `apps/web/src/pages/BookingRefund.tsx` — pagina rimborsi, ~30 stringhe, pattern `useI18n` + ternari.
+- `apps/web/src/pages/UserBookings.tsx` — 16 messaggi di errore.
+- `apps/web/src/pages/ArticleEditor.tsx` — 21 toast.
+- `dispatch-community-live-notifications` — push live BITE Crew, lingua risolta per destinatario da `preferred_language` invece di testo IT fisso → [[09 - Edge Functions]].
+
+Il pattern da seguire su un messaggio nuovo non è "IT ora, EN dopo": la stringa nasce già in entrambe le lingue, e la lingua del destinatario si **risolve** (profilo `preferred_language`, route `/it` vs `/en` al momento dell'invio, `user_metadata.lang`), non si assume. Il fallback italiano vale solo in assenza totale di segnali. Riferimento operativo completo in `AGENTS.md`.
+
 ## Rotte pubbliche localizzate (`/it/*` e `/en/*`)
 Definite in `LocalizedRoutes` (App.tsx):
 

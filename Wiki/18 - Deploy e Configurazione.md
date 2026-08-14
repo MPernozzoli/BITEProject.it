@@ -3,7 +3,7 @@ tags: [deploy, vercel, config, env]
 ---
 # 18 - Deploy e Configurazione
 
-⬅️ [[Home]] · sorgente: `vercel.json`, `apps/web/middleware.ts`, `.env`, `apps/web/vite.config.ts`
+⬅️ [[Home]] · sorgente: `vercel.json`, `middleware.ts` (root), `.env`, `apps/web/vite.config.ts`
 
 ## Hosting
 - **Vercel** (cartella `.vercel/`). Frontend SPA da `apps/web` + Vercel Functions (`api` symlink a `apps/web/api`) → [[10 - API Vercel]].
@@ -24,10 +24,24 @@ I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, imm
 
 **Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`, `/mcp`, `/api/mcp/:path*`.
 
+**Header di sicurezza su `/(.*)`** (tutte le risposte):
+
+| Header | Valore |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+
+> ⚠️ `SAMEORIGIN` e non `DENY` perché le anteprime admin e i widget embeddati restano su `biteproject.it`. `Permissions-Policy` blocca camera/microfono/geolocalizzazione: se in futuro una feature ne ha bisogno (es. posizione utente sulle mappe, video nelle live BITE Crew), va allargata qui prima, altrimenti il browser nega l'API senza errore evidente.
+>
+> **Nessuna CSP**, deliberatamente: richiederebbe mappare tutti i domini esterni (Supabase, OpenAI, tile server mappe, OAuth social, LiveKit, Resend) e verificarli in browser. È il pezzo di hardening ancora aperto.
+
 **Rewrites OAuth MCP:** `/.well-known/oauth-authorization-server(/:path*)` → `/api/mcp/oauth/metadata`, `/.well-known/oauth-protected-resource(/:path*)` → `/api/mcp/oauth/protected-resource` → [[25 - MCP Admin]].
 
 ## Edge middleware
-- `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. Mantiene lo stesso contenuto operativo di `apps/web/middleware.ts`, ma resta un file reale per evitare problemi di packaging Edge su Vercel.
+- `middleware.ts` alla root — routing/prerender a livello edge, in coppia con `apps/web/api/prerender.ts` per servire HTML ai bot → [[03 - Routing e i18n]]. È un file reale (non un symlink), per evitare problemi di packaging Edge su Vercel. Il gemello `apps/web/middleware.ts` **non esiste più**: era una copia mai eseguita, perché Vercel legge solo il middleware di root; teneva due file da sincronizzare a mano senza alcun beneficio → [[04 - Struttura Repository]].
 - Il middleware Edge non importa helper da `@vercel/functions`: usa direttamente gli header `x-middleware-next` e `x-middleware-rewrite`, così Vercel non include moduli Node non supportati nell'Edge runtime.
 - Gli URL pubblici legacy senza prefisso lingua vengono reindirizzati a `/it/*` o `/en/*` prima del fallback SPA/prerender.
 - I sottodomini `pack.biteproject.it` e `data.biteproject.it` vengono riscritti rispettivamente sui prefissi `/pack` e `/Data`.
@@ -78,11 +92,13 @@ Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ
 - `npm run build` orchestra: `build:web` (sitemap + Vite build in `apps/web`) → `build:pack` (`/pack/`) → `build:data` (`/Data/`) → `build:crew` (`/Crew/`) → `copy-subapp-builds.mjs`.
 - Base path sotto-app via `VITE_BASE_PATH`. Vedi [[19 - Sub-App (pack e data)]] e [[20 - Comandi e Workflow]].
 - `scripts/copy-subapp-builds.mjs` ricrea `dist/`, copia `apps/web/dist` alla root della build e copia `apps/pack/dist` in `dist/pack`, `apps/data/dist` in `dist/Data`, `apps/crew/dist` in `dist/Crew`.
-- `apps/web/scripts/generate-sitemap.mjs` legge sia `apps/web/.env` sia `.env` root, così la build monorepo locale genera anche URL dinamici di articoli/viaggi e non solo le rotte statiche.
+- `apps/web/scripts/generate-sitemap.mjs` legge sia `apps/web/.env` sia `.env` root, così la build monorepo locale genera anche URL dinamici di articoli/viaggi e non solo le rotte statiche. Poiché legge dati live, **ogni build locale riscrive `apps/web/public/sitemap.xml`** e `git status` lo mostra modificato: è rumore, non una modifica reale. `git checkout -- apps/web/public/sitemap.xml` prima di leggere lo stato del working tree.
+- ⚠️ **`npm run build` non fa type-check.** Lo script è `seo:sitemap && vite build`, e Vite transpila senza controllare i tipi: una build verde non dice nulla sui type error → [[20 - Comandi e Workflow]].
 - Chunking Vite: app principale e sub-app separano vendor pesanti (`router`, `query`, `radix`, `icons`, `maps`, `three`/`tiptap` dove presenti). `apps/pack` carica la pagina principale in lazy route; `apps/data` isola MapLibre nel chunk `maps`, così la route `/map` resta leggera e il vendor viene scaricato/cacheato separatamente.
 
 ## Note ambiente
-- Repo git: `github.com/MPernozzoli/BITEProject.it` (branch `main`).
+- Repo git: `github.com/MPernozzoli/BITEProject.it` (branch `main`), **pubblico**. Ogni push su `main` viene auto-deployato in produzione da Vercel: non esiste staging né review gate. Trattare ogni commit come una release.
+- **Versione Node:** `.nvmrc` (`24`) e `engines.node` (`24.x`) in `package.json` root fissano la major allineata al runtime Vercel. Se la macchina locale gira una major diversa, preferire `nvm`/`fnm` per affiancare la 24: installare un secondo Node da Homebrew può rompere il `node` di default per conflitto ABI sulle librerie condivise.
 - Package manager: usare npm come fonte di lock principale (`package-lock.json`).
 - I vecchi lock Bun sono stati rimossi: erano residui del setup iniziale e non devono essere rigenerati.
 - `.obsidian/` **non** è in `.gitignore`: valuta se ignorare il vault o versionarlo.

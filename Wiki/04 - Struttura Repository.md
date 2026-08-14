@@ -23,8 +23,6 @@ iubgicrwfovrnvoqr/
 │   └── crew/          # @biteproject/crew, community BITE Crew servita in /Crew
 ├── api -> apps/web/api
 │                       # symlink per compatibilità Vercel root
-├── middleware.ts -> apps/web/middleware.ts
-│                       # symlink per compatibilità Vercel root
 ├── supabase -> apps/web/supabase
 │                       # symlink per compatibilità Supabase CLI
 ├── docs/              # documentazione sorgente
@@ -33,14 +31,19 @@ iubgicrwfovrnvoqr/
 │   └── migration/     # schema storico/consolidato
 ├── scripts/           # copy-subapp-builds (composizione dist root)
 ├── dist/              # output build root generato: web + /pack + /Data + /Crew
-├── middleware.ts      # edge middleware (prerender/routing)
+├── middleware.ts      # edge middleware (prerender/routing) — file reale, unico,
+│                       #   letto da Vercel solo alla root → [[18 - Deploy e Configurazione]]
+├── backups/           # export/backup locali, in .gitignore: mai committare
 ├── vercel.json        # rewrite + header → [[18 - Deploy e Configurazione]]
 └── package.json       # workspace + script root → [[20 - Comandi e Workflow]]
 ```
 
-> Nota: la root non contiene più una copia applicativa `src/`, `public/` o `supabase/`. La sorgente attiva del sito principale vive in `apps/web`; `api`, `middleware.ts` e `supabase` alla root sono solo symlink di compatibilità.
+> Nota: la root non contiene più una copia applicativa `src/`, `public/` o `supabase/`. La sorgente attiva del sito principale vive in `apps/web`; `api` e `supabase` alla root sono solo symlink di compatibilità.
+>
+> `middleware.ts` invece **non** è un symlink ed esiste solo alla root: il duplicato `apps/web/middleware.ts` era dead code (Vercel legge esclusivamente quello di root) ed è stato rimosso. Non ricrearlo.
 
 ## File di configurazione chiave
+- `.nvmrc` (`24`) + `engines.node` (`24.x`) in `package.json` root — allineano la versione Node locale a quella del runtime Vercel
 - `apps/web/components.json` — config shadcn/ui del sito principale
 - `apps/web/eslint.config.js` — lint flat config
 - `apps/web/vitest.config.ts` / `apps/web/playwright.config.ts` — test web

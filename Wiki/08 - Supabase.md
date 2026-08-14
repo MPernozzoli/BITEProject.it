@@ -55,6 +55,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._restrict_internal_booking_rpc_helpers.sql` — rende service-role-only gli helper interni di manutenzione/promozione waitlist/notifiche booking
 - `..._reconcile_voyage_booking_plan_changes.sql` — rende `sync_voyage_bookable_legs` una riconciliazione completa: aggiorna le prenotazioni sulle nuove tratte canoniche, registra `voyage_booking_plan_changes` e cancella le legs obsolete.
 - `..._voyage_booking_email_flows.sql` — estende gli eventi `voyage_booking_notifications` per pagamenti e cambio planning, attiva trigger email su `voyage_booking_plan_changes` e backfill delle notifiche pending.
+- `20260812120000_pin_function_search_path.sql` — `SET search_path = public` su `plan_change_reason_is_force_majeure` e `voyage_booking_payment_deadline_hours`, le ultime due funzioni segnalate "Function Search Path Mutable" dall'advisor. Entrambe sono `IMMUTABLE` e non referenziano oggetti non qualificati: hardening puro, nessun cambio di comportamento. Già applicata al remoto.
 - `..._bite_mailapp.sql` — tabelle `inbound_emails`, `sent_emails`, `email_tracking_events`, `email_spam_senders`, `admin_email_aliases` per `/admin/mail`, con RLS admin e inserimenti server-side via [[10 - API Vercel]].
 - `..._mail_conversation_threads.sql` / `..._normalize_mail_thread_message_ids.sql` — aggiungono threading conversazionale alla mail app (`thread_key`, `message_id`, `in_reply_to`, `references`) su inbound/sent e normalizzano gli ID legacy per agganciare risposte future.
 - `..._sent_email_attachments.sql` — aggiunge `sent_emails.attachments` per salvare metadata degli allegati inviati dalla console admin senza persistere il contenuto base64.
@@ -143,7 +144,9 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - Il flusso `supabase db push --dry-run` è tornato pulito dopo la rimozione delle migrazioni duplicate `20260416113000_voyage_date_windows.sql` e `20260710130000_crew_auto_booking.sql`.
 - Gli helper interni `deactivate_past_voyage_bookable_legs`, `promote_waitlisted_voyage_bookings`, `enqueue_voyage_booking_notification` e `enqueue_admin_voyage_booking_notifications` non sono più invocabili direttamente da `anon`/`authenticated`; restano utilizzabili da `service_role` e da funzioni `SECURITY DEFINER` server-side.
 - Le migration community sono state applicate al remoto e `supabase db advisors --linked` non segnala warning filtrando `community_`, `membership_`, `sync_community`, `get_community` e `touch_updated_at`.
-- Restano warning advisor da valutare separatamente: le RPC `SECURITY DEFINER` pubbliche/`authenticated` sono intenzionali ma richiedono revisione puntuale, e la leaked-password protection va abilitata nelle impostazioni Auth Supabase.
+- Non restano funzioni con `search_path` mutabile: le ultime due segnalate dall'advisor sono state pinnate da `20260812120000_pin_function_search_path.sql`, applicata al remoto.
+- L'RLS è stata riverificata via `get_advisors` su tutte le tabelle sensibili: nessuna tabella esposta senza policy.
+- Restano warning advisor da valutare separatamente: le RPC `SECURITY DEFINER` pubbliche/`authenticated` sono intenzionali ma richiedono revisione puntuale, e la leaked-password protection va abilitata nelle impostazioni Auth Supabase (**azione umana, solo da dashboard**).
 
 ## Collegamenti
 - Funzioni serverless: [[09 - Edge Functions]]
