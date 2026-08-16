@@ -1,28 +1,21 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type RefObject } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ComponentProps, type RefObject } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import RichTextEditor from "@/components/admin/RichTextEditor";
+import ArticleGeoAssociationPanel from "@/components/admin/ArticleGeoAssociationPanel";
+import ArticleSeoPanel, { type ArticleSeoOptimization } from "@/components/admin/ArticleSeoPanel";
+import ArticlePreviewOverlay from "@/components/admin/ArticlePreviewOverlay";
+import ArticleEditorDialogs from "@/components/admin/ArticleEditorDialogs";
 import AuthorSelector from "@/components/AuthorSelector";
-import type { Database, Json } from "@/integrations/supabase/types";
-import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, MapPin, Navigation, Search as SearchIcon, Crop, Languages, Loader2, Sparkles, Eye } from "lucide-react";
+import type { Json } from "@/integrations/supabase/types";
+import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, Crop, Languages, Loader2, Sparkles, Eye } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, resolveArticleRouteRange } from "@/lib/voyage-utils";
+import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, getWaypointOptionLabel, resolveArticleRouteRange } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
 import { validateSessionOrSignOut, isAuthFailureError } from "@/lib/supabase-auth";
 import CoverCropDialog from "@/components/admin/CoverCropDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import ArticleMiniMapEditor from "@/components/admin/ArticleMiniMapEditor";
 import { clampCoverFocal, coverImageStyle, DEFAULT_COVER_FOCAL, type CoverFocal } from "@/lib/article-cover";
 import { normalizeArticleMapScenes } from "@/lib/article-map";
@@ -34,35 +27,10 @@ import ArticleReader from "@/components/ArticleReader";
 import { useI18n, type Language } from "@/lib/i18n";
 
 type ArticleLanguage = "en" | "it";
-type ArticleSeoOptimization = Database["public"]["Tables"]["article_seo_optimizations"]["Row"];
-type SeoRecommendations = {
-  contentGaps: string[];
-  onPage: string[];
-};
 
 const ARTICLE_DRAFT_STORAGE_PREFIX = "bite_article_editor_draft";
 const ADMIN_DASH_SECTION_STORAGE_KEY = "bite_admin_dashboard_active_section";
 
-const getStringList = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-};
-
-const getSeoRecommendations = (value: Json | null | undefined): SeoRecommendations => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { contentGaps: [], onPage: [] };
-  }
-
-  return {
-    contentGaps: getStringList(value.content_gaps),
-    onPage: getStringList(value.on_page),
-  };
-};
-
-const formatSeoDate = (value: string | null): string | null => {
-  if (!value) return null;
-  return new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-};
 
 type ArticleEditorDraft = {
   titleEn: string;
@@ -108,17 +76,6 @@ const getSaveErrorMessage = (error: { code?: string; message?: string }, lang: L
       : "The database is not up to date: apply the migration for the Instagram Stories columns.";
   }
   return lang === "it" ? "Salvataggio non riuscito." : "Save failed.";
-};
-
-const getWaypointOptionLabel = (waypoint: VoyageWaypoint, index: number, total: number) => {
-  const customName = waypoint.name_en?.trim() || waypoint.name_it?.trim() || waypoint.name?.trim();
-  const prefix = index === 0
-    ? "Start"
-    : index === total - 1
-      ? "Arrival"
-      : `WP ${String(index + 1).padStart(2, "0")}`;
-
-  return customName ? `${prefix} · ${customName}` : prefix;
 };
 
 const inferAssociationMode = (
@@ -1995,22 +1952,6 @@ const ArticleEditor = () => {
       })
     );
   }, []);
-  const voyageWaypointOptions = voyageWaypoints.map((waypoint, index) => ({
-    value: String(index),
-    label: getWaypointOptionLabel(waypoint, index, voyageWaypoints.length),
-  }));
-  const segmentEndWaypointOptions =
-    voyageSegStart == null
-      ? []
-      : voyageWaypointOptions.slice(voyageSegStart + 1);
-  const selectedPointWaypointLabel =
-    associationMode === "point" && voyageSegStart != null
-      ? voyageWaypointOptions[voyageSegStart]?.label || null
-      : null;
-  const selectedSegmentSummary =
-    associationMode === "segment" && voyageSegStart != null && voyageSegEnd != null
-      ? `${voyageWaypointOptions[voyageSegStart]?.label || `WP ${voyageSegStart + 1}`} → ${voyageWaypointOptions[voyageSegEnd]?.label || `WP ${voyageSegEnd + 1}`}`
-      : null;
   const previewTags = useMemo(
     () => selectedTagIds
       .map((tagId) => allTags.find((tag) => tag.id === tagId))
@@ -2101,41 +2042,6 @@ const ArticleEditor = () => {
     voyageSegStart,
     voyageWaypoints,
   ]);
-  const seoRecommendations = useMemo(
-    () => getSeoRecommendations(seoOptimization?.recommendations),
-    [seoOptimization?.recommendations]
-  );
-  const seoGeneratedAt = formatSeoDate(seoOptimization?.generated_at ?? null);
-  const seoUpdatedAt = formatSeoDate(seoOptimization?.updated_at ?? null);
-  const seoStatusMeta = useMemo(() => {
-    switch (seoOptimization?.status) {
-      case "ready":
-        return {
-          className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
-          label: "Pronta",
-        };
-      case "processing":
-        return {
-          className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-100",
-          label: "In generazione",
-        };
-      case "failed":
-        return {
-          className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-100",
-          label: "Da rivedere",
-        };
-      case "pending":
-        return {
-          className: "border-border bg-muted/40 text-muted-foreground",
-          label: "In coda",
-        };
-      default:
-        return {
-          className: "border-border bg-muted/40 text-muted-foreground",
-          label: persistedArticleStatus === "published" ? "Non generata" : "Non disponibile",
-        };
-    }
-  }, [persistedArticleStatus, seoOptimization?.status]);
 
   const renderInstagramStorySection = ({
     language,
@@ -2400,131 +2306,15 @@ const ArticleEditor = () => {
               onConfirm={handleCoverCropConfirm}
             />
 
-            <div className="rounded-[18px] border border-border/80 bg-muted/20 p-3">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground block">SEO IA</label>
-                  <p className="mt-1 text-[11px] font-sans text-muted-foreground">
-                    {seoGeneratedAt ? `Generata ${seoGeneratedAt}` : seoUpdatedAt ? `Aggiornata ${seoUpdatedAt}` : "Meta generati dopo la pubblicazione"}
-                  </p>
-                </div>
-                <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-sans font-medium ${seoStatusMeta.className}`}>
-                  {seoStatusMeta.label}
-                </span>
-              </div>
-
-              {persistedArticleStatus !== "published" ? (
-                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
-                  La SEO automatica viene generata quando l'articolo viene pubblicato.
-                </p>
-              ) : !seoOptimization ? (
-                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
-                  Nessuna ottimizzazione SEO salvata. Usa il pulsante Ottimizza SEO per generarla manualmente.
-                </p>
-              ) : seoOptimization.status === "failed" ? (
-                <div className="space-y-3">
-                  <p className="text-xs font-sans leading-relaxed text-amber-800 dark:text-amber-100">
-                    {seoOptimization.error_message || "La generazione SEO non è riuscita."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void runSeoOptimization(id, { force: true })}
-                    disabled={saving || aiTranslating || seoOptimizing}
-                    className="inline-flex items-center gap-2 border border-amber-500/40 px-3 py-1.5 text-xs font-sans text-amber-800 transition-colors hover:border-amber-600 hover:text-foreground disabled:opacity-50 dark:text-amber-100"
-                  >
-                    {seoOptimizing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                    Riprova
-                  </button>
-                </div>
-              ) : seoOptimization.status === "processing" || seoOptimization.status === "pending" ? (
-                <p className="text-xs font-sans leading-relaxed text-muted-foreground">
-                  Generazione in corso. La card si aggiorna dopo il prossimo caricamento o dopo una rigenerazione manuale.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">Italiano</p>
-                    <div>
-                      <p className="text-[10px] font-sans text-muted-foreground">Meta title</p>
-                      <p className="text-xs font-sans leading-snug text-foreground">{seoOptimization.title_it || "Non generato"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-sans text-muted-foreground">Meta description</p>
-                      <p className="text-xs font-sans leading-relaxed text-foreground/80">{seoOptimization.description_it || "Non generata"}</p>
-                    </div>
-                    {seoOptimization.keywords_it.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {seoOptimization.keywords_it.map((keyword) => (
-                          <span key={`it-${keyword}`} className="rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 border-t border-border/70 pt-3">
-                    <p className="text-[10px] font-sans uppercase tracking-[0.18em] text-muted-foreground">English</p>
-                    <div>
-                      <p className="text-[10px] font-sans text-muted-foreground">Meta title</p>
-                      <p className="text-xs font-sans leading-snug text-foreground">{seoOptimization.title_en || "Not generated"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-sans text-muted-foreground">Meta description</p>
-                      <p className="text-xs font-sans leading-relaxed text-foreground/80">{seoOptimization.description_en || "Not generated"}</p>
-                    </div>
-                    {seoOptimization.keywords_en.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {seoOptimization.keywords_en.map((keyword) => (
-                          <span key={`en-${keyword}`} className="rounded-full border border-border bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <details className="border-t border-border/70 pt-3">
-                    <summary className="cursor-pointer text-xs font-sans text-muted-foreground hover:text-foreground">Social, alt e suggerimenti</summary>
-                    <div className="mt-3 space-y-3">
-                      <div>
-                        <p className="text-[10px] font-sans text-muted-foreground">Social title IT / EN</p>
-                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.social_title_it || "Non generato"}</p>
-                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.social_title_en || "Not generated"}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-sans text-muted-foreground">Alt cover IT / EN</p>
-                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.image_alt_it || "Non generato"}</p>
-                        <p className="text-xs font-sans text-foreground/80">{seoOptimization.image_alt_en || "Not generated"}</p>
-                      </div>
-                      {(seoRecommendations.onPage.length > 0 || seoRecommendations.contentGaps.length > 0) && (
-                        <div className="space-y-2">
-                          {seoRecommendations.onPage.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-sans text-muted-foreground">On page</p>
-                              <ul className="list-disc space-y-1 pl-4 text-xs font-sans text-foreground/80">
-                                {seoRecommendations.onPage.map((item) => <li key={`on-${item}`}>{item}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                          {seoRecommendations.contentGaps.length > 0 && (
-                            <div>
-                              <p className="text-[10px] font-sans text-muted-foreground">Content gap</p>
-                              <ul className="list-disc space-y-1 pl-4 text-xs font-sans text-foreground/80">
-                                {seoRecommendations.contentGaps.map((item) => <li key={`gap-${item}`}>{item}</li>)}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {seoOptimization.model && (
-                        <p className="text-[10px] font-sans text-muted-foreground">Modello: {seoOptimization.model}</p>
-                      )}
-                    </div>
-                  </details>
-                </div>
-              )}
-            </div>
+            <ArticleSeoPanel
+              id={id}
+              seoOptimization={seoOptimization}
+              seoOptimizing={seoOptimizing}
+              aiTranslating={aiTranslating}
+              saving={saving}
+              persistedArticleStatus={persistedArticleStatus}
+              runSeoOptimization={runSeoOptimization}
+            />
 
             <div className="space-y-3">
               <div>
@@ -2695,183 +2485,34 @@ const ArticleEditor = () => {
               </div>
             )}
 
-            {/* Location & Voyage */}
-            <div>
-              <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                <MapPin size={12} className="inline mr-1" /> Location & Voyage
-              </label>
-
-              {/* Geo search */}
-              <div className="flex gap-1.5 mb-2">
-                <input
-                  type="text"
-                  value={geoSearchQuery}
-                  onChange={(e) => setGeoSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleGeoSearch())}
-                  placeholder="Search place..."
-                  className="flex-1 bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
-                />
-                <button onClick={handleGeoSearch} disabled={geoSearching} className="border border-border px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                  <SearchIcon size={12} />
-                </button>
-              </div>
-
-              {/* Mini map */}
-              <div ref={geoMapRef} className="w-full aspect-[4/3] border border-border mb-2" />
-
-              {/* Location name */}
-              <input
-                type="text"
-                value={locationName}
-                onChange={(e) => setLocationName(e.target.value)}
-                placeholder="Location name (e.g. Porto di Bari)"
-                className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors mb-2"
-              />
-
-              {/* Coordinates display */}
-              {latitude && longitude && (
-                <p className="text-[10px] font-sans text-muted-foreground mb-2">
-                  📍 {latitude.toFixed(4)}, {longitude.toFixed(4)}
-                  <button onClick={() => { setLatitude(null); setLongitude(null); geoMarkerRef.current?.remove(); }} className="ml-2 text-destructive hover:underline">Clear</button>
-                </p>
-              )}
-
-              {/* Voyage selector */}
-              <div className="mt-3">
-                <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
-                  <Navigation size={10} className="inline mr-1" /> Voyage
-                </label>
-                <select
-                  value={selectedVoyageId || ""}
-                  onChange={(e) => {
-                    const nextVoyageId = e.target.value || null;
-                    setSelectedVoyageId(nextVoyageId);
-                    setVoyageSegStart(null);
-                    setVoyageSegEnd(null);
-                    setAssociationMode(nextVoyageId ? "full" : "point");
-                  }}
-                  className="w-full bg-transparent border border-border px-2 py-1.5 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
-                >
-                  <option value="">No voyage</option>
-                  {allVoyages.map((v) => (
-                    <option key={v.id} value={v.id}>{v.type === "water" ? "🚢" : "🚐"} {v.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Association mode */}
-              {selectedVoyageId && (
-                <div className="mt-2 space-y-1.5">
-                  <label className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground block">Association</label>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleAssociationModeChange("full")}
-                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "full" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
-                    >
-                      Full voyage
-                    </button>
-                    <button
-                      onClick={() => handleAssociationModeChange("point")}
-                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "point" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
-                    >
-                      Point
-                    </button>
-                    <button
-                      onClick={() => handleAssociationModeChange("segment")}
-                      className={`px-2 py-1 text-[10px] font-sans border transition-colors ${associationMode === "segment" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:text-foreground"}`}
-                    >
-                      Segment
-                    </button>
-                  </div>
-
-                  {!voyageWaypoints.length ? (
-                    <p className="text-[10px] text-muted-foreground">
-                      This voyage has no waypoints yet.
-                    </p>
-                  ) : null}
-
-                  {associationMode === "full" && voyageWaypoints.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground">
-                      The full traced voyage is associated with this article.
-                    </p>
-                  )}
-
-                  {associationMode === "point" && voyageWaypoints.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-muted-foreground">
-                        Click a waypoint on the minimap or choose it below.
-                      </p>
-                      <div>
-                        <label className="text-[10px] font-sans text-muted-foreground block">Waypoint</label>
-                        <select
-                          value={voyageSegStart != null ? String(voyageSegStart) : ""}
-                          onChange={(e) => selectPointWaypoint(e.target.value ? Number(e.target.value) : null)}
-                          className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
-                        >
-                          <option value="">Choose a waypoint</option>
-                          {voyageWaypointOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {selectedPointWaypointLabel && (
-                        <p className="text-[10px] text-muted-foreground">
-                          Selected: {selectedPointWaypointLabel}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {associationMode === "segment" && voyageWaypoints.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] text-muted-foreground">
-                        Click two waypoints on the minimap or choose them below.
-                      </p>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div>
-                          <label className="text-[10px] font-sans text-muted-foreground block">From</label>
-                          <select
-                            value={voyageSegStart != null ? String(voyageSegStart) : ""}
-                            onChange={(e) => handleSegmentStartChange(e.target.value)}
-                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
-                          >
-                            <option value="">Choose start waypoint</option>
-                            {voyageWaypointOptions.map((option) => (
-                              <option key={`start-${option.value}`} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-sans text-muted-foreground block">To</label>
-                          <select
-                            value={voyageSegEnd != null ? String(voyageSegEnd) : ""}
-                            onChange={(e) => handleSegmentEndChange(e.target.value)}
-                            disabled={voyageSegStart == null || !segmentEndWaypointOptions.length}
-                            className="w-full bg-transparent border border-border px-2 py-1 text-xs font-sans focus:outline-none focus:border-accent"
-                          >
-                            <option value="">
-                              {voyageSegStart == null
-                                ? "Choose start first"
-                                : segmentEndWaypointOptions.length
-                                  ? "Choose end waypoint"
-                                  : "No later waypoint available"}
-                            </option>
-                            {segmentEndWaypointOptions.map((option) => (
-                              <option key={`end-${option.value}`} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      {selectedSegmentSummary && (
-                        <p className="text-[10px] text-muted-foreground">
-                          Selected: {selectedSegmentSummary}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <ArticleGeoAssociationPanel
+              locationName={locationName}
+              setLocationName={setLocationName}
+              latitude={latitude}
+              setLatitude={setLatitude}
+              longitude={longitude}
+              setLongitude={setLongitude}
+              geoSearchQuery={geoSearchQuery}
+              setGeoSearchQuery={setGeoSearchQuery}
+              geoSearching={geoSearching}
+              handleGeoSearch={handleGeoSearch}
+              geoMapRef={geoMapRef}
+              geoMarkerRef={geoMarkerRef}
+              allVoyages={allVoyages}
+              selectedVoyageId={selectedVoyageId}
+              setSelectedVoyageId={setSelectedVoyageId}
+              voyageWaypoints={voyageWaypoints}
+              associationMode={associationMode}
+              setAssociationMode={setAssociationMode}
+              handleAssociationModeChange={handleAssociationModeChange}
+              voyageSegStart={voyageSegStart}
+              setVoyageSegStart={setVoyageSegStart}
+              voyageSegEnd={voyageSegEnd}
+              setVoyageSegEnd={setVoyageSegEnd}
+              handleSegmentStartChange={handleSegmentStartChange}
+              handleSegmentEndChange={handleSegmentEndChange}
+              selectPointWaypoint={selectPointWaypoint}
+            />
 
             {/* Authors */}
             <AuthorSelector selectedIds={authorIds} onChange={setAuthorIds} />
@@ -2879,199 +2520,43 @@ const ArticleEditor = () => {
         </div>
       </div>
 
-      {previewOpen && (
-        <div className="fixed inset-0 z-[80] bg-background">
-          <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-3 backdrop-blur md:px-6">
-            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Anteprima articolo</p>
-                <p className="text-sm font-sans text-foreground">
-                  {previewLang === "it" ? previewArticle.title_it : previewArticle.title_en}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="inline-flex overflow-hidden border border-border">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewLang("it")}
-                    className={`px-3 py-2 text-xs font-sans transition-colors ${previewLang === "it" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    IT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewLang("en")}
-                    className={`px-3 py-2 text-xs font-sans transition-colors ${previewLang === "en" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    EN
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPreviewOpen(false)}
-                  className="inline-flex items-center gap-2 border border-border px-3 py-2 text-xs font-sans text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
-                >
-                  <X size={14} /> Chiudi
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="h-[calc(100vh-65px)] overflow-y-auto">
-            <ArticleReader
-              article={previewArticle as any}
-              authors={previewAuthors}
-              tags={previewTags}
-              story={previewStory as any}
-              linkedVoyage={selectedVoyage}
-              linkedVoyageWaypoints={voyageWaypoints}
-              lang={previewLang}
-              previewMode
-              previewLabel="Anteprima admin: i contenuti arrivano dalla bozza corrente e like/commenti non sono attivi."
-              shareUrl={`${window.location.origin}/logbook/${encodeURIComponent(slug || "preview")}`}
-            />
-          </div>
-        </div>
-      )}
+      <ArticlePreviewOverlay
+        previewOpen={previewOpen}
+        setPreviewOpen={setPreviewOpen}
+        previewLang={previewLang}
+        setPreviewLang={setPreviewLang}
+        previewArticle={previewArticle as ComponentProps<typeof ArticleReader>["article"]}
+        previewAuthors={previewAuthors}
+        previewTags={previewTags}
+        previewStory={previewStory as ComponentProps<typeof ArticleReader>["story"]}
+        selectedVoyage={selectedVoyage}
+        voyageWaypoints={voyageWaypoints}
+        slug={slug}
+      />
 
-      <AlertDialog open={publishChoiceOpen} onOpenChange={setPublishChoiceOpen}>
-        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
-          <AlertDialogHeader className="text-left">
-            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Pubblicazione sul logbook</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="font-sans text-sm leading-relaxed text-foreground/72 space-y-3">
-                <p>
-                  La programmazione in calendario (data e ora di uscita) avviene solo dal <strong>Piano editoriale</strong> in
-                  dashboard, non più da questo editor.
-                </p>
-                <p>
-                  <strong>Pubblica subito</strong> rende l&apos;articolo visibile sul logbook immediatamente. Sei sicuro di voler
-                  pubblicare adesso, senza passare dal piano?
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
-            <Button
-              type="button"
-              className="w-full rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={saving}
-              onClick={() => void handlePublishChoicePlanning()}
-            >
-              Manda in pianificazione
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              disabled={saving}
-              onClick={() => void handlePublishChoicePublishNow()}
-            >
-              Pubblica subito
-            </Button>
-            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
-              Annulla
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={leaveDialogOpen}>
-        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
-          <AlertDialogHeader className="text-left">
-            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Modifiche non salvate</AlertDialogTitle>
-            <AlertDialogDescription className="font-sans text-sm leading-relaxed text-foreground/72">
-              Ci sono modifiche non ancora salvate nell&apos;articolo. Scegli cosa fare prima di uscire.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
-            <AlertDialogAction
-              type="button"
-              className="w-full rounded-full"
-              disabled={saving || leaveBusy}
-              onClick={(event) => {
-                event.preventDefault();
-                void handleLeaveSaveDraft();
-              }}
-            >
-              {saving || leaveBusy ? "Salvataggio..." : "Salva come bozza (consigliato)"}
-            </AlertDialogAction>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              disabled={saving || leaveBusy}
-              onClick={() => void handleLeavePublish()}
-            >
-              {primaryPublishActionLabel}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={saving || leaveBusy}
-              onClick={handleDiscardLeaveFromEditor}
-            >
-              Esci senza salvare
-            </Button>
-            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full" onClick={handleStayOnLeaveDialog}>
-              Annulla
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={translationOfferOpen}
-        onOpenChange={(open) => {
-          if (!open) handleTranslationOfferClose();
-        }}
-      >
-        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-border bg-card shadow-lg">
-          <AlertDialogHeader className="text-left">
-            <AlertDialogTitle className="editorial-heading text-2xl leading-tight">Traduzioni mancanti</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="font-sans text-sm leading-relaxed text-foreground/72 space-y-3">
-                <p>
-                  Prima di salvare risultano contenuti solo in una lingua. Vuoi generare automaticamente le parti mancanti
-                  (stesso comando &quot;Traduci campi vuoti&quot;) oppure procedere così com&apos;è?
-                </p>
-                {translationOfferLabels.length > 0 && (
-                  <ul className="list-disc pl-5 space-y-1 text-foreground/80">
-                    {translationOfferLabels.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col gap-2 sm:items-stretch">
-            <AlertDialogAction
-              type="button"
-              className="w-full rounded-full"
-              disabled={saving || translationOfferBusy || aiTranslating}
-              onClick={(event) => {
-                event.preventDefault();
-                void handleTranslationOfferTranslateAndContinue();
-              }}
-            >
-              {translationOfferBusy || aiTranslating ? "Traduzione in corso…" : "Traduci e continua"}
-            </AlertDialogAction>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-full"
-              disabled={saving || translationOfferBusy || aiTranslating}
-              onClick={() => void handleTranslationOfferSkip()}
-            >
-              {pendingTranslationAction === "publish" ? translationOfferPublishSkipLabel : "Salva bozza senza tradurre"}
-            </Button>
-            <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
-              Annulla
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ArticleEditorDialogs
+        publishChoiceOpen={publishChoiceOpen}
+        setPublishChoiceOpen={setPublishChoiceOpen}
+        handlePublishChoicePublishNow={handlePublishChoicePublishNow}
+        handlePublishChoicePlanning={handlePublishChoicePlanning}
+        primaryPublishActionLabel={primaryPublishActionLabel}
+        leaveDialogOpen={leaveDialogOpen}
+        leaveBusy={leaveBusy}
+        handleStayOnLeaveDialog={handleStayOnLeaveDialog}
+        handleDiscardLeaveFromEditor={handleDiscardLeaveFromEditor}
+        handleLeaveSaveDraft={handleLeaveSaveDraft}
+        handleLeavePublish={handleLeavePublish}
+        translationOfferOpen={translationOfferOpen}
+        translationOfferBusy={translationOfferBusy}
+        translationOfferLabels={translationOfferLabels}
+        translationOfferPublishSkipLabel={translationOfferPublishSkipLabel}
+        pendingTranslationAction={pendingTranslationAction}
+        handleTranslationOfferClose={handleTranslationOfferClose}
+        handleTranslationOfferSkip={handleTranslationOfferSkip}
+        handleTranslationOfferTranslateAndContinue={handleTranslationOfferTranslateAndContinue}
+        saving={saving}
+        aiTranslating={aiTranslating}
+      />
     </div>
   );
 };

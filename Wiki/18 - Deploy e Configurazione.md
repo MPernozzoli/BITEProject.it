@@ -98,7 +98,7 @@ Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ
 
 ## Note ambiente
 - Repo git: `github.com/MPernozzoli/BITEProject.it` (branch `main`), **pubblico**. Ogni push su `main` viene auto-deployato in produzione da Vercel: non esiste staging né review gate. Trattare ogni commit come una release.
-- **Versione Node:** `.nvmrc` (`24`) e `engines.node` (`24.x`) in `package.json` root fissano la major allineata al runtime Vercel. Se la macchina locale gira una major diversa, preferire `nvm`/`fnm` per affiancare la 24: installare un secondo Node da Homebrew può rompere il `node` di default per conflitto ABI sulle librerie condivise.
+- **Versione Node:** `.nvmrc` (`24`) e `engines.node` (`24.x`) in `package.json` root fissano la major allineata al runtime Vercel. ⚠️ La macchina di sviluppo gira **Node 25.2.1**, fuori da quel vincolo, e questo **rompe `eslint` e `vitest`** → [[20 - Comandi e Workflow]]. In Homebrew esiste un solo Node reale: `/opt/homebrew/opt/node@23` e `node@25` sono symlink fantasma allo stesso `Cellar/node` 25.2.1. Per affiancare la 24 usare `nvm`/`fnm`, **non** Homebrew: installare un secondo Node da Homebrew ha già rotto una volta il `node` di default per conflitto ABI su `simdjson` (`dyld: Library not loaded: libsimdjson.29.dylib`).
 - Package manager: usare npm come fonte di lock principale (`package-lock.json`).
 - I vecchi lock Bun sono stati rimossi: erano residui del setup iniziale e non devono essere rigenerati.
 - `.obsidian/` **non** è in `.gitignore`: valuta se ignorare il vault o versionarlo.

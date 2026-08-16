@@ -1,6 +1,6 @@
 # Handoff — audit generico BITEProject.it
 
-Contesto per chi riprende questo lavoro in una nuova sessione: qui non c'è memoria della chat precedente, quindi questo file deve bastare da solo. Aggiornato 2026-08-14.
+Contesto per chi riprende questo lavoro in una nuova sessione: qui non c'è memoria della chat precedente, quindi questo file deve bastare da solo. Aggiornato 2026-08-15.
 
 ## Cos'è successo
 
@@ -11,13 +11,10 @@ L'utente ha chiesto un audit generico del monorepo (BITEProject.it: `apps/web` +
 1. **Ogni commit su questo repo viene auto-committato e auto-pushato su GitHub (`MPernozzoli/BITEProject.it`, pubblico), e Vercel auto-deploya `main` in produzione.** Non c'è staging, non c'è review gate. Il meccanismo non è stato attivato consapevolmente in nessuna sessione osservata — è il workflow di fatto di questo repo da mesi (verificabile: quasi ogni commit storico su `main` ha un deployment Vercel `production` corrispondente, stesso autore). Trattare ogni modifica come se finisse in produzione pochi minuti dopo averla scritta.
 2. **`npm run build` NON esegue type-check completo** (`apps/web/package.json`: `"build": "npm run seo:sitemap && vite build"`). Usare **entrambi**: `cd apps/web && npx tsc --noEmit -p tsconfig.app.json` (non `tsconfig.json`: quello è solo un project-reference con `files: []`, controlla zero file, dà falsa sicurezza) e poi `npm run build --workspace @biteproject/web` dalla root.
 3. **`apps/web/public/sitemap.xml` viene rigenerato ad ogni build** (script `seo:sitemap`, pulls live data). Dopo ogni build locale, `git status` lo mostra come modificato — è rumore, non una modifica reale: `git checkout -- apps/web/public/sitemap.xml` prima di guardare lo stato.
-4. **Esiste un set di errori TypeScript preesistenti**, non introdotti in questa sessione, mai toccati:
-   - `VoyageWaypoint` (in `apps/web/src/lib/voyage-utils.ts`) richiede `updated_at`, ma `AdminVoyageManager.tsx` (~riga 581, funzione `normalizeWaypoint`) e `apps/web/src/test/voyage-utils.test.ts` costruiscono l'oggetto senza fornirlo.
-   - `apps/web/src/pages/VoyagePage.tsx` righe 656-657 referenziano `fixedMinimumEur` su un tipo che ora ha solo `contributionPerNmEur`.
-   - Prima di qualunque modifica, girare `tsc` e confrontare l'output con questa lista: se compaiono SOLO questi (a righe eventualmente diverse per via di righe spostate), non sono un problema introdotto ora.
+4. **`tsc` è pulito dal 2026-08-15** (era una lista di errori preesistenti da ignorare a mano, ora chiusa). Non c'è più nessuna baseline: se `tsc` segnala qualcosa, l'hai introdotto tu.
 5. **Node locale: v25.2.1 (non-LTS) via Homebrew, non 24.x come Vercel.** In una sessione precedente installare `node@24` in parallelo ha rotto silenziosamente il `node` di default (conflitto di versione ABI sulla libreria condivisa `simdjson`, sintomo: `dyld: Library not loaded: .../libsimdjson.29.dylib`). Fix già applicato: `node@24` disinstallato, `/opt/homebrew/opt/simdjson` ripuntato a mano alla versione 4.2.2 (compatibile con node 25.2.1). **Non reinstallare `node@24` senza sapere che romperà di nuovo il default** — se serve testare su Node 24, valutare `nvm`/`fnm` invece di Homebrew, o accettare che si romperà e rifare il fix del symlink dopo.
 6. **L'account di test (`claude-test@biteproject.it`, credenziali in `AGENTS.md`) NON è admin.** Le pagine `/admin/*` (incluso `AdminVoyageManager`) non sono verificabili in browser da un agente in questa sessione — la verifica end-to-end resta un passaggio umano.
-7. **Toolchain `eslint` rotta in modo intermittente**: il symlink `node_modules/.bin/eslint` era stato dirottato dalla cache npm-compat di Deno (causa probabile: `npx deno@2 check` lanciato dalla root invece che scoped). Fixato una volta con `rm -rf node_modules/.deno && npm install`, ma **è emerso un problema separato e non diagnosticato**: `eslint --version`/`eslint .` si blocca indefinitamente (processi zombie osservati, terminati a mano). Non affidarsi a `npm run lint` finché non è capito.
+7. **`npm run lint` E `npm run test` sono entrambi inutilizzabili su questa macchina, per colpa di Node 25** (dettaglio e prove nella sezione "Punto 4" più sotto, e in `Wiki/20 - Comandi e Workflow.md`). Non è eslint e non è vitest: entrambi si inchiodano nello stesso frame del runtime (`SyntheticModule::Evaluate`). **Il repo non ha copertura di test verificabile finché non si passa a Node 24.** Gli unici gate di verifica affidabili oggi sono `tsc` + `npm run build`.
 
 ## Fatto in questa sessione (in ordine)
 
@@ -82,7 +79,28 @@ Verificato che il working tree lasciato dalla sessione precedente è sano: `npx 
 | `20 - Comandi e Workflow` | **nuova sezione "Type-check"** con la baseline degli errori preesistenti, `lint` ora su tutti i workspace, warning su eslint che si blocca, pin mailapp (SHA) vs newsletterapp (tag) |
 | `23 - Community` | corretto riferimento residuo a `apps/web/middleware.ts` |
 
-Punti 1 (smoke-test umano) e 3-10 della lista sotto: **non toccati**, restano aperti.
+### Punto 3 — errori TypeScript preesistenti: **CHIUSO**
+`tsc --noEmit -p tsconfig.app.json` ora esce **pulito**, zero errori. Non c'è più una baseline da confrontare a mano: qualunque errore compaia d'ora in poi è stato introdotto adesso.
+- `AdminVoyageManager.tsx` / `normalizeWaypoint`: aggiunto `updated_at` con fallback su `created_at`. La funzione normalizza ogni altro campo con un default — `updated_at` era l'unico requisito di `VoyageWaypoint` lasciato scoperto. Il fallback su `created_at` (già obbligatorio in `WaypointRecord`) copre i waypoint creati localmente (drag sulla mappa, bozze da `localStorage`) senza infilare `new Date()` dentro un normalizzatore.
+- `VoyagePage.tsx`: `contributionFixedMinimumEur(contributionOpts.fixedMinimumEur)` → `contributionFixedMinimumEur()`. **Non è un cambio di comportamento**: non esiste una colonna DB per un minimo fisso per-viaggio, `contributionOpts` non ha mai portato quel campo, quindi a runtime era già `undefined` e la funzione già ritornava il default (€20).
+- `src/test/voyage-utils.test.ts`: `updated_at: ""` aggiunto alle 8 fixture.
+
+Verificato con `tsc` pulito + `npm run build` verde.
+
+### Punto 4 — eslint bloccato: **DIAGNOSTICATO** (fix = azione umana)
+Non è eslint, ed è più grave di quanto sembrasse: **anche `npm run test` non funziona**, cosa che la sessione precedente non aveva rilevato (`vitest run` fallisce dopo 120s con `Timeout waiting for worker to respond`, **zero test eseguiti** su 22 file).
+
+Campionando lo stack di entrambi i processi con `sample <pid>`, eslint e vitest si inchiodano nello **stesso identico frame** del runtime Node: `SyntheticModule::Evaluate` → `SyntheticModuleEvaluationStepsCallback`. Due tool indipendenti fermi nello stesso punto = problema di runtime, non applicativo. La macchina gira **Node 25.2.1** mentre il repo dichiara `engines.node: 24.x` / `.nvmrc: 24`.
+
+Escluso con test diretti (documentato in `Wiki/20` per non far rifare il giro): rete, lo spazio nel path `Unreal Projects`, `fork`/`worker_threads`, `serialization: "advanced"`, gli `execArgv` di vitest, il volume di file da lintare, la cache Deno.
+
+**Azione richiesta all'umano:** installare Node 24 con `nvm` o `fnm` e rilanciare `npm run lint` / `npm run test`. Sulla macchina **non c'è** un Node 24: `/opt/homebrew/opt/node@23` e `node@25` sono symlink fantasma allo stesso unico Node 25.2.1. **Non installarlo da Homebrew** — è esattamente ciò che aveva rotto il `node` di default (conflitto ABI `simdjson`).
+
+```bash
+curl -fsSL https://fnm.vercel.app/install | bash && exec $SHELL && fnm install 24 && fnm use 24
+```
+
+Punti 1 (smoke-test umano) e 5-10 della lista sotto: **non toccati**, restano aperti.
 
 ## Stato del repo adesso
 
@@ -104,16 +122,16 @@ Ultimo commit su `main` (locale e remoto, sincronizzati): `a9977ee "Add booking 
 
 1. **Smoke-test umano** del refactor `AdminVoyageManager.tsx` (vedi sopra) — prima di tutto il resto.
 2. ~~**Vault Obsidian non aggiornato**~~ — **fatto il 2026-08-14**, vedi sezione "Sessione 2026-08-14" sopra.
-3. **Errori TypeScript preesistenti** (`updated_at` mancante su `VoyageWaypoint`, `fixedMinimumEur` in `VoyagePage.tsx`) — piccoli, isolati, mai indagati a fondo.
-4. **Toolchain `eslint`** che si blocca indefinitamente — non diagnosticato, blocca `npm run lint` su tutto il monorepo.
-5. **Refactor degli altri 5 file grandi**, stesso pattern di `AdminVoyageManager.tsx`, nessuno ancora iniziato:
-   - `apps/web/src/components/admin/AdminVoyageManager.tsx` → fatto in questa sessione, ora 3410 righe (era il peggiore).
-   - `apps/web/src/pages/AdminVoyageBookings.tsx` — 2754 righe (già parzialmente scomposto: 5 sotto-componenti esistenti, vedi `BookingGanttTable.tsx`, `VoyageCandidatesPanel.tsx`, `PlanChangeProposalDialog.tsx`, `ManualPaymentDialog.tsx`, `WaypointDetailsDialog.tsx` in `components/admin/`).
-   - `apps/web/src/pages/ArticleEditor.tsx` — 3079 righe.
-   - `apps/web/src/pages/AdminProfile.tsx` — 2359 righe.
-   - `apps/web/src/pages/UserBookings.tsx` — 2217 righe.
-   - `apps/web/src/pages/Journal.tsx` — 1988 righe.
-   - Prima di ciascuno: ripetere la fase di esplorazione (mappa strutturale + pattern esistenti + validazione piano) fatta per `AdminVoyageManager.tsx` — non assumere che i confini di estrazione siano ovvi, quel file aveva accoppiamenti nascosti (es. `guardedSelectVoyage` mai chiamato, dead code) scoperti solo leggendo riga per riga.
+3. ~~**Errori TypeScript preesistenti**~~ — **chiuso il 2026-08-15**, `tsc` è pulito.
+4. ~~**Toolchain `eslint`**~~ — **diagnosticato il 2026-08-15**: è Node 25 vs `engines: 24.x`, e travolge anche `vitest`. Resta l'azione umana di installare Node 24.
+5. **Refactor dei file grandi** — **fatto il 2026-08-15 su 3 file su 5**, stesso pattern di `AdminVoyageManager.tsx`:
+   - `AdminVoyageBookings.tsx` 2754 → 1896 (−31%): 4 pannelli (uno per tab) + `lib/booking-planning.ts` (14 helper puri).
+   - `ArticleEditor.tsx` 3079 → 2564 (−17%): pannello geo/viaggio, pannello SEO, overlay anteprima, gruppo dialog. `getWaypointOptionLabel` spostata in `lib/voyage-utils.ts`.
+   - `AdminProfile.tsx` 2359 → 1694 (−28%): card Preferenze + `lib/profile-copy.ts` (~300 righe di copy IT/EN).
+   - `Journal.tsx` 1988 → 1845 (−7%): barra statistiche della vista mappa.
+   - **`UserBookings.tsx` lasciato intero, deliberatamente.** Ogni blocco candidato richiede 22-52 props: i valori derivati da `detailsRequest` servono sia al dialog di dettaglio sia al resto della pagina, quindi la derivazione non può scendere nel figlio. Estrarre aggiungerebbe uno strato di prop-passing senza ridurre la complessità. Stesso motivo per la sidebar articoli di `Journal.tsx` (46 props). Per quelle due serve prima ristrutturare la proprietà dello stato — cambiamento di comportamento, non movimento di codice, quindi non affrontabile senza test funzionanti.
+   - Verifica di ogni singolo step: `tsc` pulito + `npm run build` verde. Ripuliti a mano ~45 import diventati orfani (`noUnusedLocals` è off, nessun tool li segnala).
+   - **Mai verificato in browser** — vale lo stesso avvertimento del punto 1.
 6. **Copertura test** (~7-8%, nessuna pagina/componente admin testato) — lavoro esteso, non un fix puntuale.
 7. **`zod` v3/v4** ora allineato (fatto), ma se in futuro diverge di nuovo: verificare l'uso reale prima di scegliere la direzione del downgrade/upgrade (in questo caso è bastato un grep, ma non è garantito che sia sempre così semplice).
 8. **`react-router` v6→v7** — 2 vulnerabilità npm moderate residue richiedono questo major bump. Deliberatamente non fatto: tocca il routing di tutte e 4 le sub-app, rischio alto per un sito che si autodeploya senza staging, non pienamente verificabile in questa sessione (browser testing su tutte le rotte richiederebbe più tempo di quanto investito qui).

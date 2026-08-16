@@ -653,8 +653,8 @@ const VoyagePage = () => {
                   <p>{contributionExplanation}</p>
                   <p>
                     {lang === "it"
-                      ? `* Agli importi indicati sopra va aggiunta una quota fissa una tantum di ${formatDepositEur(contributionFixedMinimumEur(contributionOpts.fixedMinimumEur), lang)} a persona, indipendentemente dal numero di tratte scelte.`
-                      : `* A one-time fixed contribution of ${formatDepositEur(contributionFixedMinimumEur(contributionOpts.fixedMinimumEur), lang)} per person must be added to the amounts above, regardless of how many legs are chosen.`}
+                      ? `* Agli importi indicati sopra va aggiunta una quota fissa una tantum di ${formatDepositEur(contributionFixedMinimumEur(), lang)} a persona, indipendentemente dal numero di tratte scelte.`
+                      : `* A one-time fixed contribution of ${formatDepositEur(contributionFixedMinimumEur(), lang)} per person must be added to the amounts above, regardless of how many legs are chosen.`}
                   </p>
                 </div>
               )}

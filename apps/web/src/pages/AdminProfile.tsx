@@ -5,7 +5,6 @@ import {
   BookOpen,
   Camera,
   Facebook,
-  Fingerprint,
   Globe,
   Instagram,
   Languages,
@@ -13,8 +12,6 @@ import {
   Link as LinkIcon,
   Mail,
   Save,
-  Trash2,
-  UserRound,
   X,
   Youtube,
 } from "lucide-react";
@@ -30,14 +27,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { ProfileCrewPassPanel } from "@/components/profile/ProfileCrewPassPanel";
@@ -61,13 +50,14 @@ import {
   unsubscribeFromPushNotifications,
 } from "@/lib/pwa";
 import { isAuthFailureError } from "@/lib/supabase-auth";
-import { cn } from "@/lib/utils";
 import {
   DEFAULT_PROFILE_NOTIFICATION_PREFERENCES,
   ENGAGEMENT_NOTIFICATION_FREQUENCIES,
   normalizeEngagementNotificationFrequency,
 } from "@/lib/email-notification-preferences";
 import { supabase } from "@/integrations/supabase/client";
+import { PROFILE_COPY } from "@/lib/profile-copy";
+import ProfilePreferencesPanel from "@/components/admin/ProfilePreferencesPanel";
 import { toast } from "sonner";
 
 const TikTokIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
@@ -138,314 +128,6 @@ const createProfileSnapshot = (snapshot: ProfileSnapshot) =>
     socials: Object.fromEntries(Object.entries(snapshot.socials)),
   });
 
-const COPY = {
-  it: {
-    loading: "Caricamento...",
-    title: "Il mio profilo",
-    subtitle:
-      "Gestisci identita, preferenze e presenza pubblica con lo stesso linguaggio visivo del resto del sito.",
-    badge: "Area personale",
-    previewTitle: "Come appari alla community",
-    previewText:
-      "Nome, avatar, bio e link vengono riutilizzati nei commenti, nelle firme autore e nella scheda pubblica.",
-    changePhoto: "Cambia foto",
-    photoHint: "PNG o JPG. Puoi ritagliare l'immagine prima di salvarla.",
-    viewPublicProfile: "Apri profilo pubblico",
-    stats: {
-      primaryLanguage: "Lingua principale",
-      storySubscriptions: "Storie seguite",
-      socialLinks: "Link attivi",
-      newsletter: "Newsletter",
-    },
-    sections: {
-      identityEyebrow: "Identita",
-      identityTitle: "Nome, bio e riconoscibilita",
-      identityText: "Aggiorna le informazioni che compaiono nella tua presenza pubblica.",
-      preferencesEyebrow: "Preferenze",
-      preferencesTitle: "Lingua e comunicazioni",
-      preferencesText: "Definisci lingua madre, fallback del sito e aggiornamenti email.",
-      socialsEyebrow: "Dove ti si trova",
-      socialsTitle: "Social e link esterni",
-      socialsText: "Aggiungi solo i riferimenti che vuoi mostrare davvero nella scheda pubblica.",
-      subscriptionsEyebrow: "Follow",
-      subscriptionsTitle: "Storie che stai seguendo",
-      subscriptionsText: "Qui trovi le iscrizioni attive ai thread narrativi del progetto.",
-      saveEyebrow: "Salvataggio",
-      saveTitle: "Pubblica le modifiche del profilo",
-      saveText: "Le modifiche restano locali finche non salvi. Avatar incluso.",
-    },
-    fields: {
-      name: "Nome visibile",
-      email: "Email account",
-      bio: "Bio",
-      bioPlaceholder: "Racconta chi sei, cosa fai e cosa porti a bordo.",
-      preferredLanguage: "Lingua preferita",
-      secondaryLanguage: "Lingua dei contenuti del sito",
-      secondaryHint:
-        "Il sito e disponibile solo in italiano e inglese. Seleziona il fallback da usare per i contenuti.",
-      newsletterTitle: "Aggiornamenti editoriali via email",
-      newsletterHint:
-        "Attiva per ricevere nuovi articoli, digest e comunicazioni del progetto nella tua casella.",
-      likeNotificationsTitle: "Notifiche like",
-      likeNotificationsHint:
-        "Scegli se ricevere una mail per ogni like o un riepilogo periodico dei like ricevuti su articoli e commenti.",
-      commentNotificationsTitle: "Notifiche commenti",
-      commentNotificationsHint:
-        "Scegli la frequenza per nuovi commenti ai tuoi articoli e risposte ai tuoi commenti.",
-      articleUpdatesTitle: "Nuovi articoli",
-      articleUpdatesHint:
-        "Ricevi notifiche nel sito e push per i nuovi articoli standalone pubblicati su BITE.",
-      storyUpdatesTitle: "Storie che segui",
-      storyUpdatesHint:
-        "Ricevi notifiche nel sito e push quando una storia che segui pubblica un nuovo capitolo.",
-      pushTitle: "Notifiche push",
-      pushHint:
-        "Quando usi BITE come web app sulla home del telefono puoi scegliere quali notifiche ricevere in tempo reale.",
-      pushEngagementTitle: "Community",
-      pushEngagementHint: "Like, commenti e risposte legate ai tuoi contenuti.",
-      pushPublicationTitle: "Nuove pubblicazioni",
-      pushPublicationHint: "Articoli standalone e nuovi capitoli nelle storie seguite.",
-      pushMailTitle: "Nuove mail",
-      pushMailHint: "Messaggi ricevuti nella casella admin e assegnazioni inbound.",
-      pushVoyageAdminTitle: "Viaggi da gestire",
-      pushVoyageAdminHint: "Richieste, modifiche, cancellazioni e pagamenti dei partecipanti.",
-      pushVoyageUserTitle: "I miei viaggi",
-      pushVoyageUserHint: "Approvazioni, conferme, pagamenti e cambi planning delle tue prenotazioni.",
-      pushNotInstalled:
-        "Per attivare le push devi prima salvare BITE sulla schermata Home del telefono.",
-      pushUnsupported:
-        "Questo dispositivo o browser non supporta ancora le notifiche push web in questo contesto.",
-      pushDenied:
-        "Le notifiche push sono bloccate. Riattivale dalle impostazioni del browser o dell'app installata.",
-      pushRegistrationError:
-        "Permesso notifiche attivo, ma non riesco a registrare questo dispositivo. Riprova dopo aver chiuso e riaperto l'app.",
-      pushEnable: "Attiva notifiche push",
-      pushReconnect: "Ricollega notifiche push",
-      pushEnabled: "Push attive",
-      pushDisabled: "Push disattivate",
-      pushDisable: "Disattiva push",
-      pushSaving: "Aggiornamento...",
-      pushInstructionLabel: "Come installare l'app",
-      pushConfiguredLabel: "Gestione push app",
-      pushMissingKey:
-        "Configurazione push non completata sul progetto. Manca la chiave pubblica VAPID lato client.",
-      passkeyTitle: "Passkey",
-      passkeyHint:
-        "Aggiungi una passkey per accedere senza codice email, usando Face ID, Touch ID, PIN del dispositivo o una chiave di sicurezza.",
-      passkeyUnsupported:
-        "Questo browser o dispositivo non supporta ancora le passkey.",
-      passkeyInsecure:
-        "Le passkey richiedono HTTPS, tranne su localhost.",
-      passkeyEmpty:
-        "Nessuna passkey registrata per questo account.",
-      passkeyCreatedAt: "Creata",
-      passkeyLastUsedAt: "Ultimo uso",
-      passkeyNeverUsed: "Mai usata",
-    },
-    newsletter: {
-      on: "Iscritta",
-      off: "Non iscritta",
-    },
-    notificationFrequency: {
-      instant: "Una mail per ognuno",
-      daily: "Recap giornaliero",
-      weekly: "Recap settimanale",
-      monthly: "Recap mensile",
-      none: "Nessuna notifica",
-    },
-    subscription: {
-      empty: "Non stai seguendo nessuna storia al momento.",
-      remove: "Rimuovi",
-      removed: "Iscrizione rimossa.",
-      removeError: "Impossibile aggiornare le iscrizioni alle storie.",
-    },
-    actions: {
-      save: "Salva modifiche",
-      saving: "Salvataggio...",
-      saveAndExit: "Salva ed esci",
-      leaveWithoutSaving: "Esci senza salvare",
-      stayHere: "Resta qui",
-      upload: "Upload...",
-      avatarReady: "Foto profilo pronta. Salva il profilo per pubblicarla.",
-      avatarError: "Impossibile caricare la foto profilo.",
-      invalidImage: "Seleziona un file immagine valido.",
-      saveSuccess: "Profilo aggiornato.",
-      saveError: "Impossibile salvare il profilo.",
-      dirtyBadge: "Modifiche non salvate",
-      addPasskey: "Aggiungi passkey",
-      addingPasskey: "Aggiunta...",
-      passkeyAdded: "Passkey aggiunta.",
-      passkeyRemoved: "Passkey rimossa.",
-      passkeyError: "Impossibile aggiornare le passkey.",
-      passkeyCancelled: "Operazione passkey annullata.",
-      passkeyDisabled:
-        "Le passkey non risultano abilitate nella configurazione Auth di Supabase.",
-      passkeyConfigError:
-        "Configurazione WebAuthn non valida per questo dominio. Controlla Relying Party ID e Relying Party Origins in Supabase.",
-      removePasskey: "Rimuovi passkey",
-    },
-    prompt: {
-      title: "Hai modifiche non salvate",
-      text: "Se lasci questa pagina adesso perdi le modifiche al profilo. Puoi uscire senza salvare oppure salvare prima di continuare.",
-    },
-    misc: {
-      noSecondaryLanguage: "Nessuna",
-    },
-  },
-  en: {
-    loading: "Loading...",
-    title: "My profile",
-    subtitle:
-      "Manage identity, preferences, and public presence using the same visual system as the rest of the site.",
-    badge: "Personal area",
-    previewTitle: "How you appear to the community",
-    previewText:
-      "Name, avatar, bio, and links are reused across comments, author signatures, and the public profile card.",
-    changePhoto: "Change photo",
-    photoHint: "PNG or JPG. You can crop the image before saving.",
-    viewPublicProfile: "Open public profile",
-    stats: {
-      primaryLanguage: "Primary language",
-      storySubscriptions: "Followed stories",
-      socialLinks: "Active links",
-      newsletter: "Newsletter",
-    },
-    sections: {
-      identityEyebrow: "Identity",
-      identityTitle: "Name, bio, and recognizability",
-      identityText: "Update the details that show up in your public presence.",
-      preferencesEyebrow: "Preferences",
-      preferencesTitle: "Language and communications",
-      preferencesText: "Set native language, site fallback, and email updates.",
-      socialsEyebrow: "Where to find you",
-      socialsTitle: "Social and external links",
-      socialsText: "Add only the references you actually want to expose on your public card.",
-      subscriptionsEyebrow: "Following",
-      subscriptionsTitle: "Stories you are following",
-      subscriptionsText: "Your active subscriptions to the narrative threads of the project live here.",
-      saveEyebrow: "Save",
-      saveTitle: "Publish profile changes",
-      saveText: "Changes stay local until you save them. Avatar included.",
-    },
-    fields: {
-      name: "Display name",
-      email: "Account email",
-      bio: "Bio",
-      bioPlaceholder: "Tell people who you are, what you do, and what you bring aboard.",
-      preferredLanguage: "Preferred language",
-      secondaryLanguage: "Site content language",
-      secondaryHint:
-        "The site is only available in Italian and English. Select the fallback language for editorial content.",
-      newsletterTitle: "Editorial updates by email",
-      newsletterHint:
-        "Enable this to receive new articles, digests, and project updates in your inbox.",
-      likeNotificationsTitle: "Like notifications",
-      likeNotificationsHint:
-        "Choose whether to receive one email per like or a periodic summary for likes on your articles and comments.",
-      commentNotificationsTitle: "Comment notifications",
-      commentNotificationsHint:
-        "Choose the delivery cadence for new comments on your articles and replies to your comments.",
-      articleUpdatesTitle: "New articles",
-      articleUpdatesHint:
-        "Receive in-app notifications and push alerts for new standalone articles published on BITE.",
-      storyUpdatesTitle: "Followed stories",
-      storyUpdatesHint:
-        "Receive in-app notifications and push alerts when a story you follow publishes a new chapter.",
-      pushTitle: "Push notifications",
-      pushHint:
-        "When you use BITE as a web app from your phone home screen, you can choose which real-time push notifications you receive.",
-      pushEngagementTitle: "Community",
-      pushEngagementHint: "Likes, comments, and replies tied to your content.",
-      pushPublicationTitle: "New publications",
-      pushPublicationHint: "Standalone articles and new chapters in followed stories.",
-      pushMailTitle: "New mail",
-      pushMailHint: "Messages received in the admin mailbox and inbound assignments.",
-      pushVoyageAdminTitle: "Voyages to manage",
-      pushVoyageAdminHint: "Requests, changes, cancellations, and participant payments.",
-      pushVoyageUserTitle: "My voyages",
-      pushVoyageUserHint: "Approvals, confirmations, payments, and plan changes for your bookings.",
-      pushNotInstalled:
-        "To enable push notifications you first need to save BITE to your phone home screen.",
-      pushUnsupported:
-        "This device or browser does not currently support web push in this context.",
-      pushDenied:
-        "Push notifications are blocked. Re-enable them from your browser or installed app settings.",
-      pushRegistrationError:
-        "Notifications are allowed, but this device could not be registered. Close and reopen the app, then try again.",
-      pushEnable: "Enable push notifications",
-      pushReconnect: "Reconnect push notifications",
-      pushEnabled: "Push enabled",
-      pushDisabled: "Push disabled",
-      pushDisable: "Disable push",
-      pushSaving: "Updating...",
-      pushInstructionLabel: "How to install the app",
-      pushConfiguredLabel: "App push controls",
-      pushMissingKey:
-        "Push is not fully configured for this project yet. The public VAPID key is missing on the client.",
-      passkeyTitle: "Passkeys",
-      passkeyHint:
-        "Add a passkey to sign in without an email code, using Face ID, Touch ID, your device PIN, or a security key.",
-      passkeyUnsupported:
-        "This browser or device does not support passkeys yet.",
-      passkeyInsecure:
-        "Passkeys require HTTPS, except on localhost.",
-      passkeyEmpty:
-        "No passkeys registered for this account.",
-      passkeyCreatedAt: "Created",
-      passkeyLastUsedAt: "Last used",
-      passkeyNeverUsed: "Never used",
-    },
-    newsletter: {
-      on: "Subscribed",
-      off: "Off",
-    },
-    notificationFrequency: {
-      instant: "One email each",
-      daily: "Daily digest",
-      weekly: "Weekly digest",
-      monthly: "Monthly digest",
-      none: "No notifications",
-    },
-    subscription: {
-      empty: "You are not following any stories right now.",
-      remove: "Remove",
-      removed: "Subscription removed.",
-      removeError: "Unable to update story subscriptions.",
-    },
-    actions: {
-      save: "Save changes",
-      saving: "Saving...",
-      saveAndExit: "Save and leave",
-      leaveWithoutSaving: "Leave without saving",
-      stayHere: "Stay here",
-      upload: "Upload...",
-      avatarReady: "Profile photo ready. Save the profile to publish it.",
-      avatarError: "Unable to upload the profile photo.",
-      invalidImage: "Select a valid image file.",
-      saveSuccess: "Profile updated.",
-      saveError: "Unable to save the profile.",
-      dirtyBadge: "Unsaved changes",
-      addPasskey: "Add passkey",
-      addingPasskey: "Adding...",
-      passkeyAdded: "Passkey added.",
-      passkeyRemoved: "Passkey removed.",
-      passkeyError: "Unable to update passkeys.",
-      passkeyCancelled: "Passkey operation cancelled.",
-      passkeyDisabled:
-        "Passkeys do not appear to be enabled in Supabase Auth configuration.",
-      passkeyConfigError:
-        "Invalid WebAuthn configuration for this domain. Check Relying Party ID and Relying Party Origins in Supabase.",
-      removePasskey: "Remove passkey",
-    },
-    prompt: {
-      title: "You have unsaved changes",
-      text: "If you leave this page now you will lose your profile edits. You can leave without saving or save before continuing.",
-    },
-    misc: {
-      noSecondaryLanguage: "None",
-    },
-  },
-} as const;
 
 const AdminProfile = () => {
   const { session, isAdmin, loading: authLoading } = useAuth();
@@ -527,7 +209,7 @@ const AdminProfile = () => {
       .catch(() => {});
   }, [pushPublicKey]);
 
-  const copy = COPY[lang === "en" ? "en" : "it"];
+  const copy = PROFILE_COPY[lang === "en" ? "en" : "it"];
   const passkeyUnavailableMessage = !supportsPasskeys
     ? copy.fields.passkeyUnsupported
     : !isPasskeySecureContext
@@ -1826,393 +1508,46 @@ const AdminProfile = () => {
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
-              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
-                {copy.sections.preferencesEyebrow}
-              </p>
-              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">{copy.sections.preferencesTitle}</h2>
-              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
-                {copy.sections.preferencesText}
-              </p>
-
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                    {copy.fields.preferredLanguage}
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {ALL_LANGUAGES.map((language) => (
-                      <button
-                        key={language.code}
-                        type="button"
-                        onClick={() => handleLanguageChange(language.code)}
-                        className={cn(
-                          "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
-                          preferredLanguage === language.code
-                            ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
-                            : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
-                        )}
-                      >
-                        {language.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {!isSiteNative && (
-                  <div className="space-y-3 rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                    <div className="space-y-2">
-                      <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {copy.fields.secondaryLanguage}
-                      </label>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        {copy.fields.secondaryHint}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {SITE_LANGUAGES.map((code) => {
-                        const label = ALL_LANGUAGES.find((language) => language.code === code)?.label || code;
-                        return (
-                          <button
-                            key={code}
-                            type="button"
-                            onClick={() => setSecondaryLanguage(code)}
-                            className={cn(
-                              "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
-                              secondaryLanguage === code
-                                ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
-                                : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                          {copy.fields.passkeyTitle}
-                        </p>
-                        <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                          {copy.fields.passkeyHint}
-                        </p>
-                      </div>
-                      <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-background/75">
-                        <Fingerprint size={16} className="text-accent" />
-                      </div>
-                    </div>
-
-                    {passkeyUnavailableMessage ? (
-                      <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
-                        <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                          {passkeyUnavailableMessage}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="space-y-3">
-                          {passkeysLoading ? (
-                            <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
-                              {copy.loading}
-                            </div>
-                          ) : passkeys.length > 0 ? (
-                            passkeys.map((passkey) => (
-                              <div
-                                key={passkey.id}
-                                className="flex items-start justify-between gap-3 rounded-[20px] border border-white/60 bg-white/72 px-4 py-4"
-                              >
-                                <div className="min-w-0 space-y-1">
-                                  <p className="truncate text-sm font-sans font-medium text-foreground">
-                                    {passkey.friendly_name || copy.fields.passkeyTitle}
-                                  </p>
-                                  <p className="text-xs font-sans text-muted-foreground">
-                                    {copy.fields.passkeyCreatedAt}: {formatPasskeyDate(passkey.created_at)}
-                                  </p>
-                                  <p className="text-xs font-sans text-muted-foreground">
-                                    {copy.fields.passkeyLastUsedAt}:{" "}
-                                    {passkey.last_used_at
-                                      ? formatPasskeyDate(passkey.last_used_at)
-                                      : copy.fields.passkeyNeverUsed}
-                                  </p>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  disabled={removingPasskeyId === passkey.id}
-                                  className="h-10 w-10 shrink-0 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                  onClick={() => void handleRemovePasskey(passkey.id)}
-                                  title={copy.actions.removePasskey}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
-                              {copy.fields.passkeyEmpty}
-                            </div>
-                          )}
-                        </div>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="rounded-full border-white/70 bg-white/80 hover:bg-white"
-                          disabled={registeringPasskey}
-                          onClick={() => void handleRegisterPasskey()}
-                        >
-                          <Fingerprint size={14} />
-                          {registeringPasskey ? copy.actions.addingPasskey : copy.actions.addPasskey}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {copy.fields.newsletterTitle}
-                      </p>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        {copy.fields.newsletterHint}
-                      </p>
-                    </div>
-                    <Switch checked={newsletterSubscribed} onCheckedChange={setNewsletterSubscribed} />
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="space-y-3">
-                    <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {copy.fields.likeNotificationsTitle}
-                    </p>
-                    <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                      {copy.fields.likeNotificationsHint}
-                    </p>
-                    <Select
-                      value={notificationPreferences.like_notifications_frequency}
-                      onValueChange={(value) =>
-                        setNotificationPreferences((current) => ({
-                          ...current,
-                          like_notifications_frequency: normalizeEngagementNotificationFrequency(value),
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {notificationFrequencyOptions.map((option) => (
-                          <SelectItem key={`like-${option.value}`} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="space-y-3">
-                    <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                      {copy.fields.commentNotificationsTitle}
-                    </p>
-                    <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                      {copy.fields.commentNotificationsHint}
-                    </p>
-                    <Select
-                      value={notificationPreferences.comment_notifications_frequency}
-                      onValueChange={(value) =>
-                        setNotificationPreferences((current) => ({
-                          ...current,
-                          comment_notifications_frequency: normalizeEngagementNotificationFrequency(value),
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {notificationFrequencyOptions.map((option) => (
-                          <SelectItem key={`comment-${option.value}`} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {copy.fields.articleUpdatesTitle}
-                      </p>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        {copy.fields.articleUpdatesHint}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={articleNotificationsEnabled}
-                      onCheckedChange={setArticleNotificationsEnabled}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {copy.fields.storyUpdatesTitle}
-                      </p>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        {copy.fields.storyUpdatesHint}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={storyNotificationsEnabled}
-                      onCheckedChange={setStoryNotificationsEnabled}
-                    />
-                  </div>
-                </div>
-
-                {shouldShowMobileAppCard && (
-                  <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                    <div className="space-y-3">
-                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {isInstalledApp ? copy.fields.pushConfiguredLabel : copy.fields.pushInstructionLabel}
-                      </p>
-                      <p className="text-sm font-sans text-foreground">
-                        {copy.fields.pushTitle}
-                      </p>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        {copy.fields.pushHint}
-                      </p>
-
-                      {!isInstalledApp ? (
-                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
-                          <p className="text-sm font-sans text-foreground">{copy.fields.pushNotInstalled}</p>
-                          <p className="mt-2 text-sm font-sans text-muted-foreground leading-relaxed">
-                            {pushInstallInstructions}
-                          </p>
-                        </div>
-                      ) : !canUseWebPush ? (
-                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
-                          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                            {copy.fields.pushUnsupported}
-                          </p>
-                        </div>
-                      ) : !pushPublicKey ? (
-                        <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
-                          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                            {copy.fields.pushMissingKey}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4 rounded-[20px] border border-white/70 bg-white/72 p-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                              <p className="text-sm font-sans font-medium text-foreground">
-                                {pushReady ? copy.fields.pushEnabled : copy.fields.pushDisabled}
-                              </p>
-                              <p className="text-xs font-sans text-muted-foreground">
-                                Permission: {pushPermission}
-                              </p>
-                            </div>
-                            {pushReady ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="rounded-full border-white/70 bg-white/80 hover:bg-white"
-                                disabled={pushStateLoading}
-                                onClick={() => void handleDisablePushNotifications()}
-                              >
-                                {copy.fields.pushDisable}
-                              </Button>
-                            ) : null}
-                          </div>
-
-                          {pushPermission === "default" || !hasPushSubscription ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="rounded-full border-white/70 bg-white/80 hover:bg-white"
-                              disabled={pushStateLoading}
-                              onClick={() => void handleEnablePushNotifications()}
-                            >
-                              {pushStateLoading
-                                ? copy.fields.pushSaving
-                                : hasPushSubscription
-                                  ? copy.fields.pushReconnect
-                                  : copy.fields.pushEnable}
-                            </Button>
-                          ) : null}
-
-                          {pushReady ? (
-                            <div className="space-y-0 border-t border-black/6 pt-2">
-                              {pushPreferenceRows.map((row, index) => (
-                                <div
-                                  key={row.key}
-                                  className={cn(
-                                    "flex items-start justify-between gap-4 py-4",
-                                    index > 0 && "border-t border-black/6",
-                                  )}
-                                >
-                                  <div className="space-y-1">
-                                    <p className="text-sm font-sans font-medium text-foreground">{row.title}</p>
-                                    <p className="text-xs font-sans text-muted-foreground leading-relaxed">{row.hint}</p>
-                                  </div>
-                                  <Switch
-                                    checked={row.checked}
-                                    disabled={pushStateLoading}
-                                    onCheckedChange={(checked) => void handlePushPreferenceChange(row.key, checked)}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          {pushPermission === "denied" ? (
-                            <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                              {copy.fields.pushDenied}
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
-                      <UserRound size={16} className="text-accent" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
-                        {copy.fields.preferredLanguage}
-                      </p>
-                      <p className="font-sans text-sm text-foreground mt-1">
-                        {preferredLanguageLabel}
-                        {!isSiteNative && (
-                          <span className="text-muted-foreground"> · {secondaryLanguageLabel}</span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ProfilePreferencesPanel
+              copy={copy}
+              preferredLanguage={preferredLanguage}
+              preferredLanguageLabel={preferredLanguageLabel}
+              secondaryLanguage={secondaryLanguage}
+              secondaryLanguageLabel={secondaryLanguageLabel}
+              isSiteNative={isSiteNative}
+              handleLanguageChange={handleLanguageChange}
+              setSecondaryLanguage={setSecondaryLanguage}
+              newsletterSubscribed={newsletterSubscribed}
+              setNewsletterSubscribed={setNewsletterSubscribed}
+              articleNotificationsEnabled={articleNotificationsEnabled}
+              setArticleNotificationsEnabled={setArticleNotificationsEnabled}
+              storyNotificationsEnabled={storyNotificationsEnabled}
+              setStoryNotificationsEnabled={setStoryNotificationsEnabled}
+              notificationPreferences={notificationPreferences}
+              setNotificationPreferences={setNotificationPreferences}
+              notificationFrequencyOptions={notificationFrequencyOptions}
+              canUseWebPush={canUseWebPush}
+              hasPushSubscription={hasPushSubscription}
+              pushPermission={pushPermission}
+              pushReady={pushReady}
+              pushStateLoading={pushStateLoading}
+              pushPublicKey={pushPublicKey}
+              pushPreferenceRows={pushPreferenceRows}
+              pushInstallInstructions={pushInstallInstructions}
+              handleEnablePushNotifications={handleEnablePushNotifications}
+              handleDisablePushNotifications={handleDisablePushNotifications}
+              handlePushPreferenceChange={handlePushPreferenceChange}
+              isInstalledApp={isInstalledApp}
+              shouldShowMobileAppCard={shouldShowMobileAppCard}
+              passkeys={passkeys}
+              passkeysLoading={passkeysLoading}
+              registeringPasskey={registeringPasskey}
+              removingPasskeyId={removingPasskeyId}
+              passkeyUnavailableMessage={passkeyUnavailableMessage}
+              handleRegisterPasskey={handleRegisterPasskey}
+              handleRemovePasskey={handleRemovePasskey}
+              formatPasskeyDate={formatPasskeyDate}
+            />
 
             <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">

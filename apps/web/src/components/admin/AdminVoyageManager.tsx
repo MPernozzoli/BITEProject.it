@@ -598,6 +598,9 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   stop_departure_time: (waypoint?.stop_departure_time ?? null) as string | null,
   date_start: (waypoint?.date_start ?? null) as string | null,
   date_end: (waypoint?.date_end ?? null) as string | null,
+  // I waypoint creati localmente (drag sulla mappa, bozze ripristinate da localStorage) non hanno
+  // ancora un updated_at dal DB: per loro vale created_at, che WaypointRecord richiede sempre.
+  updated_at: (waypoint?.updated_at ?? waypoint.created_at) as string,
 });
 
 const normalizeVoyage = (voyage: VoyageRecord): Voyage => ({

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, Pencil, Plus, RefreshCw, Search, Settings, Ship, Trash2, Users, Wallet, X, type LucideIcon } from "lucide-react";
+import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, RefreshCw, Search, Settings, Ship, Users, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,6 +25,19 @@ import VoyageCandidatesPanel from "@/components/admin/VoyageCandidatesPanel";
 import PlanChangeProposalDialog, { type PlanChangeProposal } from "@/components/admin/PlanChangeProposalDialog";
 import ManualPaymentDialog, { type ManualPayment } from "@/components/admin/ManualPaymentDialog";
 import WaypointDetailsDialog from "@/components/admin/WaypointDetailsDialog";
+import BookingSettingsPanel from "@/components/admin/BookingSettingsPanel";
+import VoyageStopsPanel from "@/components/admin/VoyageStopsPanel";
+import VoyageLegsPanel from "@/components/admin/VoyageLegsPanel";
+import VoyageWorkawaySettingsPanel from "@/components/admin/VoyageWorkawaySettingsPanel";
+import {
+  fromDateTimeLocalValue,
+  formatDuration,
+  formatPlanningDate,
+  getWaypointArrivalDate,
+  hasWaypointCoordinates,
+  isDepartureTimeAfterArrival,
+  toDateTimeLocalValue,
+} from "@/lib/booking-planning";
 import { getWaypointEffectiveType, hasVoyageDatesTbd, totalWaypointDistance } from "@/lib/voyage-utils";
 import {
   type BookableLeg,
@@ -38,30 +51,19 @@ import {
   type VoyageBookingStatus,
   type WorkawayRole,
   DANGER_MAX,
-  STOP_DEPARTURE_PRESETS,
-  STOP_HOURS_PRESETS,
-  STOP_NIGHTS_PRESETS,
   capacityBlockingStatuses,
-  computeAutoLegComplexity,
   estimateStopMinutes,
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
-  getComplexityClass,
-  getComplexityLabel,
-  getDangerClass,
-  getDangerLabel,
-  getDefaultStopDepartureTime,
-  getEffectiveStopHoursDefault,
-  getLegComplexity,
   getLegDangerLevel,
   getLegLabel,
   getLocalizedBookingVoyageName,
-  getWaypointStopUiMode,
-  isLegComplexityAuto,
 } from "@/lib/booking-utils";
 import { depositForPayerEur } from "@/lib/booking-deposit";
-import { DANGER_REASONS, type DangerReasonKey } from "@/lib/danger-reasons";
+import {
+  type DangerReasonKey,
+} from "@/lib/danger-reasons";
 import { DEFAULT_BOOKING_BRIEFINGS } from "@/lib/booking-briefings";
 import { sendBookingInvites, type BookingParticipant } from "@/lib/booking-participants";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
@@ -140,119 +142,7 @@ const duplicateBookingStatuses = new Set<VoyageBookingStatus>([
   "waitlisted",
 ]);
 
-const toDateTimeLocalValue = (value?: string | null) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-};
 
-const fromDateTimeLocalValue = (value: string) => {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-};
-
-const formatPlanningDate = (value?: string | null) => {
-  if (!value) return "Non impostata";
-  return formatBookingDate(value, "it-IT") || "Non impostata";
-};
-
-const formatDuration = (minutes: number) => {
-  const safeMinutes = Math.max(0, Math.round(minutes || 0));
-  const days = Math.floor(safeMinutes / 1440);
-  const hours = Math.floor((safeMinutes % 1440) / 60);
-  const mins = safeMinutes % 60;
-  const parts = [];
-  if (days) parts.push(`${days}g`);
-  if (hours) parts.push(`${hours}h`);
-  if (mins || parts.length === 0) parts.push(`${mins}m`);
-  return parts.join(" ");
-};
-
-const haversineNm = (from: BookingWaypoint | undefined, to: BookingWaypoint | undefined) => {
-  if (typeof from?.lat !== "number" || typeof from?.lng !== "number" || typeof to?.lat !== "number" || typeof to?.lng !== "number") {
-    return null;
-  }
-  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
-  const dLat = toRad(to.lat - from.lat);
-  const dLng = toRad(to.lng - from.lng);
-  const lat1 = toRad(from.lat);
-  const lat2 = toRad(to.lat);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 3440.065 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-const hasWaypointCoordinates = (
-  waypoint: BookingWaypoint
-): waypoint is BookingWaypoint & { lat: number; lng: number } =>
-  Number.isFinite(Number(waypoint.lat)) && Number.isFinite(Number(waypoint.lng));
-
-const formatPlanningWindow = (start?: string | null, end?: string | null) => {
-  if (!start && !end) return "Non impostata";
-  if (start && end && start !== end) return `${formatPlanningDate(start)} → ${formatPlanningDate(end)}`;
-  return formatPlanningDate(start || end);
-};
-
-const formatWaypointStopTiming = (
-  waypoint: BookingWaypoint,
-  incomingLeg?: BookableLeg,
-  outboundLeg?: BookableLeg
-) => {
-  const arrival = waypoint.date_end
-    ? formatPlanningDate(waypoint.date_end)
-    : formatPlanningWindow(incomingLeg?.ends_at_window_start, incomingLeg?.ends_at_window_end);
-  const departure = waypoint.date_start
-    ? formatPlanningDate(waypoint.date_start)
-    : formatPlanningWindow(outboundLeg?.starts_at_window_start, outboundLeg?.starts_at_window_end);
-  return `Arrivo ${arrival} · Ripartenza ${departure}`;
-};
-
-const formatLegDistance = (distanceNm: number | null | undefined) => {
-  if (!Number.isFinite(Number(distanceNm))) return "NM non disponibili";
-  return `${Number(distanceNm).toFixed(1)} NM`;
-};
-
-const getWaypointArrivalDate = (waypoint: BookingWaypoint, incomingLeg?: BookableLeg) => {
-  const value = waypoint.date_end || incomingLeg?.ends_at_window_start || incomingLeg?.ends_at_window_end;
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const formatLocalTime = (date: Date) =>
-  `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-
-const isDepartureTimeAfterArrival = (arrival: Date | null, departureTime: string) => {
-  if (!arrival || !departureTime) return true;
-  const [hoursPart, minutesPart] = departureTime.split(":");
-  const hours = Number(hoursPart);
-  const minutes = Number(minutesPart);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return true;
-  const departure = new Date(arrival);
-  departure.setHours(hours, minutes, 0, 0);
-  return departure.getTime() > arrival.getTime();
-};
-
-const getDepartureTimeFromArrivalAndHours = (arrival: Date | null, hours: number) => {
-  if (!arrival) return null;
-  const departure = new Date(arrival.getTime() + Math.max(0, Number(hours) || 0) * 3_600_000);
-  return departure.toDateString() === arrival.toDateString() ? formatLocalTime(departure) : null;
-};
-
-const getStopHoursFromArrivalAndDepartureTime = (arrival: Date | null, departureTime: string) => {
-  if (!arrival || !departureTime) return null;
-  const [hoursPart, minutesPart] = departureTime.split(":");
-  const hours = Number(hoursPart);
-  const minutes = Number(minutesPart);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-  const departure = new Date(arrival);
-  departure.setHours(hours, minutes, 0, 0);
-  if (departure.getTime() <= arrival.getTime()) return null;
-  const diffHours = (departure.getTime() - arrival.getTime()) / 3_600_000;
-  return Math.max(0, Math.round(diffHours));
-};
 
 /**
  * Snapshot of the "Salva planning" batch: voyage booking settings + waypoint stop config +
@@ -1843,822 +1733,74 @@ const AdminVoyageBookings = () => {
         )}
 
         {activeTab === "soste" && (
-        <section className="glass-panel rounded-[30px] p-5 md:p-6">
-          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <Anchor size={18} className="text-accent" />
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Soste</p>
-                <h2 className="editorial-heading text-2xl">Durata delle soste ai waypoint</h2>
-              </div>
-            </div>
-            {routePlanningActions}
-          </div>
-          <div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Soste waypoint</p>
-                <span className="text-xs text-muted-foreground">Durata prevista in sosta</span>
-              </div>
-              <div className="space-y-2">
-                {publicPlanningWaypoints.map((waypoint, index) => {
-                  const stopUiMode = getWaypointStopUiMode(waypoint);
-                  const outboundLeg = legs.find((leg) => leg.from_waypoint_id === waypoint.id);
-                  const previousWaypoint = index > 0 ? publicPlanningWaypoints[index - 1] : undefined;
-                  const incomingLeg = previousWaypoint
-                    ? legs.find((leg) => leg.from_waypoint_id === previousWaypoint.id && leg.to_waypoint_id === waypoint.id) ||
-                      legs.find((leg) => leg.to_waypoint_id === waypoint.id)
-                    : undefined;
-                  const incomingDistanceNm =
-                    typeof incomingLeg?.planned_nautical_miles === "number"
-                      ? incomingLeg.planned_nautical_miles
-                      : haversineNm(previousWaypoint, waypoint);
-                  const incomingDurationMinutes =
-                    incomingDistanceNm !== null && planningSpeedKn > 0 ? (incomingDistanceNm / planningSpeedKn) * 60 : null;
-                  const previousWaypointName = previousWaypoint?.name_it || previousWaypoint?.name_en || previousWaypoint?.name || "Waypoint";
-                  const waypointName = waypoint.name_it || waypoint.name_en || waypoint.name || "Waypoint";
-                  const effectiveHours = getEffectiveStopHoursDefault(waypoint);
-                  const effectiveNights = Math.max(1, Number(waypoint.stop_nights ?? 1));
-                  const defaultDeparture = getDefaultStopDepartureTime(Boolean(outboundLeg?.open_sea));
-                  const arrivalDate = getWaypointArrivalDate(waypoint, incomingLeg);
-                  const effectiveShortDeparture =
-                    (waypoint.stop_departure_time || getDepartureTimeFromArrivalAndHours(arrivalDate, effectiveHours) || defaultDeparture).slice(0, 5);
-                  const effectiveDeparture = (waypoint.stop_departure_time ?? defaultDeparture).slice(0, 5);
-
-                  const applyStopMode = (mode: "none" | "hours" | "nights") => {
-                    if (mode === "none") {
-                      updateWaypointPlanning(waypoint.id, {
-                        stop_mode: "hours",
-                        stop_hours: 0,
-                        stop_nights: null,
-                        stop_departure_time: null,
-                        planned_stop_duration_minutes: 0,
-                      });
-                    } else if (mode === "hours") {
-                      updateWaypointPlanning(waypoint.id, {
-                        stop_mode: "hours",
-                        stop_hours: effectiveHours,
-                        stop_nights: null,
-                        stop_departure_time: effectiveShortDeparture,
-                        planned_stop_duration_minutes: effectiveHours * 60,
-                      });
-                    } else {
-                      updateWaypointPlanning(waypoint.id, {
-                        stop_mode: "nights",
-                        stop_nights: effectiveNights,
-                        stop_departure_time: waypoint.stop_departure_time || defaultDeparture,
-                        stop_hours: null,
-                        planned_stop_duration_minutes: 0,
-                      });
-                    }
-                  };
-
-                  const applyHoursDepartureTime = (time: string) => {
-                    if (!isDepartureTimeAfterArrival(arrivalDate, time)) {
-                      toast.error("L'orario di ripartenza deve essere successivo all'arrivo.");
-                      return;
-                    }
-                    const computedHours = getStopHoursFromArrivalAndDepartureTime(arrivalDate, time);
-                    const hours = computedHours ?? effectiveHours;
-                    updateWaypointPlanning(waypoint.id, {
-                      stop_mode: "hours",
-                      stop_departure_time: time,
-                      stop_hours: hours,
-                      planned_stop_duration_minutes: hours * 60,
-                    });
-                  };
-
-                  const applyHoursPreset = (hours: number) => {
-                    updateWaypointPlanning(waypoint.id, {
-                      stop_mode: "hours",
-                      stop_hours: hours,
-                      stop_departure_time: getDepartureTimeFromArrivalAndHours(arrivalDate, hours) || waypoint.stop_departure_time || null,
-                      planned_stop_duration_minutes: hours * 60,
-                    });
-                  };
-
-                  return (
-                    <div key={waypoint.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3">
-                      {previousWaypoint && (
-                        <div className="flex flex-col gap-1 rounded-[14px] bg-muted/35 px-3 py-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                          <span className="truncate">
-                            Tratta da {previousWaypointName} a {waypointName}
-                          </span>
-                          <span className="shrink-0 font-medium text-foreground">
-                            {formatLegDistance(incomingDistanceNm)} ·{" "}
-                            {incomingDurationMinutes === null ? "durata non disponibile" : formatDuration(incomingDurationMinutes)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {index + 1}. {waypointName}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatWaypointStopTiming(waypoint, incomingLeg, outboundLeg)}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setDetailsWaypointId(waypoint.id)}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
-                        >
-                          <Pencil size={12} /> Dettagli tappa
-                        </button>
-                      </div>
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label className="block">
-                          <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Sosta</span>
-                          <select
-                            value={stopUiMode}
-                            onChange={(event) => applyStopMode(event.target.value as "none" | "hours" | "nights")}
-                            className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                          >
-                            <option value="none">Nessuna sosta</option>
-                            <option value="hours">Sosta breve (ore)</option>
-                            <option value="nights">Giorni + orario di ripartenza</option>
-                          </select>
-                        </label>
-
-                        {stopUiMode === "hours" && (
-                          <>
-                            <div>
-                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ripartenza</span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="time"
-                                  min={arrivalDate ? formatLocalTime(arrivalDate) : undefined}
-                                  value={effectiveShortDeparture}
-                                  onChange={(event) => applyHoursDepartureTime(event.target.value)}
-                                  className="w-28 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                                />
-                                {STOP_DEPARTURE_PRESETS.map((preset) => {
-                                  const disabled = !isDepartureTimeAfterArrival(arrivalDate, preset);
-                                  return (
-                                    <button
-                                      key={preset}
-                                      type="button"
-                                      disabled={disabled}
-                                      onClick={() => applyHoursDepartureTime(preset)}
-                                      className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                      {preset}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <p className="mt-1 text-[11px] text-muted-foreground">
-                                {arrivalDate
-                                  ? `Durata calcolata dall'arrivo: ${formatDuration(effectiveHours * 60)}. Per ripartenze il giorno dopo usa la modalità giorni.`
-                                  : "Arrivo non impostato: usa le ore come fallback manuale."}
-                              </p>
-                            </div>
-                            <div>
-                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Ore</span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={effectiveHours}
-                                  onChange={(event) => {
-                                    const hours = Math.max(0, Number(event.target.value) || 0);
-                                    updateWaypointPlanning(waypoint.id, {
-                                      stop_hours: hours,
-                                      stop_departure_time:
-                                        getDepartureTimeFromArrivalAndHours(arrivalDate, hours) || waypoint.stop_departure_time || null,
-                                      planned_stop_duration_minutes: hours * 60,
-                                    });
-                                  }}
-                                  className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                                />
-                                {STOP_HOURS_PRESETS.map((preset) => (
-                                  <button
-                                    key={preset}
-                                    type="button"
-                                    onClick={() => applyHoursPreset(preset)}
-                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
-                                  >
-                                    {preset}h
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {stopUiMode === "nights" && (
-                          <>
-                            <div>
-                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Giorni</span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  step="1"
-                                  value={effectiveNights}
-                                  onChange={(event) =>
-                                    updateWaypointPlanning(waypoint.id, {
-                                      stop_nights: Math.max(1, Number(event.target.value) || 1),
-                                    })
-                                  }
-                                  className="w-20 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                                />
-                                {STOP_NIGHTS_PRESETS.map((preset) => (
-                                  <button
-                                    key={preset}
-                                    type="button"
-                                    onClick={() => updateWaypointPlanning(waypoint.id, { stop_nights: preset })}
-                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
-                                  >
-                                    {preset}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div>
-                              <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                                Ripartenza{outboundLeg?.open_sea ? " · navigazione d'altura → default 19:00" : ""}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="time"
-                                  value={effectiveDeparture}
-                                  onChange={(event) =>
-                                    updateWaypointPlanning(waypoint.id, { stop_departure_time: event.target.value })
-                                  }
-                                  className="w-28 border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                                />
-                                {STOP_DEPARTURE_PRESETS.map((preset) => (
-                                  <button
-                                    key={preset}
-                                    type="button"
-                                    onClick={() => updateWaypointPlanning(waypoint.id, { stop_departure_time: preset })}
-                                    className="glass-chip px-2.5 py-1 text-xs text-foreground hover:text-accent"
-                                  >
-                                    {preset}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {publicPlanningWaypoints.length === 0 && <p className="text-sm text-muted-foreground">Nessun waypoint pubblico caricato per questa rotta.</p>}
-              </div>
-          </div>
-        </section>
+          <VoyageStopsPanel
+            publicPlanningWaypoints={publicPlanningWaypoints}
+            legs={legs}
+            planningSpeedKn={planningSpeedKn}
+            routePlanningActions={routePlanningActions}
+            updateWaypointPlanning={updateWaypointPlanning}
+            setDetailsWaypointId={setDetailsWaypointId}
+          />
         )}
 
         {activeTab === "rotte" && (
-        <section className="glass-panel rounded-[30px] p-5 md:p-6">
-          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <CalendarClock size={18} className="text-accent" />
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Rotte</p>
-                <h2 className="editorial-heading text-2xl">Tratte di navigazione</h2>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={syncLegs}
-                disabled={saving || !selectedVoyageId || !selectedVoyage?.booking_enabled}
-                className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
-                Sync tratte
-              </button>
-              {routePlanningActions}
-            </div>
-          </div>
-          <div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Finestre e disponibilità</p>
-                <span className="text-xs text-muted-foreground">Finestre e disponibilità</span>
-              </div>
-              <div className="space-y-2">
-                {legs.map((leg) => {
-                  const distanceNm = haversineNm(waypointsById[leg.from_waypoint_id], waypointsById[leg.to_waypoint_id]);
-                  const estimatedMinutes = distanceNm === null ? null : (distanceNm / planningSpeedKn) * 60;
-                  const isEditingLeg = editableLegIds.has(leg.id);
-                  return (
-                    <div key={leg.id} className="rounded-[18px] border border-border/70 p-3">
-                      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{getLegLabel(leg, waypointsById, "it")}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {distanceNm === null ? "Distanza non disponibile" : `${distanceNm.toFixed(1)} nm`}
-                            {estimatedMinutes === null ? "" : ` · ${formatDuration(estimatedMinutes)} a ${planningSpeedKn.toFixed(1)} kn`}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Partenza: {formatPlanningWindow(leg.starts_at_window_start, leg.starts_at_window_end)}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Arrivo: {formatPlanningWindow(leg.ends_at_window_start, leg.ends_at_window_end)}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(leg.is_bookable)}
-                              onChange={(event) => updateLegPlanning(leg.id, { is_bookable: event.target.checked })}
-                              className="h-4 w-4 accent-[hsl(var(--accent))]"
-                            />
-                            Prenotabile
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => toggleLegEditing(leg.id)}
-                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-foreground hover:text-accent"
-                          >
-                            <Pencil size={12} />
-                            {isEditingLeg ? "Chiudi edit" : "Edit orari"}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => cycleLegComplexity(leg)}
-                          title="Clic per cambiare livello (Auto → 1 → … → 5 → Auto)"
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getComplexityClass(getLegComplexity(leg))}`}
-                        >
-                          Complessità {getLegComplexity(leg)} · {getComplexityLabel(getLegComplexity(leg), "it")}
-                          {isLegComplexityAuto(leg) ? ` (auto ${computeAutoLegComplexity(leg)})` : ""}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => cycleLegDanger(leg)}
-                          title="Clic per cambiare livello di pericolo (0 → 3 → 0)"
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getDangerClass(getLegDangerLevel(leg))}`}
-                        >
-                          Pericolo · {getDangerLabel(getLegDangerLevel(leg), "it")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggleLegOpenSea(leg)}
-                          title="Navigazione d'altura (>12 nm dalla costa): aumenta complessità e contributo"
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                            leg.open_sea
-                              ? "border-indigo-300/70 bg-indigo-100/70 text-indigo-800"
-                              : "border-border/70 bg-background text-muted-foreground"
-                          }`}
-                        >
-                          Navigazione d'altura{leg.open_sea ? " ✓" : ""}
-                        </button>
-                      </div>
-                      {getLegDangerLevel(leg) > 0 && (
-                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Motivi:</span>
-                          {DANGER_REASONS.map((reason) => {
-                            const active = (leg.danger_reasons ?? []).includes(reason.key);
-                            const Icon = reason.icon;
-                            return (
-                              <button
-                                key={reason.key}
-                                type="button"
-                                onClick={() => toggleLegDangerReason(leg, reason.key)}
-                                title={reason.label_it}
-                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                                  active
-                                    ? "border-red-300/70 bg-red-100/70 text-red-800"
-                                    : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
-                                }`}
-                              >
-                                <Icon size={11} />
-                                {reason.label_it}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {isEditingLeg && (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <label className="block">
-                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza da</span>
-                            <input
-                              type="datetime-local"
-                              value={toDateTimeLocalValue(leg.starts_at_window_start)}
-                              onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_start: fromDateTimeLocalValue(event.target.value) })}
-                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Partenza a</span>
-                            <input
-                              type="datetime-local"
-                              value={toDateTimeLocalValue(leg.starts_at_window_end)}
-                              onChange={(event) => updateLegPlanning(leg.id, { starts_at_window_end: fromDateTimeLocalValue(event.target.value) })}
-                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo da</span>
-                            <input
-                              type="datetime-local"
-                              value={toDateTimeLocalValue(leg.ends_at_window_start)}
-                              onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_start: fromDateTimeLocalValue(event.target.value) })}
-                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Arrivo a</span>
-                            <input
-                              type="datetime-local"
-                              value={toDateTimeLocalValue(leg.ends_at_window_end)}
-                              onChange={(event) => updateLegPlanning(leg.id, { ends_at_window_end: fromDateTimeLocalValue(event.target.value) })}
-                              className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                            />
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {legs.length === 0 && <p className="text-sm text-muted-foreground">Nessuna tratta: abilita il booking e usa “Salva e ricalcola”.</p>}
-              </div>
-          </div>
-        </section>
+          <VoyageLegsPanel
+            legs={legs}
+            waypointsById={waypointsById}
+            selectedVoyage={selectedVoyage}
+            selectedVoyageId={selectedVoyageId}
+            planningSpeedKn={planningSpeedKn}
+            saving={saving}
+            editableLegIds={editableLegIds}
+            routePlanningActions={routePlanningActions}
+            toggleLegEditing={toggleLegEditing}
+            updateLegPlanning={updateLegPlanning}
+            cycleLegComplexity={cycleLegComplexity}
+            cycleLegDanger={cycleLegDanger}
+            toggleLegOpenSea={toggleLegOpenSea}
+            toggleLegDangerReason={toggleLegDangerReason}
+            syncLegs={syncLegs}
+          />
         )}
 
         {activeTab === "candidature" && (
         <section className="glass-panel rounded-[34px] p-5 md:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <Settings size={17} className="text-accent" />
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Impostazioni candidature</p>
-                <h2 className="editorial-heading text-xl">Contributo alternativo &amp; workaway</h2>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {isBookingSettingsDirty && (
-                <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
-                  Modifiche non salvate
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => void saveBookingSettings()}
-                disabled={saving || !selectedVoyageId}
-                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
-                Salva
-              </button>
-              <Link
-                to="/admin/bookings/rimborsi"
-                className="glass-chip inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-              >
-                <Wallet size={14} /> Rimborsi da eseguire
-              </Link>
-            </div>
-          </div>
-
-          <div className="mb-6 rounded-[22px] border border-border/70 bg-background/35 p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-background/50 p-3">
-                <label className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-foreground">Proposta economica alternativa</span>
-                  <input
-                    type="checkbox"
-                    checked={bookingSettings.contribution_proposal_enabled}
-                    onChange={(event) => updateSettingsField("contribution_proposal_enabled", event.target.checked)}
-                    className="h-4 w-4"
-                  />
-                </label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Permette al candidato di proporre un contributo totale diverso da quello calcolato, per questo viaggio.
-                  Il minimo di €20 (fisso) è sempre dovuto e non è configurabile.
-                </p>
-                {bookingSettings.contribution_proposal_enabled && (
-                  <div className="mt-3 flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">Tetto massimo: fino al</span>
-                    <input
-                      type="number"
-                      min={100}
-                      value={bookingSettings.contribution_proposal_max_percent}
-                      onChange={(event) =>
-                        updateSettingsField("contribution_proposal_max_percent", Number(event.target.value))
-                      }
-                      className="w-16 border border-border bg-background/70 px-2 py-1 text-xs focus:border-accent focus:outline-none"
-                    />
-                    <span className="text-muted-foreground">% del totale normalmente calcolato</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-border/70 bg-background/50 p-3">
-                <label className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-foreground">Workaway attivo</span>
-                  <input
-                    type="checkbox"
-                    checked={bookingSettings.workaway_enabled}
-                    onChange={(event) => updateSettingsField("workaway_enabled", event.target.checked)}
-                    className="h-4 w-4"
-                  />
-                </label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Permette candidature con mansioni (social, foto, video, cucina, skipper...) invece del contributo, per questo viaggio.
-                </p>
-              </div>
-            </div>
-
-            {bookingSettings.workaway_enabled && (
-              <div className="mt-4">
-                <p className="mb-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                  Posizioni attive per questo viaggio
-                </p>
-                {workawayRoles.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nessun ruolo nel catalogo. Aggiungine uno qui sotto.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {workawayRoles.map((role) => {
-                      const active = (bookingSettings.workaway_role_keys || []).includes(role.key);
-                      return (
-                        <button
-                          key={role.id}
-                          type="button"
-                          onClick={() => toggleVoyageWorkawayRoleKey(role.key)}
-                          aria-pressed={active}
-                          className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                            active
-                              ? "border-accent bg-accent/10 text-foreground"
-                              : "border-border/70 bg-background/40 text-muted-foreground hover:border-accent/50"
-                          } ${role.active ? "" : "opacity-50"}`}
-                          title={role.active ? undefined : "Ruolo disattivato dal catalogo globale"}
-                        >
-                          {role.label_it}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="mt-4 border-t border-border/60 pt-4">
-              <p className="mb-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Catalogo ruoli workaway (globale, condiviso tra tutti i viaggi)
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {workawayRoles.map((role) => (
-                  <button
-                    key={role.id}
-                    type="button"
-                    onClick={() => void toggleWorkawayRoleActive(role)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                      role.active
-                        ? "border-emerald-300/70 bg-emerald-100/60 text-emerald-900"
-                        : "border-border/70 bg-background/40 text-muted-foreground line-through"
-                    }`}
-                    title={role.active ? "Clicca per disattivare globalmente" : "Clicca per riattivare globalmente"}
-                  >
-                    {role.label_it}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                <input
-                  value={newWorkawayRoleLabelIt}
-                  onChange={(event) => setNewWorkawayRoleLabelIt(event.target.value)}
-                  placeholder="Nome ruolo IT (es. Cuoco)"
-                  className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                />
-                <input
-                  value={newWorkawayRoleLabelEn}
-                  onChange={(event) => setNewWorkawayRoleLabelEn(event.target.value)}
-                  placeholder="Role name EN (e.g. Cook)"
-                  className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => void addWorkawayRole()}
-                  className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-foreground hover:text-accent"
-                >
-                  <Plus size={14} /> Aggiungi al catalogo
-                </button>
-              </div>
-            </div>
-          </div>
-
+          <VoyageWorkawaySettingsPanel
+            bookingSettings={bookingSettings}
+            updateSettingsField={updateSettingsField}
+            isBookingSettingsDirty={isBookingSettingsDirty}
+            saving={saving}
+            selectedVoyageId={selectedVoyageId}
+            saveBookingSettings={saveBookingSettings}
+            workawayRoles={workawayRoles}
+            newWorkawayRoleLabelIt={newWorkawayRoleLabelIt}
+            setNewWorkawayRoleLabelIt={setNewWorkawayRoleLabelIt}
+            newWorkawayRoleLabelEn={newWorkawayRoleLabelEn}
+            setNewWorkawayRoleLabelEn={setNewWorkawayRoleLabelEn}
+            addWorkawayRole={addWorkawayRole}
+            toggleWorkawayRoleActive={toggleWorkawayRoleActive}
+            toggleVoyageWorkawayRoleKey={toggleVoyageWorkawayRoleKey}
+          />
           <VoyageCandidatesPanel voyageId={selectedVoyageId} />
         </section>
         )}
 
         {activeTab === "briefing" && (
-        <section className="glass-panel rounded-[30px] p-5 md:p-6">
-          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <Settings size={17} className="text-accent" />
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Admin / bookings / settings</p>
-                <h2 className="editorial-heading text-2xl">Prepartenza, briefing email e checklist</h2>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {isBookingSettingsDirty && (
-                <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
-                  Modifiche non salvate
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => void saveBookingSettings()}
-                disabled={saving || !selectedVoyageId}
-                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />}
-                Salva settings
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <label className="block">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Deadline conferma ore</span>
-              <input
-                type="number"
-                min="1"
-                value={bookingSettings.confirmation_deadline_hours}
-                onChange={(event) => updateSettingsField("confirmation_deadline_hours", Number(event.target.value))}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Info prepartenza IT</span>
-              <textarea
-                rows={4}
-                value={bookingSettings.predeparture_info_it || ""}
-                onChange={(event) => updateSettingsField("predeparture_info_it", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Predeparture info EN</span>
-              <textarea
-                rows={4}
-                value={bookingSettings.predeparture_info_en || ""}
-                onChange={(event) => updateSettingsField("predeparture_info_en", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-            <fieldset className="lg:col-span-3 rounded-[22px] border border-border/70 bg-background/35 p-4">
-              <legend className="px-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Mail briefing 1 · invio automatico alla conferma
-              </legend>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Riepilogo viaggio, spostamenti flessibili, bagaglio morbido, abbigliamento caldo/antivento, scarpe da barca e prodotti già disponibili a bordo.
-              </p>
-              <div className="grid gap-4">
-                <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 1 IT</span>
-                  <textarea
-                    rows={9}
-                    value={bookingSettings.first_briefing_content_it || ""}
-                    onChange={(event) => updateSettingsField("first_briefing_content_it", event.target.value)}
-                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 1 EN</span>
-                  <textarea
-                    rows={9}
-                    value={bookingSettings.first_briefing_content_en || ""}
-                    onChange={(event) => updateSettingsField("first_briefing_content_en", event.target.value)}
-                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                </label>
-              </div>
-            </fieldset>
-            <fieldset className="lg:col-span-3 rounded-[22px] border border-border/70 bg-background/35 p-4">
-              <legend className="px-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                Mail briefing 2 · operativo a ridosso della partenza
-              </legend>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F, USB-A/USB-C, frigo e suggerimenti per luoghi o esperienze.
-              </p>
-              <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo L</p>
-                  <div className="mt-3 flex h-16 items-center justify-center gap-3 rounded-xl border border-border/60 bg-background/80">
-                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
-                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
-                    <span className="h-3 w-3 rounded-full border border-foreground/70" />
-                  </div>
-                </div>
-                <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo F</p>
-                  <div className="mt-3 flex h-16 items-center justify-center rounded-xl border border-border/60 bg-background/80">
-                    <div className="flex h-12 w-12 items-center justify-center gap-4 rounded-full border-2 border-foreground/70">
-                      <span className="h-3 w-3 rounded-full bg-foreground/70" />
-                      <span className="h-3 w-3 rounded-full bg-foreground/70" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-4">
-                <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 2 IT</span>
-                  <textarea
-                    rows={9}
-                    value={bookingSettings.second_briefing_content_it || ""}
-                    onChange={(event) => updateSettingsField("second_briefing_content_it", event.target.value)}
-                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Briefing 2 EN</span>
-                  <textarea
-                    rows={9}
-                    value={bookingSettings.second_briefing_content_en || ""}
-                    onChange={(event) => updateSettingsField("second_briefing_content_en", event.target.value)}
-                    className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                </label>
-              </div>
-            </fieldset>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Termini / note operative IT</span>
-              <textarea
-                rows={3}
-                value={bookingSettings.terms_content_it || ""}
-                onChange={(event) => updateSettingsField("terms_content_it", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-            <label className="block lg:col-span-3">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Terms / operational notes EN</span>
-              <textarea
-                rows={3}
-                value={bookingSettings.terms_content_en || ""}
-                onChange={(event) => updateSettingsField("terms_content_en", event.target.value)}
-                className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-              />
-            </label>
-          </div>
-
-          <div className="mt-6 border-t border-border/70 pt-5">
-            <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end">
-              <label className="block flex-1">
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Nuovo item checklist</span>
-                <input
-                  value={newTaskTitle}
-                  onChange={(event) => setNewTaskTitle(event.target.value)}
-                  className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void addBookingTask()}
-                disabled={saving || !newTaskTitle.trim()}
-                className="glass-chip inline-flex items-center justify-center gap-2 px-4 py-2 text-sm text-foreground hover:text-accent disabled:opacity-50"
-              >
-                <Plus size={15} /> Aggiungi
-              </button>
-            </div>
-            <div className="space-y-2">
-              {bookingTasks.map((task) => (
-                <div key={task.id} className="grid gap-3 rounded-[18px] border border-border/70 p-3 md:grid-cols-[1fr_auto_auto] md:items-center">
-                  <input
-                    value={task.title_it}
-                    onChange={(event) => setBookingTasks((items) => items.map((item) => item.id === task.id ? { ...item, title_it: event.target.value } : item))}
-                    onBlur={(event) => void updateBookingTask(task.id, { title_it: event.target.value })}
-                    className="border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                  <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={task.required}
-                      onChange={(event) => void updateBookingTask(task.id, { required: event.target.checked })}
-                      className="h-4 w-4 accent-[hsl(var(--accent))]"
-                    />
-                    Required
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void deleteBookingTask(task.id)}
-                    className="glass-chip inline-flex items-center justify-center gap-2 px-3 py-2 text-xs text-destructive"
-                  >
-                    <Trash2 size={13} /> Elimina
-                  </button>
-                </div>
-              ))}
-              {bookingTasks.length === 0 && (
-                <p className="text-sm text-muted-foreground">Nessuna checklist configurata per questo viaggio.</p>
-              )}
-            </div>
-          </div>
-        </section>
+          <BookingSettingsPanel
+            bookingSettings={bookingSettings}
+            updateSettingsField={updateSettingsField}
+            isBookingSettingsDirty={isBookingSettingsDirty}
+            saving={saving}
+            selectedVoyageId={selectedVoyageId}
+            saveBookingSettings={saveBookingSettings}
+            bookingTasks={bookingTasks}
+            setBookingTasks={setBookingTasks}
+            newTaskTitle={newTaskTitle}
+            setNewTaskTitle={setNewTaskTitle}
+            addBookingTask={addBookingTask}
+            updateBookingTask={updateBookingTask}
+            deleteBookingTask={deleteBookingTask}
+          />
         )}
       </div>
 

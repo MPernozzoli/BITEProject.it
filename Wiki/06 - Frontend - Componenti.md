@@ -48,6 +48,29 @@ tags: [frontend, componenti, ui]
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
 - `admin/` — gestione contenuti: `AdminEditorialPlan*`, `AdminCommunityManager`, `AdminNewsletterManager`, `AdminVoyageManager`, `AdminMapPresenceManager`, `AdminBadgeManager`, `ArticleMiniMapEditor`, filtri collassabili… `AdminCommunityManager` governa Crew Pass, prezzi, canali/subfeed, ruoli moderator, live modificabili (titolo, date, accesso, tier, modalità, archiviazione) e snapshot pagamenti; `AdminEditorialPlan` mostra il cockpit social del mese, mentre `AdminEditorialPlanSlotDialog` gestisce asset/target/caption/stato e snapshot insight dei post. `BookingGanttTable.tsx` usa dialog in portal per aggiunta persone e dettagli profilo, evitando popover tagliati dentro la matrice → [[16 - Admin]]. `AdminMcpTokens.tsx` (montato da `AdminProfile` su `/profile` per gli admin) emette e revoca i token del server MCP: il valore in chiaro è mostrato una volta sola perché non è recuperabile → [[25 - MCP Admin]]
 - `booking/` — flusso candidatura, condizioni, prenotazione e pagamento; include `CandidateInfoForm.tsx` per raccogliere esperienza nautica, lingue, lavoro remoto, regimi alimentari, motivazione e note → [[13 - Booking Voyage]]
+
+### Pannelli di `AdminVoyageBookings.tsx`
+La pagina ([[05 - Frontend - Pagine]]) è organizzata in 5 tab e ognuno è un pannello presentazionale fratello, stesso pattern dei pannelli di `AdminVoyageManager` (cartella piatta, `export default` + `export interface <Nome>Props`, zero chiamate Supabase, la pagina resta l'unica proprietaria di stato/fetch/mutazioni):
+- `admin/VoyageStopsPanel.tsx` — tab **Soste**: per ogni waypoint narrativo arrivo/sosta/ripartenza, preset ore/notti, orario di ripartenza e coerenza con la tratta in ingresso.
+- `admin/VoyageLegsPanel.tsx` — tab **Rotte**: finestre di partenza/arrivo per tratta, flag prenotabile, complessità (auto o override), livello di pericolo e relative motivazioni.
+- `admin/VoyageWorkawaySettingsPanel.tsx` — tab **Candidature**, parte impostazioni: contributo alternativo/workaway per viaggio e catalogo ruoli. Convive nella stessa `<section>` con `VoyageCandidatesPanel.tsx`, che resta il pannello di revisione delle candidature.
+- `admin/BookingSettingsPanel.tsx` — tab **Briefing**: prepartenza, le due mail briefing bilingui, termini/note operative e checklist.
+- I tab **Overview** (lista prenotazioni + Gantt) usano `BookingGanttTable.tsx`, già estratto in precedenza.
+
+### Pannelli di `ArticleEditor.tsx`
+Stesso pattern, applicato alla sidebar e agli overlay dell'editor articoli:
+- `admin/ArticleGeoAssociationPanel.tsx` — luogo dell'articolo (ricerca geo, mappa, lat/lng) e associazione al viaggio: modalità **point / segment / full** e scelta dei waypoint. La pagina resta proprietaria dell'istanza MapLibre: passa `geoMapRef`/`geoMarkerRef` e il pannello si limita a renderizzare il contenitore. I valori derivati dalle opzioni waypoint sono calcolati **dentro** il pannello, non passati come props, perché nessun altro li usa.
+- `admin/ArticleSeoPanel.tsx` — stato dell'ottimizzazione SEO generata da `optimize-article-seo` ([[09 - Edge Functions]]): badge di stato, meta title/description, keyword e raccomandazioni, con rigenerazione manuale. Possiede i propri helper di parsing e **esporta il tipo `ArticleSeoOptimization`**, che la pagina importa: il tipo appartiene al pannello, non viceversa.
+- `admin/ArticlePreviewOverlay.tsx` — anteprima a schermo intero con switch IT/EN, alimentata da `ArticleReader` in `previewMode` (niente like/commenti/analytics).
+- `admin/ArticleEditorDialogs.tsx` — i tre dialog di conferma: scelta pubblica-ora/pianifica, uscita con modifiche non salvate, offerta di traduzione quando mancano campi nell'altra lingua → [[03 - Routing e i18n]].
+
+### Pannelli di `AdminProfile.tsx` e `Journal.tsx`
+- `admin/ProfilePreferencesPanel.tsx` — card "Preferenze" di `/profile`: lingua principale/secondaria, newsletter, notifiche email, Web Push, passkey e installazione app mobile. Il copy IT/EN vive in `lib/profile-copy.ts` → [[07 - Frontend - Lib e Hooks]].
+- `JournalMapStatsBar.tsx` (in `components/`, non `admin/`: è superficie pubblica) — barra statistiche flottante della vista mappa del logbook: miglia in mare, km a terra, conteggio viaggi e selettore viaggio/tipo. Solo desktop. Possiede i due helper di classe CSS per icona e pill di stato viaggio, che erano module-private in `Journal.tsx` e servivano solo a questa barra.
+
+> **Nota sul costo delle props.** Questi pannelli hanno superfici ampie (`ProfilePreferencesPanel` ne ha 38) perché la pagina resta l'unica proprietaria dello stato: è il prezzo di un'estrazione puramente presentazionale, scelta perché verificabile con `tsc` + build in assenza di test ([[20 - Comandi e Workflow]]). Per ridurle il passo giusto è spostare **lo stato**, non ri-accorpare la UI.
+>
+> **Due pagine sono state deliberatamente lasciate intere:** in `UserBookings.tsx` ogni blocco candidato richiede 22-52 props (i valori derivati da `detailsRequest` servono sia al dialog di dettaglio sia al resto della pagina), e in `Journal.tsx` la sidebar articoli ne richiede 46. Lì estrarre non migliorerebbe nulla: aggiungerebbe solo uno strato di prop-passing. Servirebbe prima ristrutturare la proprietà dello stato — un cambiamento di comportamento, non un movimento di codice.
 - `voyage/` — componenti dettaglio viaggio
 - `home/` — sezioni della homepage
 - `legal/` — blocchi pagine legali

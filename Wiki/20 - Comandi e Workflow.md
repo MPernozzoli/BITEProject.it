@@ -35,18 +35,40 @@ La verifica completa prima di un commit è quindi **due comandi**: `tsc --noEmit
 
 > Nota: `noUnusedLocals` / `noUnusedParameters` sono disattivati. Dopo un refactor che sposta codice fuori da un file, gli import rimasti inutilizzati nel file di partenza **non vengono segnalati da nessun tool**: vanno cercati a mano.
 
-### Errori TypeScript preesistenti (baseline nota)
-Girando `tsc` su `apps/web` compaiono errori **non introdotti dalle modifiche in corso**. Prima di attribuirsi una regressione, confrontare l'output con questa lista:
-- `VoyageWaypoint` (`src/lib/voyage-utils.ts`) richiede `updated_at`, ma `normalizeWaypoint` in `AdminVoyageManager.tsx` e le fixture di `src/test/voyage-utils.test.ts` costruiscono l'oggetto senza fornirlo.
-- `src/pages/VoyagePage.tsx` referenzia `fixedMinimumEur` su un tipo che ora espone solo `contributionPerNmEur`.
-
-Se compaiono **solo** questi (a numeri di riga eventualmente diversi), il lavoro in corso è pulito.
+Al 2026-08-15 `tsc` è **pulito**: zero errori. Non esiste più una baseline di errori "noti" da ignorare, quindi qualunque errore compaia è stato introdotto dal lavoro in corso.
 
 ## Testing
 - **Unit/component:** Vitest + Testing Library → `apps/web/src/test/`, config `apps/web/vitest.config.ts`. Copertura reale bassa (~7-8%): nessuna pagina o componente admin è coperto da test.
 - **E2E:** Playwright → `apps/web/playwright.config.ts`, `apps/web/playwright-fixture.ts`.
 - **Lint:** ESLint segnala gli `any` come warning progressivi; gli errori bloccanti restano riservati a bug probabili (es. Rules of Hooks, import non supportati, direttive TS unsafe).
-- ⚠️ **`npm run lint` è inaffidabile:** `eslint` si blocca a tempo indefinito (osservato anche su `eslint --version`, con processi zombie da terminare a mano). Causa non diagnosticata. Un problema correlato ma distinto — il symlink `node_modules/.bin/eslint` dirottato dalla cache npm-compat di Deno, tipicamente dopo un `npx deno@2 check` lanciato dalla root invece che da `apps/web` — si risolve con `rm -rf node_modules/.deno && npm install`. Finché il blocco non è capito, non usare il lint come gate di verifica: usare `tsc` + build.
+- 🔴 **`npm run lint` e `npm run test` non funzionano su questa macchina** — stessa causa, vedi sotto.
+- Un problema distinto e già risolto: il symlink `node_modules/.bin/eslint` dirottato dalla cache npm-compat di Deno, tipicamente dopo un `npx deno@2 check` lanciato dalla root invece che da `apps/web`. Si risolve con `rm -rf node_modules/.deno && npm install`. Oggi la cache `.deno` non è presente e i symlink sono corretti: non è questa la causa dei blocchi attuali.
+
+## 🔴 eslint e vitest si bloccano: è la versione di Node, non i tool
+
+**Sintomo:** `npm run lint` (`eslint .`) resta appeso a tempo indefinito; `npm run test` (`vitest run`) fallisce dopo 120s con `[vitest-pool-runner]: Timeout waiting for worker to respond`, un errore per file di test, **zero test eseguiti**.
+
+**Diagnosi (2026-08-15).** Campionando lo stack dei due processi con `sample <pid>`, entrambi risultano fermi nello stesso identico punto del runtime Node:
+
+```
+node::loader::ModuleWrap::Evaluate
+  v8::internal::SyntheticModule::Evaluate
+    node::loader::ModuleWrap::SyntheticModuleEvaluationStepsCallback
+```
+
+Due tool indipendenti (eslint 9.32, vitest 4.1.10 / Vite 8.1.4) che si inchiodano nella valutazione dei **moduli ESM sintetici** di Node non sono due bug applicativi: è il runtime. La macchina gira **Node 25.2.1** (non-LTS), mentre il repo dichiara `engines.node: "24.x"` e `.nvmrc: 24` — cioè la major su cui gira Vercel e su cui questo stack è supportato.
+
+Cose **escluse** con test diretti, per non rifare il giro:
+- non è la rete (`registry.npmjs.org` risponde 200 in 0.3s);
+- non è lo spazio nel path `Unreal Projects` — il `%20` nelle stack trace è solo il formato ESM di Node, e `distDir` di vitest usa correttamente `fileURLToPath`;
+- non è `fork`/`worker_threads` in sé, né `serialization: "advanced"`: un fork con gli stessi identici parametri funziona;
+- non sono gli `execArgv` di vitest (`--experimental-import-meta-resolve` e `--require suppress-warnings.cjs` girano entrambi senza problemi);
+- non è il volume di file da lintare (295 sorgenti, `dist` già in `ignores`);
+- non è la cache Deno (assente).
+
+**Fix:** girare su Node 24. Attenzione: sulla macchina **non esiste** un Node 24 — `/opt/homebrew/opt/node@23` e `node@25` sono symlink fantasma che puntano tutti allo stesso unico Node 25.2.1 in `Cellar/node` (residuo dell'incidente di installazione descritto in [[18 - Deploy e Configurazione]]). Installare la 24 con `nvm`/`fnm`, **non** con Homebrew in parallelo: è proprio quello che aveva rotto il `node` di default per conflitto ABI su `simdjson`.
+
+Finché si resta su Node 25, `tsc` + `npm run build` sono gli unici gate di verifica utilizzabili.
 - **Bundle check:** `npm run build` mostra la distribuzione dei chunk Vite. I vendor pesanti sono separati in chunk cacheabili; i warning su dimensioni grezze vanno valutati guardando anche il peso gzip e se il chunk è lazy.
 
 ## Supabase (CLI, se usata)

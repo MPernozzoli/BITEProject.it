@@ -36,12 +36,13 @@ tags: [frontend, lib, hooks, logica]
 - `booking-application-draft.ts` — serializzazione bozza candidatura: `localStorage` per utenti anonimi e sincronizzazione Supabase su `voyage_booking_drafts` per utenti loggati.
 - `booking-briefings.ts` — testi default bilingue e risoluzione fallback per prima/seconda mail briefing viaggio.
 - `booking-payment.ts`, `booking-participants.ts`, `booking-utils.ts` — helper booking e soste waypoint condivisi tra `/admin/bookings` e gestione rotte.
+- `booking-planning.ts` — helper **puri** di pianificazione rotta admin: formattazione date/finestre/durate/distanze e matematica arrivo → sosta → ripartenza (`getWaypointArrivalDate`, `getStopHoursFromArrivalAndDepartureTime`, `isDepartureTimeAfterArrival`, `toDateTimeLocalValue`…). Vivevano come funzioni module-private dentro `pages/AdminVoyageBookings.tsx`; sono state estratte quando i pannelli in `components/admin/` hanno iniziato a servirsene, perché **un componente non deve importare da una pagina**. Nessuna dipendenza da stato React: input → output, quindi testabili in isolamento → [[06 - Frontend - Componenti]]
 - `booking-refunds.ts` — client di `POST /api/bookings/status` per le transizioni terminali con rimborso; accetta `refundPercentOverride` (può solo alzare la percentuale di policy).
 - `plan-change-reasons.ts` — catalogo motivazioni delle proposte di modifica piano e mapping forza maggiore. **Solo label per la UI**: il flag `force_majeure` autoritativo è derivato server-side in SQL, i due elenchi vanno tenuti allineati → [[24 - Termini e Condizioni]]
 - `danger-reasons.ts` — modificatori navigazione pericolosa
 - `waypoint-form.ts` — trasformazione pura dello stato inspector WPT in patch persistibili; preserva anche l'orario di ripartenza delle soste brevi per non disallineare `/routes` da `/bookings`.
 - `voyage-schedule.ts` — regole di fase viaggio/tratta (`getLegPhase`, `getVoyagePhase`, `isLegBookableNow`, `getPendingActual`, `isLegDelayed`, `shouldShowLiveWidget`). Mirror TS delle funzioni SQL omonime: vanno cambiati insieme → [[21 - Tracking Real-Time Viaggi]]
-- `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). Il fallback visuale è `WPT NN`, non coordinate salvate come nome; vecchi nomi in formato coordinate vengono trattati come provvisori e possono essere sovrascritti dal naming automatico. L'admin può forzare il naming città o baia/cala dall'inspector WPT.
+- `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). Il fallback visuale è `WPT NN`, non coordinate salvate come nome; vecchi nomi in formato coordinate vengono trattati come provvisori e possono essere sovrascritti dal naming automatico. L'admin può forzare il naming città o baia/cala dall'inspector WPT. Espone anche `getWaypointOptionLabel` (etichetta dei `<select>` admin: `Start`, `WP 03 · Nome`, `Arrival`), spostata qui dall'editor articoli quando il pannello di associazione geo ha iniziato a servirsene → [[06 - Frontend - Componenti]]
 
 ### Mappe → [[14 - Mappe e Layer Geospaziale]]
 - `maplibre.ts`, `map-presence.ts`
@@ -53,6 +54,7 @@ tags: [frontend, lib, hooks, logica]
 - ~~`mail-display.ts`~~ — **rimosso il 28 luglio 2026**: gli helper per nome mittente (`from_name` → firma → indirizzo), preview del solo testo nuovo e split delle citazioni sono ora in `@pynkstudio/mailapp/mailbox` (isomorfo, safe nel bundle client). `AdminMail.tsx` importa da lì → [[12 - Newsletter ed Email]].
 
 ### Profilo
+- `profile-copy.ts` — `PROFILE_COPY`, il copy IT/EN completo di `/profile` (~300 righe), estratto dalla pagina perché i pannelli in `components/admin/` ne consumano il tipo. Esporta `ProfileCopy` come **unione IT|EN**, non `PROFILE_COPY["it"]`: con `as const` i due rami hanno literal type diversi e restringere all'italiano rifiuterebbe il ramo inglese → [[06 - Frontend - Componenti]]
 - `profile-avatar.ts`, `profile-completeness.ts`
 
 ### SEO / i18n / infra

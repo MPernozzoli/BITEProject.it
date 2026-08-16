@@ -1738,3 +1738,19 @@ export interface GeoArticle {
   likeCount?: number;
   viewCount?: number;
 }
+
+/**
+ * Etichetta di un waypoint nei <select> admin ("Start", "WP 03 · Nome", "Arrival").
+ * Prefisso posizionale + nome custom se presente. Usato dall'editor articoli
+ * (pagina e pannello di associazione geo) — vive qui perché serve a entrambi.
+ */
+export function getWaypointOptionLabel(waypoint: VoyageWaypoint, index: number, total: number) {
+  const customName = waypoint.name_en?.trim() || waypoint.name_it?.trim() || waypoint.name?.trim();
+  const prefix = index === 0
+    ? "Start"
+    : index === total - 1
+      ? "Arrival"
+      : `WP ${String(index + 1).padStart(2, "0")}`;
+
+  return customName ? `${prefix} · ${customName}` : prefix;
+}

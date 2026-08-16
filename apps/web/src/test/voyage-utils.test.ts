@@ -195,9 +195,9 @@ describe("buildVoyageGeometry", () => {
 describe("buildVoyageSegmentGeometry", () => {
   it("uses cached land geometry for article segments instead of straight waypoint chords", () => {
     const waypoints = [
-      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
-      { id: "wp-2", voyage_id: "voyage-1", lat: 44.1, lng: 9.1, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "technical", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
-      { id: "wp-3", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 44.1, lng: 9.1, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "technical", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
+      { id: "wp-3", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
     ] satisfies VoyageWaypoint[];
 
     const geometry = buildVoyageSegmentGeometry(waypoints, "land", 0, 2, [
@@ -219,8 +219,8 @@ describe("buildVoyageSegmentGeometry", () => {
 
   it("does not synthesize straight land segments when cached geometry is missing", () => {
     const waypoints = [
-      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
-      { id: "wp-2", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-1", voyage_id: "voyage-1", lat: 44.0, lng: 9.0, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 44.2, lng: 9.2, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
     ] satisfies VoyageWaypoint[];
 
     expect(buildVoyageSegmentGeometry(waypoints, "land", 0, 1)).toEqual([]);
@@ -229,9 +229,9 @@ describe("buildVoyageSegmentGeometry", () => {
 
   it("slices cached waterway geometry between segment endpoints like land", () => {
     const waypoints = [
-      { id: "wp-1", voyage_id: "voyage-1", lat: 48.57, lng: 7.95, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
-      { id: "wp-2", voyage_id: "voyage-1", lat: 48.58, lng: 7.96, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
-      { id: "wp-3", voyage_id: "voyage-1", lat: 48.59, lng: 7.97, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "" },
+      { id: "wp-1", voyage_id: "voyage-1", lat: 48.57, lng: 7.95, name: "", name_en: null, name_it: null, sort_order: 0, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
+      { id: "wp-2", voyage_id: "voyage-1", lat: 48.58, lng: 7.96, name: "", name_en: null, name_it: null, sort_order: 1, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
+      { id: "wp-3", voyage_id: "voyage-1", lat: 48.59, lng: 7.97, name: "", name_en: null, name_it: null, sort_order: 2, waypoint_type: "narrative", visibility_mode: "auto", description_en: null, description_it: null, event_date: null, event_time: null, media: [], date_start: null, date_end: null, created_at: "", updated_at: "" },
     ] satisfies VoyageWaypoint[];
 
     const cached: [number, number][] = [
