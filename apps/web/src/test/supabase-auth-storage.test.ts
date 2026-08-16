@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { createSharedSupabaseAuthStorage } from "@/lib/supabase-auth-storage";
+import { createSharedSupabaseAuthStorage } from "@shared/supabase/auth-storage";
 
 const createStorageMock = (): Storage => {
   const values = new Map<string, string>();

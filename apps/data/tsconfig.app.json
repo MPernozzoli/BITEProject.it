@@ -19,7 +19,8 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ]
+      ],
+      "@shared/*": ["../../shared/*"]
     },
     "skipLibCheck": true,
     "strict": false,
@@ -29,7 +30,5 @@
     ],
     "useDefineForClassFields": true
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src", "../../shared"]
 }

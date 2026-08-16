@@ -1,3 +1,15 @@
+/**
+ * Storage di sessione Supabase condiviso sul dominio `.biteproject.it`.
+ *
+ * Unica copia per tutte e quattro le app (`web`, `pack`, `data`, `crew`): prima era
+ * duplicata byte per byte in `apps/<app>/src/lib/supabase-auth-storage.ts`, con il
+ * rischio che una modifica al formato dei cookie ne aggiornasse solo alcune e
+ * spezzasse il single sign-on fra i sottodomini.
+ *
+ * Importare con `@shared/supabase/auth-storage` (alias definito nel `vite.config.ts`
+ * e nel `tsconfig.app.json` di ogni app).
+ */
+
 const SHARED_AUTH_COOKIE_DOMAIN = ".biteproject.it";
 const SHARED_AUTH_HOST_RE = /(^|\.)biteproject\.it$/i;
 const COOKIE_CHUNK_SIZE = 3000;

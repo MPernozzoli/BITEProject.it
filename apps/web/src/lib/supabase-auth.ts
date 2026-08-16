@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { supabase } from "@/integrations/supabase/client";
-import { removeSharedSupabaseAuthItem } from "@/lib/supabase-auth-storage";
+import { removeSharedSupabaseAuthItem } from "@shared/supabase/auth-storage";
 
 /** Chiave storage usata da Supabase JS per la sessione (sb-<ref>-auth-token). */
 export function getSupabaseAuthStorageKey(): string {
