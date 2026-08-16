@@ -28,7 +28,7 @@ L'utente ha chiesto un audit generico del monorepo (BITEProject.it: `apps/web` +
 - (Un presunto 4° problema — autorizzazione mancante su `sync-article-community-post` — si è rivelato un falso positivo: il controllo c'era già.)
 
 ### 3. Fix media/bassa severità
-`npm audit fix` (2/4 vulnerabilità risolte; `react-router` v6→v7 resta, vedi sotto), header di sicurezza su `vercel.json` (no CSP, volutamente — richiederebbe mappare tutti i domini esterni e testare in browser), confronto a tempo costante in `handle-email-suppression`, `bun.lock` rimosso, `apps/web/middleware.ts` rimosso (dead code, Vercel usa solo quello di root), `.nvmrc`+`engines` aggiunti, lint esteso a tutte le sub-app in `package.json` root.
+`npm audit fix` (2/4 vulnerabilità risolte; `react-router` v6→v7 resta, vedi sotto), header di sicurezza su `vercel.json` (CSP aggiunta poi il 2026-08-15, in Report-Only — vedi punto 10), confronto a tempo costante in `handle-email-suppression`, `bun.lock` rimosso, `apps/web/middleware.ts` rimosso (dead code, Vercel usa solo quello di root), `.nvmrc`+`engines` aggiunti, lint esteso a tutte le sub-app in `package.json` root.
 
 ### 4. Verifica Supabase via MCP (server già autorizzato in sessione, project id `ekwloweuicrqjjgabfdp`)
 - RLS confermata a posto su tutte le tabelle sensibili (`get_advisors`).
@@ -135,8 +135,17 @@ Ultimo commit su `main` (locale e remoto, sincronizzati): `a9977ee "Add booking 
 6. **Copertura test** (~7-8%, nessuna pagina/componente admin testato) — lavoro esteso, non un fix puntuale.
 7. **`zod` v3/v4** ora allineato (fatto), ma se in futuro diverge di nuovo: verificare l'uso reale prima di scegliere la direzione del downgrade/upgrade (in questo caso è bastato un grep, ma non è garantito che sia sempre così semplice).
 8. **`react-router` v6→v7** — 2 vulnerabilità npm moderate residue richiedono questo major bump. Deliberatamente non fatto: tocca il routing di tutte e 4 le sub-app, rischio alto per un sito che si autodeploya senza staging, non pienamente verificabile in questa sessione (browser testing su tutte le rotte richiederebbe più tempo di quanto investito qui).
-9. **Deduplica client Supabase** (4 copie quasi identiche tra le sub-app) — architetturale, deliberatamente non fatto per non introdurre un'astrazione non richiesta.
-10. **CSP** su `vercel.json` — deliberatamente omessa (richiede mappare tutti i domini esterni: Supabase, OpenAI, mappe, OAuth social, e testare in browser che nulla si rompa).
+9. ~~**Deduplica client Supabase**~~ — **fatto il 2026-08-15.** `shared/supabase/` alla root (fuori da `apps/`, risolta con alias `@shared` in vite.config + tsconfig di tutte e 4 le app; non è un workspace npm, quindi niente install):
+   - `auth-storage.ts` — era duplicato **byte per byte in tutte e 4** le app (114 righe × 4). Rischio concreto rimosso: una modifica al formato dei cookie poteva aggiornarne solo alcune e spezzare il SSO fra i sottodomini.
+   - `create-client.ts` — factory `createBiteSupabaseClient<Database>({ passkey })`. I 4 `client.ts` sono ora una riga. L'unica differenza reale era il flag passkey (attivo su `web`/`crew`, assente su `pack`/`data`).
+   - **I 4 `types.ts` NON sono stati toccati e non vanno toccati:** non sono duplicati ma sottoinsiemi deliberati (`web`/`crew` 6643 righe, `pack` 181, `data` 502). Centralizzarli obbligherebbe le app leggere a portarsi l'intero schema.
+   - Verificato: `tsc` pulito su web/pack/data e **build reale di tutte e 4 le app** verde.
+   - ⚠️ `apps/crew` ha **un errore TypeScript preesistente** in `CommunityComments.tsx` (`linked_resources: Json` vs `unknown[]`), verificato presente anche sul codice pre-modifica ripristinato da git. Non introdotto da questo lavoro, mai indagato — è l'unico residuo della vecchia baseline, e vive in `crew`, non in `web`.
+
+10. ~~**CSP**~~ — **fatta il 2026-08-15, in `Report-Only`.** Policy completa su `vercel.json`, origini ricavate leggendo il codice (Supabase https+wss, tile Carto, Nominatim, Google Fonts, Vercel insights, YouTube-nocookie, `blob:` per i worker MapLibre e le anteprime immagini). Dettaglio completo in `Wiki/18`.
+    - **Non blocca nulla**: logga soltanto. Scelta deliberata, per due motivi: un buco nella policy rompe risorse in produzione in silenzio e qui non c'è staging; e **l'host LiveKit non è determinabile dal codice** (`apps/crew` lo riceve a runtime da `/api/community/livekit-token`), quindi manca dalla policy di proposito.
+    - **Azione umana per attivarla davvero:** navigare il sito (`/Crew` con una live, `/logbook` con la mappa, admin con l'editor), raccogliere i violation report in console, aggiungere le origini mancanti, poi rinominare la chiave in `vercel.json` da `Content-Security-Policy-Report-Only` a `Content-Security-Policy`.
+
 
 ## Riferimenti
 

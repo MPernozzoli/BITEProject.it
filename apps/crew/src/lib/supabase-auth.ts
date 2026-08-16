@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { removeSharedSupabaseAuthItem } from "@/lib/supabase-auth-storage";
+import { removeSharedSupabaseAuthItem } from "@shared/supabase/auth-storage";
 
 export function getSupabaseAuthStorageKey(): string {
   const raw = import.meta.env.VITE_SUPABASE_URL as string | undefined;

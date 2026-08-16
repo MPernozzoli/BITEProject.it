@@ -25,6 +25,10 @@ iubgicrwfovrnvoqr/
 │                       # symlink per compatibilità Vercel root
 ├── supabase -> apps/web/supabase
 │                       # symlink per compatibilità Supabase CLI
+├── shared/            # codice condiviso dalle 4 app, fuori da apps/
+│   └── supabase/      #   auth-storage.ts (storage sessione cross-sottodominio)
+│                       #   create-client.ts (factory del client browser)
+│                       #   → alias "@shared" → [[19 - Sub-App (pack e data)]]
 ├── docs/              # documentazione sorgente
 │   ├── bite-atlas-architecture.md  → [[15 - Semantic Layer (AI Agents)]]
 │   ├── payments-bunq.md            → [[11 - Pagamenti Bunq]]
@@ -41,6 +45,16 @@ iubgicrwfovrnvoqr/
 > Nota: la root non contiene più una copia applicativa `src/`, `public/` o `supabase/`. La sorgente attiva del sito principale vive in `apps/web`; `api` e `supabase` alla root sono solo symlink di compatibilità.
 >
 > `middleware.ts` invece **non** è un symlink ed esiste solo alla root: il duplicato `apps/web/middleware.ts` era dead code (Vercel legge esclusivamente quello di root) ed è stato rimosso. Non ricrearlo.
+
+## Alias di import
+Ogni app definisce **due** alias, in coppia nel suo `vite.config.ts` (per il bundler) e nel suo `tsconfig.app.json` (per il type-check). Se se ne aggiunge uno, vanno aggiornati entrambi i file in tutte e quattro le app, altrimenti `tsc` e la build divergono:
+
+| Alias | Punta a |
+|---|---|
+| `@` | `apps/<app>/src` |
+| `@shared` | `shared/` alla root del repo |
+
+`shared/` non è un workspace npm: è una cartella di sorgenti TypeScript risolta per alias. Non richiede `npm install` né una entry in `workspaces`, e Vite la transpila come codice di progetto perché sta fuori da `node_modules`.
 
 ## File di configurazione chiave
 - `.nvmrc` (`24`) + `engines.node` (`24.x`) in `package.json` root — allineano la versione Node locale a quella del runtime Vercel

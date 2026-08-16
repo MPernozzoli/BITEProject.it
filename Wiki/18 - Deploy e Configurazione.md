@@ -36,7 +36,23 @@ I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, imm
 
 > ⚠️ `SAMEORIGIN` e non `DENY` perché le anteprime admin e i widget embeddati restano su `biteproject.it`. `Permissions-Policy` blocca camera/microfono/geolocalizzazione: se in futuro una feature ne ha bisogno (es. posizione utente sulle mappe, video nelle live BITE Crew), va allargata qui prima, altrimenti il browser nega l'API senza errore evidente.
 >
-> **Nessuna CSP**, deliberatamente: richiederebbe mappare tutti i domini esterni (Supabase, OpenAI, tile server mappe, OAuth social, LiveKit, Resend) e verificarli in browser. È il pezzo di hardening ancora aperto.
+**Content-Security-Policy: attiva in `Report-Only`.** La policy è scritta e spedita su tutte le risposte, ma **non blocca nulla**: il browser si limita a loggare in console ciò che violerebbe. Origini consentite, ricavate leggendo il codice e non a memoria:
+
+| Direttiva | Origini oltre `'self'` | Perché |
+|---|---|---|
+| `script-src` | `va.vercel-scripts.com` | `@vercel/analytics` + `@vercel/speed-insights` |
+| `style-src` | `'unsafe-inline'`, `fonts.googleapis.com` | style inline di React/Tailwind + CSS dei font |
+| `font-src` | `data:`, `fonts.gstatic.com` | file dei font |
+| `img-src` | `data:`, `blob:`, Supabase, `*.basemaps.cartocdn.com` | anteprime `createObjectURL`, media storage, tile raster |
+| `connect-src` | Supabase (https + **wss** per realtime), `nominatim.openstreetmap.org`, tile Carto, Vercel insights | REST, realtime, geocoding |
+| `worker-src` | `blob:` | worker di MapLibre |
+| `frame-src` | `youtube-nocookie.com`, `youtube.com` | embed video negli articoli |
+
+`object-src 'none'`, `base-uri`, `form-action` e `frame-ancestors` sono chiusi su `'self'`.
+
+> ⚠️ **Perché Report-Only e non enforcing.** Un buco nella policy rompe risorse in produzione **in silenzio**, e questo repo auto-deploya senza staging. Inoltre c'è un'origine che non è determinabile leggendo il codice: **LiveKit** — `apps/crew` riceve l'URL del server a runtime da `/api/community/livekit-token`, quindi il suo host `wss://` non compare da nessuna parte nei sorgenti e **non è nella policy**. In Report-Only questo è innocuo e anzi utile: la console lo rivelerà.
+>
+> **Per passare a enforcing:** aprire il sito (incluse `/Crew` con una live attiva, `/logbook` con la mappa, l'admin con l'editor articoli), raccogliere i `Report-Only` in console, aggiungere le origini mancanti, poi rinominare la chiave in `vercel.json` da `Content-Security-Policy-Report-Only` a `Content-Security-Policy`. È l'unica modifica necessaria.
 
 **Rewrites OAuth MCP:** `/.well-known/oauth-authorization-server(/:path*)` → `/api/mcp/oauth/metadata`, `/.well-known/oauth-protected-resource(/:path*)` → `/api/mcp/oauth/protected-resource` → [[25 - MCP Admin]].
 
