@@ -6,7 +6,9 @@ const LOGIN_HOSTNAME = "login.biteproject.it";
 const PACK_PREFIX = "/pack";
 const DATA_PREFIX = "/Data";
 const CREW_PREFIX = "/Crew";
-const PUBLIC_FILE_RE = /\.[a-z0-9]+$/i;
+// Only actual static-asset extensions bypass SPA/prerender routing. Article
+// slugs are allowed to contain dots (for example "benvenuti-a-bordo.di-spritz").
+const PUBLIC_FILE_RE = /\.(?:aac|avif|bmp|css|csv|eot|flac|gif|ico|jpe?g|js|m4a|map|mjs|mov|mp3|mp4|ogg|ogv|pdf|png|svg|txt|wasm|webm|webmanifest|webp|woff2?|xml)$/i;
 
 const next = () =>
   new Response(null, {

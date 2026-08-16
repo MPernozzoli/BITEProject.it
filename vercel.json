@@ -34,19 +34,19 @@
       "destination": "/api/sitemap"
     },
     {
-      "source": "/pack/((?!.*\\.[^/]+$).*)",
+      "source": "/pack/((?!.*\\.(?:aac|avif|bmp|css|csv|eot|flac|gif|ico|jpe?g|js|m4a|map|mjs|mov|mp3|mp4|ogg|ogv|pdf|png|svg|txt|wasm|webm|webmanifest|webp|woff2?|xml)$).*)",
       "destination": "/pack/index.html"
     },
     {
-      "source": "/Data/((?!.*\\.[^/]+$).*)",
+      "source": "/Data/((?!.*\\.(?:aac|avif|bmp|css|csv|eot|flac|gif|ico|jpe?g|js|m4a|map|mjs|mov|mp3|mp4|ogg|ogv|pdf|png|svg|txt|wasm|webm|webmanifest|webp|woff2?|xml)$).*)",
       "destination": "/Data/index.html"
     },
     {
-      "source": "/Crew/((?!.*\\.[^/]+$).*)",
+      "source": "/Crew/((?!.*\\.(?:aac|avif|bmp|css|csv|eot|flac|gif|ico|jpe?g|js|m4a|map|mjs|mov|mp3|mp4|ogg|ogv|pdf|png|svg|txt|wasm|webm|webmanifest|webp|woff2?|xml)$).*)",
       "destination": "/Crew/index.html"
     },
     {
-      "source": "/((?!.*\\.[^/]+$).*)",
+      "source": "/((?!.*\\.(?:aac|avif|bmp|css|csv|eot|flac|gif|ico|jpe?g|js|m4a|map|mjs|mov|mp3|mp4|ogg|ogv|pdf|png|svg|txt|wasm|webm|webmanifest|webp|woff2?|xml)$).*)",
       "destination": "/"
     }
   ],

@@ -20,7 +20,7 @@ tags: [deploy, vercel, config, env]
 - `/Crew/((?!.*\.[^/]+$).*)` → `/Crew/index.html`
 - `/((?!.*\.[^/]+$).*)` → `/` (SPA fallback, React Router lato client)
 
-I fallback SPA escludono i path che terminano con estensione (`.js`, `.css`, immagini, manifest, ecc.): un asset/chunk Vite mancante deve restituire 404, non `index.html`, altrimenti browser con shell vecchie dopo un deploy possono tentare di eseguire HTML come modulo JavaScript.
+I fallback SPA escludono soltanto un elenco esplicito di estensioni di asset (`.js`, `.css`, immagini, font, manifest, ecc.): un asset/chunk Vite mancante deve restituire 404, non `index.html`, altrimenti browser con shell vecchie dopo un deploy possono tentare di eseguire HTML come modulo JavaScript. Non usare una regola generica per ogni punto nel path: gli slug editoriali possono contenerne uno (es. `benvenuti-a-bordo.di-spritz`) e devono raggiungere la SPA.
 
 **Headers `X-Robots-Tag: noindex, nofollow`** su: `/admin`, `/admin/:path*`, `/login`, `/signup`, `/complete-profile`, `/bookings`, `/profile`, `/unsubscribe`, `/newsletter/confirm`, `/Crew/:path*`, `/mcp`, `/api/mcp/:path*`.
 
