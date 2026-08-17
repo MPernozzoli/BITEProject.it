@@ -72,3 +72,4 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - Doc di architettura originale: `docs/bite-atlas-architecture.md` → sintetizzato in [[15 - Semantic Layer (AI Agents)]]
 - Doc pagamenti: `docs/payments-bunq.md` → sintetizzato in [[11 - Pagamenti Bunq]]
 - Schema migrazione: `docs/migration/SCHEMA.md`
+- Previsione feature (non implementate): `docs/voyage-track-import-and-memento-plan.md` — import dei tracciati reali dal plotter, biglietto commemorativo per i partecipanti, regola "niente notifiche sulle tratte concluse" → [[21 - Tracking Real-Time Viaggi]]

@@ -43,6 +43,16 @@ Con `flex_days = 0` la finestra è un punto: qualsiasi ritardo notifica.
 
 La notifica scatta **una sola volta** per ritardo: `apply_voyage_schedule` confronta lo stato precedente con quello nuovo e apre un plan change solo per le tratte appena sforate.
 
+### Quello che è già passato non notifica
+Migrazione `20260817150000`. Due guardie in `apply_voyage_schedule`, prima del blocco di notifica:
+
+- **tratta `completed`** → nessun plan change. Una variazione su una tratta già navigata è una correzione a posteriori di informazioni non più azionabili per chi c'era: se la barca è a Palermo e viene corretta Bari → Santa Maria di Leuca, chi ha fatto quella tratta non riceve nulla.
+- **viaggio con stato derivato `completed`** → nessun plan change, per nessuna tratta. Serve soprattutto per `status_override = 'completed'`, dove l'admin dichiara concluso un viaggio a cui manca ancora qualche arrivo effettivo: senza questa guardia le tratte scoperte notificherebbero comunque.
+
+Notificano solo le tratte `active` e `planned`. Attenzione al caso di confine: una tratta senza arrivo effettivo registrato diventa comunque `completed` **per orologio** quando passa `ends_at_window_end`, e da quel momento tace — dimenticarsi di premere "arriva ora" non tiene la tratta notificabile in eterno.
+
+La regola vive solo in SQL: il TS non decide quando aprire un plan change, li mostra soltanto (`UserBookingMatrix`, `UserBookings`).
+
 ## Stati derivati
 Non più manuali. La regola sta in un posto solo, mirrorata su due lati:
 - SQL: `voyage_leg_phase()`, `voyage_derived_status()`, `voyage_leg_is_bookable_now()`
