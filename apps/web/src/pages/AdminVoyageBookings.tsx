@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Anchor, ArrowLeft, CalendarClock, Check, Clock, LayoutGrid, Loader2, Mail, MapPinned, Mountain, RefreshCw, Search, Settings, Ship, Users, X, type LucideIcon } from "lucide-react";
+import { Anchor, ArrowLeft, CalendarClock, Check, Clock, Coins, LayoutGrid, Loader2, Mail, MapPinned, Mountain, RefreshCw, Search, Settings, Ship, Users, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -60,7 +60,14 @@ import {
   getLegLabel,
   getLocalizedBookingVoyageName,
 } from "@/lib/booking-utils";
-import { depositForPayerEur } from "@/lib/booking-deposit";
+import {
+  DEFAULT_CONTRIBUTION_PER_NM_EUR,
+  contributionFixedMinimumEur,
+  contributionPerNmEur,
+  depositForPayerEur,
+  formatDepositEur,
+  perPersonDepositEur,
+} from "@/lib/booking-deposit";
 import {
   type DangerReasonKey,
 } from "@/lib/danger-reasons";
@@ -160,6 +167,7 @@ const buildRoutePlanningSnapshot = (
           booking_enabled: Boolean(voyage.booking_enabled),
           booking_max_guests: voyage.booking_max_guests ?? null,
           booking_planning_speed_kn: voyage.booking_planning_speed_kn ?? null,
+          booking_contribution_per_nm_eur: voyage.booking_contribution_per_nm_eur ?? null,
           departure_window_start: voyage.departure_window_start || null,
           departure_window_end: voyage.departure_window_end || null,
         }
@@ -295,7 +303,7 @@ const AdminVoyageBookings = () => {
     const [voyagesRes, profilesRes] = await Promise.all([
       typedSupabase
         .from("voyages")
-        .select("id,name,name_it,name_en,type,status,booking_enabled,booking_max_guests,booking_planning_speed_kn,departure_window_start,departure_window_end,start_date,end_date")
+        .select("id,name,name_it,name_en,type,status,booking_enabled,booking_max_guests,booking_planning_speed_kn,booking_contribution_per_nm_eur,departure_window_start,departure_window_end,start_date,end_date")
         .order("start_date", { ascending: true, nullsFirst: false }),
       typedSupabase
         .from("profiles")
@@ -619,6 +627,21 @@ const AdminVoyageBookings = () => {
     };
   }, [planningSpeedKn, publicPlanningWaypoints, waypoints]);
 
+  /** Economic settings behind every contribution shown to travellers: the per-voyage €/NM
+   * coefficient, the site-wide fixed minimum, and the resulting full-route estimate so the
+   * admin sees what a change to the coefficient actually does. */
+  const contributionSettings = useMemo(() => {
+    const perNmEur = contributionPerNmEur(selectedVoyage?.booking_contribution_per_nm_eur);
+    const bookableLegs = legs.filter((leg) => leg.is_bookable);
+    const estimateLegs = bookableLegs.length > 0 ? bookableLegs : legs;
+    return {
+      perNmEur,
+      fixedMinimumEur: contributionFixedMinimumEur(),
+      estimateNm: estimateLegs.reduce((total, leg) => total + (Number(leg.planned_nautical_miles) || 0), 0),
+      fullRoutePerPersonEur: perPersonDepositEur(estimateLegs, { contributionPerNmEur: perNmEur }),
+    };
+  }, [legs, selectedVoyage?.booking_contribution_per_nm_eur]);
+
   const requestWouldExceedCapacity = (request: BookingRequest, nextStatus: VoyageBookingStatus) => {
     if (!capacityBlockingStatuses.has(nextStatus)) return false;
     const currentLegIds = requestLegs
@@ -695,6 +718,7 @@ const AdminVoyageBookings = () => {
       booking_enabled: Boolean(selectedVoyage.booking_enabled),
       booking_max_guests: Math.max(1, Number(selectedVoyage.booking_max_guests ?? 4) || 4),
       booking_planning_speed_kn: Math.max(0.1, Number(selectedVoyage.booking_planning_speed_kn ?? 5) || 5),
+      booking_contribution_per_nm_eur: contributionPerNmEur(selectedVoyage.booking_contribution_per_nm_eur),
       departure_window_start: selectedVoyage.departure_window_start || null,
       departure_window_end: selectedVoyage.departure_window_end || null,
     };
@@ -1705,6 +1729,53 @@ const AdminVoyageBookings = () => {
                     className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
                   />
                 </label>
+              </div>
+
+              <div className="mt-5 border-t border-border/70 pt-4">
+                <p className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                  <Coins size={13} className="text-accent" /> Impostazioni economiche
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">€/NM contributo</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={selectedVoyage?.booking_contribution_per_nm_eur ?? DEFAULT_CONTRIBUTION_PER_NM_EUR}
+                      onChange={(event) =>
+                        updateSelectedVoyagePlanning({
+                          booking_contribution_per_nm_eur: Math.max(0, Number(event.target.value) || 0),
+                        })
+                      }
+                      className="w-full border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                    />
+                    <span className="mt-1 block text-[10.5px] leading-snug text-muted-foreground">
+                      Coefficiente per miglio nautico pianificato, applicato a ogni tratta (default {DEFAULT_CONTRIBUTION_PER_NM_EUR.toFixed(2).replace(".", ",")}).
+                      Si salva con “Salva planning”.
+                    </span>
+                  </label>
+                  <div className="block">
+                    <span className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Quota fissa minima</span>
+                    <div className="w-full border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+                      {formatDepositEur(contributionSettings.fixedMinimumEur)}
+                    </div>
+                    <span className="mt-1 block text-[10.5px] leading-snug text-muted-foreground">
+                      Valore fisso di sito, uguale per tutti i viaggi e non modificabile da qui: si versa una volta
+                      per persona, indipendentemente dalle tratte scelte.
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+                  Contributo intera rotta: {formatDepositEur(contributionSettings.fixedMinimumEur)} +{" "}
+                  {contributionSettings.estimateNm.toFixed(1)} NM ×{" "}
+                  {formatDepositEur(contributionSettings.perNmEur)}/NM con i modificatori di tratta (notte +10%, mare
+                  aperto +20%, pericolosità +20%) ={" "}
+                  <span className="font-semibold text-foreground">
+                    {formatDepositEur(contributionSettings.fullRoutePerPersonEur)}
+                  </span>{" "}
+                  a persona.
+                </p>
               </div>
             </div>
 

@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { X, Loader2 } from "lucide-react";
 import { slugifyVoyageName, type Voyage } from "@/lib/voyage-utils";
+import { contributionFixedMinimumEur, formatDepositEur } from "@/lib/booking-deposit";
 import type { VoyageFormState } from "@/components/admin/AdminVoyageManager";
 
 const voyageStatusLabels: Record<Voyage["status"], string> = {
@@ -302,7 +303,7 @@ const VoyageFormPanel = ({
             </span>
           </label>
           {voyageForm.booking_enabled && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
                   Persone max
@@ -349,6 +350,18 @@ const VoyageFormPanel = ({
                 />
                 <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
                   Default 0,90 euro per miglio nautico pianificato.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+                  Quota fissa minima
+                </label>
+                <div className="w-full border border-dashed border-border px-3 py-2 text-sm font-sans text-foreground">
+                  {formatDepositEur(contributionFixedMinimumEur())}
+                </div>
+                <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
+                  Valore fisso di sito, uguale per tutti i viaggi: si aggiunge una volta per persona al contributo
+                  calcolato sulle miglia.
                 </p>
               </div>
             </div>
