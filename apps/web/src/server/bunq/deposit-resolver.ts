@@ -260,6 +260,23 @@ export async function resolveDepositPayer(
   const payerParticipantId = payer?.id ?? null;
   const payerProfileId = isLead ? bookingOwnerId : payer?.profile_id ?? null;
 
+  // A guest's share is exactly the figure the booker is still negotiating, so collecting it now
+  // would charge an amount nobody has agreed to. Guests wait: once the negotiation resolves,
+  // arm_voyage_booking_guest_shares emails them with their own two-day window. Only the booker
+  // pays during the negotiation, and only the fixed minimum.
+  const contributionProposalStatusRaw =
+    (request as { contribution_proposal_status?: string | null }).contribution_proposal_status ?? "none";
+  const negotiationOpen =
+    Boolean((request as { contribution_fixed_only_payment?: boolean | null }).contribution_fixed_only_payment) &&
+    (contributionProposalStatusRaw === "pending_admin_review" ||
+      contributionProposalStatusRaw === "pending_user_approval");
+  if (!isLead && negotiationOpen) {
+    throw new DepositHttpError(409, {
+      error: "guest_payment_suspended",
+      contributionProposalStatus: contributionProposalStatusRaw,
+    });
+  }
+
   const { data: legLinks, error: legLinkError } = await db
     .from("voyage_booking_request_legs")
     .select("bookable_leg_id")
@@ -299,8 +316,7 @@ export async function resolveDepositPayer(
   };
   const coveredPersons = isLead && paymentMode === "lead_pays_all" ? partySize : 1;
 
-  const contributionProposalStatus =
-    (request as { contribution_proposal_status?: string | null }).contribution_proposal_status ?? "none";
+  const contributionProposalStatus = contributionProposalStatusRaw;
   const contributionFixedOnlyPayment = Boolean(
     (request as { contribution_fixed_only_payment?: boolean | null }).contribution_fixed_only_payment,
   );

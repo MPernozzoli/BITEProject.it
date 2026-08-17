@@ -73,6 +73,8 @@ type Body = {
   proposedVariableCents?: number | null;
   workaway?: WorkawayBody;
   candidateMessage?: string | null;
+  /** People on the application. The negotiated amounts stay per person — see below. */
+  partySize?: number;
 };
 
 function round2(value: number): number {
@@ -103,6 +105,11 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const legIds = Array.isArray(body.legIds) ? body.legIds.map((id) => String(id)).filter(Boolean) : [];
   const proposalKind = String(body.proposalKind ?? "").trim();
   const workaway = body.workaway ?? {};
+  // The negotiated figures below are per person whatever this is: the booker negotiates one
+  // traveller's share for the whole party, and the payment layer multiplies it by however many
+  // people each payer covers. request_voyage_booking validates the value against the voyage's
+  // booking_max_guests, so nothing beyond a sane floor is enforced here.
+  const partySize = Math.max(1, Math.floor(Number(body.partySize ?? 1)) || 1);
 
   if (!voyageId || legIds.length === 0) {
     sendJson(res, 400, { error: "missing_voyage_or_legs" });
@@ -219,6 +226,7 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
         _workaway_requests_compensation: workaway.requestsCompensation ?? false,
         _workaway_requested_compensation_cents: workaway.requestedCompensationCents ?? null,
         _candidate_message: body.candidateMessage ?? null,
+        _party_size: partySize,
       },
     );
 

@@ -25,6 +25,7 @@ type AdminBookingEvent =
   | 'admin_balance_deadline_missed'
   | 'admin_contribution_proposal_received'
   | 'admin_contribution_proposal_resolved'
+  | 'admin_guest_share_overdue'
 
 /**
  * A delay reaches admins as admin_plan_change, but there is nothing to approve:
@@ -70,6 +71,7 @@ const COPY = {
       admin_balance_deadline_missed: 'Saldo non versato entro la scadenza.',
       admin_contribution_proposal_received: 'Nuova proposta di contributo/workaway.',
       admin_contribution_proposal_resolved: 'Il candidato ha risposto alla contro-proposta.',
+      admin_guest_share_overdue: 'Quota di un ospite non versata.',
     },
     intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -88,6 +90,8 @@ const COPY = {
         return `${prefix}${traveler} ha proposto un contributo o workaway alternativo per ${voyageName}. Apri la gestione booking per esaminarla.`
       if (eventType === 'admin_contribution_proposal_resolved')
         return `${prefix}${traveler} ha risposto alla tua contro-proposta di contributo per ${voyageName}. Controlla l'esito nella gestione booking.`
+      if (eventType === 'admin_guest_share_overdue')
+        return `${prefix}un ospite della prenotazione di ${traveler} su ${voyageName} non ha versato la propria quota entro i due giorni previsti. Ora sta a ${traveler} decidere se proseguire senza quella persona o annullare per tutti: non serve un tuo intervento, ma la prenotazione resta in sospeso finche non risponde.`
       return `${prefix}${traveler} ha inviato una nuova richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri gestione booking',
@@ -122,6 +126,7 @@ const COPY = {
       admin_balance_deadline_missed: 'Decaduto per mancato saldo',
       admin_contribution_proposal_received: 'Proposta da esaminare',
       admin_contribution_proposal_resolved: 'Risposta del candidato',
+      admin_guest_share_overdue: 'Quota ospite non versata',
     },
     footerReason: 'Ricevi questa email perche sei amministratore su BITE.',
   },
@@ -139,6 +144,7 @@ const COPY = {
       admin_balance_deadline_missed: 'Balance deadline missed.',
       admin_contribution_proposal_received: 'New contribution/workaway proposal.',
       admin_contribution_proposal_resolved: 'Traveller responded to the counter-proposal.',
+      admin_guest_share_overdue: 'A guest share went unpaid.',
     },
     intro: (name: string, eventType: AdminTemplateVariant, voyageName: string, travelerName: string, scope?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -157,6 +163,8 @@ const COPY = {
         return `${prefix}${traveler} proposed an alternative contribution or workaway for ${voyageName}. Open booking management to review it.`
       if (eventType === 'admin_contribution_proposal_resolved')
         return `${prefix}${traveler} responded to your contribution counter-proposal for ${voyageName}. Check the outcome in booking management.`
+      if (eventType === 'admin_guest_share_overdue')
+        return `${prefix}a guest on ${traveler}'s booking for ${voyageName} did not pay their share within the two days allowed. It is now up to ${traveler} to decide whether to go on without that person or cancel for everybody: nothing is needed from you, but the booking stays open until they answer.`
       return `${prefix}${traveler} submitted a new berth request for ${voyageName}.`
     },
     cta: 'Open booking management',
@@ -191,6 +199,7 @@ const COPY = {
       admin_balance_deadline_missed: 'Lapsed — balance missed',
       admin_contribution_proposal_received: 'Proposal to review',
       admin_contribution_proposal_resolved: 'Traveller response',
+      admin_guest_share_overdue: 'Guest share unpaid',
     },
     footerReason: 'You are receiving this email because you are an admin on BITE.',
   },
@@ -207,6 +216,7 @@ function normalizeEventType(value?: string | null): AdminBookingEvent {
     'admin_balance_deadline_missed',
     'admin_contribution_proposal_received',
     'admin_contribution_proposal_resolved',
+    'admin_guest_share_overdue',
   ]
   return allowed.includes(value as AdminBookingEvent) ? (value as AdminBookingEvent) : 'admin_new_booking'
 }

@@ -38,6 +38,13 @@ export interface MyParticipation {
   requires_payment: boolean;
   deposit_paid: boolean;
   expires_at: string | null;
+  /** True while the booker is still negotiating the amount: this guest must not be charged yet. */
+  negotiation_open: boolean;
+  /** This guest's own obligation once the amount is settled — null when the lead covers everyone. */
+  share_due_cents: number | null;
+  share_paid_cents: number;
+  /** Two-day window opened when the negotiation resolved. Null until then. */
+  share_payment_due_at: string | null;
 }
 
 type RpcClient = {
@@ -98,6 +105,41 @@ export async function acceptParticipation(participantId: string, candidateInfo?:
 export async function declineParticipation(participantId: string): Promise<void> {
   const { error } = await client.rpc("decline_booking_participation", { _participant_id: participantId });
   if (error) throw new Error(error.message ?? "decline_failed");
+}
+
+/** One row per person on a booking, as every member of that party may see them. */
+export interface BookingPartyMember {
+  participant_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  is_lead: boolean;
+  status: BookingParticipant["status"] | "balance_unpaid";
+  /** What this member owes for themselves — null when the lead covers the whole party. */
+  share_due_cents: number | null;
+  share_paid_cents: number;
+  /** Deadline for their own share, armed when the contribution negotiation resolved. */
+  share_payment_due_at: string | null;
+  is_me: boolean;
+}
+
+/** Everyone on a booking with their own share and whether it is settled. Members only. */
+export async function getBookingPartyOverview(bookingRequestId: string): Promise<BookingPartyMember[]> {
+  const { data, error } = await client.rpc<BookingPartyMember[]>("get_booking_party_overview", {
+    _booking_request_id: bookingRequestId,
+  });
+  if (error) throw new Error(error.message ?? "party_overview_failed");
+  return (data ?? []) as BookingPartyMember[];
+}
+
+/**
+ * The booker drops a guest who missed their share deadline. The other half of that decision —
+ * calling the whole booking off — is the ordinary cancellation through /api/bookings/status,
+ * so the refund tiers apply to it.
+ */
+export async function dropUnpaidGuestShare(participantId: string): Promise<void> {
+  const { error } = await client.rpc("lead_drop_unpaid_guest_share", { _participant_id: participantId });
+  if (error) throw new Error(error.message ?? "drop_guest_share_failed");
 }
 
 /** Trigger invite emails for a booking's pending guests. */

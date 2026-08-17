@@ -425,6 +425,15 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'contribution_proposal_rejected') {
       return { title: 'Proposal not accepted', body: `Your proposal for ${voyageName}${legs} was not accepted.` }
     }
+    if (params.eventType === 'guest_share_due') {
+      return { title: 'Your share is due', body: `The amount for ${voyageName}${legs} is agreed: pay your own share within two days.` }
+    }
+    if (params.eventType === 'guest_share_overdue') {
+      return { title: 'A share was not paid', body: `Someone on your booking for ${voyageName}${legs} missed their share deadline.` }
+    }
+    if (params.eventType === 'guest_share_dropped') {
+      return { title: 'Participation cancelled', body: `Your participation in ${voyageName}${legs} was cancelled for an unpaid share.` }
+    }
     return { title: 'Voyage booking update', body: `There is an update for ${voyageName}${legs}.` }
   }
 
@@ -487,6 +496,15 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'contribution_proposal_rejected') {
     return { title: 'Proposta non accettata', body: `La tua proposta per ${voyageName}${legs} non e stata accettata.` }
+  }
+  if (params.eventType === 'guest_share_due') {
+    return { title: 'La tua quota e da versare', body: `L'importo per ${voyageName}${legs} e concordato: versa la tua quota entro due giorni.` }
+  }
+  if (params.eventType === 'guest_share_overdue') {
+    return { title: 'Una quota non e stata versata', body: `Una persona della tua prenotazione per ${voyageName}${legs} non ha rispettato il termine.` }
+  }
+  if (params.eventType === 'guest_share_dropped') {
+    return { title: 'Partecipazione annullata', body: `La tua partecipazione a ${voyageName}${legs} e stata annullata per quota non versata.` }
   }
   return { title: 'Aggiornamento booking viaggio', body: `C'e un aggiornamento per ${voyageName}${legs}.` }
 }

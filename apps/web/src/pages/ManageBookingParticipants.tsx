@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { getLocalizedBookingVoyageName, type BookingVoyage } from "@/lib/booking-utils";
 import {
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
+  contributionFixedMinimumEur,
   depositForPayerEur,
   depositTargetEur,
   formatDepositEur,
@@ -56,6 +57,8 @@ const ManageBookingParticipants = () => {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("lead_pays_all");
   const [bookingStatus, setBookingStatus] = useState<string | null>(null);
   const [alreadyPaid, setAlreadyPaid] = useState(false);
+  /** A contribution/workaway proposal is still open: only the fixed minimum is collected now. */
+  const [negotiationPending, setNegotiationPending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paymentChoiceOpen, setPaymentChoiceOpen] = useState(false);
   const [paymentStarting, setPaymentStarting] = useState(false);
@@ -71,8 +74,12 @@ const ManageBookingParticipants = () => {
       profile_id: string;
       status: string;
       payment_mode: PaymentMode | null;
+      contribution_fixed_only_payment: boolean | null;
+      contribution_proposal_status: string | null;
     }>("voyage_booking_requests")
-      .select("id, voyage_id, party_size, profile_id, status, payment_mode")
+      .select(
+        "id, voyage_id, party_size, profile_id, status, payment_mode, contribution_fixed_only_payment, contribution_proposal_status"
+      )
       .eq("id", id)
       .maybeSingle();
 
@@ -95,6 +102,11 @@ const ManageBookingParticipants = () => {
     }
     setPartySize(size);
     setBookingStatus(request.status ?? null);
+    setNegotiationPending(
+      Boolean(request.contribution_fixed_only_payment) &&
+        (request.contribution_proposal_status === "pending_admin_review" ||
+          request.contribution_proposal_status === "pending_user_approval")
+    );
     if (request.payment_mode === "each_pays_own" || request.payment_mode === "lead_pays_all") {
       setPaymentMode(request.payment_mode);
     }
@@ -171,14 +183,27 @@ const ManageBookingParticipants = () => {
     }),
     [contributionPerNmEur, id, priorVoyageContributionBookings, voyage?.id],
   );
-  const perPerson = useMemo(() => perPersonDepositEur(legs, contributionOptions), [contributionOptions, legs]);
+  // While a contribution/workaway proposal is open only the fixed minimum is collected — the
+  // negotiated part is requested once the organiser has answered. Mirrors the fixed-only branch
+  // of resolveDepositPayer, which is what actually decides the charged amount.
+  const fixedMinimumEur = contributionFixedMinimumEur(contributionOptions.fixedMinimumEur);
+  const perPerson = useMemo(
+    () => (negotiationPending ? fixedMinimumEur : perPersonDepositEur(legs, contributionOptions)),
+    [contributionOptions, fixedMinimumEur, legs, negotiationPending]
+  );
   const leadPaysAllTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }, contributionOptions),
-    [contributionOptions, legs, partySize]
+    () =>
+      negotiationPending
+        ? fixedMinimumEur * partySize
+        : depositForPayerEur(legs, { isLead: true, paymentMode: "lead_pays_all", partySize }, contributionOptions),
+    [contributionOptions, fixedMinimumEur, legs, negotiationPending, partySize]
   );
   const leadPaysMeTotal = useMemo(
-    () => depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, contributionOptions),
-    [contributionOptions, legs, partySize]
+    () =>
+      negotiationPending
+        ? fixedMinimumEur
+        : depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, contributionOptions),
+    [contributionOptions, fixedMinimumEur, legs, negotiationPending, partySize]
   );
 
   const updateGuest = (index: number, field: keyof ParticipantInput, value: string) => {
@@ -386,11 +411,19 @@ const ManageBookingParticipants = () => {
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <Wallet size={16} /> {lang === "it" ? "Pagamento del contributo" : "Contribution payment"}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {lang === "it"
-              ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a €499) ora e il saldo entro 15gg dalla partenza della propria tratta.`
-              : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to €499) is due now and the balance within 15 days of your leg's departure.`}
-          </p>
+          {negotiationPending ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {lang === "it"
+                ? `Hai proposto un contributo alternativo per il gruppo: ora si versa solo la quota fissa di ${formatDepositEur(perPerson, "it")} a persona, non negoziabile. L'eventuale saldo verrà richiesto solo dopo la risposta dell'organizzatore, e sarà lo stesso importo concordato per ciascun partecipante.`
+                : `You proposed an alternative contribution for the party: only the non-negotiable ${formatDepositEur(perPerson, "en")} fixed share per person is due now. Any balance is requested once the organiser has answered, and it will be the same agreed amount for every participant.`}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {lang === "it"
+                ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a €499) ora e il saldo entro 15gg dalla partenza della propria tratta.`
+                : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to €499) is due now and the balance within 15 days of your leg's departure.`}
+            </p>
+          )}
           {alreadyPaid && (
             <p className="rounded-2xl border border-emerald-300/60 bg-emerald-50/70 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100/90">
               {lang === "it"
@@ -414,9 +447,13 @@ const ManageBookingParticipants = () => {
             <span className="text-sm">
               <span className="font-medium text-foreground">{lang === "it" ? "Pago per tutti" : "I pay for everyone"}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                {lang === "it"
-                  ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "it")} per l'intero gruppo (saldo di ${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "it")} entro 15gg dalla partenza). Gli altri dovranno solo iscriversi e accettare le condizioni.`
-                  : `Pay the ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "en")} deposit now for the whole group (${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "en")} balance due within 15 days of departure). The others only need to register and accept the terms.`}
+                {negotiationPending
+                  ? lang === "it"
+                    ? `Paghi ora ${formatDepositEur(leadPaysAllTotal, "it")}, la quota fissa per tutto il gruppo. Gli altri dovranno solo iscriversi e accettare le condizioni.`
+                    : `Pay ${formatDepositEur(leadPaysAllTotal, "en")} now, the fixed share for the whole group. The others only need to register and accept the terms.`
+                  : lang === "it"
+                    ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "it")} per l'intero gruppo (saldo di ${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "it")} entro 15gg dalla partenza). Gli altri dovranno solo iscriversi e accettare le condizioni.`
+                    : `Pay the ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "en")} deposit now for the whole group (${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "en")} balance due within 15 days of departure). The others only need to register and accept the terms.`}
               </span>
             </span>
           </label>
@@ -436,9 +473,13 @@ const ManageBookingParticipants = () => {
             <span className="text-sm">
               <span className="font-medium text-foreground">{lang === "it" ? "Pago solo per me" : "I pay for myself only"}</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                {lang === "it"
-                  ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "it")} per te (saldo di ${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "it")} entro 15gg dalla partenza). Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
-                  : `Pay the ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "en")} deposit now for yourself (${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "en")} balance due within 15 days of departure). Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
+                {negotiationPending
+                  ? lang === "it"
+                    ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")}, la tua quota fissa. Ogni altro partecipante verserà la propria accettando l'invito, e poi l'importo che hai concordato tu: la cifra non è rinegoziabile dai singoli.`
+                    : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} now, your own fixed share. Each other participant pays theirs when accepting, then the amount you agreed: individuals cannot renegotiate it.`
+                  : lang === "it"
+                    ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "it")} per te (saldo di ${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "it")} entro 15gg dalla partenza). Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
+                    : `Pay the ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "en")} deposit now for yourself (${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "en")} balance due within 15 days of departure). Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
               </span>
             </span>
           </label>

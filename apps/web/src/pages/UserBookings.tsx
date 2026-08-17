@@ -42,7 +42,11 @@ import {
   acceptParticipation,
   declineParticipation,
   type MyParticipation,
+  getBookingPartyOverview,
+  dropUnpaidGuestShare,
+  type BookingPartyMember,
 } from "@/lib/booking-participants";
+import BookingPartyPanel from "@/components/booking/BookingPartyPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -146,6 +150,8 @@ const UserBookings = () => {
   const [candidateInfoPrefill, setCandidateInfoPrefill] = useState<CandidateInfo>(emptyCandidateInfo);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [myParticipations, setMyParticipations] = useState<MyParticipation[]>([]);
+  const [partyMembers, setPartyMembers] = useState<BookingPartyMember[]>([]);
+  const [droppingParticipantId, setDroppingParticipantId] = useState<string | null>(null);
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
   const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
@@ -410,6 +416,20 @@ const UserBookings = () => {
     if (!loading && session?.user.id) void loadParticipations();
   }, [loadParticipations, loading, session?.user.id]);
 
+  /** Who else is on the booking currently open, and where each of them stands with their share. */
+  const loadPartyMembers = useCallback(async (bookingRequestId: string | null) => {
+    if (!bookingRequestId) {
+      setPartyMembers([]);
+      return;
+    }
+    try {
+      setPartyMembers(await getBookingPartyOverview(bookingRequestId));
+    } catch {
+      /* non-fatal: the party panel just stays hidden */
+      setPartyMembers([]);
+    }
+  }, []);
+
   const loadOccupancy = useCallback(async (voyageId: string) => {
     if (!voyageId) {
       setOccupancy([]);
@@ -573,6 +593,16 @@ const UserBookings = () => {
       (selectedVoyageWatch.leg_ids.length === 0 ||
         selectedFullLegIds.some((legId) => selectedVoyageWatch.leg_ids.includes(legId)))
   );
+
+  // Only multi-person bookings have a party to show; for a solo one the RPC would just return
+  // the booker themselves.
+  const ownPartyRequestId =
+    ownRequestForSelectedVoyage && ownRequestForSelectedVoyage.party_size > 1
+      ? ownRequestForSelectedVoyage.id
+      : null;
+  useEffect(() => {
+    void loadPartyMembers(ownPartyRequestId);
+  }, [loadPartyMembers, ownPartyRequestId]);
 
   useEffect(() => {
     if (loading || busy || !draftHydratedRef.current || !selectedVoyageId || ownRequestForSelectedVoyage) return;
@@ -1087,6 +1117,37 @@ const UserBookings = () => {
     }
   };
 
+  /** The booker chose to sail without the guest who missed their share deadline. */
+  const dropParticipant = async (participantId: string) => {
+    if (
+      !confirm(
+        lang === "it"
+          ? "Proseguire senza questa persona? Il suo posto viene liberato e quanto eventualmente versato le viene restituito."
+          : "Continue without this person? Their seat is released and anything they paid is refunded to them."
+      )
+    ) {
+      return;
+    }
+    setDroppingParticipantId(participantId);
+    try {
+      await dropUnpaidGuestShare(participantId);
+      toast.success(
+        lang === "it" ? "Partecipante rimosso dalla prenotazione." : "Participant removed from the booking."
+      );
+      await loadData();
+      await loadPartyMembers(ownRequestForSelectedVoyage?.id ?? null);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : null;
+      toast.error(
+        lang === "it"
+          ? `Non è stato possibile rimuovere il partecipante.${detail ? ` (${detail})` : ""}`
+          : `Unable to remove the participant.${detail ? ` (${detail})` : ""}`
+      );
+    } finally {
+      setDroppingParticipantId(null);
+    }
+  };
+
   const cancelBooking = async (request: BookingRequest) => {
     if (!confirm(lang === "it" ? "Annullare questa partecipazione?" : "Cancel this participation?")) return;
     setSaving(true);
@@ -1244,6 +1305,20 @@ const UserBookings = () => {
     setAcceptSubmitting(true);
     try {
       await acceptParticipation(acceptTarget.participant_id, acceptCandidateInfo);
+      // While the booker is still negotiating the amount there is nothing to charge yet: the
+      // server refuses a guest payment in that window, and the guest is emailed with their own
+      // two-day deadline once the figure is agreed.
+      if (acceptTarget.requires_payment && acceptTarget.negotiation_open) {
+        toast.success(
+          lang === "it"
+            ? "Invito accettato. L'importo del contributo è ancora in accordo con chi ha prenotato: ti avviseremo appena è definito, poi avrai due giorni per versare la tua quota."
+            : "Invitation accepted. The contribution is still being agreed with whoever booked: we'll let you know as soon as it's settled, and you'll then have two days to pay your share."
+        );
+        setAcceptTarget(null);
+        setAcceptCandidateInfo(candidateInfoPrefill);
+        await loadParticipations();
+        return;
+      }
       // Guests paying their own share choose between the Bunq link and bank transfer after accepting.
       if (acceptTarget.requires_payment) {
         toast.success(lang === "it" ? "Invito accettato." : "Invitation accepted.");
@@ -1334,6 +1409,17 @@ const UserBookings = () => {
     (lang === "it" ? p.voyage_name_it : p.voyage_name_en) || p.voyage_name || (lang === "it" ? "Viaggio" : "Voyage");
 
   const pendingParticipations = myParticipations.filter((p) => p.status === "pending");
+  /**
+   * Accepted invitations where this guest still owes their own share — either suspended while
+   * the booker negotiates, or armed with a deadline. Without this the guest had nowhere at all
+   * to see or pay their share: only pending invitations were ever rendered.
+   */
+  const shareDueParticipations = myParticipations.filter(
+    (p) =>
+      p.status === "accepted" &&
+      p.requires_payment &&
+      (p.negotiation_open || (p.share_due_cents != null && p.share_paid_cents < p.share_due_cents))
+  );
 
   if (loading) {
     return <div className="min-h-screen pt-28 text-center text-sm text-muted-foreground">Loading...</div>;
@@ -1399,6 +1485,82 @@ const UserBookings = () => {
 
         {bookedVoyageIds.length > 0 && (
           <VoyageLiveWidget readOnly voyageIds={bookedVoyageIds} lang={lang} />
+        )}
+
+        {shareDueParticipations.length > 0 && (
+          <section className="glass-panel rounded-[30px] border border-amber-400/50 p-5 md:p-6">
+            <h2 className="editorial-heading mb-4 text-2xl">
+              {lang === "it" ? "La tua quota" : "Your share"}
+            </h2>
+            <div className="space-y-3">
+              {shareDueParticipations.map((p) => {
+                const overdue =
+                  p.share_payment_due_at != null && new Date(p.share_payment_due_at).getTime() <= Date.now();
+                return (
+                  <div
+                    key={p.participant_id}
+                    className="rounded-[22px] border border-border/70 bg-background/50 p-4 text-sm"
+                  >
+                    <p className="font-medium text-foreground">{participationVoyageName(p)}</p>
+                    {p.negotiation_open ? (
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {lang === "it"
+                          ? "L'importo del contributo è ancora in accordo con chi ha prenotato. Non devi versare nulla adesso: ti avviseremo appena è definito e da quel momento avrai due giorni per pagare la tua quota."
+                          : "The contribution is still being agreed with whoever booked. Nothing to pay right now: we'll let you know as soon as it's settled, and you'll then have two days to pay your share."}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {lang === "it"
+                            ? "L'importo è stato concordato da chi ha prenotato e vale per ciascun partecipante: non è rinegoziabile singolarmente."
+                            : "The amount was agreed by whoever booked and applies to every participant: it cannot be renegotiated individually."}
+                        </p>
+                        <p className={`mt-2 text-xs font-semibold ${overdue ? "text-orange-700 dark:text-orange-300" : "text-foreground"}`}>
+                          {p.share_due_cents != null
+                            ? formatDepositEur(
+                                (p.share_due_cents - p.share_paid_cents) / 100,
+                                lang === "it" ? "it" : "en"
+                              )
+                            : ""}
+                          {p.share_payment_due_at && (
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              {overdue
+                                ? lang === "it"
+                                  ? `termine scaduto il ${formatBookingDate(p.share_payment_due_at, locale)}`
+                                  : `deadline passed on ${formatBookingDate(p.share_payment_due_at, locale)}`
+                                : lang === "it"
+                                  ? `entro il ${formatBookingDate(p.share_payment_due_at, locale)}`
+                                  : `by ${formatBookingDate(p.share_payment_due_at, locale)}`}
+                            </span>
+                          )}
+                        </p>
+                        {overdue && (
+                          <p className="mt-1 text-xs leading-relaxed text-orange-800 dark:text-orange-300/90">
+                            {lang === "it"
+                              ? "Il termine è passato: chi ha prenotato può decidere di proseguire senza di te. Puoi ancora pagare finché non lo fa."
+                              : "The deadline has passed: whoever booked may decide to continue without you. You can still pay until they do."}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPaymentChoice({
+                              bookingRequestId: p.booking_request_id,
+                              participantId: p.participant_id,
+                            })
+                          }
+                          className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                        >
+                          <Wallet size={14} />
+                          {lang === "it" ? "Versa la tua quota" : "Pay your share"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {pendingParticipations.length > 0 && (
@@ -1641,6 +1803,19 @@ const UserBookings = () => {
                             <Users size={14} />
                             {lang === "it" ? "Gestisci partecipanti" : "Manage participants"}
                           </button>
+
+                          {partyMembers.length > 0 && (
+                            <div className="mt-4">
+                              <BookingPartyPanel
+                                lang={lang}
+                                members={partyMembers}
+                                isLead
+                                droppingParticipantId={droppingParticipantId}
+                                onDropParticipant={(participantId) => void dropParticipant(participantId)}
+                                onCancelWholeBooking={() => void cancelBooking(ownRequestForSelectedVoyage)}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     {ownRequestForSelectedVoyage?.status === "admin_approved" &&

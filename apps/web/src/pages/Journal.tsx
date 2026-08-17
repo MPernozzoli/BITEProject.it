@@ -816,10 +816,9 @@ const Journal = () => {
       return;
     }
 
-    // Proposals (alternative contribution / workaway) are v1-scoped to solo applications —
-    // the party is negotiated as one block, no per-guest split.
-    const attachedProposal =
-      Math.max(1, bookingPartySize) === 1 ? toApplyWithProposalPayload(bookingProposal) : null;
+    // One negotiation per application, run by the booker on everyone's behalf: the figures are
+    // per person, so guests simply inherit the agreed amount and pay their own share.
+    const attachedProposal = toApplyWithProposalPayload(bookingProposal);
 
     setBookingSubmitting(true);
     try {
@@ -834,6 +833,7 @@ const Journal = () => {
           candidateInfo: bookingCandidateInfo,
           proposal: attachedProposal,
           candidateMessage: bookingProposal.candidateMessage.trim() || null,
+          partySize: Math.max(1, bookingPartySize),
         });
         if (applyResult.ok === false) {
           toast.error(
@@ -1421,27 +1421,23 @@ const Journal = () => {
             message={bookingMessage}
             requiresPayment
             showPaymentMethodChoice={false}
-            fixedOnlyPayment={Boolean(
-              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
-            )}
+            fixedOnlyPayment={Boolean(contributionProposalKind(bookingProposal))}
             depositPerPersonEur={
-              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
+              contributionProposalKind(bookingProposal)
                 ? bookingFixedMinimumEur
                 : perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)
             }
             depositTotalEur={
-              Math.max(1, bookingPartySize) === 1 && contributionProposalKind(bookingProposal)
-                ? bookingFixedMinimumEur
+              contributionProposalKind(bookingProposal)
+                ? bookingFixedMinimumEur * Math.max(1, bookingPartySize)
                 : totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)
             }
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             standardVariableEur={bookingStandardVariableEur}
             fixedMinimumEur={bookingFixedMinimumEur}
-            contributionProposalEnabled={
-              Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.contribution_proposal_enabled)
-            }
+            contributionProposalEnabled={Boolean(bookingProposalSettings?.contribution_proposal_enabled)}
             contributionProposalMaxPercent={bookingProposalSettings?.contribution_proposal_max_percent ?? 150}
-            workawayEnabled={Math.max(1, bookingPartySize) === 1 && Boolean(bookingProposalSettings?.workaway_enabled)}
+            workawayEnabled={Boolean(bookingProposalSettings?.workaway_enabled)}
             workawayRoles={workawayRoles}
             activeWorkawayRoleKeys={bookingProposalSettings?.workaway_role_keys ?? []}
             proposal={bookingProposal}

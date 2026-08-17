@@ -23,6 +23,8 @@ export async function applyVoyageBookingWithProposal(params: {
   candidateInfo: Record<string, unknown>;
   proposal: ApplyWithProposalPayload;
   candidateMessage: string | null;
+  /** People on the application; the proposed amounts stay per person. Defaults to a solo application. */
+  partySize?: number;
 }): Promise<ApplyWithProposalResult> {
   const token = await authToken();
   if (!token) return { ok: false, error: "unauthenticated" };
@@ -41,6 +43,7 @@ export async function applyVoyageBookingWithProposal(params: {
         proposedVariableCents: params.proposal.proposedVariableCents,
         workaway: params.proposal.workaway,
         candidateMessage: params.candidateMessage,
+        partySize: Math.max(1, Math.floor(params.partySize ?? 1) || 1),
       }),
     });
   } catch {

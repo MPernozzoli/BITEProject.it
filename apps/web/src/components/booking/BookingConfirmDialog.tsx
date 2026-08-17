@@ -394,6 +394,7 @@ const BookingConfirmDialog = ({
                   lang={lang}
                   proposal={proposal}
                   onChange={onProposalChange}
+                  partySize={partySize}
                   standardVariableEur={standardVariableEur}
                   fixedMinimumEur={fixedMinimumEur}
                   contributionProposalEnabled={contributionProposalEnabled}

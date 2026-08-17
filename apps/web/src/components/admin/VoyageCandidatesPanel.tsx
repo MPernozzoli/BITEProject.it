@@ -28,6 +28,7 @@ import { formatDepositEur } from "@/lib/booking-deposit";
 import { getWorkawayFileSignedUrl } from "@/lib/booking-proposal-apply";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import { getBookingPartyOverview, type BookingPartyMember } from "@/lib/booking-participants";
 
 type SupabaseError = { message: string } | null;
 type SupabaseResponse = { data: unknown; error: SupabaseError };
@@ -87,6 +88,53 @@ type VoyageCandidatesPanelProps = {
   voyageId?: string;
   /** Called after every (re)load with the number of candidates in review. */
   onCountChange?: (count: number) => void;
+};
+
+/**
+ * Who else is on a group candidature, and whether each of them has settled their own share.
+ * The party already exists structurally — one request, several participants — but the review
+ * card only ever showed the booker, so an admin approving "2 pax" had no idea who the second
+ * person was or whether they had accepted.
+ */
+const PartyMembersLine = ({ bookingRequestId, partySize }: { bookingRequestId: string; partySize: number }) => {
+  const [members, setMembers] = useState<BookingPartyMember[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getBookingPartyOverview(bookingRequestId)
+      .then((rows) => {
+        if (!cancelled) setMembers(rows);
+      })
+      .catch(() => {
+        /* non-fatal: the card falls back to the plain "N pax" above */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingRequestId]);
+
+  if (members.length === 0) return null;
+
+  const label = (member: BookingPartyMember): string => {
+    const name = [member.first_name, member.last_name].filter(Boolean).join(" ").trim() || member.email;
+    if (member.is_lead) return `${name} (prenota)`;
+    if (member.status === "pending") return `${name} — invito non accettato`;
+    if (member.status === "declined") return `${name} — ha rifiutato`;
+    if (member.status === "expired") return `${name} — invito scaduto`;
+    if (member.status === "balance_unpaid") return `${name} — uscito, quota non versata`;
+    if (member.share_due_cents != null && member.share_paid_cents >= member.share_due_cents) {
+      return `${name} — quota versata`;
+    }
+    if (member.share_due_cents != null) return `${name} — quota da versare`;
+    return name;
+  };
+
+  return (
+    <p className="mt-1 text-xs text-muted-foreground/90">
+      <span className="font-medium text-foreground/80">Gruppo di {partySize}:</span>{" "}
+      {members.map((member) => label(member)).join(" · ")}
+    </p>
+  );
 };
 
 const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPanelProps) => {
@@ -1146,6 +1194,9 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         {currentLegs.length > 0 ? currentLegs.map((leg) => getLegLabel(leg, waypointsById, "it")).join(", ") : "Nessuna tratta"} ·{" "}
                         {request.party_size} pax
                       </p>
+                      {request.party_size > 1 && (
+                        <PartyMembersLine bookingRequestId={request.id} partySize={request.party_size} />
+                      )}
                       {request.admin_notes && (
                         <p className="mt-1 text-xs text-muted-foreground/90">{request.admin_notes}</p>
                       )}

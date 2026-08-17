@@ -24,6 +24,12 @@ type ContributionProposalFormProps = {
   workawayEnabled: boolean;
   /** Ceiling, as a % of the total standard contribution (variable + fixed). No floor beyond the fixed minimum itself. */
   maxPercent: number;
+  /**
+   * People this application covers. The negotiation is always per person — the booker settles one
+   * traveller's share on everyone's behalf — so this only adds the group total next to the slider,
+   * and never changes the value being proposed.
+   */
+  partySize?: number;
   workawayRoles: WorkawayRole[];
   activeWorkawayRoleKeys: string[];
   cvFile: File | null;
@@ -82,6 +88,7 @@ const ContributionProposalForm = ({
   contributionProposalEnabled,
   workawayEnabled,
   maxPercent,
+  partySize = 1,
   workawayRoles,
   activeWorkawayRoleKeys,
   cvFile,
@@ -105,6 +112,16 @@ const ContributionProposalForm = ({
   const defaultVariableEur = Math.max(0, defaultTotalEur - fixedMinimumEur);
   const currentVariableEur = proposal.proposedVariableEur ?? defaultVariableEur;
   const currentTotalEur = currentVariableEur + fixedMinimumEur;
+  // The slider always works on one traveller's share; with a party, the figure that actually
+  // leaves someone's account is that share times the people it covers, so it is spelled out
+  // rather than left for the candidate to multiply in their head.
+  const people = Math.max(1, Math.floor(partySize) || 1);
+  const groupTotalNote =
+    people > 1
+      ? it
+        ? `Per ${people} persone: ${formatDepositEur(currentTotalEur * people, "it")} in tutto. La cifra vale per ogni partecipante — se ognuno paga per sé, ciascuno verserà ${formatDepositEur(currentTotalEur, "it")}.`
+        : `For ${people} people: ${formatDepositEur(currentTotalEur * people, "en")} in total. The figure applies to every participant — if each pays their own way, each will pay ${formatDepositEur(currentTotalEur, "en")}.`
+      : null;
 
   const setTotalEur = (totalEur: number) => {
     onChange({ ...proposal, proposedVariableEur: Math.max(0, Math.round(totalEur) - fixedMinimumEur) });
@@ -204,6 +221,9 @@ const ContributionProposalForm = ({
                   ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile.`
                   : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable.`}
               </p>
+              {groupTotalNote && (
+                <p className="pt-1 text-xs font-medium text-foreground">{groupTotalNote}</p>
+              )}
             </div>
           )}
         </div>
@@ -256,6 +276,9 @@ const ContributionProposalForm = ({
                     ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile: il lavoro copre solo l'eventuale differenza rispetto alla quota normale.`
                     : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable: the work only covers the gap below the normal quota.`}
                 </p>
+                {groupTotalNote && (
+                  <p className="pt-1 text-xs font-medium text-foreground">{groupTotalNote}</p>
+                )}
               </div>
 
               {activeRoles.length > 0 && (
