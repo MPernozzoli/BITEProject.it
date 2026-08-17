@@ -120,12 +120,16 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
       db.from("voyages").select("name, name_it, name_en, booking_contribution_per_nm_eur").eq("id", voyageId).maybeSingle(),
       db.from("profiles").select("name").eq("id", user.id).maybeSingle(),
     ]);
+    const language = requestedLanguage;
+    // The voyage name has to follow the email's own language, not default to the Italian one:
+    // an English invite naming an Italian-only voyage reads as a half-translated email.
+    const voyageRow = voyage as { name_it?: string; name_en?: string; name?: string } | null;
     const voyageName =
-      (voyage as { name_it?: string; name_en?: string; name?: string } | null)?.name_it ||
-      (voyage as { name?: string } | null)?.name ||
+      (language === "en" ? voyageRow?.name_en : voyageRow?.name_it) ||
+      (language === "en" ? voyageRow?.name_it : voyageRow?.name_en) ||
+      voyageRow?.name ||
       "";
     const inviterName = (inviter as { name?: string } | null)?.name || "";
-    const language = requestedLanguage;
     const contributionPerNmEur = Number(
       (voyage as { booking_contribution_per_nm_eur?: number } | null)?.booking_contribution_per_nm_eur ?? 0.9,
     );

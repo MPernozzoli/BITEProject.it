@@ -17,6 +17,7 @@ import {
   type PriorVoyageContributionBooking,
 } from "@/lib/booking-deposit";
 import {
+  listBookingParticipants,
   saveBookingParticipants,
   sendBookingInvites,
   type PaymentMode,
@@ -53,6 +54,8 @@ const ManageBookingParticipants = () => {
   const [legs, setLegs] = useState<DepositLeg[]>([]);
   const [guests, setGuests] = useState<ParticipantInput[]>([]);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("lead_pays_all");
+  const [bookingStatus, setBookingStatus] = useState<string | null>(null);
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paymentChoiceOpen, setPaymentChoiceOpen] = useState(false);
   const [paymentStarting, setPaymentStarting] = useState(false);
@@ -66,8 +69,10 @@ const ManageBookingParticipants = () => {
       voyage_id: string;
       party_size: number;
       profile_id: string;
+      status: string;
+      payment_mode: PaymentMode | null;
     }>("voyage_booking_requests")
-      .select("id, voyage_id, party_size, profile_id, status")
+      .select("id, voyage_id, party_size, profile_id, status, payment_mode")
       .eq("id", id)
       .maybeSingle();
 
@@ -82,8 +87,43 @@ const ManageBookingParticipants = () => {
     }
 
     const size = Math.max(1, Number(request.party_size) || 1);
+    // A solo booking has nobody to invite and no payment split to choose: everything this page
+    // offers is decided elsewhere, so sending the traveller here would only confuse them.
+    if (size < 2) {
+      navigate("/bookings", { replace: true });
+      return;
+    }
     setPartySize(size);
-    setGuests(Array.from({ length: size - 1 }, () => ({ first_name: "", last_name: "", email: "" })));
+    setBookingStatus(request.status ?? null);
+    if (request.payment_mode === "each_pays_own" || request.payment_mode === "lead_pays_all") {
+      setPaymentMode(request.payment_mode);
+    }
+
+    // The page is reachable again after the initial redirect (from /bookings), so it has to show
+    // what was already saved rather than blank fields that would silently re-send the invites.
+    let savedGuests: ParticipantInput[] = [];
+    try {
+      savedGuests = (await listBookingParticipants(id))
+        .filter((participant) => !participant.is_lead && participant.status !== "declined")
+        .map((participant) => ({
+          first_name: participant.first_name ?? "",
+          last_name: participant.last_name ?? "",
+          email: participant.email,
+        }));
+    } catch (participantsError) {
+      console.error("[ManageBookingParticipants] failed to load participants", participantsError);
+    }
+    setGuests(
+      Array.from({ length: size - 1 }, (_unused, index) =>
+        savedGuests[index] ?? { first_name: "", last_name: "", email: "" },
+      ),
+    );
+
+    const { data: paidDeposits } = await q<Array<{ id: string }>>("voyage_booking_deposits")
+      .select("id")
+      .eq("booking_request_id", id)
+      .eq("status", "paid");
+    setAlreadyPaid((paidDeposits ?? []).length > 0);
 
     const { data: priorBookings } = await q<PriorVoyageContributionBooking[]>("voyage_booking_requests")
       .select("id, voyage_id, status")
@@ -146,6 +186,7 @@ const ManageBookingParticipants = () => {
   };
 
   const validate = (): string | null => {
+    const leadEmail = (session?.user.email ?? "").trim().toLowerCase();
     const emails = new Set<string>();
     for (const g of guests) {
       if (!g.first_name.trim() || !g.last_name.trim()) {
@@ -155,12 +196,45 @@ const ManageBookingParticipants = () => {
         return lang === "it" ? "Inserisci un'email valida per ogni persona." : "Enter a valid email for everyone.";
       }
       const key = g.email.trim().toLowerCase();
+      // The lead already has their own participant row: reusing their address here would hit the
+      // one-email-per-booking unique index and surface a raw database error.
+      if (leadEmail && key === leadEmail) {
+        return lang === "it"
+          ? "Sei già incluso come organizzatore: indica l'email delle altre persone."
+          : "You are already included as the organiser: enter the other people's addresses.";
+      }
       if (emails.has(key)) {
         return lang === "it" ? "Le email dei partecipanti devono essere diverse." : "Participant emails must be different.";
       }
       emails.add(key);
     }
     return null;
+  };
+
+  /** Domain errors raised by set_booking_participants, as readable text. */
+  const participantErrorMessage = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message : "";
+    if (raw.includes("participant_email_is_lead")) {
+      return lang === "it"
+        ? "Sei già incluso come organizzatore: indica l'email delle altre persone."
+        : "You are already included as the organiser: enter the other people's addresses.";
+    }
+    if (raw.includes("participant_email_duplicated")) {
+      return lang === "it"
+        ? "Le email dei partecipanti devono essere diverse."
+        : "Participant emails must be different.";
+    }
+    if (raw.includes("participant_email_invalid")) {
+      return lang === "it"
+        ? "Inserisci un'email valida per ogni persona."
+        : "Enter a valid email for everyone.";
+    }
+    if (raw.includes("participant_already_booked")) {
+      return lang === "it"
+        ? "Una delle persone invitate ha già un posto su queste tratte: non può essere aggiunta due volte."
+        : "One of the invited people already holds a place on these legs: they cannot be added twice.";
+    }
+    return raw || (lang === "it" ? "Operazione non riuscita." : "Something went wrong.");
   };
 
   const handleSubmit = async () => {
@@ -194,9 +268,16 @@ const ManageBookingParticipants = () => {
         );
       }
 
+      // Coming back only to edit the guest list must not re-open a payment that is already
+      // settled — resolveDepositPayer would just answer "already_settled".
+      if (alreadyPaid) {
+        toast.success(lang === "it" ? "Partecipanti aggiornati." : "Participants updated.");
+        navigate("/bookings");
+        return;
+      }
       setPaymentChoiceOpen(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error");
+      toast.error(participantErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -258,6 +339,14 @@ const ManageBookingParticipants = () => {
           </p>
         </header>
 
+        {bookingStatus === "pending_payment" && (
+          <div className="glass-panel rounded-[24px] border border-orange-300/50 bg-orange-50/60 p-4 text-xs leading-relaxed text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+            {lang === "it"
+              ? "La candidatura non è ancora stata inviata: viene registrata solo dopo il pagamento del contributo, che si completa qui sotto dopo aver indicato i partecipanti."
+              : "Your application has not been submitted yet: it is registered only once the contribution is paid, which you complete below after listing the participants."}
+          </div>
+        )}
+
         <div className="glass-panel rounded-[24px] border border-amber-300/50 bg-amber-50/50 p-4 text-xs leading-relaxed text-amber-900 dark:bg-amber-400/10 dark:text-amber-100/90">
           {lang === "it"
             ? "BITE non è un charter o un'attività commerciale: è un viaggio privato con condivisione equa delle spese vive. Ogni partecipante dovrà avere un proprio account sul portale BITE per prendere parte al viaggio, accettare le condizioni ed eventualmente versare la propria quota di contributo."
@@ -302,16 +391,24 @@ const ManageBookingParticipants = () => {
               ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a €499) ora e il saldo entro 15gg dalla partenza della propria tratta.`
               : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to €499) is due now and the balance within 15 days of your leg's departure.`}
           </p>
+          {alreadyPaid && (
+            <p className="rounded-2xl border border-emerald-300/60 bg-emerald-50/70 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100/90">
+              {lang === "it"
+                ? "Hai già versato il contributo per questa prenotazione: la modalità di pagamento non è più modificabile. Per rettifiche scrivici."
+                : "You have already paid the contribution for this booking: the payment split can no longer be changed. Contact us for adjustments."}
+            </p>
+          )}
           <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${
+            className={`flex items-start gap-3 rounded-2xl border p-3 ${
               paymentMode === "lead_pays_all" ? "border-accent bg-accent/5" : "border-border/70"
-            }`}
+            } ${alreadyPaid ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
           >
             <input
               type="radio"
               name="paymentMode"
               checked={paymentMode === "lead_pays_all"}
               onChange={() => setPaymentMode("lead_pays_all")}
+              disabled={alreadyPaid}
               className="mt-1"
             />
             <span className="text-sm">
@@ -324,15 +421,16 @@ const ManageBookingParticipants = () => {
             </span>
           </label>
           <label
-            className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 ${
+            className={`flex items-start gap-3 rounded-2xl border p-3 ${
               paymentMode === "each_pays_own" ? "border-accent bg-accent/5" : "border-border/70"
-            }`}
+            } ${alreadyPaid ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
           >
             <input
               type="radio"
               name="paymentMode"
               checked={paymentMode === "each_pays_own"}
               onChange={() => setPaymentMode("each_pays_own")}
+              disabled={alreadyPaid}
               className="mt-1"
             />
             <span className="text-sm">
@@ -353,7 +451,13 @@ const ManageBookingParticipants = () => {
           className="glass-chip inline-flex w-full items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:text-accent disabled:opacity-50"
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-          {lang === "it" ? "Invia inviti e scegli pagamento" : "Send invites & choose payment"}
+          {alreadyPaid
+            ? lang === "it"
+              ? "Salva partecipanti e invia inviti"
+              : "Save participants & send invites"
+            : lang === "it"
+              ? "Invia inviti e scegli pagamento"
+              : "Send invites & choose payment"}
         </button>
       </div>
 

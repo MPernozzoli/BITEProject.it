@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, BellOff, CalendarCheck, Check, CreditCard, Hourglass, Loader2, MessageSquare, Ship, Wallet, X } from "lucide-react";
+import { Bell, BellOff, CalendarCheck, Check, CreditCard, Hourglass, Loader2, MessageSquare, Ship, Users, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
@@ -544,21 +544,26 @@ const UserBookings = () => {
       ) || null,
     [availabilityWatches, selectedVoyageId]
   );
-  const selectedFullLegIds = useMemo(() => {
-    const capacity = selectedVoyage?.booking_max_guests || 1;
-    return selectedVoyageLegs
-      .filter((leg) => {
-        const occupied = occupancy
-          .filter(
-            (row) =>
-              row.leg_ids.includes(leg.id) &&
-              ["admin_approved", "user_confirmed"].includes(row.status)
-          )
-          .reduce((sum, row) => sum + row.party_size, 0);
-        return occupied >= capacity;
-      })
-      .map((leg) => leg.id);
+  /** Seats still free on each leg of the selected voyage — only approved/confirmed bookings occupy. */
+  const remainingSeatsByLegId = useMemo(() => {
+    const capacity = Math.max(1, selectedVoyage?.booking_max_guests || 1);
+    const remaining: Record<string, number> = {};
+    for (const leg of selectedVoyageLegs) {
+      const occupied = occupancy
+        .filter(
+          (row) =>
+            row.leg_ids.includes(leg.id) &&
+            ["admin_approved", "user_confirmed"].includes(row.status)
+        )
+        .reduce((sum, row) => sum + row.party_size, 0);
+      remaining[leg.id] = Math.max(0, capacity - occupied);
+    }
+    return remaining;
   }, [occupancy, selectedVoyage?.booking_max_guests, selectedVoyageLegs]);
+  const selectedFullLegIds = useMemo(
+    () => selectedVoyageLegs.filter((leg) => (remainingSeatsByLegId[leg.id] ?? 0) <= 0).map((leg) => leg.id),
+    [remainingSeatsByLegId, selectedVoyageLegs]
+  );
   const selectedFullLegLabels = useMemo(
     () => selectedFullLegIds.map((id) => legsById[id]).filter(Boolean).map((leg) => getLegLabel(leg, waypointsById, lang)),
     [lang, legsById, selectedFullLegIds, waypointsById]
@@ -848,6 +853,23 @@ const UserBookings = () => {
       );
       return false;
     }
+    // A party only fits where there is room for *all* of it: an application the organiser could
+    // never approve as-is is worse than a refusal here, because the contribution is paid first.
+    const tooTightLegIds = selectedLegIds.filter(
+      (legId) => legId in remainingSeatsByLegId && remainingSeatsByLegId[legId] < parsedPartySize
+    );
+    if (tooTightLegIds.length > 0) {
+      const labels = tooTightLegIds
+        .map((legId) => legsById[legId])
+        .filter(Boolean)
+        .map((leg) => getLegLabel(leg, waypointsById, lang));
+      toast.error(
+        lang === "it"
+          ? `Non ci sono ${parsedPartySize} posti liberi su: ${labels.join(", ")}. Riduci il numero di persone o togli queste tratte.`
+          : `There aren't ${parsedPartySize} free seats on: ${labels.join(", ")}. Reduce the party size or remove these legs.`
+      );
+      return false;
+    }
     return true;
   };
 
@@ -960,6 +982,16 @@ const UserBookings = () => {
     if (bookingRequestId && parsedPartySize > 1) {
       setSaving(false);
       setConfirmOpen(false);
+      // Same cleanup as the solo path below: leaving the draft behind would re-hydrate this form
+      // with the legs that were just submitted, and the next attempt would only earn a BK001.
+      setSelectedLegIds([]);
+      setMessage("");
+      candidateInfoTouchedRef.current = false;
+      clearLocalBookingApplicationDraft(selectedVoyageId);
+      await clearCloudBookingApplicationDraft(session.user.id, selectedVoyageId).catch((error) => {
+        console.error("Failed to clear booking draft", error);
+      });
+      setCandidateInfo(candidateInfoPrefill);
       navigate(`/bookings/${bookingRequestId}/participants`);
       return;
     }
@@ -1553,18 +1585,64 @@ const UserBookings = () => {
                             </span>
                           )}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPaymentChoice({ bookingRequestId: ownRequestForSelectedVoyage.id })
-                          }
-                          className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
-                        >
-                          <Wallet size={14} />
-                          {lang === "it" ? "Completa il pagamento" : "Complete the payment"}
-                        </button>
+                        {ownRequestForSelectedVoyage.party_size > 1 ? (
+                          // Who pays and how much depend on the guest list and the split the lead
+                          // picks, so a multi-person application must go through the participants
+                          // page — paying straight from here would silently charge for the whole
+                          // party and leave the guests unnamed and uninvited.
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(`/bookings/${ownRequestForSelectedVoyage.id}/participants`)
+                            }
+                            className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                          >
+                            <Users size={14} />
+                            {lang === "it"
+                              ? "Indica i partecipanti e paga"
+                              : "Add participants & pay"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPaymentChoice({ bookingRequestId: ownRequestForSelectedVoyage.id })
+                            }
+                            className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                          >
+                            <Wallet size={14} />
+                            {lang === "it" ? "Completa il pagamento" : "Complete the payment"}
+                          </button>
+                        )}
                       </div>
                     )}
+
+                    {ownRequestForSelectedVoyage &&
+                      ownRequestForSelectedVoyage.party_size > 1 &&
+                      ["requested", "waitlisted", "admin_approved", "user_confirmed"].includes(
+                        ownRequestForSelectedVoyage.status
+                      ) && (
+                        <div className="rounded-[22px] border border-border/70 bg-background/40 p-4 text-sm">
+                          <p className="font-medium text-foreground">
+                            {lang === "it" ? "Persone della tua prenotazione" : "People on your booking"}
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            {lang === "it"
+                              ? `Hai aderito per ${ownRequestForSelectedVoyage.party_size} persone. Da qui puoi rivedere i dati degli altri partecipanti, correggere un'email sbagliata e rimandare gli inviti.`
+                              : `You joined for ${ownRequestForSelectedVoyage.party_size} people. From here you can review the other participants, fix a wrong address and re-send the invitations.`}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(`/bookings/${ownRequestForSelectedVoyage.id}/participants`)
+                            }
+                            className="glass-chip mt-3 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:text-accent"
+                          >
+                            <Users size={14} />
+                            {lang === "it" ? "Gestisci partecipanti" : "Manage participants"}
+                          </button>
+                        </div>
+                      )}
                     {ownRequestForSelectedVoyage?.status === "admin_approved" &&
                       ownRequestForSelectedVoyage.payment_mode === "each_pays_own" &&
                       !ownRequestForSelectedVoyage.is_comped &&

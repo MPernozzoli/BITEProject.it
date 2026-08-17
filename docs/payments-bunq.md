@@ -186,8 +186,9 @@ Tables & functions: `voyage_booking_participants`, `voyage_booking_requests.paym
 
 **Follow-ups before production:**
 - Redeploy the `send-transactional-email` edge function so the new invite template is picked up.
-- Schedule `expire_pending_booking_participants()` (pg_cron or a cron edge function) — it is
-  granted to `service_role` and is not called automatically yet.
+- ~~Schedule `expire_pending_booking_participants()`~~ — done in
+  `20260817120000_multi_person_booking_fixes`: pg_cron job `expire-pending-booking-participants`,
+  hourly, restricted to bookings that are still active.
 - Configure `BUNQ_WEBHOOK_SECRET` in Vercel and include it in the Bunq callback URL as
   `?secret=...` (or send it as `x-bite-bunq-webhook-secret` if using a proxy). The webhook
   rejects unsigned callbacks before attempting to settle a deposit.

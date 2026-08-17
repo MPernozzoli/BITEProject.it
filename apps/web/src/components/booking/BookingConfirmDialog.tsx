@@ -262,7 +262,15 @@ const BookingConfirmDialog = ({
     (condition) => condition.optional || accepted[condition.id]
   );
 
+  /** Whether the proposal block is actually on screen — see proposalError below. */
+  const proposalVisible =
+    requiresPayment && Boolean(proposal && onProposalChange) && (contributionProposalEnabled || workawayEnabled);
+
   const proposalError = useMemo(() => {
+    // Only validate what the user can see and fix. A leftover proposal from a previous party
+    // size (the form disappears above 1 guest) would otherwise disable the confirm button while
+    // its explanation stayed hidden inside the collapsed block.
+    if (!proposalVisible) return null;
     if (!proposal || !onProposalChange) return null;
     if (!contributionProposalKind(proposal)) return null;
     return getContributionProposalValidationError(
@@ -272,7 +280,7 @@ const BookingConfirmDialog = ({
       contributionProposalMaxPercent,
       lang === "it" ? "it" : "en"
     );
-  }, [proposal, onProposalChange, standardVariableEur, fixedMinimumEur, contributionProposalMaxPercent, lang]);
+  }, [proposalVisible, proposal, onProposalChange, standardVariableEur, fixedMinimumEur, contributionProposalMaxPercent, lang]);
 
   const canConfirm = allAccepted && !proposalError;
 
@@ -377,10 +385,7 @@ const BookingConfirmDialog = ({
             </div>
           )}
 
-          {requiresPayment &&
-            proposal &&
-            onProposalChange &&
-            (contributionProposalEnabled || workawayEnabled) && (
+          {proposalVisible && proposal && onProposalChange && (
               <div className="mb-4 rounded-2xl border border-border/70 bg-muted/25 p-4">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   {lang === "it" ? "Proponi un'alternativa (facoltativo)" : "Propose an alternative (optional)"}
@@ -453,6 +458,13 @@ const BookingConfirmDialog = ({
                   {lang === "it"
                     ? `${formatDepositEur(depositPerPersonEur, "it")} a persona × ${partySize} persone`
                     : `${formatDepositEur(depositPerPersonEur, "en")} per person × ${partySize} guests`}
+                </p>
+              )}
+              {partySize > 1 && (
+                <p className="mt-2 rounded-xl border border-amber-400/50 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
+                  {lang === "it"
+                    ? "L'importo qui sopra è quello dell'intero gruppo. Nel passo successivo indichi le altre persone e scegli se versare tu per tutti oppure solo la tua quota, lasciando che ciascuno paghi la propria: l'importo effettivamente addebitato dipende da quella scelta."
+                    : "The amount above covers the whole party. In the next step you list the other people and choose whether you pay for everyone or only your own share, letting each guest pay theirs: the amount actually charged follows that choice."}
                 </p>
               )}
               <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-200">

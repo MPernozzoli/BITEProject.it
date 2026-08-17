@@ -139,20 +139,33 @@ async function hasPriorActiveVoyageBookingForPayer(
 /**
  * Total already settled by one payer on a booking. Deposits are per-payer, so a guest paying
  * their own share never sees the lead's payment counted against their own balance.
+ *
+ * The lead is the one payer whose tag changes mid-flow: a payment made before their participant
+ * row exists (a party that paid straight from /bookings without naming guests first) is tagged
+ * `participant_id IS NULL`, while every later payment resolves onto their participant row. Both
+ * tags are the same human, so `includeUntagged` folds them together — without it the lead would
+ * be asked to pay the deposit a second time as soon as guests are configured. This mirrors
+ * expire_unpaid_voyage_booking_balance, which already treats
+ * `participant_id is null or participant_id = lead.id` as one payer.
  */
 async function paidDepositTotalEur(
   db: SupabaseClient,
   bookingRequestId: string,
   payerParticipantId: string | null,
+  options: { includeUntagged: boolean } = { includeUntagged: false },
 ): Promise<number> {
   let query = db
     .from("voyage_booking_deposits")
     .select("amount_cents")
     .eq("booking_request_id", bookingRequestId)
     .eq("status", "paid");
-  query = payerParticipantId
-    ? query.eq("participant_id", payerParticipantId)
-    : query.is("participant_id", null);
+  if (!payerParticipantId) {
+    query = query.is("participant_id", null);
+  } else if (options.includeUntagged) {
+    query = query.or(`participant_id.is.null,participant_id.eq.${payerParticipantId}`);
+  } else {
+    query = query.eq("participant_id", payerParticipantId);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -367,7 +380,9 @@ export async function resolveDepositPayer(
     if (stampError) throw new Error(stampError.message);
   }
 
-  const alreadyPaidEur = await paidDepositTotalEur(db, bookingRequestId, payerParticipantId);
+  const alreadyPaidEur = await paidDepositTotalEur(db, bookingRequestId, payerParticipantId, {
+    includeUntagged: isLead,
+  });
   const phase: PaymentPhase = alreadyPaidEur < depositTarget ? "deposit" : "balance";
   const targetEur = phase === "deposit" ? depositTarget : dueEur;
   const amountEur = Math.round((targetEur - alreadyPaidEur + Number.EPSILON) * 100) / 100;
