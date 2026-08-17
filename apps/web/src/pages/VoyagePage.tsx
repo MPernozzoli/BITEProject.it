@@ -31,7 +31,7 @@ import {
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
 import { applySeo, withLang, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
-import { isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
+import { formatBookingWindow, isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
 import {
   perPersonDepositEur,
   legDepositEur,
@@ -97,6 +97,8 @@ const VoyagePage = () => {
   const referencedLegId = useMemo(() => new URLSearchParams(location.search).get("leg"), [location.search]);
   const { lang } = useI18n();
   const locale = lang === "it" ? "it-IT" : "en-US";
+  /** Le finestre di tratta usano lo stesso locale del resto del booking (giorno–giorno mese h HH:MM). */
+  const bookingWindowLocale = lang === "it" ? "it-IT" : "en-GB";
   const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -330,6 +332,23 @@ const VoyagePage = () => {
     });
     return map;
   }, [waypoints]);
+  /**
+   * Le finestre di una tappa vivono sulle tratte adiacenti: la tratta entrante
+   * finisce lì (finestra di arrivo), quella uscente parte da lì (finestra di
+   * partenza). Le tratte arrivano già ordinate per sort_order, quindi in caso di
+   * waypoint toccato più volte vince la prima.
+   */
+  const stopLegsByWaypointId = useMemo(() => {
+    const map: Record<string, { inbound?: BookableLegAvailability; outbound?: BookableLegAvailability }> = {};
+    bookingLegs.forEach((leg) => {
+      const arrival = (map[leg.to_waypoint_id] ??= {});
+      if (!arrival.inbound) arrival.inbound = leg;
+      const departure = (map[leg.from_waypoint_id] ??= {});
+      if (!departure.outbound) departure.outbound = leg;
+    });
+    return map;
+  }, [bookingLegs]);
+
   const legWaypointLabel = (waypointId: string, fallback: string) => {
     const waypoint = waypointById[waypointId];
     if (!waypoint) return fallback;
@@ -701,10 +720,36 @@ const VoyagePage = () => {
                     : `${lang === "it" ? "Sosta" : "Stop"} ${stopNumber}`;
                 const BookendIcon = isDeparture ? Navigation : MapPinned;
 
-                const arrivalLabel = formatIsoDate(waypoint.date_end, locale);
-                const departureLabel = formatIsoDate(waypoint.date_start, locale);
+                const stopLegs = stopLegsByWaypointId[waypoint.id];
+                const arrivalWindowLabel = formatBookingWindow(
+                  stopLegs?.inbound?.ends_at_window_start,
+                  stopLegs?.inbound?.ends_at_window_end,
+                  bookingWindowLocale
+                );
+                const departureWindowLabel = formatBookingWindow(
+                  stopLegs?.outbound?.starts_at_window_start,
+                  stopLegs?.outbound?.starts_at_window_end,
+                  bookingWindowLocale
+                );
+                // La finestra pianificata è più informativa della data secca: quando c'è, la sostituisce.
+                const arrivalRow = arrivalWindowLabel
+                  ? { label: lang === "it" ? "Finestra di arrivo" : "Arrival window", value: arrivalWindowLabel }
+                  : (() => {
+                      const arrivalLabel = formatIsoDate(waypoint.date_end, locale);
+                      return arrivalLabel
+                        ? { label: lang === "it" ? "Arrivo previsto" : "Expected arrival", value: arrivalLabel }
+                        : null;
+                    })();
+                const departureRow = departureWindowLabel
+                  ? { label: lang === "it" ? "Finestra di partenza" : "Departure window", value: departureWindowLabel }
+                  : (() => {
+                      const departureLabel = formatIsoDate(waypoint.date_start, locale);
+                      return departureLabel
+                        ? { label: lang === "it" ? "Ripartenza prevista" : "Expected departure", value: departureLabel }
+                        : null;
+                    })();
                 const stopDurationLabel = formatWaypointStopDuration(waypoint, lang);
-                const hasStayInfo = Boolean(arrivalLabel || departureLabel || stopDurationLabel);
+                const hasStayInfo = Boolean(arrivalRow || departureRow || stopDurationLabel);
 
                 const heroMedia = mediaItems.find((item) => item.kind === "image") ?? mediaItems[0];
                 const extraMedia = heroMedia ? mediaItems.filter((item) => item !== heroMedia) : [];
@@ -787,25 +832,21 @@ const VoyagePage = () => {
                               {lang === "it" ? "Info pratiche" : "Practical info"}
                             </p>
                             <dl className="m-0 space-y-3.5">
-                              {arrivalLabel && (
+                              {arrivalRow && (
                                 <div className="flex items-start gap-2.5">
                                   <CalendarCheck size={14} className="mt-0.5 shrink-0 text-accent" />
                                   <div>
-                                    <dt className="text-[11px] text-muted-foreground">
-                                      {lang === "it" ? "Arrivo previsto" : "Expected arrival"}
-                                    </dt>
-                                    <dd className="m-0 text-sm text-foreground">{arrivalLabel}</dd>
+                                    <dt className="text-[11px] text-muted-foreground">{arrivalRow.label}</dt>
+                                    <dd className="m-0 text-sm text-foreground">{arrivalRow.value}</dd>
                                   </div>
                                 </div>
                               )}
-                              {departureLabel && (
+                              {departureRow && (
                                 <div className="flex items-start gap-2.5">
                                   <Ship size={14} className="mt-0.5 shrink-0 text-accent" />
                                   <div>
-                                    <dt className="text-[11px] text-muted-foreground">
-                                      {lang === "it" ? "Ripartenza prevista" : "Expected departure"}
-                                    </dt>
-                                    <dd className="m-0 text-sm text-foreground">{departureLabel}</dd>
+                                    <dt className="text-[11px] text-muted-foreground">{departureRow.label}</dt>
+                                    <dd className="m-0 text-sm text-foreground">{departureRow.value}</dd>
                                   </div>
                                 </div>
                               )}
