@@ -1232,14 +1232,80 @@
   }
 
   .article-rich-body blockquote {
-    border-left-width: 0;
-    border-radius: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.58);
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(249, 246, 241, 0.42));
+    position: relative;
+    margin: 3.25rem 0;
+    padding: 1.65rem 2rem 1.65rem 2.55rem;
+    border: 0;
+    border-left: 3px solid hsl(var(--accent) / 0.72);
+    border-radius: 0 1.1rem 1.1rem 0;
+    background: linear-gradient(135deg, rgba(247, 249, 247, 0.92), rgba(235, 241, 239, 0.68));
     box-shadow:
-      0 16px 40px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.56);
-    padding: 1.25rem 1.5rem;
+      0 14px 34px rgba(15, 23, 42, 0.07),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+    color: hsl(var(--foreground));
+    font-family: var(--font-serif);
+    font-size: clamp(1.28rem, 2.1vw, 1.65rem);
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1.45;
+    letter-spacing: -0.018em;
+    text-wrap: pretty;
+  }
+
+  .article-rich-body blockquote::before {
+    position: absolute;
+    top: -0.12rem;
+    left: 0.75rem;
+    content: "“";
+    color: hsl(var(--accent) / 0.38);
+    font-family: var(--font-serif);
+    font-size: 4.25rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .article-rich-body blockquote > :first-child {
+    margin-top: 0;
+  }
+
+  .article-rich-body blockquote > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* Tailwind preflight azzera i marker: qui li rendiamo espliciti per editor,
+     anteprima e reader pubblico, che condividono .article-rich-body. */
+  .article-rich-body ul,
+  .article-rich-body ol {
+    margin: 1.5rem 0;
+    padding-inline-start: 1.7rem;
+  }
+
+  .article-rich-body ul {
+    list-style-type: disc;
+  }
+
+  .article-rich-body ol {
+    list-style-type: decimal;
+  }
+
+  .article-rich-body li {
+    display: list-item;
+    padding-inline-start: 0.3rem;
+  }
+
+  .article-rich-body li::marker {
+    color: hsl(var(--accent));
+    font-weight: 700;
+  }
+
+  .article-rich-body li > p {
+    margin: 0.35rem 0;
+  }
+
+  .article-rich-body li > ul,
+  .article-rich-body li > ol {
+    margin: 0.55rem 0;
   }
 
   .article-rich-body hr {
