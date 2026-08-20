@@ -6,6 +6,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
+import { TableKit } from "@tiptap/extension-table";
 import { MediaFigure } from "@/lib/article-media";
 import { ArticleMapSceneAnchor } from "@/lib/article-map-anchor";
 
@@ -20,4 +21,5 @@ export const articleContentExtensions = [
   Color,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Underline,
+  TableKit,
 ];

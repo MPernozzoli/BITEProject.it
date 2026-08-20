@@ -133,6 +133,15 @@ function paragraphFrom(tokens: Token[] | undefined): JSONContent[] {
   return blocks;
 }
 
+/** Una cella TipTap deve sempre contenere almeno un paragrafo, anche se vuota. */
+function tableCellFrom(cell: Tokens.TableCell, type: "tableHeader" | "tableCell"): JSONContent {
+  const { inline } = splitInline(inlineTokensToNodes(cell.tokens));
+  return {
+    type,
+    content: [{ type: "paragraph", ...(inline.length > 0 ? { content: inline } : {}) }],
+  };
+}
+
 function blockTokensToNodes(tokens: Token[]): JSONContent[] {
   const out: JSONContent[] = [];
 
@@ -185,6 +194,19 @@ function blockTokensToNodes(tokens: Token[]): JSONContent[] {
             ? { type: "orderedList", attrs: { start: Number(list.start) || 1 }, content: items }
             : { type: "bulletList", content: items },
         );
+        break;
+      }
+      case "table": {
+        const table = token as Tokens.Table;
+        const header = {
+          type: "tableRow",
+          content: table.header.map((cell) => tableCellFrom(cell, "tableHeader")),
+        };
+        const rows = table.rows.map((row) => ({
+          type: "tableRow",
+          content: row.map((cell) => tableCellFrom(cell, "tableCell")),
+        }));
+        out.push({ type: "table", content: [header, ...rows] });
         break;
       }
       case "html":
@@ -275,6 +297,34 @@ function inlineToMarkdown(nodes: JSONContent[] | undefined): string {
     .join("");
 }
 
+function tableCellToMarkdown(cell: JSONContent): string {
+  // Markdown non gestisce blocchi dentro una cella: conserviamo i paragrafi
+  // come line-break HTML, che Marked legge senza spezzare la tabella.
+  return (cell.content ?? [])
+    .map((child) => blockToMarkdown(child, 0))
+    .filter(Boolean)
+    .join("<br>")
+    .replace(/\|/g, "\\|");
+}
+
+function tableToMarkdown(table: JSONContent): string {
+  const rows = table.content ?? [];
+  if (rows.length === 0) return "";
+
+  const headerCells = rows[0].content ?? [];
+  if (headerCells.length === 0) return "";
+  const header = `| ${headerCells.map(tableCellToMarkdown).join(" | ")} |`;
+  const divider = `| ${headerCells.map(() => "---").join(" | ")} |`;
+  const body = rows.slice(1).map((row) => {
+    const cells = row.content ?? [];
+    // Il parser Markdown richiede lo stesso numero di colonne: le celle
+    // mancanti diventano vuote, quelle extra restano rappresentate.
+    const values = headerCells.map((_, index) => (cells[index] ? tableCellToMarkdown(cells[index]) : ""));
+    return `| ${values.join(" | ")} |`;
+  });
+  return [header, divider, ...body].join("\n");
+}
+
 function blockToMarkdown(node: JSONContent, depth: number): string {
   switch (node.type) {
     case "paragraph":
@@ -297,6 +347,8 @@ function blockToMarkdown(node: JSONContent, depth: number): string {
     }
     case "horizontalRule":
       return "---";
+    case "table":
+      return tableToMarkdown(node);
     case "bulletList":
     case "orderedList": {
       const ordered = node.type === "orderedList";

@@ -8,6 +8,7 @@ import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import { TableKit } from "@tiptap/extension-table";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { MediaFigure, type MediaFigureAttrs } from "@/lib/article-media";
@@ -17,7 +18,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Quote, Minus, Undo, Redo,
   Image as ImageIcon, Link as LinkIcon, Youtube as YoutubeIcon,
-  Type, Heading1, Heading2, Heading3, Palette, Code, MapPinned,
+  Type, Heading1, Heading2, Heading3, Palette, Code, MapPinned, Table, Rows3, Columns3, Trash2,
 } from "lucide-react";
 
 interface RichTextEditorProps {
@@ -105,6 +106,7 @@ const RichTextEditor = ({
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Underline,
+      TableKit.configure({ table: { resizable: true } }),
       Placeholder.configure({ placeholder }),
     ],
     content: normalizedContent,
@@ -439,6 +441,22 @@ const RichTextEditor = ({
           </MenuButton>
           <MenuButton onClick={() => editor.chain().focus().setHorizontalRule().run()} title="Divider">
             <Minus size={16} />
+          </MenuButton>
+
+          <div className="mx-1 w-px bg-border" />
+
+          {/* Tables: the controls that alter a table are available only while the cursor is in one. */}
+          <MenuButton onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} title="Insert table (3 columns, 3 rows)">
+            <Table size={16} />
+          </MenuButton>
+          <MenuButton onClick={() => editor.chain().focus().addRowAfter().run()} disabled={!editor.isActive("table")} title="Add table row">
+            <Rows3 size={16} />
+          </MenuButton>
+          <MenuButton onClick={() => editor.chain().focus().addColumnAfter().run()} disabled={!editor.isActive("table")} title="Add table column">
+            <Columns3 size={16} />
+          </MenuButton>
+          <MenuButton onClick={() => editor.chain().focus().deleteTable().run()} disabled={!editor.isActive("table")} title="Delete table">
+            <Trash2 size={16} />
           </MenuButton>
 
           <div className="mx-1 w-px bg-border" />

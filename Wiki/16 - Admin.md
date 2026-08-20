@@ -42,7 +42,7 @@ La PWA admin monta anche `AdminMobileNavigation` dal layout globale per utenti a
 - Coda upload media: `apps/web/src/lib/admin-media-upload-queue.ts`
 
 ## Editor articoli
-- Basato su **TipTap 3** ([[02 - Stack Tecnologico]]): heading, image, link, youtube, text-align, color, underline, placeholder.
+- Basato su **TipTap 3** ([[02 - Stack Tecnologico]]): heading, image, link, youtube, text-align, color, underline, placeholder, liste e tabelle. La toolbar inserisce tabelle 3×3 con intestazione; a cursore dentro una tabella permette di aggiungere righe/colonne, ridimensionare le colonne e cancellare la tabella.
 - Il pulsante **Anteprima** apre una vista full-screen non persistente che costruisce l'articolo dallo stato corrente dell'editor e riusa `ArticleReader.tsx`: cover/focal point, corpo TipTap, ancore e scene mini-mappa, rotta/waypoint, media di viaggio, autori, storia e tag seguono la stessa struttura della pagina pubblica. Se il viaggio/segmento collegato ha tratti ancora selezionabili, anche la CTA **Partecipa** della minimappa è visibile; like/commenti e analytics restano disattivati.
 - Sanitizzazione: `apps/web/src/lib/sanitize-rich-html.ts` (dompurify).
 - Traduzione IT/EN: `translate-editor-content` ([[09 - Edge Functions]]) + `apps/web/src/lib/translate-editor-content.ts`; la function chiama OpenAI Responses API server-side con `OPENAI_API_KEY` nei secret Supabase. Gap traduzioni evidenziati da `article-translation-gaps.ts`.

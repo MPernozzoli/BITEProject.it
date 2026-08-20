@@ -19,6 +19,13 @@ describe("markdownToTiptap", () => {
     expect(doc.content?.[2]?.content).toHaveLength(2);
   });
 
+  it("converte una tabella Markdown in nodi TipTap semantici", () => {
+    const doc = markdownToTiptap("| Porto | Miglia |\n| --- | --- |\n| Bonifacio | 42 |");
+    expect(doc.content?.[0]).toMatchObject({ type: "table" });
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]).toMatchObject({ type: "tableHeader" });
+    expect(doc.content?.[0]?.content?.[1]?.content?.[0]).toMatchObject({ type: "tableCell" });
+  });
+
   it("limita i titoli ai livelli ammessi dall'editor", () => {
     const doc = markdownToTiptap("##### Troppo profondo");
     expect(doc.content?.[0]?.attrs?.level).toBe(3);
@@ -81,6 +88,7 @@ describe("round-trip", () => {
     ["titolo e paragrafo", "# Rotta verso sud\n\nSiamo partiti all'alba."],
     ["lista puntata", "- uno\n- due\n- tre"],
     ["lista numerata", "1. primo\n2. secondo"],
+    ["tabella", "| Porto | Miglia |\n| --- | --- |\n| Bonifacio | 42 |\n| Capri | 68 |"],
     ["citazione", "> Il mare non ha memoria."],
     ["blocco di codice", "```ts\nconst x = 1;\n```"],
     ["separatore", "Prima\n\n---\n\nDopo"],
