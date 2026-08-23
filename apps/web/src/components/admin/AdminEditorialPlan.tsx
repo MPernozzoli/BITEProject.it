@@ -400,13 +400,13 @@ export default function AdminEditorialPlan() {
     if (!session?.user || channels.length === 0) return;
 
     const socialChannels = channels.filter((c) => c.code !== "site");
-    if (socialChannels.length === 0 && calendarChannelFilter !== "site") return;
+    if (socialChannels.length === 0 && kpiChannelCode !== "site") return;
 
     // When a specific channel is selected, only load that channel's metrics
-    const visibleChannels = calendarChannelFilter === "all"
+    const visibleChannels = kpiChannelCode === "all"
       ? socialChannels
-      : socialChannels.filter((c) => c.code === calendarChannelFilter);
-    if (visibleChannels.length === 0 && calendarChannelFilter !== "site") return;
+      : socialChannels.filter((c) => c.code === kpiChannelCode);
+    if (visibleChannels.length === 0 && kpiChannelCode !== "site") return;
 
     const channelIds = visibleChannels.map((c) => c.id);
     const monthFromStr = format(startOfMonth(cursorMonth), "yyyy-MM-dd");
@@ -425,7 +425,7 @@ export default function AdminEditorialPlan() {
       published_articles: number;
     } | null = null;
 
-    const showSite = calendarChannelFilter === "all" || calendarChannelFilter === "site";
+    const showSite = kpiChannelCode === "all" || kpiChannelCode === "site";
     if (showSite) {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -606,7 +606,7 @@ export default function AdminEditorialPlan() {
       setFlashFields(newFlash);
       setTimeout(() => setFlashFields(new Set()), 1200);
     }
-  }, [session?.user, channels, cursorMonth, calendarChannelFilter]);
+  }, [session?.user, channels, cursorMonth, kpiChannelCode]);
 
   /** Trigger background metrics sync (fire-and-forget with 20min cooldown). */
   const triggerMetricsSync = useCallback(async (channelId?: string) => {
@@ -943,7 +943,7 @@ export default function AdminEditorialPlan() {
           </div>
 
           {/* Site KPIs when site channel is selected or all */}
-          {(calendarChannelFilter === "all" || calendarChannelFilter === "site") && (
+          {(kpiChannelCode === "all" || kpiChannelCode === "site") && (
             <div className="space-y-3">
               {(() => {
                 const m = channelMetrics["site"];
@@ -984,7 +984,7 @@ export default function AdminEditorialPlan() {
           <div className="space-y-3">
             {channels
               .filter((ch) => ch.code !== "site")
-              .filter((ch) => calendarChannelFilter === "all" || ch.code === calendarChannelFilter)
+              .filter((ch) => kpiChannelCode === "all" || ch.code === kpiChannelCode)
               .map((ch) => {
                 const m = channelMetrics[ch.id];
                 const isIG = ch.code === "instagram_bite" || ch.code === "instagram_dogs";
