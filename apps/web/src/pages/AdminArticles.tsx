@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Clock, Edit, Eye, FileText, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, Edit, Eye, FileText, Plus, Send, Trash2, type LucideIcon } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,10 +28,26 @@ interface Article {
   scheduled_at: string | null;
   created_at: string;
   updated_at: string;
+  story_id: string | null;
 }
 
+interface StorySummary {
+  id: string;
+  title_en: string | null;
+  title_it: string | null;
+}
+
+type ArticleTabKey = "all" | "draft" | "scheduled" | "published" | "by_story";
+
+const ARTICLE_TABS: { key: ArticleTabKey; label: string; icon: LucideIcon }[] = [
+  { key: "all", label: "Tutti", icon: FileText },
+  { key: "draft", label: "Bozze", icon: FileText },
+  { key: "scheduled", label: "Programmati", icon: Clock },
+  { key: "published", label: "Pubblicati", icon: Send },
+  { key: "by_story", label: "Per Storia", icon: BookOpen },
+];
+
 type ArticleListFilters = {
-  status: "all" | "draft" | "scheduled" | "published";
   category: string;
   editorialType: "all" | "pillar" | "support" | "utility_reflection" | "unset";
   dateFilterMode: "created" | "updated" | "published" | "scheduled";
@@ -45,7 +61,6 @@ type ArticleListSort = {
 };
 
 const emptyArticleListFilters: ArticleListFilters = {
-  status: "all",
   category: "all",
   editorialType: "all",
   dateFilterMode: "updated",
@@ -97,12 +112,70 @@ const statusLabel = (status: string) => {
   }
 };
 
+const ArticleRow = ({ article, onDelete }: { article: Article; onDelete: (id: string, title: string) => void }) => (
+  <article className="glass-panel-soft rounded-[26px] p-5">
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+            {statusIcon(article.status)}
+            {statusLabel(article.status)}
+          </span>
+          <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+            {article.category}
+          </span>
+          {article.editorial_type && (
+            <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-accent/90">
+              {article.editorial_type === "utility_reflection" ? "Utility" : article.editorial_type}
+            </span>
+          )}
+        </div>
+        <h3 className="editorial-heading text-2xl leading-tight mb-2">{article.title_en || article.title_it || "Untitled"}</h3>
+        <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+          Aggiornato il {format(new Date(article.updated_at), "d MMM yyyy, HH:mm")}
+          {article.scheduled_at && article.status === "scheduled" && (
+            <> · programmato per {format(new Date(article.scheduled_at), "d MMM yyyy, HH:mm")}</>
+          )}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {article.status === "published" && (
+          <Link
+            to={`/logbook/${article.slug}`}
+            className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            title="View"
+          >
+            <Eye size={16} />
+          </Link>
+        )}
+        <Link
+          to={`/admin/article/${article.id}`}
+          className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          title="Edit"
+        >
+          <Edit size={16} />
+        </Link>
+        <button
+          onClick={() => onDelete(article.id, article.title_en || article.title_it || "Untitled")}
+          className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+          title="Delete"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
+  </article>
+);
+
 const AdminArticles = () => {
   const { session } = useAuth();
   const navigate = useNavigate();
   const userId = session?.user?.id ?? null;
   const [articles, setArticles] = useState<Article[]>([]);
+  const [stories, setStories] = useState<StorySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ArticleTabKey>("all");
   const [filters, setFilters] = useState<ArticleListFilters>(emptyArticleListFilters);
   const [sort, setSort] = useState<ArticleListSort>(defaultArticleListSort);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
@@ -111,14 +184,18 @@ const AdminArticles = () => {
   const fetchArticles = useCallback(async () => {
     if (!userId && !isAdminDevBypassEnabled()) return;
     setLoading(true);
-    const { data, error } = await supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false });
-    if (error && isAuthFailureError(error)) {
+    const [articlesRes, storiesRes] = await Promise.all([
+      supabase.from("logbook_articles").select("*").order("updated_at", { ascending: false }),
+      supabase.from("stories").select("id, title_en, title_it").order("title_en"),
+    ]);
+    if (articlesRes.error && isAuthFailureError(articlesRes.error)) {
       await supabase.auth.signOut();
       navigate("/login", { state: { from: "/admin/articles" } });
       setLoading(false);
       return;
     }
-    if (data) setArticles(data as unknown as Article[]);
+    if (articlesRes.data) setArticles(articlesRes.data as unknown as Article[]);
+    if (storiesRes.data) setStories(storiesRes.data as unknown as StorySummary[]);
     setLoading(false);
   }, [navigate, userId]);
 
@@ -141,8 +218,16 @@ const AdminArticles = () => {
     return [...next].sort((a, b) => a.localeCompare(b));
   }, [articles]);
 
+  const storyTitleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    stories.forEach((s) => {
+      map.set(s.id, s.title_en || s.title_it || "Untitled Story");
+    });
+    return map;
+  }, [stories]);
+
   const hasActiveFilters =
-    filters.status !== "all" ||
+    activeTab !== "all" ||
     filters.category !== "all" ||
     filters.editorialType !== "all" ||
     Boolean(filters.dateFrom) ||
@@ -151,7 +236,9 @@ const AdminArticles = () => {
   const filteredArticles = useMemo(
     () =>
       articles.filter((article) => {
-        if (filters.status !== "all" && article.status !== filters.status) return false;
+        if (activeTab === "draft" && article.status !== "draft") return false;
+        if (activeTab === "scheduled" && article.status !== "scheduled") return false;
+        if (activeTab === "published" && article.status !== "published") return false;
         if (filters.category !== "all" && article.category !== filters.category) return false;
         if (filters.editorialType === "unset" && article.editorial_type) return false;
         if (filters.editorialType !== "all" && filters.editorialType !== "unset" && article.editorial_type !== filters.editorialType)
@@ -159,7 +246,7 @@ const AdminArticles = () => {
         const d = articleFilterDate(article, filters.dateFilterMode);
         return isDateWithinRange(d, filters.dateFrom, filters.dateTo);
       }),
-    [articles, filters]
+    [articles, filters, activeTab]
   );
 
   const visibleArticles = useMemo(() => {
@@ -186,6 +273,21 @@ const AdminArticles = () => {
       return comparison * mult;
     });
   }, [filteredArticles, sort]);
+
+  const articlesByStory = useMemo(() => {
+    const groups = new Map<string, Article[]>();
+    const unassigned: Article[] = [];
+    visibleArticles.forEach((article) => {
+      if (article.story_id) {
+        const list = groups.get(article.story_id) || [];
+        list.push(article);
+        groups.set(article.story_id, list);
+      } else {
+        unassigned.push(article);
+      }
+    });
+    return { groups, unassigned };
+  }, [visibleArticles]);
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
@@ -214,6 +316,38 @@ const AdminArticles = () => {
         </section>
 
         <section className="glass-panel rounded-[34px] p-5 md:p-6 lg:p-8 space-y-6">
+          <nav className="glass-panel flex flex-wrap gap-1.5 rounded-[26px] p-1.5">
+            {ARTICLE_TABS.map((tab) => {
+              const active = activeTab === tab.key;
+              const badge = tab.key === "draft" ? articles.filter((a) => a.status === "draft").length
+                : tab.key === "scheduled" ? articles.filter((a) => a.status === "scheduled").length
+                : tab.key === "published" ? articles.filter((a) => a.status === "published").length
+                : 0;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`relative inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm font-medium transition-colors ${
+                    active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <tab.icon size={16} />
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  {badge > 0 && (
+                    <span
+                      className={`ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
+                        active ? "bg-background/25 text-background" : "bg-accent text-accent-foreground"
+                      }`}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
           <AdminCollapsibleListFilters
             title="Filtri articoli"
             expanded={filtersExpanded}
@@ -226,19 +360,6 @@ const AdminArticles = () => {
             onToggleAdvanced={() => setFiltersAdvanced((open) => !open)}
             minimalRow={
               <>
-                <div className="min-w-[6.5rem] flex-1">
-                  <label className={adminFilterLabelClass}>Stato</label>
-                  <select
-                    value={filters.status}
-                    onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value as ArticleListFilters["status"] }))}
-                    className={adminFilterSelectClass}
-                  >
-                    <option value="all">Tutti</option>
-                    <option value="draft">Bozza</option>
-                    <option value="scheduled">Programmato</option>
-                    <option value="published">Pubblicato</option>
-                  </select>
-                </div>
                 <div className="min-w-[6.5rem] flex-1">
                   <label className={adminFilterLabelClass}>Categoria</label>
                   <select
@@ -357,68 +478,47 @@ const AdminArticles = () => {
               <p className="text-muted-foreground">Nessun articolo corrisponde ai filtri.</p>
               <button
                 type="button"
-                onClick={() => setFilters(emptyArticleListFilters)}
+                onClick={() => { setFilters(emptyArticleListFilters); setActiveTab("all"); }}
                 className="text-sm font-sans text-accent hover:text-foreground transition-colors"
               >
                 Reimposta filtri
               </button>
             </div>
+          ) : activeTab === "by_story" ? (
+            <div className="space-y-6">
+              {Array.from(articlesByStory.groups.entries()).map(([storyId, storyArticles]) => (
+                <div key={storyId} className="space-y-3">
+                  <div className="flex items-center gap-3 px-1">
+                    <BookOpen size={16} className="text-accent shrink-0" />
+                    <h3 className="editorial-heading text-xl">{storyTitleMap.get(storyId) || "Storia sconosciuta"}</h3>
+                    <span className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                      {storyArticles.length}
+                    </span>
+                  </div>
+                  {storyArticles.map((article) => (
+                    <ArticleRow key={article.id} article={article} onDelete={deleteArticle} />
+                  ))}
+                </div>
+              ))}
+              {articlesByStory.unassigned.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 px-1">
+                    <FileText size={16} className="text-muted-foreground shrink-0" />
+                    <h3 className="editorial-heading text-xl text-muted-foreground">Senza storia</h3>
+                    <span className="glass-chip inline-flex px-2.5 py-1 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                      {articlesByStory.unassigned.length}
+                    </span>
+                  </div>
+                  {articlesByStory.unassigned.map((article) => (
+                    <ArticleRow key={article.id} article={article} onDelete={deleteArticle} />
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-3">
               {visibleArticles.map((article) => (
-                <article key={article.id} className="glass-panel-soft rounded-[26px] p-5">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
-                        <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                          {statusIcon(article.status)}
-                          {statusLabel(article.status)}
-                        </span>
-                        <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                          {article.category}
-                        </span>
-                        {article.editorial_type && (
-                          <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-accent/90">
-                            {article.editorial_type === "utility_reflection" ? "Utility" : article.editorial_type}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="editorial-heading text-2xl leading-tight mb-2">{article.title_en || article.title_it || "Untitled"}</h3>
-                      <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-                        Aggiornato il {format(new Date(article.updated_at), "d MMM yyyy, HH:mm")}
-                        {article.scheduled_at && article.status === "scheduled" && (
-                          <> · programmato per {format(new Date(article.scheduled_at), "d MMM yyyy, HH:mm")}</>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {article.status === "published" && (
-                        <Link
-                          to={`/logbook/${article.slug}`}
-                          className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                          title="View"
-                        >
-                          <Eye size={16} />
-                        </Link>
-                      )}
-                      <Link
-                        to={`/admin/article/${article.id}`}
-                        className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                        title="Edit"
-                      >
-                        <Edit size={16} />
-                      </Link>
-                      <button
-                        onClick={() => deleteArticle(article.id, article.title_en || article.title_it || "Untitled")}
-                        className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </article>
+                <ArticleRow key={article.id} article={article} onDelete={deleteArticle} />
               ))}
             </div>
           )}

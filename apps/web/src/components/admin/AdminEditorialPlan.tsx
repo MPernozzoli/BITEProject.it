@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { addDays, eachDayOfInterval, endOfWeek, format, formatDistanceToNow, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
-import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, LineChart, MessageSquare, Music2, Plus, RefreshCw, Settings2, TrendingUp, Youtube } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Globe, Instagram, MessageSquare, Music2, Plus, RefreshCw, Settings2, TrendingUp, Youtube } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -33,7 +33,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import AdminEditorialPlanSettingsDialog from "./AdminEditorialPlanSettingsDialog";
 import AdminEditorialPlanSlotDialog from "./AdminEditorialPlanSlotDialog";
-import AdminArticleInsightsDialog from "./AdminArticleInsightsDialog";
+import {
+  formatCount,
+  formatDwell,
+  langLabel,
+  type ArticleViewInsightRow,
+} from "@/lib/article-insights";
 
 type ArticleLite = ArticleForPlan & { title_en: string; title_it: string };
 type ChannelRow = Database["public"]["Tables"]["editorial_plan_channels"]["Row"];
@@ -123,7 +128,6 @@ export default function AdminEditorialPlan() {
   /** Filtro calendario: "all" mostra tutti, un codice canale mostra solo quello. */
   const [calendarChannelFilter, setCalendarChannelFilter] = useState<EditorialChannelCode | "all">("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [insightsOpen, setInsightsOpen] = useState(false);
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<SlotForPlan | null>(null);
 
@@ -135,6 +139,8 @@ export default function AdminEditorialPlan() {
 
   /** Channel metrics from editorial_channel_metrics + aggregated post insights. */
   const [channelMetrics, setChannelMetrics] = useState<Record<string, ChannelMetrics>>({});
+  /** Article view insights for the performance preview. */
+  const [articleInsights, setArticleInsights] = useState<ArticleViewInsightRow[]>([]);
   /** Whether a background metrics sync is in progress. */
   const [metricsSyncing, setMetricsSyncing] = useState(false);
   /** Fields that just got new values (for flash animation). */
@@ -382,29 +388,90 @@ export default function AdminEditorialPlan() {
       setInsightsBySlotId({});
     }
 
+    // Fetch article view insights for the performance preview
+    const { data: artInsights } = await supabase.rpc("admin_article_view_insights");
+    setArticleInsights((artInsights ?? []) as unknown as ArticleViewInsightRow[]);
+
     setLoading(false);
   }, [session?.user, navigate]);
 
-  /** Load channel metrics (profile snapshots + aggregated post insights). */
+/** Load channel metrics (profile snapshots + aggregated post insights). */
   const loadChannelMetrics = useCallback(async () => {
     if (!session?.user || channels.length === 0) return;
 
     const socialChannels = channels.filter((c) => c.code !== "site");
-    if (socialChannels.length === 0) return;
+    if (socialChannels.length === 0 && calendarChannelFilter !== "site") return;
 
-    const channelIds = socialChannels.map((c) => c.id);
+    // When a specific channel is selected, only load that channel's metrics
+    const visibleChannels = calendarChannelFilter === "all"
+      ? socialChannels
+      : socialChannels.filter((c) => c.code === calendarChannelFilter);
+    if (visibleChannels.length === 0 && calendarChannelFilter !== "site") return;
+
+    const channelIds = visibleChannels.map((c) => c.id);
     const monthFromStr = format(startOfMonth(cursorMonth), "yyyy-MM-dd");
     const monthToStr = format(
       new Date(cursorMonth.getFullYear(), cursorMonth.getMonth() + 1, 0),
       "yyyy-MM-dd"
     );
 
+    // --- Site metrics (when site is visible) ---
+    let siteMetrics: {
+      total_subscribers: number;
+      new_subscribers_7d: number;
+      total_profiles: number;
+      new_profiles_7d: number;
+      total_articles: number;
+      published_articles: number;
+    } | null = null;
+
+    const showSite = calendarChannelFilter === "all" || calendarChannelFilter === "site";
+    if (showSite) {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [
+        { count: totalSubs },
+        { count: newSubs7d },
+        { count: totalProfiles },
+        { count: newProfiles7d },
+        { count: totalArticles },
+        { count: publishedArticles },
+      ] = await Promise.all([
+        supabase.from("newsletter_subscribers").select("*", { count: "exact", head: true }),
+        supabase
+          .from("newsletter_subscribers")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", sevenDaysAgo),
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", sevenDaysAgo),
+        supabase.from("articles").select("*", { count: "exact", head: true }),
+        supabase
+          .from("articles")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "published"),
+      ]);
+
+      siteMetrics = {
+        total_subscribers: totalSubs ?? 0,
+        new_subscribers_7d: newSubs7d ?? 0,
+        total_profiles: totalProfiles ?? 0,
+        new_profiles_7d: newProfiles7d ?? 0,
+        total_articles: totalArticles ?? 0,
+        published_articles: publishedArticles ?? 0,
+      };
+    }
+
     // 1. Fetch latest profile snapshot per channel
-    const { data: profileSnapshots } = await supabase
-      .from("editorial_channel_metrics")
-      .select("channel_id, followers, following, media_count, avg_engagement_rate, sample_post_count, captured_at")
-      .in("channel_id", channelIds)
-      .order("captured_at", { ascending: false });
+    const { data: profileSnapshots } = channelIds.length > 0
+      ? await supabase
+          .from("editorial_channel_metrics")
+          .select("channel_id, followers, following, media_count, avg_engagement_rate, sample_post_count, captured_at")
+          .in("channel_id", channelIds)
+          .order("captured_at", { ascending: false })
+      : { data: null };
 
     // Deduplicate: keep only latest per channel
     const latestProfile = new Map<string, typeof profileSnapshots extends (infer T)[] | null ? T : never>();
@@ -413,11 +480,13 @@ export default function AdminEditorialPlan() {
     }
 
     // 2. Fetch aggregated post insights for current month
-    const { data: targets } = await supabase
-      .from("editorial_publish_targets")
-      .select("id, channel_id")
-      .eq("status", "published")
-      .in("channel_id", channelIds);
+    const { data: targets } = channelIds.length > 0
+      ? await supabase
+          .from("editorial_publish_targets")
+          .select("id, channel_id")
+          .eq("status", "published")
+          .in("channel_id", channelIds)
+      : { data: null };
 
     const targetIdsByChannel = new Map<string, string[]>();
     for (const t of targets ?? []) {
@@ -465,7 +534,41 @@ export default function AdminEditorialPlan() {
     const newMetrics: Record<string, ChannelMetrics> = {};
     const newFlash = new Set<string>();
 
-    for (const ch of socialChannels) {
+    // Add site metrics first
+    if (siteMetrics) {
+      const prev = channelMetrics["site"];
+      const metrics: ChannelMetrics = {
+        channel_id: "site",
+        channel_code: "site",
+        followers: siteMetrics.total_subscribers,
+        following: null,
+        media_count: siteMetrics.published_articles,
+        avg_engagement_rate: null,
+        sample_post_count: null,
+        captured_at: new Date().toISOString(),
+        total_reach: 0,
+        total_views: 0,
+        total_likes: 0,
+        total_comments: 0,
+        total_saves: 0,
+        total_shares: 0,
+        total_impressions: 0,
+        total_posts: siteMetrics.published_articles,
+      };
+      newMetrics["site"] = metrics;
+
+      if (prev) {
+        const fields = ["followers", "media_count"] as const;
+        for (const f of fields) {
+          if (metrics[f] !== prev[f] && metrics[f] !== null && metrics[f] !== 0) {
+            newFlash.add(`site-${f}`);
+          }
+        }
+      }
+    }
+
+    // Add social channels
+    for (const ch of visibleChannels) {
       const profile = latestProfile.get(ch.id);
       const agg = aggregatedByChannel.get(ch.id) ?? {
         total_reach: 0, total_views: 0, total_likes: 0, total_comments: 0,
@@ -503,7 +606,7 @@ export default function AdminEditorialPlan() {
       setFlashFields(newFlash);
       setTimeout(() => setFlashFields(new Set()), 1200);
     }
-  }, [session?.user, channels, cursorMonth]);
+  }, [session?.user, channels, cursorMonth, calendarChannelFilter]);
 
   /** Trigger background metrics sync (fire-and-forget with 20min cooldown). */
   const triggerMetricsSync = useCallback(async (channelId?: string) => {
@@ -725,10 +828,6 @@ export default function AdminEditorialPlan() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setInsightsOpen(true)}>
-            <LineChart size={16} />
-            Insight articoli
-          </Button>
           <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => setSettingsOpen(true)}>
             <Settings2 size={16} />
             Impostazioni
@@ -843,10 +942,49 @@ export default function AdminEditorialPlan() {
             )}
           </div>
 
+          {/* Site KPIs when site channel is selected or all */}
+          {(calendarChannelFilter === "all" || calendarChannelFilter === "site") && (
+            <div className="space-y-3">
+              {(() => {
+                const m = channelMetrics["site"];
+                if (!m) return null;
+                return (
+                  <div key="site" className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Globe className="text-accent size-4" />
+                      <span className="text-xs font-sans font-medium">Sito / Newsletter</span>
+                      {m?.captured_at && (
+                        <span className="ml-auto text-[9px] text-muted-foreground">
+                          {formatDistanceToNow(new Date(m.captured_at), { addSuffix: true, locale: it })}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Profile metrics row */}
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                      <MetricCard label="Iscritti totali" value={m.followers ?? 0} flash={flashFields.has("site-followers")} />
+                      <MetricCard label="Nuovi (7gg)" value={m.total_views ?? 0} />
+                      <MetricCard label="Profili totali" value={m.total_impressions ?? 0} />
+                    </div>
+
+                    {/* Post metrics row */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <MetricCard label="Articoli" value={m.total_posts ?? 0} small />
+                      <MetricCard label="Pubblicati" value={m.media_count ?? 0} small />
+                      <MetricCard label="Nuovi profili (7gg)" value={m.total_likes ?? 0} small />
+                      <MetricCard label="Engagement" value={m.avg_engagement_rate != null ? `${(m.avg_engagement_rate * 100).toFixed(1)}%` : "–"} small />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Per-channel native metrics cards */}
           <div className="space-y-3">
             {channels
               .filter((ch) => ch.code !== "site")
+              .filter((ch) => calendarChannelFilter === "all" || ch.code === calendarChannelFilter)
               .map((ch) => {
                 const m = channelMetrics[ch.id];
                 const isIG = ch.code === "instagram_bite" || ch.code === "instagram_dogs";
@@ -954,6 +1092,58 @@ export default function AdminEditorialPlan() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Article insights preview */}
+      <div className="glass-panel-soft rounded-[26px] p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Performance articoli</p>
+          <Link
+            to="/admin/performance"
+            className="inline-flex items-center gap-1.5 text-xs font-sans text-accent hover:text-accent/80 transition-colors"
+          >
+            Vedi tutto
+            <ChevronRight size={12} />
+          </Link>
+        </div>
+        {(() => {
+          if (articleInsights.length === 0) {
+            return (
+              <p className="text-sm font-sans text-muted-foreground text-center py-4">
+                Nessun articolo pubblicato con metriche.
+              </p>
+            );
+          }
+          const totalViews = articleInsights.reduce((sum, r) => sum + (r.view_count || 0), 0);
+          const totalTracked = articleInsights.reduce((sum, r) => sum + (r.tracked_views || 0), 0);
+          const avgDwellMs = articleInsights.reduce((sum, r) => sum + ((r.avg_dwell_ms || 0) * (r.measured_dwell_count || 0)), 0);
+          const dwellCount = articleInsights.reduce((sum, r) => sum + (r.measured_dwell_count || 0), 0);
+          const totalLikes = articleInsights.reduce((sum, r) => sum + (r.like_count || 0), 0);
+          const topLang = articleInsights.reduce((sum, r) => sum + (r.views_it || 0), 0) >=
+            articleInsights.reduce((sum, r) => sum + (r.views_en || 0), 0) ? "it" : "en";
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1">Viste totali</p>
+                <p className="text-xl font-sans font-semibold tabular-nums text-foreground">{formatCount(totalViews)}</p>
+              </div>
+              <div className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1">Dwell medio</p>
+                <p className="text-xl font-sans font-semibold tabular-nums text-foreground">
+                  {formatDwell(dwellCount ? avgDwellMs / dwellCount : 0)}
+                </p>
+              </div>
+              <div className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1">Top lingua</p>
+                <p className="text-xl font-sans font-semibold tabular-nums text-foreground">{langLabel(topLang)}</p>
+              </div>
+              <div className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1">Mi piace</p>
+                <p className="text-xl font-sans font-semibold tabular-nums text-foreground">{formatCount(totalLikes)}</p>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1104,8 +1294,6 @@ export default function AdminEditorialPlan() {
           </div>
         </div>
       )}
-
-      <AdminArticleInsightsDialog open={insightsOpen} onOpenChange={setInsightsOpen} />
 
       <AdminEditorialPlanSettingsDialog
         open={settingsOpen}

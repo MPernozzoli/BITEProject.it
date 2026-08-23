@@ -309,7 +309,7 @@ const ArticleEditor = () => {
       return;
     }
     if (error || !data) {
-      navigate("/admin");
+      navigate("/admin/articles");
       return;
     }
     const rowStatus = data.status;
@@ -1432,7 +1432,7 @@ const ArticleEditor = () => {
         ? "Bozza salvata. Imposta data e slot dal Piano editoriale in dashboard."
         : "Draft saved. Set date and slot from the Editorial Plan in the dashboard."
     );
-    navigate("/admin");
+    navigate("/admin/articles");
   }, [navigate, saveArticle, lang]);
 
   const handlePublishChoicePublishNow = useCallback(() => {
@@ -2157,8 +2157,8 @@ const ArticleEditor = () => {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <button type="button" onClick={() => requestLeave("/admin")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft size={16} /> Torna alla Dashboard
+          <button type="button" onClick={() => requestLeave("/admin/articles")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft size={16} /> Torna agli Articoli
           </button>
           <div className="flex items-center gap-3">
             <button

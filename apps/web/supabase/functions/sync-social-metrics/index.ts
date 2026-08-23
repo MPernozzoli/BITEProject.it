@@ -52,6 +52,10 @@ function jsonResponse(data: Record<string, unknown>, status = 200): Response {
   })
 }
 
+function jsonErr(msg: string, status = 400): Response {
+  return jsonResponse({ error: msg }, status)
+}
+
 function authorizeCron(req: Request): boolean {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const cronSecret = Deno.env.get('SOCIAL_METRICS_CRON_SECRET')
@@ -63,9 +67,42 @@ function authorizeCron(req: Request): boolean {
   if (serviceRoleKey && bearer === serviceRoleKey) return true
   if (cronSecret) {
     const headerSecret = req.headers.get('x-cron-secret')
-    return Boolean(headerSecret && headerSecret === cronSecret)
+    if (headerSecret && headerSecret === cronSecret) return true
   }
   return false
+}
+
+/**
+ * Accept cron secret, service_role, or admin JWT.
+ * Returns true if authorized, false otherwise.
+ */
+async function authorizeRequest(req: Request, supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {
+  // Fast path: cron secret or service role key
+  if (authorizeCron(req)) return true
+
+  // Admin JWT path
+  const authHeader = req.headers.get('Authorization')
+  const token =
+    authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : ''
+  if (!token) return false
+
+  // Decode JWT to get user_id
+  const parts = token.split('.')
+  if (parts.length < 2) return false
+  try {
+    const payload = JSON.parse(atob(parts[1].replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=')))
+    const userId: string | null = payload?.sub ?? null
+    if (!userId) return false
+    if (payload?.role === 'service_role') return true
+
+    // Check admin role
+    const { createClient } = await import('npm:@supabase/supabase-js@2')
+    const client = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+    const { data: isAdmin } = await client.rpc('has_role', { _user_id: userId, _role: 'admin' })
+    return Boolean(isAdmin)
+  } catch {
+    return false
+  }
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -395,14 +432,15 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
-  if (!authorizeCron(req)) {
-    return jsonResponse({ error: 'Unauthorized' }, 401)
-  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 500)
+  }
+
+  if (!(await authorizeRequest(req, supabaseUrl, serviceRoleKey))) {
+    return jsonResponse({ error: 'Unauthorized' }, 401)
   }
 
   // Parse body
