@@ -23,6 +23,8 @@ import {
   ChevronDown,
   AlertTriangle,
   ChevronRight,
+  BarChart3,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { isAuthFailureError } from "@/lib/supabase-auth";
@@ -212,6 +214,8 @@ const AdminDashboard = () => {
       { to: "/admin/community", label: "Community", eyebrow: "Crew", description: "Prezzi, ruoli, live e rinnovi", icon: UsersRound, count: null },
       { to: "/admin/newsletter", label: "Newsletter", eyebrow: "Audience", description: "Campagne, liste e automazioni", icon: Mail, count: null },
       { to: "/admin/badges", label: "Badge", eyebrow: "Community", description: "Reward e profili collegati", icon: Award, count: null },
+      { to: "/admin/content-notes", label: "Content Notes", eyebrow: "Backlog", description: "Idee, appunti e bozze non assegnate", icon: ClipboardList, count: null },
+      { to: "/admin/performance", label: "Performance", eyebrow: "Analytics", description: "Punteggi 5 punti articoli pubblicati", icon: BarChart3, count: null },
     ],
     [articles.length, scheduledCount, stories.length, voyagesCount]
   );

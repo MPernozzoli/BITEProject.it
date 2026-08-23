@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { addDays, eachDayOfInterval, endOfWeek, format, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, eachDayOfInterval, endOfWeek, format, formatDistanceToNow, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { it } from "date-fns/locale";
-import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, LineChart, Music2, Plus, Settings2, TrendingUp, Youtube } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, Dog, Eye, Instagram, LineChart, MessageSquare, Music2, Plus, RefreshCw, Settings2, TrendingUp, Youtube } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ import {
   type WeeklyTemplate,
 } from "@/lib/editorial-plan";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import AdminEditorialPlanSettingsDialog from "./AdminEditorialPlanSettingsDialog";
@@ -60,6 +61,7 @@ type InsightLite = {
   comments: number;
   shares: number;
   saves: number;
+  impressions: number;
   captured_at: string;
 };
 
@@ -70,6 +72,26 @@ type OAuthStatus = {
   access_token_expires_at: string | null;
   updated_at: string;
   has_token: boolean;
+};
+
+type ChannelMetrics = {
+  channel_id: string;
+  channel_code: EditorialChannelCode;
+  followers: number | null;
+  following: number | null;
+  media_count: number | null;
+  avg_engagement_rate: number | null;
+  sample_post_count: number | null;
+  captured_at: string;
+  // Aggregated post metrics (computed from editorial_post_insights)
+  total_reach: number;
+  total_views: number;
+  total_likes: number;
+  total_comments: number;
+  total_saves: number;
+  total_shares: number;
+  total_impressions: number;
+  total_posts: number;
 };
 
 function EditorialChannelLogo({ code, className }: { code: EditorialChannelCode; className?: string }) {
@@ -98,6 +120,8 @@ export default function AdminEditorialPlan() {
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   /** Canale i cui KPI sono mostrati nel pannello (default: sito). */
   const [kpiChannelCode, setKpiChannelCode] = useState<EditorialChannelCode>("site");
+  /** Filtro calendario: "all" mostra tutti, un codice canale mostra solo quello. */
+  const [calendarChannelFilter, setCalendarChannelFilter] = useState<EditorialChannelCode | "all">("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [slotDialogOpen, setSlotDialogOpen] = useState(false);
@@ -108,6 +132,19 @@ export default function AdminEditorialPlan() {
   const [targetsBySlotId, setTargetsBySlotId] = useState<Record<string, TargetRow[]>>({});
   const [insightsBySlotId, setInsightsBySlotId] = useState<Record<string, InsightLite[]>>({});
   const [oauthByChannelId, setOauthByChannelId] = useState<Record<string, OAuthStatus>>({});
+
+  /** Channel metrics from editorial_channel_metrics + aggregated post insights. */
+  const [channelMetrics, setChannelMetrics] = useState<Record<string, ChannelMetrics>>({});
+  /** Whether a background metrics sync is in progress. */
+  const [metricsSyncing, setMetricsSyncing] = useState(false);
+  /** Fields that just got new values (for flash animation). */
+  const [flashFields, setFlashFields] = useState<Set<string>>(new Set());
+  /** Timestamp of last known metrics per channel (for polling). */
+  const lastKnownCaptureRef = useRef<Record<string, string>>({});
+  /** Timestamp of last sync trigger per channel (for 20min cooldown). */
+  const lastSyncTriggerRef = useRef<Record<string, number>>({});
+  /** Poll interval ref for cleanup. */
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const channelIdToCode = useMemo(() => {
     const m = new Map<string, EditorialChannelCode>();
@@ -318,7 +355,7 @@ export default function AdminEditorialPlan() {
         if (targetIds.length > 0) {
           const { data: insightData, error: insightErr } = await supabase
             .from("editorial_post_insights")
-            .select("target_id, source, reach, views, likes, comments, shares, saves, captured_at")
+            .select("target_id, source, reach, views, likes, comments, shares, saves, impressions, captured_at")
             .in("target_id", targetIds)
             .order("captured_at", { ascending: false });
           if (!insightErr && insightData) {
@@ -348,10 +385,182 @@ export default function AdminEditorialPlan() {
     setLoading(false);
   }, [session?.user, navigate]);
 
+  /** Load channel metrics (profile snapshots + aggregated post insights). */
+  const loadChannelMetrics = useCallback(async () => {
+    if (!session?.user || channels.length === 0) return;
+
+    const socialChannels = channels.filter((c) => c.code !== "site");
+    if (socialChannels.length === 0) return;
+
+    const channelIds = socialChannels.map((c) => c.id);
+    const monthFromStr = format(startOfMonth(cursorMonth), "yyyy-MM-dd");
+    const monthToStr = format(
+      new Date(cursorMonth.getFullYear(), cursorMonth.getMonth() + 1, 0),
+      "yyyy-MM-dd"
+    );
+
+    // 1. Fetch latest profile snapshot per channel
+    const { data: profileSnapshots } = await supabase
+      .from("editorial_channel_metrics")
+      .select("channel_id, followers, following, media_count, avg_engagement_rate, sample_post_count, captured_at")
+      .in("channel_id", channelIds)
+      .order("captured_at", { ascending: false });
+
+    // Deduplicate: keep only latest per channel
+    const latestProfile = new Map<string, typeof profileSnapshots extends (infer T)[] | null ? T : never>();
+    for (const row of profileSnapshots ?? []) {
+      if (!latestProfile.has(row.channel_id)) latestProfile.set(row.channel_id, row);
+    }
+
+    // 2. Fetch aggregated post insights for current month
+    const { data: targets } = await supabase
+      .from("editorial_publish_targets")
+      .select("id, channel_id")
+      .eq("status", "published")
+      .in("channel_id", channelIds);
+
+    const targetIdsByChannel = new Map<string, string[]>();
+    for (const t of targets ?? []) {
+      const list = targetIdsByChannel.get(t.channel_id) ?? [];
+      list.push(t.id);
+      targetIdsByChannel.set(t.channel_id, list);
+    }
+
+    const aggregatedByChannel = new Map<string, {
+      total_reach: number; total_views: number; total_likes: number;
+      total_comments: number; total_saves: number; total_shares: number;
+      total_impressions: number; total_posts: number;
+    }>();
+
+    for (const [chId, tIds] of targetIdsByChannel) {
+      if (tIds.length === 0) continue;
+      const { data: insights } = await supabase
+        .from("editorial_post_insights")
+        .select("target_id, reach, views, likes, comments, shares, saves, impressions, captured_at")
+        .in("target_id", tIds)
+        .gte("captured_at", monthFromStr)
+        .lte("captured_at", monthToStr + "T23:59:59");
+
+      // Deduplicate by target_id keeping latest
+      const latestByTarget = new Map<string, typeof insights extends (infer T)[] | null ? T : never>();
+      for (const ins of insights ?? []) {
+        const cur = latestByTarget.get(ins.target_id);
+        if (!cur || ins.captured_at > cur.captured_at) latestByTarget.set(ins.target_id, ins);
+      }
+
+      const latest = Array.from(latestByTarget.values());
+      aggregatedByChannel.set(chId, {
+        total_reach: latest.reduce((s, i) => s + (i.reach ?? 0), 0),
+        total_views: latest.reduce((s, i) => s + (i.views ?? 0), 0),
+        total_likes: latest.reduce((s, i) => s + (i.likes ?? 0), 0),
+        total_comments: latest.reduce((s, i) => s + (i.comments ?? 0), 0),
+        total_saves: latest.reduce((s, i) => s + (i.saves ?? 0), 0),
+        total_shares: latest.reduce((s, i) => s + (i.shares ?? 0), 0),
+        total_impressions: latest.reduce((s, i) => s + (i.impressions ?? 0), 0),
+        total_posts: latest.length,
+      });
+    }
+
+    // 3. Merge into channelMetrics
+    const newMetrics: Record<string, ChannelMetrics> = {};
+    const newFlash = new Set<string>();
+
+    for (const ch of socialChannels) {
+      const profile = latestProfile.get(ch.id);
+      const agg = aggregatedByChannel.get(ch.id) ?? {
+        total_reach: 0, total_views: 0, total_likes: 0, total_comments: 0,
+        total_saves: 0, total_shares: 0, total_impressions: 0, total_posts: 0,
+      };
+
+      const prev = channelMetrics[ch.id];
+      const metrics: ChannelMetrics = {
+        channel_id: ch.id,
+        channel_code: ch.code as EditorialChannelCode,
+        followers: profile?.followers ?? null,
+        following: profile?.following ?? null,
+        media_count: profile?.media_count ?? null,
+        avg_engagement_rate: profile?.avg_engagement_rate ?? null,
+        sample_post_count: profile?.sample_post_count ?? null,
+        captured_at: profile?.captured_at ?? "",
+        ...agg,
+      };
+
+      newMetrics[ch.id] = metrics;
+
+      // Detect changes for flash animation
+      if (prev) {
+        const fields = ["followers", "total_reach", "total_views", "total_likes", "total_comments"] as const;
+        for (const f of fields) {
+          if (metrics[f] !== prev[f] && metrics[f] !== null && metrics[f] !== 0) {
+            newFlash.add(`${ch.id}-${f}`);
+          }
+        }
+      }
+    }
+
+    setChannelMetrics(newMetrics);
+    if (newFlash.size > 0) {
+      setFlashFields(newFlash);
+      setTimeout(() => setFlashFields(new Set()), 1200);
+    }
+  }, [session?.user, channels, cursorMonth]);
+
+  /** Trigger background metrics sync (fire-and-forget with 20min cooldown). */
+  const triggerMetricsSync = useCallback(async (channelId?: string) => {
+    const now = Date.now();
+    const COOLDOWN_MS = 20 * 60 * 1000;
+
+    if (channelId) {
+      const last = lastSyncTriggerRef.current[channelId] ?? 0;
+      if (now - last < COOLDOWN_MS) return;
+    }
+
+    lastSyncTriggerRef.current[channelId ?? "all"] = now;
+    setMetricsSyncing(true);
+
+    try {
+      await supabase.functions.invoke("sync-social-metrics", {
+        body: { channel_id: channelId ?? undefined, force: true },
+      });
+    } catch {
+      // Non-fatal: sync is best-effort
+    }
+
+    // Start polling for updated data
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    let attempts = 0;
+    pollIntervalRef.current = setInterval(async () => {
+      attempts++;
+      await loadChannelMetrics();
+      if (attempts >= 10 || !metricsSyncing) {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        setMetricsSyncing(false);
+      }
+    }, 3000);
+
+    // Safety timeout: stop polling after 30s
+    setTimeout(() => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      setMetricsSyncing(false);
+    }, 30000);
+  }, [loadChannelMetrics]);
+
   useEffect(() => {
     if (authLoading || !session?.user) return;
     void loadData();
   }, [authLoading, session?.user, loadData]);
+
+  useEffect(() => {
+    if (authLoading || !session?.user) return;
+    void loadChannelMetrics();
+  }, [authLoading, session?.user, loadChannelMetrics]);
+
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
 
   const maxHorizonWeeks = useMemo(() => Math.max(8, ...channels.map((c) => c.horizon_weeks)), [channels]);
 
@@ -398,7 +607,10 @@ export default function AdminEditorialPlan() {
 
   const slotsByDate = useMemo(() => {
     const m = new Map<string, SlotForPlan[]>();
-    for (const s of slotsInMonth) {
+    const filtered = calendarChannelFilter === "all"
+      ? slotsInMonth
+      : slotsInMonth.filter((s) => s.channel_id === (channels.find((c) => c.code === calendarChannelFilter)?.id ?? ""));
+    for (const s of filtered) {
       const list = m.get(s.slot_date) ?? [];
       list.push(s);
       m.set(s.slot_date, list);
@@ -411,7 +623,7 @@ export default function AdminEditorialPlan() {
       });
     }
     return m;
-  }, [slotsInMonth, channelOrderIdx]);
+  }, [slotsInMonth, channelOrderIdx, calendarChannelFilter, channels]);
 
   const slotsById = useMemo(() => new Map(slots.map((s) => [s.id, s])), [slots]);
 
@@ -608,29 +820,135 @@ export default function AdminEditorialPlan() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Social cockpit</p>
-              <p className="mt-1 text-xs text-muted-foreground">Solo account collegati e target con metriche sincronizzabili.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Metriche native per piattaforma · aggiornamento automatico giornaliero.</p>
             </div>
             <BarChart3 className="size-5 text-accent" aria-hidden />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Account", value: socialSummary.connectedAccounts, icon: CalendarDays },
-              { label: "Target", value: socialSummary.targets, icon: TrendingUp },
-              { label: "Reach", value: socialSummary.reach, icon: Eye },
-              { label: "Engagement", value: socialSummary.engagement, icon: BarChart3 },
-            ].map(({ label, value, icon: Icon }) => (
-              <div key={label} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
-                <Icon className="mb-2 size-4 text-accent" aria-hidden />
-                <p className="font-sans text-xl font-semibold tabular-nums">{value.toLocaleString("it-IT")}</p>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-              </div>
-            ))}
+
+          {/* Sync trigger */}
+          <div className="mb-4 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={metricsSyncing}
+              onClick={() => triggerMetricsSync()}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`size-3.5 ${metricsSyncing ? "animate-spin" : ""}`} aria-hidden />
+              {metricsSyncing ? "Sincronizzazione…" : "Aggiorna metriche"}
+            </Button>
+            {metricsSyncing && (
+              <Progress value={40} className="h-1 w-16 animate-pulse" />
+            )}
           </div>
+
+          {/* Per-channel native metrics cards */}
+          <div className="space-y-3">
+            {channels
+              .filter((ch) => ch.code !== "site")
+              .map((ch) => {
+                const m = channelMetrics[ch.id];
+                const isIG = ch.code === "instagram_bite" || ch.code === "instagram_dogs";
+                const isYT = ch.code === "youtube";
+                const isTK = ch.code === "tiktok";
+
+                return (
+                  <div key={ch.id} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <EditorialChannelLogo code={ch.code as EditorialChannelCode} className="text-accent" />
+                      <span className="text-xs font-sans font-medium">{ch.label}</span>
+                      {m?.captured_at && (
+                        <span className="ml-auto text-[9px] text-muted-foreground">
+                          {formatDistanceToNow(new Date(m.captured_at), { addSuffix: true, locale: it })}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Profile metrics row */}
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                      <MetricCard
+                        label={isYT ? "Iscrizioni" : "Follower"}
+                        value={m?.followers ?? 0}
+                        flash={flashFields.has(`${ch.id}-followers`)}
+                      />
+                      {isIG && (
+                        <>
+                          <MetricCard label="Post" value={m?.media_count ?? 0} />
+                          <MetricCard label="Media" value={m?.avg_engagement_rate != null ? `${(m.avg_engagement_rate * 100).toFixed(1)}%` : "–"} />
+                        </>
+                      )}
+                      {isYT && (
+                        <>
+                          <MetricCard label="Video" value={m?.media_count ?? 0} />
+                          <MetricCard label="Avg Eng" value={m?.avg_engagement_rate != null ? `${(m.avg_engagement_rate * 100).toFixed(1)}%` : "–"} />
+                        </>
+                      )}
+                      {isTK && (
+                        <>
+                          <MetricCard label="Post" value={m?.media_count ?? 0} />
+                          <MetricCard label="Avg Eng" value={m?.avg_engagement_rate != null ? `${(m.avg_engagement_rate * 100).toFixed(1)}%` : "–"} />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Post insights row (monthly aggregates) */}
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {isIG && (
+                        <>
+                          <MetricCard label="Reach" value={m?.total_reach ?? 0} flash={flashFields.has(`${ch.id}-total_reach`)} small />
+                          <MetricCard label="Views" value={m?.total_views ?? 0} flash={flashFields.has(`${ch.id}-total_views`)} small />
+                          <MetricCard label="Likes" value={m?.total_likes ?? 0} flash={flashFields.has(`${ch.id}-total_likes`)} small />
+                          <MetricCard label="Commenti" value={m?.total_comments ?? 0} flash={flashFields.has(`${ch.id}-total_comments`)} small />
+                          <MetricCard label="Salvataggi" value={m?.total_saves ?? 0} small />
+                        </>
+                      )}
+                      {isYT && (
+                        <>
+                          <MetricCard label="Views" value={m?.total_views ?? 0} flash={flashFields.has(`${ch.id}-total_views`)} small />
+                          <MetricCard label="Likes" value={m?.total_likes ?? 0} flash={flashFields.has(`${ch.id}-total_likes`)} small />
+                          <MetricCard label="Commenti" value={m?.total_comments ?? 0} flash={flashFields.has(`${ch.id}-total_comments`)} small />
+                          <MetricCard label="Saves" value={m?.total_saves ?? 0} small />
+                          <MetricCard label="Shares" value={m?.total_shares ?? 0} small />
+                        </>
+                      )}
+                      {isTK && (
+                        <>
+                          <MetricCard label="Views" value={m?.total_views ?? 0} flash={flashFields.has(`${ch.id}-total_views`)} small />
+                          <MetricCard label="Likes" value={m?.total_likes ?? 0} flash={flashFields.has(`${ch.id}-total_likes`)} small />
+                          <MetricCard label="Commenti" value={m?.total_comments ?? 0} flash={flashFields.has(`${ch.id}-total_comments`)} small />
+                          <MetricCard label="Shares" value={m?.total_shares ?? 0} small />
+                          <MetricCard label="Saves" value={m?.total_saves ?? 0} small />
+                        </>
+                      )}
+                    </div>
+
+                    {m?.total_posts != null && m.total_posts > 0 && (
+                      <p className="mt-1.5 text-[9px] text-muted-foreground">
+                        {m.total_posts} post misurati questo mese
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Link to comments page */}
+          <div className="mt-4">
+            <Link
+              to="/admin/comments"
+              className="inline-flex items-center gap-1.5 text-xs text-accent hover:text-accent/80 transition-colors"
+            >
+              <MessageSquare className="size-3.5" aria-hidden />
+              Gestione commenti →
+            </Link>
+          </div>
+
+          {/* Legacy aggregated summary */}
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.pending} in coda</span>
-            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.published} pubblicati</span>
-            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.measuredPosts} con ID piattaforma</span>
-            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.insightSnapshots} snapshot</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.connectedAccounts} account collegati</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.targets} target</span>
+            <span className="rounded-full bg-muted/60 px-3 py-1">{socialSummary.reach.toLocaleString("it-IT")} reach</span>
             {socialSummary.failed > 0 && (
               <span className="rounded-full bg-destructive/10 px-3 py-1 text-destructive">{socialSummary.failed} errori</span>
             )}
@@ -677,6 +995,34 @@ export default function AdminEditorialPlan() {
         </div>
       ) : (
         <div className="glass-panel-soft rounded-[28px] p-4 md:p-5 overflow-x-auto">
+          {/* Channel filter bar */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="text-[10px] font-sans uppercase tracking-wider text-muted-foreground mr-1">Canale:</span>
+            <button
+              className={`px-3 py-1 rounded-full text-xs font-sans transition-all ${
+                calendarChannelFilter === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-background/60 text-foreground hover:bg-background/80"
+              }`}
+              onClick={() => setCalendarChannelFilter("all")}
+            >
+              Tutti
+            </button>
+            {channels.map((ch) => (
+              <button
+                key={ch.id}
+                className={`px-3 py-1 rounded-full text-xs font-sans transition-all ${
+                  calendarChannelFilter === ch.code
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-background/60 text-foreground hover:bg-background/80"
+                }`}
+                onClick={() => setCalendarChannelFilter(ch.code as EditorialChannelCode)}
+              >
+                {EDITORIAL_CHANNEL_LABELS[ch.code as EditorialChannelCode] ?? ch.code}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-7 gap-1 min-w-[640px] text-[10px] font-sans uppercase tracking-wider text-muted-foreground mb-2">
             {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((d) => (
               <div key={d} className="text-center py-1">
@@ -793,4 +1139,32 @@ function normalizeSlotTime(t: string): string {
   if (t.length >= 8 && t.includes(":")) return t.slice(0, 8);
   if (t.length === 5) return `${t}:00`;
   return t;
+}
+
+function MetricCard({
+  label,
+  value,
+  flash = false,
+  small = false,
+}: {
+  label: string;
+  value: number | string;
+  flash?: boolean;
+  small?: boolean;
+}) {
+  const display = typeof value === "number" ? value.toLocaleString("it-IT") : value;
+  return (
+    <div
+      className={cn(
+        "rounded-[10px] bg-muted/40 text-center transition-all",
+        small ? "px-1.5 py-1" : "px-2 py-1.5",
+        flash && "animate-pulse bg-accent/20 ring-1 ring-accent/40"
+      )}
+    >
+      <p className={cn("font-sans font-semibold tabular-nums", small ? "text-xs" : "text-sm")}>{display}</p>
+      <p className={cn("text-muted-foreground", small ? "text-[8px]" : "text-[9px]")} style={{ letterSpacing: "0.06em", textTransform: "uppercase" as const }}>
+        {label}
+      </p>
+    </div>
+  );
 }

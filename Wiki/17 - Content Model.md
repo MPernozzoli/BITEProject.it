@@ -19,6 +19,19 @@ Sincronizzazione community: alla pubblicazione di un articolo, `sync-article-com
 ### ✅ Readiness check (check_article_readiness)
 Function PostgreSQL che verifica se un articolo ha tutti i campi obbligatori per la pubblicazione. Campi controllati: `title_it`, `title_en`, `excerpt_it`, `excerpt_en`, `content_it`, `content_en`, `cover_image`, `editorial_type`. Restituisce `{ ready: boolean, missing: string[], article_id }`. Usata da `editorial-readiness-alert` per le notifiche push proactive e potentially dal trigger di scheduling.
 
+### 📝 Content Notes (backlog idee)
+Tabella `content_notes` per raccogliere idee, appunti e bozze non ancora assegnate al piano editoriale. Stati: `note` (idea libera), `selected` (pronta da promuovere), `draft` (promossa a bozza articolo), `archived`. Campi: `title`, `body`, `pillar` (experience/practical/reflective), `pinned`, `promoted_to_article_id` (FK opzionale all'articolo creato). RLS: solo admin. La promozione crea un `logbook_articles` draft e collega la nota.
+
+### 📊 Article scoring (5-point rubric)
+Funzione `compute_article_score(uuid)` calcola un punteggio 0-2 per cinque assi, totale /10:
+- **Reach**: lettori unici negli ultimi 30gg (0=<50, 1=50-500, 2=>500)
+- **Read**: dwell time medio + profondità scroll (dwell>=90s AND scroll>=50%=2, either>=30s OR scroll>=30%=1)
+- **React**: (likes+comments+shares)/100 lettori (>=5%=2, >=1%=1)
+- **Retain**: lettori unici totali (0=<50, 1=50-200, 2=>200)
+- **Lead**: click su link/CTA negli ultimi 30gg (>=10=2, >=3=1)
+
+Eventi di tracking: `article_share_events`, `article_click_events`, `article_scroll_events`. RLS: insert pubblico (anon+auth), select admin. Le RPC `record_article_share/click/scroll` sono accessibili a `anon`/`authenticated`.
+
 ### ⛵ Voyage / segmenti di rotta
 `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{start,end}`, `coordinates.{departure,arrival}`, `route_association.{waypoint_count, geometry_points, route_type, status, distance, geojson_url, semantic_url}`, `entities_involved`, `linked_media`, `related_articles`, `related_waypoints`, `canonical_url`.
 

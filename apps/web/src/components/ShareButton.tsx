@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image as ImageIcon, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import AppleShareIcon from "@/components/AppleShareIcon";
@@ -10,8 +10,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
+import { supabase } from "@/integrations/supabase/client";
+import { getOrCreateVisitorKey } from "@/lib/visitor-key";
 
 interface ShareButtonProps {
+  articleId?: string;
   instagramStoryImageUrl?: string | null;
   title?: string;
   url?: string;
@@ -62,11 +65,28 @@ const triggerImageFallback = (imageUrl: string, filename: string) => {
   anchor.click();
 };
 
-const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareButtonProps) => {
+const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 }: ShareButtonProps) => {
   const { lang } = useI18n();
   const isMobileViewport = useIsMobile();
   const [preparedInstagramFile, setPreparedInstagramFile] = useState<File | null>(null);
   const isIt = lang === "it";
+
+  const trackShare = useCallback(
+    async (method: string) => {
+      if (!articleId) return;
+      try {
+        const visitorKey = getOrCreateVisitorKey();
+        await supabase.rpc("record_article_share", {
+          _article_id: articleId,
+          _visitor_key: visitorKey,
+          _method: method,
+        });
+      } catch {
+        // silent
+      }
+    },
+    [articleId]
+  );
   const isMobileDevice =
     isMobileViewport ||
     (typeof navigator !== "undefined" && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent));
@@ -94,6 +114,7 @@ const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareBut
     if (navigator.share) {
       try {
         await navigator.share({ title: shareTitle, url: shareUrl });
+        void trackShare("native");
         return;
       } catch (error) {
         if (isAbortError(error)) return;
@@ -102,6 +123,7 @@ const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareBut
 
     try {
       await navigator.clipboard.writeText(shareUrl);
+      void trackShare("link");
       toast.success(isIt ? "Link copiato." : "Link copied.");
     } catch {
       toast.error(isIt ? "Impossibile copiare il link." : "Could not copy the link.");
@@ -130,6 +152,7 @@ const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareBut
     if (shareData && navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
       try {
         await navigator.share(shareData);
+        void trackShare("instagram_story");
         return;
       } catch (error) {
         if (isAbortError(error)) return;
@@ -148,6 +171,8 @@ const ShareButton = ({ instagramStoryImageUrl, title, url, size = 18 }: ShareBut
       instagramStoryImageUrl,
       imageFile?.name || filenameFromTitle(shareTitle, "image/jpeg", instagramStoryImageUrl)
     );
+
+    void trackShare("instagram_story");
 
     toast.message(
       linkCopied

@@ -69,6 +69,9 @@ const AdminPackGallery = lazy(() => import("./pages/AdminPackGallery"));
 const AdminMail = lazy(() => import("./pages/AdminMail"));
 const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const AdminBookingRefunds = lazy(() => import("./pages/AdminBookingRefunds"));
+const AdminContentNotes = lazy(() => import("./pages/AdminContentNotes"));
+const AdminPerformanceDashboard = lazy(() => import("./pages/AdminPerformanceDashboard"));
+const AdminCommentsRoute = lazy(() => import("./pages/AdminCommentsRoute"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
 const UserLogin = lazy(() => import("./pages/UserLogin"));
@@ -271,6 +274,9 @@ const App = () => {
                         AdminRoute perderebbe i parametri OAuth nel redirect al login. */}
                     <Route path="/admin/mcp/authorize" element={<AdminMcpAuthorize />} />
                     <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />
+                    <Route path="/admin/content-notes" element={<AdminRoute><AdminContentNotes /></AdminRoute>} />
+                    <Route path="/admin/performance" element={<AdminRoute><AdminPerformanceDashboard /></AdminRoute>} />
+                    <Route path="/admin/comments" element={<AdminRoute><AdminCommentsRoute /></AdminRoute>} />
                     <Route path="/admin/logbook-points" element={<AdminRoute><AdminLogbookPoints /></AdminRoute>} />
                     <Route path="/admin/pack-gallery" element={<AdminRoute><AdminPackGallery /></AdminRoute>} />
                     <Route path="/admin/trackers" element={<AdminRoute><AdminMapPresence /></AdminRoute>} />

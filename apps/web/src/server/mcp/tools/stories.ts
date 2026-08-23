@@ -173,8 +173,8 @@ export function registerStoryTools(server: McpServer, ctx: McpContext): void {
         .from("stories")
         .insert({
           slug,
-          slug_it: args.slug_it?.trim() || null,
-          slug_en: args.slug_en?.trim() || null,
+          slug_it: args.slug_it?.trim() || generateStorySlug(args.title_it) || null,
+          slug_en: args.slug_en?.trim() || generateStorySlug(args.title_en) || null,
           title_it: args.title_it.trim(),
           title_en: args.title_en.trim(),
           description_it: args.description_it?.trim() || null,

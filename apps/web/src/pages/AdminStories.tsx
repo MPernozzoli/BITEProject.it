@@ -21,6 +21,8 @@ interface Story {
   title_en: string;
   title_it: string;
   slug: string;
+  slug_it: string | null;
+  slug_en: string | null;
   description_en: string | null;
   description_it: string | null;
   cover_image: string | null;
@@ -63,7 +65,15 @@ const defaultStoryListSort: StoryListSort = {
 };
 
 const generateSlug = (title: string) =>
-  title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
+  title
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
 
 const statusLabel = (status: string) => {
   if (status === "published") return "Pubblicato";
@@ -82,7 +92,6 @@ const AdminStories = () => {
   const [form, setForm] = useState({
     title_en: "",
     title_it: "",
-    slug: "",
     description_en: "",
     description_it: "",
     type: "open" as string,
@@ -135,7 +144,6 @@ const AdminStories = () => {
       setForm({
         title_en: story.title_en,
         title_it: story.title_it,
-        slug: story.slug,
         description_en: story.description_en || "",
         description_it: story.description_it || "",
         type: story.type || "open",
@@ -144,18 +152,22 @@ const AdminStories = () => {
       void fetchLinkedArticles(story.id);
     } else {
       setEditingStory(null);
-      setForm({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "", type: "open", target_chapter_count: "" });
+      setForm({ title_en: "", title_it: "", description_en: "", description_it: "", type: "open", target_chapter_count: "" });
       setLinkedArticles([]);
     }
     setShowForm(true);
   };
 
   const saveStory = async () => {
-    const slug = form.slug || generateSlug(form.title_en);
+    const slugEn = generateSlug(form.title_en);
+    const slugIt = generateSlug(form.title_it);
+    const slug = slugEn || slugIt;
     const payload = {
       title_en: form.title_en,
       title_it: form.title_it,
       slug,
+      slug_en: slugEn || null,
+      slug_it: slugIt || null,
       description_en: form.description_en || null,
       description_it: form.description_it || null,
       type: form.type,
@@ -370,7 +382,7 @@ const AdminStories = () => {
                   <input
                     type="text"
                     value={form.title_en}
-                    onChange={(e) => setForm((f) => ({ ...f, title_en: e.target.value, slug: f.slug || generateSlug(e.target.value) }))}
+                    onChange={(e) => setForm((f) => ({ ...f, title_en: e.target.value }))}
                     className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
@@ -383,16 +395,6 @@ const AdminStories = () => {
                     className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Slug</label>
-                <input
-                  type="text"
-                  value={form.slug}
-                  onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
-                  className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
-                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
