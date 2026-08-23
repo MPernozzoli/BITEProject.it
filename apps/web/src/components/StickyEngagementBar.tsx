@@ -156,6 +156,13 @@ const StickyEngagementBar = ({
     }
   }, [onScrollToComments]);
 
+  const tooltipBase =
+    "z-[60] absolute bottom-full mb-2 whitespace-nowrap rounded-full bg-white/95 px-3 py-1.5 text-xs font-sans font-medium text-foreground shadow-lg border border-black/5 backdrop-blur-sm pointer-events-none transition-all duration-500 ease-[var(--ease-out-expo)]";
+  const tooltipHidden = "opacity-0 translate-y-2 scale-95";
+  const tooltipVisible = "opacity-100 translate-y-0 scale-100";
+  const arrow =
+    "absolute -bottom-1 left-5 h-2 w-2 rotate-45 bg-white/95 border-r border-b border-black/5";
+
   return (
     <div
       ref={barRef}
@@ -165,13 +172,25 @@ const StickyEngagementBar = ({
           : "translate-y-full opacity-0 pointer-events-none"
       }`}
     >
-      <div className="mx-auto max-w-3xl px-3 pb-[env(safe-area-inset-bottom)] md:px-4">
+      <div className="mx-auto max-w-3xl px-3 pb-[env(safe-area-inset-bottom)] md:px-4 relative">
+        {/* Tooltip cuore — fuori dal glass-panel per evitare clip da border-radius */}
+        <div className={`${tooltipBase} left-4 ${heartNudge ? tooltipVisible : tooltipHidden}`}>
+          {heartNudgeText}
+          <div className={arrow} />
+        </div>
+
+        {/* Tooltip commenti — fuori dal glass-panel */}
+        <div className={`${tooltipBase} left-1/2 -translate-x-1/2 ${commentNudge ? tooltipVisible : tooltipHidden}`}>
+          {commentNudgeText}
+          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-white/95 border-r border-b border-black/5" />
+        </div>
+
         <div className="glass-panel rounded-t-[22px] border border-b-0 border-white/20 bg-white/70 backdrop-blur-xl px-4 py-3 md:px-6 md:py-3.5 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
           <div className="flex items-center gap-2 md:gap-4">
             <button
               onClick={onToggleLike}
               disabled={busy}
-              className={`relative inline-flex items-center gap-1.5 text-sm font-sans transition-colors rounded-full px-3 py-1.5 -ml-1 ${
+              className={`inline-flex items-center gap-1.5 text-sm font-sans transition-colors rounded-full px-3 py-1.5 -ml-1 ${
                 liked
                   ? "text-red-500 bg-red-50 hover:bg-red-100"
                   : "text-muted-foreground hover:text-foreground hover:bg-black/5"
@@ -186,44 +205,20 @@ const StickyEngagementBar = ({
               {likeCount > 0 && <span className="font-medium tabular-nums">{likeCount}</span>}
             </button>
 
-            <div
-              className={`absolute left-4 bottom-full mb-2 whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 text-xs font-sans font-medium text-foreground shadow-lg border border-black/5 backdrop-blur-sm transition-all duration-500 ease-[var(--ease-out-expo)] ${
-                heartNudge
-                  ? "opacity-100 translate-y-0 scale-100"
-                  : "opacity-0 translate-y-2 scale-95 pointer-events-none"
+            <button
+              onClick={scrollToComments}
+              className={`inline-flex items-center gap-1.5 text-sm font-sans hover:text-foreground hover:bg-black/5 rounded-full px-3 py-1.5 transition-colors ${
+                commentNudge ? "text-accent" : "text-muted-foreground"
               }`}
+              title={isIt ? "Commenti" : "Comments"}
             >
-              {heartNudgeText}
-              <div className="absolute -bottom-1 left-5 h-2 w-2 rotate-45 bg-white/90 border-r border-b border-black/5" />
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={scrollToComments}
-                className={`inline-flex items-center gap-1.5 text-sm font-sans hover:text-foreground hover:bg-black/5 rounded-full px-3 py-1.5 transition-colors ${
-                  commentNudge ? "text-accent" : "text-muted-foreground"
-                }`}
-                title={isIt ? "Commenti" : "Comments"}
-              >
-                <MessageCircle size={20} />
-                {commentCount > 0 && <span className="font-medium tabular-nums">{commentCount}</span>}
-              </button>
-
-              <div
-                className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 text-xs font-sans font-medium text-foreground shadow-lg border border-black/5 backdrop-blur-sm transition-all duration-500 ease-[var(--ease-out-expo)] ${
-                  commentNudge
-                    ? "opacity-100 translate-y-0 scale-100"
-                    : "opacity-0 translate-y-2 scale-95 pointer-events-none"
-                }`}
-              >
-                {commentNudgeText}
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-white/90 border-r border-b border-black/5" />
-              </div>
-            </div>
+              <MessageCircle size={20} />
+              {commentCount > 0 && <span className="font-medium tabular-nums">{commentCount}</span>}
+            </button>
 
             <div className="flex-1" />
 
-            <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImageUrl} size={18} />
+            <ShareButton articleId={articleId} title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImageUrl} size={18} />
           </div>
         </div>
       </div>

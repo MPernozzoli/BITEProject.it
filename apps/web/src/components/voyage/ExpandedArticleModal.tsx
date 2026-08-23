@@ -715,7 +715,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
                       <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
                         <LikeButton articleId={article.id} liked={liked} likeCount={likeCount} onToggleLike={toggleLike} busy={likeBusy} />
-                        <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
+                        <ShareButton articleId={article.id} title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
                       </div>
                     </div>
 

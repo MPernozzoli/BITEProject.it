@@ -561,7 +561,7 @@ const ArticleReader = ({
                 ) : (
                   <>
                     <LikeButton articleId={article.id} liked={liked} likeCount={likeCount} onToggleLike={toggleLike} busy={likeBusy} />
-                    <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
+                    <ShareButton articleId={article.id} title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
                   </>
                 )}
               </div>
