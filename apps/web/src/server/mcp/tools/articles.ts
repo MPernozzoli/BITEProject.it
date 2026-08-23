@@ -735,4 +735,124 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       } satisfies ToolOutcome;
     },
   });
+
+  registerTool(server, ctx, {
+    name: "article_metrics",
+    title: "Metriche aggregate degli articoli",
+    description:
+      "Restituisce le metriche di tutti gli articoli: visualizzazioni, tempo medio di lettura, visitatori unici, likes, commenti, distribuzione per lingua. Ordinati per numero di visualizzazioni decrescente.",
+    scope: "analytics:read",
+    kind: "read",
+    inputSchema: {
+      status: z.enum(["published", "draft", "scheduled"]).optional().describe("Filtra per stato. Senza filtro: tutti."),
+      limit: z.number().int().min(1).max(100).default(50),
+    },
+    handler: async (args, context) => {
+      const { data, error } = await context.service.rpc("admin_article_view_insights");
+      if (error) throw new McpToolError("db_error", `Lettura metriche fallita: ${error.message}`);
+
+      let rows = (data ?? []) as Array<{
+        article_id: string;
+        title_it: string | null;
+        title_en: string | null;
+        story_id: string | null;
+        status: string | null;
+        published_at: string | null;
+        view_count: number;
+        tracked_views: number;
+        registered_views: number;
+        anonymous_views: number;
+        distinct_visitors: number;
+        distinct_registered: number;
+        avg_dwell_ms: number | null;
+        measured_dwell_count: number;
+        views_it: number;
+        views_en: number;
+        top_lang: string | null;
+        last_view_at: string | null;
+        like_count: number;
+        registered_likes: number;
+        anonymous_likes: number;
+        comment_count: number;
+      }>;
+
+      if (args.status) rows = rows.filter((r) => r.status === args.status);
+      rows = rows.slice(0, args.limit ?? 50);
+
+      return {
+        text: `${rows.length} articoli con metriche.`,
+        data: rows.map((r) => ({
+          article_id: r.article_id,
+          title_it: r.title_it,
+          title_en: r.title_en,
+          status: r.status,
+          published_at: r.published_at,
+          view_count: r.view_count,
+          tracked_views: r.tracked_views,
+          distinct_visitors: r.distinct_visitors,
+          avg_dwell_ms: r.avg_dwell_ms,
+          views_it: r.views_it,
+          views_en: r.views_en,
+          top_lang: r.top_lang,
+          like_count: r.like_count,
+          comment_count: r.comment_count,
+          last_view_at: r.last_view_at,
+        })),
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
+    name: "article_metrics_detail",
+    title: "Metriche dettagliate di un articolo",
+    description:
+      "Restituisce le metriche complete di un singolo articolo: riepilogo con visualizzazioni, visitatori unici, tempo medio di lettura, likes, commenti, e serie giornaliera degli ultimi 30 giorni.",
+    scope: "analytics:read",
+    kind: "read",
+    inputSchema: {
+      article_id: z.string().uuid(),
+    },
+    handler: async (args, context) => {
+      const { data, error } = await context.service.rpc("admin_article_view_insight_one", {
+        _article_id: args.article_id,
+      });
+      if (error) throw new McpToolError("db_error", `Lettura metriche fallita: ${error.message}`);
+      if (!data) throw new McpToolError("not_found", `Nessuna metrica per l'articolo ${args.article_id}.`);
+
+      const detail = data as {
+        article_id: string;
+        title_it: string | null;
+        title_en: string | null;
+        story_id: string | null;
+        status: string | null;
+        published_at: string | null;
+        view_count: number;
+        summary: {
+          tracked_views: number;
+          registered_views: number;
+          anonymous_views: number;
+          distinct_visitors: number;
+          distinct_registered: number;
+          avg_dwell_ms: number | null;
+          measured_dwell_count: number;
+          views_it: number;
+          views_en: number;
+          views_unknown_lang: number;
+          first_view_at: string | null;
+          last_view_at: string | null;
+          like_count: number;
+          registered_likes: number;
+          anonymous_likes: number;
+          comment_count: number;
+        };
+        daily: Array<{ day: string; views: number; registered: number }>;
+      };
+
+      return {
+        text: `Metriche per "${detail.title_it || detail.title_en}": ${detail.view_count} visualizzazioni, ${detail.summary?.distinct_visitors ?? 0} visitatori unici, ${detail.summary?.like_count ?? 0} likes, ${detail.summary?.comment_count ?? 0} commenti.`,
+        targetId: detail.article_id,
+        data: detail,
+      } satisfies ToolOutcome;
+    },
+  });
 }

@@ -7,6 +7,7 @@ import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, User } from "lucide-rea
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
+import StickyEngagementBar from "@/components/StickyEngagementBar";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import ArticleVoyageMediaWidget from "@/components/ArticleVoyageMediaWidget";
@@ -597,6 +598,16 @@ const ArticleReader = ({
           {!previewMode && <ArticleRelatedSection articleId={article.id} tagIds={tags.map((tag) => tag.id)} lang={lang} />}
         </div>
       </div>
+
+      {!previewMode && (
+        <StickyEngagementBar
+          articleId={article.id}
+          lang={lang}
+          title={title}
+          shareUrl={shareUrl}
+          instagramStoryImageUrl={instagramStoryImage}
+        />
+      )}
     </div>
   );
 };

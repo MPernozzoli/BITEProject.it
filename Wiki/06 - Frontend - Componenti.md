@@ -17,8 +17,9 @@ tags: [frontend, componenti, ui]
 - `ArticleSidebar.tsx`, `ArticleRelatedSection.tsx`
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale articolo → [[14 - Mappe e Layer Geospaziale]]
 - `ArticleVoyageMediaWidget.tsx`
-- `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement
-- `ArticleReader.tsx` — renderer condiviso della pagina articolo: cover, metadati/autori, contenuto TipTap sanificato, scene mappa, media di viaggio, tag, engagement e sidebar. `ArticlePage.tsx` lo usa con side effect pubblici attivi; `ArticleEditor.tsx` lo usa per anteprima admin senza like/commenti/analytics. Le citazioni TipTap hanno stile editoriale condiviso (`.article-rich-body blockquote`): ampio respiro verticale, segno laterale teal e virgolette tipografiche, invece della precedente bubble neutra. La stessa classe forza marker e indentazione di liste `ul`/`ol`, così punti e numeri sono visibili uguali nell’editor, nell’anteprima e nella pagina pubblica.
+- `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement inline
+- `StickyEngagementBar.tsx` — barra engagement fissa in basso (like, commenti, condivisione) con animazione heart nudge allo scroll ~35%, montata da `ArticleReader.tsx` in modalità pubblica
+- `ArticleReader.tsx` — renderer condiviso della pagina articolo: cover, metadati/autori, contenuto TipTap sanificato, scene mappa, media di viaggio, tag, engagement inline e sidebar. In modalità pubblica monta `StickyEngagementBar` (barra fissa in basso con like/commenti/condivisione e cuore animato a metà scroll). `ArticlePage.tsx` lo usa con side effect pubblici attivi; `ArticleEditor.tsx` lo usa per anteprima admin senza like/commenti/analytics. Le citazioni TipTap hanno stile editoriale condiviso (`.article-rich-body blockquote`): ampio respiro verticale, segno laterale teal e virgolette tipografiche, invece della precedente bubble neutra. La stessa classe forza marker e indentazione di liste `ul`/`ol`, così punti e numeri sono visibili uguali nell’editor, nell’anteprima e nella pagina pubblica.
 - `AuthorSelector.tsx`
 
 ## Profilo / social

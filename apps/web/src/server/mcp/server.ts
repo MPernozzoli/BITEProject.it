@@ -11,6 +11,7 @@ import { registerArticleTools } from "./tools/articles.js";
 import { registerMailTools } from "./tools/mail.js";
 import { registerNewsletterTools } from "./tools/newsletter.js";
 import { registerPlanTools } from "./tools/plan.js";
+import { registerStoryTools } from "./tools/stories.js";
 import { registerVoyageTools } from "./tools/voyages.js";
 
 export const MCP_SERVER_NAME = "bite-admin";
@@ -21,7 +22,7 @@ export const MCP_SERVER_VERSION = "1.0.0";
  * fiducia: i contenuti letti dal database sono testo scritto da terzi (commenti,
  * bozze, mail) e non sono istruzioni per il modello.
  */
-const INSTRUCTIONS = `Server MCP del backoffice BITE (biteproject.it). Permette di pianificare il piano editoriale, scrivere e aggiornare bozze, programmarne la pubblicazione, gestire le campagne newsletter e curare il contenuto narrativo delle tappe dei viaggi (descrizioni, punti di interesse, attività, foto).
+const INSTRUCTIONS = `Server MCP del backoffice BITE (biteproject.it). Permette di pianificare il piano editoriale, scrivere e aggiornare bozze, programmarne la pubblicazione, gestire le campagne newsletter, curare il contenuto narrativo delle tappe dei viaggi (descrizioni, punti di interesse, attività, foto), gestire le storie (serie di articoli) e consultare le metriche di engagement (visualizzazioni, tempi di lettura, likes, commenti).
 
 Regole del dominio:
 - Il sito è bilingue IT/EN. Ogni contenuto destinato agli utenti esiste in entrambe le lingue: i tool rifiutano di programmare un articolo incompleto, salvo allow_translation_gaps esplicito.
@@ -39,6 +40,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
   registerPlanTools(server, ctx);
   registerArticleTools(server, ctx);
+  registerStoryTools(server, ctx);
   registerNewsletterTools(server, ctx);
   registerMailTools(server, ctx);
   registerVoyageTools(server, ctx);

@@ -13,12 +13,15 @@
 export const MCP_SCOPES = [
   "articles:read",
   "articles:write",
+  "analytics:read",
   "plan:read",
   "plan:write",
   "newsletter:read",
   "newsletter:write",
   "mail:read",
   "mail:write",
+  "stories:read",
+  "stories:write",
   "voyages:read",
   "voyages:write",
 ] as const;
@@ -33,12 +36,15 @@ export function isMcpScope(value: string): value is McpScope {
 export const MCP_SCOPE_LABELS: Record<McpScope, { it: string; en: string }> = {
   "articles:read": { it: "Leggere gli articoli", en: "Read articles" },
   "articles:write": { it: "Scrivere e modificare articoli", en: "Write and edit articles" },
+  "analytics:read": { it: "Leggere le metriche e le analisi degli articoli", en: "Read article metrics and analytics" },
   "plan:read": { it: "Leggere il piano editoriale", en: "Read the editorial plan" },
   "plan:write": { it: "Programmare nel piano editoriale", en: "Schedule in the editorial plan" },
   "newsletter:read": { it: "Leggere le newsletter", en: "Read newsletters" },
   "newsletter:write": { it: "Scrivere e schedulare newsletter", en: "Write and schedule newsletters" },
   "mail:read": { it: "Leggere la posta", en: "Read mail" },
   "mail:write": { it: "Rispondere, inoltrare e scrivere mail", en: "Reply, forward and write mail" },
+  "stories:read": { it: "Leggere le storie", en: "Read stories" },
+  "stories:write": { it: "Creare e modificare storie, assegnare articoli", en: "Create and edit stories, assign articles" },
   "voyages:read": { it: "Leggere le rotte e le tappe", en: "Read voyages and stops" },
   "voyages:write": {
     it: "Modificare rotte e tappe (nomi, descrizioni, POI, attività, foto)",
@@ -60,10 +66,13 @@ export function mcpScopeLabel(scope: string, lang: "it" | "en"): string {
 export const DEFAULT_MCP_SCOPES: McpScope[] = [
   "articles:read",
   "articles:write",
+  "analytics:read",
   "plan:read",
   "plan:write",
   "newsletter:read",
   "mail:read",
+  "stories:read",
+  "stories:write",
   "voyages:read",
   "voyages:write",
 ];
