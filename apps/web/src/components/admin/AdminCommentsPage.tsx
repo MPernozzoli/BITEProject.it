@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { RefreshCw, MessageSquare, Reply, EyeOff, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, MessageSquare, Reply, EyeOff, Trash2, ChevronLeft, ChevronRight, Instagram, Youtube, Music2, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,7 +11,7 @@ import {
 } from "@/lib/editorial-plan";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EditorialChannelLogo } from "@/components/editorial/EditorialChannelLogo";
+import { cn } from "@/lib/utils";
 
 type CommentStatus = "new" | "replied" | "hidden" | "dismissed";
 
@@ -40,6 +40,14 @@ const STATUS_LABELS: Record<CommentStatus, string> = {
 };
 
 const PAGE_SIZE = 20;
+
+function EditorialChannelLogo({ code, className }: { code: EditorialChannelCode; className?: string }) {
+  if (code === "instagram_bite" || code === "instagram_dogs") return <Instagram className={cn("size-4", className)} />;
+  if (code === "youtube") return <Youtube className={cn("size-4", className)} />;
+  if (code === "tiktok") return <Music2 className={cn("size-4", className)} />;
+  if (code === "site") return <Globe className={cn("size-4", className)} />;
+  return <MessageSquare className={cn("size-4", className)} />;
+}
 
 export default function AdminCommentsPage() {
   const { session, loading: authLoading } = useAuth();
