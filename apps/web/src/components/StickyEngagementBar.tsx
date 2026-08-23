@@ -118,7 +118,7 @@ const StickyEngagementBar = ({
 
         setVisible(scrollY > vh * 0.35);
 
-        if (!nudgeFired.current && scrollProgress > 0.3 && scrollProgress < 0.65) {
+        if (!nudgeFired.current && !liked && scrollProgress > 0.3 && scrollProgress < 0.65) {
           nudgeFired.current = true;
           setHeartNudgeText(pickRandom(heartTexts));
           setHeartNudge(true);
@@ -143,7 +143,7 @@ const StickyEngagementBar = ({
       clearTimeout(heartNudgeTimeout.current);
       clearTimeout(commentNudgeTimeout.current);
     };
-  }, [scrollContainerRef, heartTexts, commentTexts]);
+  }, [scrollContainerRef, heartTexts, commentTexts, liked]);
 
   const scrollToComments = useCallback(() => {
     if (onScrollToComments) {
@@ -179,10 +179,10 @@ const StickyEngagementBar = ({
           <div className={arrow} />
         </div>
 
-        {/* Tooltip commenti — fuori dal glass-panel */}
-        <div className={`${tooltipBase} left-1/2 -translate-x-1/2 ${commentNudge ? tooltipVisible : tooltipHidden}`}>
+        {/* Tooltip commenti — fuori dal glass-panel, allineato al bottone */}
+        <div className={`${tooltipBase} left-[72px] ${commentNudge ? tooltipVisible : tooltipHidden}`}>
           {commentNudgeText}
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-white/95 border-r border-b border-black/5" />
+          <div className={`${arrow} left-5`} />
         </div>
 
         <div className="glass-panel rounded-t-[22px] border border-b-0 border-white/20 bg-white/70 backdrop-blur-xl px-4 py-3 md:px-6 md:py-3.5 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
