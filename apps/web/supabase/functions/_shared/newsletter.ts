@@ -58,6 +58,7 @@ export const BITE_PREFERENCE_DEFAULTS = {
   push_mail_enabled: true,
   push_voyage_admin_enabled: true,
   push_voyage_user_enabled: true,
+  push_editorial_alerts_enabled: true,
 } as const
 
 export const BITE_PREFERENCE_COLUMNS = Object.keys(BITE_PREFERENCE_DEFAULTS)

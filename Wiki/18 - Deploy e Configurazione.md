@@ -101,6 +101,7 @@ OAuth social del calendario editoriale (secret Supabase Functions, non Vercel):
 - `SOCIAL_OAUTH_FRONTEND_URL` — `https://admin.biteproject.it/admin`, destinazione dopo successo/errore sul sottodominio admin.
 - `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` — app creata nel portale Meta, sezione Instagram > API setup with Instagram login; richiesta per i canali Instagram del piano editoriale.
 - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` — da configurare solo quando si abilita il collegamento OAuth dei relativi canali.
+- `EDITORIAL_ALERT_CRON_SECRET` — secret per la cron che verifica la prontezza articoli e invia push admin. Configurato sia come Supabase Function secret sia in Vault (`editorial_alert_cron_secret`) → [[09 - Edge Functions]]. Cron attiva: `15 * * * *` (ogni ora al minuto 15).
 
 Template locale: `.env.example`. Variabile server rilevante per pagamenti: `BUNQ_WEBHOOK_SECRET`, da configurare in Vercel e nella callback Bunq.
 

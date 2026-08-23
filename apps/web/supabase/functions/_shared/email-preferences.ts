@@ -23,6 +23,7 @@ export type EmailNotificationPreferences = NewsletterPreferences & {
   push_mail_enabled: boolean
   push_voyage_admin_enabled: boolean
   push_voyage_user_enabled: boolean
+  push_editorial_alerts_enabled: boolean
 }
 
 export { hasAnyEmailNotificationsEnabled, hasAnyNewsletterNotificationsEnabled }

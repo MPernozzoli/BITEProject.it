@@ -16,6 +16,9 @@ SEO generata da IA: `article_seo_optimizations` è una tabella one-to-one per ar
 
 Sincronizzazione community: alla pubblicazione di un articolo, `sync-article-community-post` genera un post BITE Crew pubblico tramite IA. Il post mantiene `metadata.source_article_id` per idempotenza, salva il link all'articolo in `linked_resources` e replica tutti gli autori editoriali in `community_post_authors` con ordinamento. Il post non crea una seconda discussione: usa lo stesso thread `article_comments` della pagina logbook, così commenti e like commento sono condivisi tra sito principale e Crew.
 
+### ✅ Readiness check (check_article_readiness)
+Function PostgreSQL che verifica se un articolo ha tutti i campi obbligatori per la pubblicazione. Campi controllati: `title_it`, `title_en`, `excerpt_it`, `excerpt_en`, `content_it`, `content_en`, `cover_image`, `editorial_type`. Restituisce `{ ready: boolean, missing: string[], article_id }`. Usata da `editorial-readiness-alert` per le notifiche push proactive e potentially dal trigger di scheduling.
+
 ### ⛵ Voyage / segmenti di rotta
 `id`, `type`, `title`, `slug`, `language`, `summary`, `date.{start,end}`, `coordinates.{departure,arrival}`, `route_association.{waypoint_count, geometry_points, route_type, status, distance, geojson_url, semantic_url}`, `entities_involved`, `linked_media`, `related_articles`, `related_waypoints`, `canonical_url`.
 

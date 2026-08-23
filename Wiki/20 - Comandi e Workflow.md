@@ -138,5 +138,23 @@ cd apps/web && npx deno@2 check --no-lock --node-modules-dir=auto supabase/funct
 ```
 Rimuovere `apps/web/node_modules` dopo: `--node-modules-dir=auto` lo crea per risolvere gli specifier `npm:`.
 
+## Deploy Edge Functions
+
+```bash
+# Deploy singola function
+supabase functions deploy <function-name> --project-ref ekwloweuicrqjjgabfdp --no-verify-jwt
+
+# Deploy editorial-readiness-alert
+supabase functions deploy editorial-readiness-alert --project-ref ekwloweuicrqjjgabfdp --no-verify-jwt
+
+# Secret (già configurati)
+supabase secrets set EDITORIAL_ALERT_CRON_SECRET=<value> --project-ref ekwloweuicrqjjgabfdp
+```
+
+Le cron jobs sono gestite da `pg_cron` nel database. Verifica con:
+```sql
+select jobid, schedule, command, active from cron.job where jobname like 'editorial%';
+```
+
 ## Collegamenti
 - [[18 - Deploy e Configurazione]] · [[19 - Sub-App (pack e data)]] · [[08 - Supabase]] · [[23 - Community]]

@@ -6,7 +6,7 @@ tags: [admin, mcp, ai, agents, backoffice]
 ⬅️ [[Home]] · sorgente: `apps/web/api/mcp/`, `apps/web/src/server/mcp/`, migrazione `20260802210739_admin_mcp_access.sql`
 
 ## Cos'è
-Un server **MCP** (Model Context Protocol) che espone il backoffice a un client agentico (Claude Code, Claude Desktop): pianificare il piano editoriale, scrivere e aggiornare bozze, programmarne la pubblicazione, gestire le campagne newsletter.
+Un server **MCP** (Model Context Protocol) che espone il backoffice a un client agentico (Claude Code, Claude Desktop): pianificare il piano editoriale, scrivere e aggiornare bozze, programmarne la pubblicazione, gestire le campagne newsletter, gestire le storie (serie di articoli) e consultare le metriche di engagement.
 
 > È la superficie **privata** accanto a quella pubblica di [[15 - Semantic Layer (AI Agents)]]: `llms.txt` e `/data/*` raccontano il progetto a chiunque, l'MCP lo fa **fare** a chi ha un token admin.
 
@@ -26,7 +26,7 @@ Il rewrite `/mcp` → `/api/mcp` sta in `vercel.json` **prima** del catch-all SP
 - A ogni richiesta si ri-verifica `has_role(user_id,'admin')`: **togliere il ruolo invalida subito tutti i token di quell'utente**, senza revocarli uno per uno.
 - Il valore in chiaro esiste solo nella risposta alla creazione. La UI è in `AdminMcpTokens.tsx`, montata da `AdminProfile.tsx` su `/profile` per gli admin.
 
-Scope: `articles:read|write`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `voyages:read|write`. Elenco, tipo ed etichette bilingui vivono in un solo punto, `src/lib/mcp-scopes.ts`: sia la UI di creazione token (`AdminMcpTokens.tsx`) sia la pagina di consenso OAuth (`AdminMcpAuthorize.tsx`) lo importano invece di tenere un proprio elenco, quindi mostrano sempre gli stessi permessi e uno scope nuovo compare in entrambe senza toccarle. `Record<McpScope, …>` obbliga anche a dargli un'etichetta: dimenticarla è un errore di build (`tsc`), non un buco silenzioso scoperto in produzione — cosa già successa una volta con `voyages:*`, aggiunto allo scope server ma non alla pagina di consenso finché non consolidata qui.
+Scope: `articles:read|write`, `analytics:read`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `stories:read|write`, `voyages:read|write`. Elenco, tipo ed etichette bilingui vivono in un solo punto, `src/lib/mcp-scopes.ts`: sia la UI di creazione token (`AdminMcpTokens.tsx`) sia la pagina di consenso OAuth (`AdminMcpAuthorize.tsx`) lo importano invece di tenere un proprio elenco, quindi mostrano sempre gli stessi permessi e uno scope nuovo compare in entrambe senza toccarle. `Record<McpScope, …>` obbliga anche a dargli un'etichetta: dimenticarla è un errore di build (`tsc`), non un buco silenzioso scoperto in produzione — cosa già successa una volta con `voyages:*`, aggiunto allo scope server ma non alla pagina di consenso finché non consolidata qui.
 
 ### OAuth 2.1 (connector claude.ai)
 Un client come Claude Code punta direttamente col token manuale; un connector browser (claude.ai) non sa mandare un header custom e si aspetta un authorization server. Per quel caso c'è un AS minimale, tutto in `apps/web/api/mcp/oauth/` + `src/server/mcp/oauth.ts`:
@@ -52,6 +52,8 @@ Registrati tutti tramite `registry.ts`, che applica in un punto solo controllo d
 |---|---|
 | Piano | `plan_get_settings`, `plan_list_slots`, `plan_find_gaps`, `plan_upsert_slot`, `plan_assign_article`, `plan_free_slot` |
 | Articoli | `article_search`, `article_get`, `article_create_draft`, `article_update`, `article_translate`, `article_seo_optimize`, `article_schedule`, `article_unschedule`, `article_upload_image` |
+| Metriche | `article_metrics` (aggregate), `article_metrics_detail` (singolo articolo con serie giornaliera) |
+| Storie | `story_search`, `story_get`, `story_create`, `story_update`, `story_delete`, `story_assign_article`, `story_remove_article` |
 | Newsletter | `newsletter_list_messages`, `newsletter_get_message`, `newsletter_stats`, `newsletter_create_draft`, `newsletter_update_draft`, `newsletter_schedule`, `newsletter_cancel_schedule`, `newsletter_upload_image` |
 | Mail | `mail_list_messages`, `mail_get_message`, `mail_mark`, `mail_reply`, `mail_forward`, `mail_compose` |
 | Viaggi | `voyage_search`, `voyage_get`, `voyage_waypoint_update`, `voyage_waypoint_upload_image` |
@@ -94,6 +96,12 @@ Per la newsletter la stessa fedeltà arriva gratis: `newsletter_create_draft`/`u
 
 ## Impostazioni articolo coperte
 `article_create_draft`/`article_update` non toccano solo il corpo: cover con punto focale (`cover_focal_x/y`) e zoom (`cover_zoom`), slug bilingui SEO (`slug_it`/`slug_en`, indicizzati unique case-insensitive — un duplicato torna come errore DB leggibile), tag (per nome: risolti su quelli esistenti o creati al volo, **sostituiscono** l'elenco esistente quando passati, non lo sommano — stessa semantica "cancella e riscrivi" di `ArticleEditor.tsx`), autori (`{profile_id, role}`, stessa sostituzione, il profilo deve già esistere), collegamento voyage/waypoint/segmento, posizione (`location_name`/`latitude`/`longitude`). `article_get` li restituisce tutti, tag inclusi per nome.
+
+## Metriche articoli
+`article_metrics` e `article_metrics_detail` chiamano le RPC admin `admin_article_view_insights` e `admin_article_view_insight_one` (definite in `20260809090000_article_likes_anonymous_and_engagement_kpis.sql`). Restituiscono: visualizzazioni totali e tracciate, visitatori unici (registrati + anonimi), tempo medio di lettura, distribuzione per lingua (IT/EN), likes (registrati + anonimi), commenti, serie giornaliera degli ultimi 30 giorni. Lo scope è `analytics:read`.
+
+## Storie
+`story_*` gestisce la tabella `stories`: serie di articoli collegati via `logbook_articles.story_id` (FK nullable). Una story ha titolo e descrizione bilingue, slug bilingui (unique case-insensitive), cover, `type` (`open`|`closed`) e `target_chapter_count` (nullable). `story_assign_article`/`story_remove_article` impostano/rimuovono `story_id` sugli articoli — l'articolo non viene mai eliminato, solo scollegato. `story_delete` elimina la story e scollega gli articoli (con `confirm: true`). Scope: `stories:read|write`.
 
 ## Non ancora fatto
 - **Invio di prova della newsletter**: richiederebbe logica nuova, che per `AGENTS.md` va in `@pynkstudio/newsletterapp` con bump dei due pin, non qui.

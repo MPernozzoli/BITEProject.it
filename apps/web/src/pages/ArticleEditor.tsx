@@ -1011,8 +1011,15 @@ const ArticleEditor = () => {
     const saveContentIt = snap?.contentIt ?? contentIt;
 
     if (action === "draft") {
-      finalStatus = "draft";
-      scheduledAt = null;
+      // Preserve scheduling when editing an already-scheduled article:
+      // the editorial plan slot is still linked, so don't tear it down.
+      if (persistedArticleStatus === "scheduled" && serverScheduledAt) {
+        finalStatus = "scheduled";
+        scheduledAt = serverScheduledAt;
+      } else {
+        finalStatus = "draft";
+        scheduledAt = null;
+      }
     } else {
       finalStatus = "published";
       scheduledAt = null;

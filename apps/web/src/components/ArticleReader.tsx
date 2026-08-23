@@ -8,6 +8,7 @@ import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
 import StickyEngagementBar from "@/components/StickyEngagementBar";
+import { useArticleLike } from "@/hooks/useArticleLike";
 import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import ArticleVoyageMediaWidget from "@/components/ArticleVoyageMediaWidget";
@@ -83,6 +84,7 @@ export type ArticleReaderStoryChapter = {
   title_en: string;
   title_it: string;
   published_at: string | null;
+  status?: string;
 };
 
 type ArticleReaderAuthor = {
@@ -103,6 +105,8 @@ type ArticleReaderStory = {
   slug_en?: string | null;
   title_en: string;
   title_it: string;
+  type?: string;
+  target_chapter_count?: number | null;
 };
 
 type ArticleReaderProps = {
@@ -140,6 +144,7 @@ const ArticleReader = ({
   const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
+  const { liked, likeCount, busy: likeBusy, toggleLike } = useArticleLike(article.id);
 
   const storyId = article.story_id;
   const articleRouteSegment = useMemo(() => {
@@ -181,11 +186,12 @@ const ArticleReader = ({
 
   const chapterPrevNext = useMemo(() => {
     if (!article.id || !storyChapters.length) return { prev: null as ArticleReaderStoryChapter | null, next: null as ArticleReaderStoryChapter | null };
-    const idx = storyChapters.findIndex((chapter) => chapter.id === article.id);
+    const publishedOnly = storyChapters.filter((ch) => !ch.status || ch.status === "published");
+    const idx = publishedOnly.findIndex((chapter) => chapter.id === article.id);
     if (idx < 0) return { prev: null, next: null };
     return {
-      prev: idx > 0 ? storyChapters[idx - 1] : null,
-      next: idx < storyChapters.length - 1 ? storyChapters[idx + 1] : null,
+      prev: idx > 0 ? publishedOnly[idx - 1] : null,
+      next: idx < publishedOnly.length - 1 ? publishedOnly[idx + 1] : null,
     };
   }, [article.id, storyChapters]);
 
@@ -490,9 +496,14 @@ const ArticleReader = ({
               {story && (
                 <Link to={storyPathForLang(story as any, lang)} className="glass-panel-soft flex items-center gap-3 mb-6 p-4 rounded-[24px] hover:border-accent transition-colors group">
                   <BookOpen size={16} className="text-accent flex-shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">{lang === "it" ? "Parte della storia" : "Part of story"}</span>
                     <p className="editorial-heading text-sm group-hover:text-accent transition-colors">{lang === "en" ? story.title_en : story.title_it || story.title_en}</p>
+                    {(story.type === "closed" && story.target_chapter_count != null && storyChapters?.length) && (
+                      <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                        {storyChapters.length} {lang === "it" ? "di" : "of"} {story.target_chapter_count} {lang === "it" ? "capitoli" : "chapters"}
+                      </span>
+                    )}
                   </div>
                 </Link>
               )}
@@ -549,7 +560,7 @@ const ArticleReader = ({
                   <span className="text-sm font-sans text-muted-foreground">{lang === "it" ? "Area like, condivisione e commenti" : "Like, share and comments area"}</span>
                 ) : (
                   <>
-                    <LikeButton articleId={article.id} />
+                    <LikeButton articleId={article.id} liked={liked} likeCount={likeCount} onToggleLike={toggleLike} busy={likeBusy} />
                     <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage} />
                   </>
                 )}
@@ -590,7 +601,7 @@ const ArticleReader = ({
                   />
                 )}
                 {articleVoyageMediaItems.length > 0 && <ArticleVoyageMediaWidget items={articleVoyageMediaItems} lang={lang} />}
-                {!previewMode && <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} />}
+                {!previewMode && <ArticleSidebar currentArticleId={article.id} storyId={storyId ?? null} storyChapters={storyChapters} />}
               </div>
             </aside>
           </div>
@@ -606,6 +617,10 @@ const ArticleReader = ({
           title={title}
           shareUrl={shareUrl}
           instagramStoryImageUrl={instagramStoryImage}
+          liked={liked}
+          likeCount={likeCount}
+          onToggleLike={toggleLike}
+          busy={likeBusy}
         />
       )}
     </div>

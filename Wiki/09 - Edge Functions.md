@@ -31,6 +31,7 @@ tags: [backend, edge-functions, serverless, supabase]
 - `dispatch-voyage-booking-notifications` — notifiche prenotazioni, pagamenti, cambi planning e briefing viaggio; per gli eventi admin invia anche Web Push agli admin iscritti → [[13 - Booking Voyage]]
 - `dispatch-voyage-availability-updates` — email non commerciali per utenti che hanno chiesto aggiornamenti su nuovi voyage partecipabili o disponibilità riaperta → [[13 - Booking Voyage]]
 - `dispatch-community-live-notifications` — Web Push per gli utenti che hanno attivato "Avvisami" sui live BITE Crew; invia 10 minuti prima e quando la live inizia, usando `community_live_event_reminders` → [[23 - Community]]. Il testo della push è **risolto per destinatario** leggendo `preferred_language` del profilo: prima era testo italiano fisso per tutti, in violazione della regola bilingue → [[03 - Routing e i18n]]
+- `editorial-readiness-alert` — controllo proattivo di prontezza articoli. Ogni ora verifica gli slot del sito in programma nelle prossime 24h: se l'articolo assegnato non è pronto (manca copertina, excerpt, contenuto, tipo editoriale), invia Web Push agli admin. USA `check_article_readiness()` (DB function) e logga in `editorial_alert_log` per evitare spam. Secret: `EDITORIAL_ALERT_CRON_SECRET`.
 - `vapid-public-key` — chiave push Web Push
 
 ## 🌐 Layer semantico pubblico → [[15 - Semantic Layer (AI Agents)]]

@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import CommentSection from "@/components/CommentSection";
+import StickyEngagementBar from "@/components/StickyEngagementBar";
+import { useArticleLike } from "@/hooks/useArticleLike";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { useArticleDwellTracking, useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
 import { articleContentExtensions } from "@/lib/article-content";
@@ -105,6 +107,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
   useQualifiedArticleRead(article?.id ?? null, slug ?? undefined, lang);
   useSyncArticleViewCount(article?.id ?? null, slug ?? undefined);
   useArticleDwellTracking(article?.id ?? null);
+
+  const { liked, likeCount, busy: likeBusy, toggleLike } = useArticleLike(article?.id ?? "");
 
   const { data: authors = [] } = useQuery({
     queryKey: ["article-authors", article?.id],
@@ -710,7 +714,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                       )}
 
                       <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
-                        <LikeButton articleId={article.id} />
+                        <LikeButton articleId={article.id} liked={liked} likeCount={likeCount} onToggleLike={toggleLike} busy={likeBusy} />
                         <ShareButton title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
                       </div>
                     </div>
@@ -763,6 +767,28 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
           </div>
         </div>
       </div>
+
+      {article && (
+        <StickyEngagementBar
+          articleId={article.id}
+          lang={lang}
+          title={title}
+          shareUrl={shareUrl}
+          instagramStoryImageUrl={instagramStoryImage || undefined}
+          scrollContainerRef={scrollContainerRef}
+          liked={liked}
+          likeCount={likeCount}
+          onToggleLike={toggleLike}
+          busy={likeBusy}
+          onScrollToComments={() => {
+            const container = scrollContainerRef.current;
+            const commentSection = container?.querySelector("section:last-of-type");
+            if (container && commentSection) {
+              commentSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          }}
+        />
+      )}
     </>
   );
 

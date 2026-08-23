@@ -8,6 +8,7 @@ tags: [frontend, lib, hooks, logica]
 ## Hooks (`apps/web/src/hooks/`)
 - `useAuth.tsx` — `AuthProvider` + accesso sessione Supabase → [[08 - Supabase]]
 - `useArticleReads.tsx` — conteggio letture articolo (live); quando un utente autenticato registra la lettura di un articolo, archivia anche le notifiche in-app di pubblicazione (`notification_category = publication`) relative a quell'articolo impostando `read_at` → [[12 - Newsletter ed Email]]
+- `useArticleLike.ts` — stato condiviso like articolo (`liked`, `likeCount`, `toggleLike`, `busy`); usato da `LikeButton` e `StickyEngagementBar` per restare sincronizzati
 - `useBeforeUnloadPrompt.ts` — prompt nativo per modifiche non salvate: attivo su desktop, disattivato su mobile/PWA per non interferire col ripristino pagina dopo background.
 - `usePublicContentSnapshot.ts` — snapshot contenuti pubblici in cache
 - `use-mobile.tsx` — breakpoint mobile

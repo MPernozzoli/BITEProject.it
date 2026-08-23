@@ -6,15 +6,25 @@ import { getOrCreateVisitorKey } from "@/lib/visitor-key";
 interface LikeButtonProps {
   articleId: string;
   size?: number;
+  liked?: boolean;
+  likeCount?: number;
+  onToggleLike?: () => void;
+  busy?: boolean;
 }
 
-const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
-  const [liked, setLiked] = useState(false);
-  const [count, setCount] = useState(0);
+const LikeButton = ({ articleId, size = 18, liked: externalLiked, likeCount: externalCount, onToggleLike, busy: externalBusy }: LikeButtonProps) => {
+  const [internalLiked, setInternalLiked] = useState(false);
+  const [internalCount, setInternalCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [internalBusy, setInternalBusy] = useState(false);
+
+  const isControlled = externalLiked !== undefined;
+  const liked = isControlled ? externalLiked : internalLiked;
+  const count = isControlled ? externalCount ?? 0 : internalCount;
+  const busy = isControlled ? (externalBusy ?? false) : internalBusy;
 
   useEffect(() => {
+    if (isControlled) return;
     let cancelled = false;
 
     const load = async () => {
@@ -27,7 +37,7 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
         .from("article_likes")
         .select("id", { count: "exact", head: true })
         .eq("article_id", articleId);
-      if (!cancelled) setCount(c || 0);
+      if (!cancelled) setInternalCount(c || 0);
 
       const { data } = uid
         ? await supabase
@@ -42,22 +52,24 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
             .eq("article_id", articleId)
             .eq("visitor_key", getOrCreateVisitorKey())
             .maybeSingle();
-      if (!cancelled) setLiked(!!data);
+      if (!cancelled) setInternalLiked(!!data);
     };
 
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [articleId]);
+    return () => { cancelled = true; };
+  }, [articleId, isControlled]);
 
   const toggleLike = async () => {
-    if (busy) return;
-    setBusy(true);
+    if (onToggleLike) {
+      onToggleLike();
+      return;
+    }
+    if (internalBusy) return;
+    setInternalBusy(true);
 
-    const nextLiked = !liked;
-    setLiked(nextLiked);
-    setCount((c) => Math.max(0, c + (nextLiked ? 1 : -1)));
+    const nextLiked = !internalLiked;
+    setInternalLiked(nextLiked);
+    setInternalCount((c) => Math.max(0, c + (nextLiked ? 1 : -1)));
 
     const { data, error } = await supabase.rpc("toggle_article_like", {
       _article_id: articleId,
@@ -65,14 +77,13 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
     });
 
     if (error) {
-      console.error("Failed to toggle article like", { articleId, error });
-      setLiked(!nextLiked);
-      setCount((c) => Math.max(0, c - (nextLiked ? 1 : -1)));
+      setInternalLiked(!nextLiked);
+      setInternalCount((c) => Math.max(0, c - (nextLiked ? 1 : -1)));
     } else {
       const result = data as { liked: boolean; count: number } | null;
       if (result) {
-        setLiked(result.liked);
-        setCount(result.count);
+        setInternalLiked(result.liked);
+        setInternalCount(result.count);
         if (result.liked && userId) {
           void supabase.functions.invoke("dispatch-engagement-notifications", {
             body: { limit: 100 },
@@ -81,7 +92,7 @@ const LikeButton = ({ articleId, size = 18 }: LikeButtonProps) => {
       }
     }
 
-    setBusy(false);
+    setInternalBusy(false);
   };
 
   return (

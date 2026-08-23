@@ -3921,8 +3921,10 @@ export type Database = {
           slug: string
           slug_en: string | null
           slug_it: string | null
+          target_chapter_count: number | null
           title_en: string
           title_it: string
+          type: string
           updated_at: string
         }
         Insert: {
@@ -3934,8 +3936,10 @@ export type Database = {
           slug: string
           slug_en?: string | null
           slug_it?: string | null
+          target_chapter_count?: number | null
           title_en?: string
           title_it?: string
+          type?: string
           updated_at?: string
         }
         Update: {
@@ -3947,8 +3951,10 @@ export type Database = {
           slug?: string
           slug_en?: string | null
           slug_it?: string | null
+          target_chapter_count?: number | null
           title_en?: string
           title_it?: string
+          type?: string
           updated_at?: string
         }
         Relationships: []

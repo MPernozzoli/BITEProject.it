@@ -64,6 +64,7 @@ type StoryChapter = {
   title_en: string;
   title_it: string;
   published_at: string | null;
+  status: string;
 };
 
 type ArticleSeoOptimization = {
@@ -134,9 +135,9 @@ const ArticlePage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("logbook_articles")
-        .select("id, slug, slug_it, slug_en, title_en, title_it, published_at")
+        .select("id, slug, slug_it, slug_en, title_en, title_it, published_at, status")
         .eq("story_id", storyId!)
-        .eq("status", "published")
+        .in("status", ["published", "scheduled", "draft"])
         .order("published_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data || []) as StoryChapter[];

@@ -15,7 +15,7 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `Manifesto.tsx` | `manifesto` | Manifesto del progetto |
 | `Journal.tsx` | `logbook` | Indice logbook/articoli |
 | `ArticlePage.tsx` | `logbook/:slug` | Articolo singolo (con mappa, related) |
-| `StoryPage.tsx` | `logbook/story/:slug` | Racconto/story |
+| `StoryPage.tsx` | `logbook/story/:slug` | Racconto/story: elenco capitoli pubblicati + anteprime articoli futuri (draft/schedulati), badge tipo (aperta/chiusa), progresso, iscrizione |
 | `Voyages.tsx` | `voyages` | Elenco viaggi |
 | `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta; supporta `?leg=<bookable_leg_id>` per evidenziare una tratta referenziata dalla community |
 | `Collaborations.tsx` | `collaborations` | Collaborazioni aperte: ricerca in mare, creator/editoriale e brand |

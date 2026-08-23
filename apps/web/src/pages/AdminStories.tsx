@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, BookOpen, Edit, Eye, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BookOpen, Edit, Eye, Link2, Plus, Trash2, Unlink, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,8 +24,20 @@ interface Story {
   description_en: string | null;
   description_it: string | null;
   cover_image: string | null;
+  type: string;
+  target_chapter_count: number | null;
   created_at: string;
   updated_at: string;
+}
+
+interface StoryArticle {
+  id: string;
+  title_en: string;
+  title_it: string;
+  slug: string;
+  status: string;
+  published_at: string | null;
+  scheduled_at: string | null;
 }
 
 type StoryListFilters = {
@@ -53,6 +65,12 @@ const defaultStoryListSort: StoryListSort = {
 const generateSlug = (title: string) =>
   title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 80);
 
+const statusLabel = (status: string) => {
+  if (status === "published") return "Pubblicato";
+  if (status === "scheduled") return "Pianificato";
+  return "Bozza";
+};
+
 const AdminStories = () => {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -61,11 +79,26 @@ const AdminStories = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingStory, setEditingStory] = useState<Story | null>(null);
-  const [form, setForm] = useState({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
+  const [form, setForm] = useState({
+    title_en: "",
+    title_it: "",
+    slug: "",
+    description_en: "",
+    description_it: "",
+    type: "open" as string,
+    target_chapter_count: "" as string,
+  });
   const [filters, setFilters] = useState<StoryListFilters>(emptyStoryListFilters);
   const [sort, setSort] = useState<StoryListSort>(defaultStoryListSort);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [filtersAdvanced, setFiltersAdvanced] = useState(false);
+
+  // Article management state
+  const [linkedArticles, setLinkedArticles] = useState<StoryArticle[]>([]);
+  const [loadingArticles, setLoadingArticles] = useState(false);
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [unassignedArticles, setUnassignedArticles] = useState<StoryArticle[]>([]);
+  const [linkSearch, setLinkSearch] = useState("");
 
   const fetchStories = useCallback(async () => {
     if (!userId && !isAdminDevBypassEnabled()) return;
@@ -85,6 +118,17 @@ const AdminStories = () => {
     void fetchStories();
   }, [fetchStories]);
 
+  const fetchLinkedArticles = useCallback(async (storyId: string) => {
+    setLoadingArticles(true);
+    const { data } = await supabase
+      .from("logbook_articles")
+      .select("id, title_en, title_it, slug, status, published_at, scheduled_at")
+      .eq("story_id", storyId)
+      .order("published_at", { ascending: true, nullsFirst: true });
+    setLinkedArticles((data as StoryArticle[]) || []);
+    setLoadingArticles(false);
+  }, []);
+
   const openForm = (story?: Story) => {
     if (story) {
       setEditingStory(story);
@@ -94,22 +138,34 @@ const AdminStories = () => {
         slug: story.slug,
         description_en: story.description_en || "",
         description_it: story.description_it || "",
+        type: story.type || "open",
+        target_chapter_count: story.target_chapter_count?.toString() || "",
       });
+      void fetchLinkedArticles(story.id);
     } else {
       setEditingStory(null);
-      setForm({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "" });
+      setForm({ title_en: "", title_it: "", slug: "", description_en: "", description_it: "", type: "open", target_chapter_count: "" });
+      setLinkedArticles([]);
     }
     setShowForm(true);
   };
 
   const saveStory = async () => {
     const slug = form.slug || generateSlug(form.title_en);
-    const data = { ...form, slug };
+    const payload = {
+      title_en: form.title_en,
+      title_it: form.title_it,
+      slug,
+      description_en: form.description_en || null,
+      description_it: form.description_it || null,
+      type: form.type,
+      target_chapter_count: form.type === "closed" && form.target_chapter_count ? parseInt(form.target_chapter_count, 10) : null,
+    };
     if (editingStory) {
-      await supabase.from("stories").update(data).eq("id", editingStory.id);
+      await supabase.from("stories").update(payload).eq("id", editingStory.id);
       toast.success("Story updated");
     } else {
-      await supabase.from("stories").insert(data);
+      await supabase.from("stories").insert(payload);
       toast.success("Story created");
     }
     setShowForm(false);
@@ -122,6 +178,43 @@ const AdminStories = () => {
     setStories((prev) => prev.filter((s) => s.id !== id));
     toast.success("Story deleted");
   };
+
+  const unlinkArticle = async (articleId: string) => {
+    await supabase.from("logbook_articles").update({ story_id: null }).eq("id", articleId);
+    setLinkedArticles((prev) => prev.filter((a) => a.id !== articleId));
+    toast.success("Article unlinked");
+  };
+
+  const openLinkPicker = async () => {
+    if (!editingStory) return;
+    setShowLinkPicker(true);
+    setLinkSearch("");
+    const { data } = await supabase
+      .from("logbook_articles")
+      .select("id, title_en, title_it, slug, status, published_at, scheduled_at")
+      .is("story_id", null)
+      .order("created_at", { ascending: false });
+    setUnassignedArticles((data as StoryArticle[]) || []);
+  };
+
+  const linkArticle = async (articleId: string) => {
+    if (!editingStory) return;
+    await supabase.from("logbook_articles").update({ story_id: editingStory.id }).eq("id", articleId);
+    const article = unassignedArticles.find((a) => a.id === articleId);
+    if (article) {
+      setLinkedArticles((prev) => [...prev, article]);
+      setUnassignedArticles((prev) => prev.filter((a) => a.id !== articleId));
+    }
+    toast.success("Article linked");
+  };
+
+  const filteredUnassigned = useMemo(() => {
+    if (!linkSearch.trim()) return unassignedArticles;
+    const q = linkSearch.toLowerCase();
+    return unassignedArticles.filter(
+      (a) => a.title_en.toLowerCase().includes(q) || a.title_it.toLowerCase().includes(q) || a.slug.toLowerCase().includes(q)
+    );
+  }, [unassignedArticles, linkSearch]);
 
   const hasActiveFilters = Boolean(filters.dateFrom) || Boolean(filters.dateTo);
 
@@ -323,6 +416,55 @@ const AdminStories = () => {
                 </div>
               </div>
 
+              {/* Story type */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Tipo di storia</label>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, type: "open", target_chapter_count: "" }))}
+                      className={`flex-1 rounded-[18px] border px-4 py-3 text-sm font-sans transition-colors ${
+                        form.type === "open"
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-stone-200/90 bg-white/78 text-muted-foreground hover:border-stone-300"
+                      }`}
+                    >
+                      Aperta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, type: "closed" }))}
+                      className={`flex-1 rounded-[18px] border px-4 py-3 text-sm font-sans transition-colors ${
+                        form.type === "closed"
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-stone-200/90 bg-white/78 text-muted-foreground hover:border-stone-300"
+                      }`}
+                    >
+                      Chiusa
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {form.type === "open"
+                      ? "Numero di capitoli non definito"
+                      : "Numero preciso di capitoli (aggiornabile)"}
+                  </p>
+                </div>
+                {form.type === "closed" && (
+                  <div>
+                    <label className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-2 block">Capitoli previsti</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.target_chapter_count}
+                      onChange={(e) => setForm((f) => ({ ...f, target_chapter_count: e.target.value }))}
+                      placeholder="Es. 5"
+                      className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-3">
                 <button
                   onClick={saveStory}
@@ -332,6 +474,100 @@ const AdminStories = () => {
                   {editingStory ? "Aggiorna story" : "Crea story"}
                 </button>
               </div>
+
+              {/* Linked articles section — only when editing */}
+              {editingStory && (
+                <div className="border-t border-stone-200/60 pt-5 mt-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">Articoli della storia</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {linkedArticles.length} articolo{linkedArticles.length !== 1 ? "i" : ""}
+                        {form.type === "closed" && form.target_chapter_count
+                          ? ` / ${form.target_chapter_count} previsti`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      onClick={openLinkPicker}
+                      className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-xs font-sans text-accent hover:text-foreground transition-colors"
+                    >
+                      <Link2 size={13} />
+                      Collega articolo
+                    </button>
+                  </div>
+
+                  {loadingArticles ? (
+                    <p className="text-xs text-muted-foreground">Caricamento...</p>
+                  ) : linkedArticles.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nessun articolo collegato.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {linkedArticles.map((article, idx) => (
+                        <div key={article.id} className="glass-panel-soft rounded-[18px] flex items-center gap-3 px-4 py-3">
+                          <span className="text-[11px] font-sans text-muted-foreground w-5 text-center">{idx + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-sans truncate">{article.title_en || article.title_it}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {statusLabel(article.status)}
+                              {article.published_at && ` · ${format(new Date(article.published_at), "d MMM yyyy")}`}
+                              {article.scheduled_at && !article.published_at && ` · dal ${format(new Date(article.scheduled_at), "d MMM yyyy")}`}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => unlinkArticle(article.id)}
+                            className="glass-chip inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                            title="Scollega"
+                          >
+                            <Unlink size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Link picker modal */}
+                  {showLinkPicker && (
+                    <div className="glass-panel-soft rounded-[20px] p-4 space-y-3 border border-accent/30">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">Collega articolo esistente</h5>
+                        <button
+                          onClick={() => setShowLinkPicker(false)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={linkSearch}
+                        onChange={(e) => setLinkSearch(e.target.value)}
+                        placeholder="Cerca per titolo..."
+                        className="w-full rounded-[14px] border border-stone-200/90 bg-white/78 px-3 py-2 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
+                      />
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {filteredUnassigned.length === 0 ? (
+                          <p className="text-xs text-muted-foreground py-2">Nessun articolo disponibile.</p>
+                        ) : (
+                          filteredUnassigned.map((article) => (
+                            <button
+                              key={article.id}
+                              onClick={() => linkArticle(article.id)}
+                              className="w-full text-left glass-panel-soft rounded-[14px] flex items-center gap-3 px-3 py-2.5 hover:border-accent transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-sans truncate">{article.title_en || article.title_it}</p>
+                                <p className="text-[10px] text-muted-foreground">{statusLabel(article.status)}</p>
+                              </div>
+                              <Link2 size={12} className="text-accent shrink-0" />
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -365,12 +601,18 @@ const AdminStories = () => {
                           <BookOpen size={13} />
                           Story
                         </span>
+                        <span className="glass-chip inline-flex items-center px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.15em] text-muted-foreground">
+                          {story.type === "closed" ? "Chiusa" : "Aperta"}
+                        </span>
                       </div>
                       <h3 className="editorial-heading text-2xl leading-tight mb-2">{story.title_en || story.title_it}</h3>
                       <p className="text-sm font-sans text-muted-foreground">/{story.slug}</p>
                       <p className="text-xs font-sans text-muted-foreground mt-1">
                         Creata {format(new Date(story.created_at), "d MMM yyyy")} · aggiornata{" "}
                         {format(new Date(story.updated_at), "d MMM yyyy, HH:mm")}
+                        {story.type === "closed" && story.target_chapter_count != null && (
+                          <> · {story.target_chapter_count} capitoli previsti</>
+                        )}
                       </p>
                     </div>
 

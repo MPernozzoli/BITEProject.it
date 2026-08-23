@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { format } from "date-fns";
-import { ArrowLeft, Bell, BellOff, BookOpen } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, BookOpen, Clock, Lock, Unlock } from "lucide-react";
 import ProfileCard from "@/components/ProfileCard";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import {
@@ -15,6 +15,20 @@ import {
   storyLocalizedPaths,
   storyPathForLang,
 } from "@/lib/article-slug";
+
+type ChapterArticle = {
+  id: string;
+  slug: string;
+  title_en: string;
+  title_it: string;
+  excerpt_en: string | null;
+  excerpt_it: string | null;
+  cover_image: string | null;
+  published_at: string | null;
+  scheduled_at: string | null;
+  status: string;
+  authors?: { id: string; name: string | null; avatar_url: string | null }[];
+};
 
 const StoryPage = () => {
   const { slug } = useParams();
@@ -50,7 +64,6 @@ const StoryPage = () => {
     },
   });
 
-  // Redirect to current-lang canonical slug when user landed on the other slug.
   useEffect(() => {
     if (!story || !slug) return;
     const preferred = slugForLang(story as any, lang);
@@ -61,8 +74,8 @@ const StoryPage = () => {
     }
   }, [story, slug, lang, navigate]);
 
-  // Chapters (articles in this story, chronological)
-  const { data: chapters = [] } = useQuery({
+  // Fetch ALL articles in this story (published + scheduled + draft)
+  const { data: allChapters = [] } = useQuery({
     queryKey: ["story-chapters", story?.id],
     enabled: !!story?.id,
     queryFn: async () => {
@@ -70,12 +83,13 @@ const StoryPage = () => {
         .from("logbook_articles")
         .select("*") as any)
         .eq("story_id", story!.id)
-        .eq("status", "published")
-        .order("published_at", { ascending: true });
+        .in("status", ["published", "scheduled", "draft"])
+        .order("published_at", { ascending: true, nullsFirst: true })
+        .order("scheduled_at", { ascending: true, nullsFirst: true })
+        .order("created_at", { ascending: true });
       if (error) throw error;
 
-      // Fetch authors
-      const ids = (data || []).map((a) => a.id);
+      const ids = (data || []).map((a: any) => a.id);
       if (!ids.length) return [];
       const { data: authorLinks } = await supabase.from("article_authors").select("article_id, profile_id").in("article_id", ids);
       const profileIds = [...new Set((authorLinks || []).map((a) => a.profile_id))];
@@ -90,12 +104,25 @@ const StoryPage = () => {
         if (profile) articleAuthorsMap[link.article_id].push(profile);
       });
 
-      return (data || []).map((article) => ({
+      return (data || []).map((article: any) => ({
         ...article,
         authors: articleAuthorsMap[article.id] || [],
       }));
     },
   });
+
+  const publishedChapters = useMemo(
+    () => allChapters.filter((c) => c.status === "published"),
+    [allChapters]
+  );
+
+  const upcomingChapters = useMemo(
+    () => allChapters.filter((c) => c.status !== "published"),
+    [allChapters]
+  );
+
+  const isClosedComplete = story?.type === "closed" && story?.target_chapter_count != null
+    && publishedChapters.length >= story.target_chapter_count;
 
   // Subscription status
   const { data: isSubscribed = false } = useQuery({
@@ -156,7 +183,7 @@ const StoryPage = () => {
             description: desc || DEFAULT_DESCRIPTION,
             url: `${window.location.origin}/${lang}${storyPathForLang(story as any, lang)}`,
           },
-          hasPart: chapters.map((chapter) => ({
+          hasPart: publishedChapters.map((chapter) => ({
             "@type": "Article",
             headline: lang === "en" ? chapter.title_en : chapter.title_it || chapter.title_en,
             url: `${window.location.origin}/${lang}${articlePathForLang(chapter as any, lang)}`,
@@ -168,7 +195,7 @@ const StoryPage = () => {
         },
       ],
     });
-  }, [chapters, story, title, desc, lang]);
+  }, [publishedChapters, story, title, desc, lang]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center pt-20"><p className="text-muted-foreground">Loading...</p></div>;
@@ -184,6 +211,8 @@ const StoryPage = () => {
       </div>
     );
   }
+
+  const showSubscribe = !isClosedComplete;
 
   return (
     <div>
@@ -205,13 +234,34 @@ const StoryPage = () => {
             <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
               {lang === "it" ? "Storia" : "Story"}
             </span>
+            <span className="glass-chip inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.15em] text-muted-foreground">
+              {story.type === "closed" ? <Lock size={10} /> : <Unlock size={10} />}
+              {story.type === "closed"
+                ? (lang === "it" ? "Chiusa" : "Closed")
+                : (lang === "it" ? "Aperta" : "Open")}
+            </span>
           </div>
 
           <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-4">{title}</h1>
-          {desc && <p className="editorial-body text-lg text-muted-foreground mb-8">{desc}</p>}
+          {desc && <p className="editorial-body text-lg text-muted-foreground mb-6">{desc}</p>}
 
-          {/* Subscribe button */}
-          {userId && (
+          {/* Progress for closed stories */}
+          {story.type === "closed" && story.target_chapter_count != null && (
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden max-w-xs">
+                <div
+                  className="h-full bg-accent rounded-full transition-all"
+                  style={{ width: `${Math.min((publishedChapters.length / story.target_chapter_count) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="text-xs font-sans text-muted-foreground">
+                {publishedChapters.length} {lang === "it" ? "di" : "of"} {story.target_chapter_count} {lang === "it" ? "capitoli pubblicati" : "chapters published"}
+              </span>
+            </div>
+          )}
+
+          {/* Subscribe button — hidden when closed story is complete */}
+          {showSubscribe && userId && (
             <button
               onClick={() => toggleSubscription.mutate()}
               className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-sans font-medium transition-colors mb-12 ${
@@ -228,7 +278,7 @@ const StoryPage = () => {
             </button>
           )}
 
-          {!userId && (
+          {showSubscribe && !userId && (
             <p className="text-sm text-muted-foreground mb-12">
               <Link to="/login" className="text-accent hover:underline">
                 {lang === "it" ? "Accedi" : "Log in"}
@@ -241,9 +291,13 @@ const StoryPage = () => {
           {/* Chapters */}
           <div className="space-y-8">
             <h2 className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">
-              {lang === "it" ? `${chapters.length} Capitoli` : `${chapters.length} Chapters`}
+              {lang === "it"
+                ? `${publishedChapters.length} Capitoli${story.type === "closed" && story.target_chapter_count != null ? ` di ${story.target_chapter_count}` : ""}`
+                : `${publishedChapters.length} Chapters${story.type === "closed" && story.target_chapter_count != null ? ` of ${story.target_chapter_count}` : ""}`}
             </h2>
-            {chapters.map((chapter, idx) => {
+
+            {/* Published chapters */}
+            {publishedChapters.map((chapter, idx) => {
               const chTitle = lang === "en" ? chapter.title_en : (chapter.title_it || chapter.title_en);
               const chExcerpt = lang === "en" ? chapter.excerpt_en : (chapter.excerpt_it || chapter.excerpt_en);
               return (
@@ -295,12 +349,70 @@ const StoryPage = () => {
                 </article>
               );
             })}
-            {chapters.length === 0 && (
+
+            {/* Upcoming chapters (scheduled / draft) — non-clickable previews */}
+            {upcomingChapters.map((chapter, idx) => {
+              const chTitle = lang === "en" ? chapter.title_en : (chapter.title_it || chapter.title_en);
+              const chapterNumber = publishedChapters.length + idx + 1;
+              return (
+                <article key={chapter.id} className="opacity-60">
+                  <div className="flex gap-6 items-start">
+                    <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-dashed border-border text-sm font-sans text-muted-foreground">
+                      {chapterNumber}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="editorial-heading text-xl md:text-2xl mb-1 text-muted-foreground">
+                        {chTitle}
+                      </h3>
+                      <div className="flex items-center gap-3 mt-2">
+                        {chapter.scheduled_at ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Clock size={11} />
+                            {lang === "it" ? `Disponibile dal ${format(new Date(chapter.scheduled_at), "d MMM yyyy")}` : `Available from ${format(new Date(chapter.scheduled_at), "MMM d, yyyy")}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">
+                            {lang === "it" ? "In preparazione" : "In preparation"}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-muted-foreground border border-border rounded-full px-2 py-0.5">
+                          {chapter.status === "scheduled"
+                            ? (lang === "it" ? "Pianificato" : "Scheduled")
+                            : (lang === "it" ? "Bozza" : "Draft")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+
+            {allChapters.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {lang === "it" ? "Nessun capitolo ancora pubblicato." : "No chapters published yet."}
               </p>
             )}
           </div>
+
+          {/* Footer link to logbook when story is complete */}
+          {isClosedComplete && (
+            <div className="mt-12 pt-8 border-t border-border">
+              <Link
+                to="/logbook"
+                className="glass-panel-soft rounded-[24px] flex items-center gap-3 p-4 hover:border-accent transition-colors group"
+              >
+                <BookOpen size={16} className="text-accent" />
+                <div>
+                  <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
+                    {lang === "it" ? "Altri articoli" : "More articles"}
+                  </span>
+                  <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                    {lang === "it" ? "Scopri altri articoli nel Logbook" : "Discover more articles in the Logbook"}
+                  </p>
+                </div>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
     </div>

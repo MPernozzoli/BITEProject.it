@@ -18,7 +18,7 @@ tags: [frontend, componenti, ui]
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale articolo → [[14 - Mappe e Layer Geospaziale]]
 - `ArticleVoyageMediaWidget.tsx`
 - `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement inline
-- `StickyEngagementBar.tsx` — barra engagement fissa in basso (like, commenti, condivisione) con animazione heart nudge allo scroll ~35%, montata da `ArticleReader.tsx` in modalità pubblica
+- `StickyEngagementBar.tsx` — barra engagement fissa in basso (like, commenti, condivisione) con testi animati casuali che invitano all'azione, animazione heart nudge a metà scroll e comment nudge verso fine scroll. Supporta `scrollContainerRef` per contesti con scroll custom (modal). Montata da `ArticleReader.tsx` (pagina pubblica) e `ExpandedArticleModal.tsx` (anteprima logbook). Lo stato like è condiviso via `useArticleLike` hook con `LikeButton`.
 - `ArticleReader.tsx` — renderer condiviso della pagina articolo: cover, metadati/autori, contenuto TipTap sanificato, scene mappa, media di viaggio, tag, engagement inline e sidebar. In modalità pubblica monta `StickyEngagementBar` (barra fissa in basso con like/commenti/condivisione e cuore animato a metà scroll). `ArticlePage.tsx` lo usa con side effect pubblici attivi; `ArticleEditor.tsx` lo usa per anteprima admin senza like/commenti/analytics. Le citazioni TipTap hanno stile editoriale condiviso (`.article-rich-body blockquote`): ampio respiro verticale, segno laterale teal e virgolette tipografiche, invece della precedente bubble neutra. La stessa classe forza marker e indentazione di liste `ul`/`ol`, così punti e numeri sono visibili uguali nell’editor, nell’anteprima e nella pagina pubblica.
 - `AuthorSelector.tsx`
 
@@ -44,6 +44,7 @@ tags: [frontend, componenti, ui]
 - `voyage/VoyageLiveWidget.tsx` — widget viaggio in corso: mostra la prima tratta da chiudere con i tasti "Parti ora"/"Arriva ora" e il chevron per data/ora manuale. Compare da 7 giorni prima della partenza prevista fino a fine viaggio. Prop `readOnly` per la versione viaggiatore su `/bookings`, prop `voyageIds` per limitarlo ai viaggi prenotati → [[21 - Tracking Real-Time Viaggi]]
 - `voyage/VoyageLegend.tsx` — legenda rotta del logbook; mostra distanze, tappe e articoli collegati, ma non i badge di complessità delle tratte prenotabili.
 - `voyage/ArticleListCard.tsx` — card articolo della sidebar `/logbook`, con thumbnail, metadati, autori, contatori e icona occhiali senza box per gli articoli già letti.
+- `voyage/ExpandedArticleModal.tsx` — modale full-screen per l'anteprima articolo dal logbook: rendering completo con cover, mappa, contenuto, commenti e `StickyEngagementBar` con scroll custom via `scrollContainerRef`. Stato like condiviso con `LikeButton` tramite `useArticleLike`.
 
 ## Sottocartelle tematiche
 - `ui/` — **shadcn/ui** primitives (button, dialog, input, select, tabs, toast…). Base di tutta l'interfaccia.
