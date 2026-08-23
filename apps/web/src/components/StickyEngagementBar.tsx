@@ -62,6 +62,7 @@ const StickyEngagementBar = ({
 }: StickyEngagementBarProps) => {
   const [visible, setVisible] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
+  const [hasCommented, setHasCommented] = useState(false);
   const [heartNudge, setHeartNudge] = useState(false);
   const [heartNudgeText, setHeartNudgeText] = useState("");
   const [commentNudge, setCommentNudge] = useState(false);
@@ -80,11 +81,22 @@ const StickyEngagementBar = ({
     let cancelled = false;
 
     const load = async () => {
-      const { count: cc } = await supabase
-        .from("article_comments")
-        .select("id", { count: "exact", head: true })
-        .eq("article_id", articleId);
-      if (!cancelled) setCommentCount(cc || 0);
+      const visitorKey = getOrCreateVisitorKey();
+      const [countResult, commentResult] = await Promise.all([
+        supabase
+          .from("article_comments")
+          .select("id", { count: "exact", head: true })
+          .eq("article_id", articleId),
+        supabase
+          .from("article_comments")
+          .select("id", { count: "exact", head: true })
+          .eq("article_id", articleId)
+          .eq("visitor_key", visitorKey),
+      ]);
+      if (!cancelled) {
+        setCommentCount(countResult.count || 0);
+        setHasCommented((commentResult.count || 0) > 0);
+      }
     };
 
     void load();
@@ -125,7 +137,7 @@ const StickyEngagementBar = ({
           heartNudgeTimeout.current = setTimeout(() => setHeartNudge(false), 2800);
         }
 
-        if (!commentNudgeFired.current && scrollProgress > 0.6 && scrollProgress < 0.9) {
+        if (!commentNudgeFired.current && !hasCommented && scrollProgress > 0.6 && scrollProgress < 0.9) {
           commentNudgeFired.current = true;
           setCommentNudgeText(pickRandom(commentTexts));
           setCommentNudge(true);
@@ -143,7 +155,7 @@ const StickyEngagementBar = ({
       clearTimeout(heartNudgeTimeout.current);
       clearTimeout(commentNudgeTimeout.current);
     };
-  }, [scrollContainerRef, heartTexts, commentTexts, liked]);
+  }, [scrollContainerRef, heartTexts, commentTexts, liked, hasCommented]);
 
   const scrollToComments = useCallback(() => {
     if (onScrollToComments) {
