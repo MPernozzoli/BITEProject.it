@@ -1120,6 +1120,16 @@
     z-index: 1;
   }
 
+  @media (max-width: 768px) {
+    .glass-panel,
+    .glass-panel-soft,
+    .glass-chip,
+    .glass-frame {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
   .hero-layer {
     position: absolute;
     inset: 0;

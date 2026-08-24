@@ -2,7 +2,6 @@ import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
-import { generateHTML } from "@tiptap/react";
 import { ArrowLeft, BookOpen, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { format } from "date-fns";
 import LikeButton from "@/components/LikeButton";
@@ -15,8 +14,6 @@ import { useArticleDwellTracking, useQualifiedArticleRead, useSyncArticleViewCou
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
-import { articleContentExtensions } from "@/lib/article-content";
-import ProfileAvatar from "@/components/ProfileAvatar";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import {
   articleLocalizedPaths,
@@ -25,7 +22,6 @@ import {
   slugForLang,
   storyPathForLang,
 } from "@/lib/article-slug";
-import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
 import LazyArticleMapAside from "@/components/LazyArticleMapAside";
 import { extractImagesFromRichContent } from "@/lib/content-images";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
@@ -309,22 +305,6 @@ const ArticlePage = () => {
     if (!content || typeof content !== "object" || !Array.isArray((content as any).content)) return [];
     return (content as any).content as Record<string, unknown>[];
   }, [content]);
-  const hasStructuredContent = Boolean(
-    content && typeof content === "object" && Object.keys(content).length > 0
-  );
-  let contentRenderFailed = false;
-  let htmlContent = "";
-
-  if (hasStructuredContent) {
-    try {
-      htmlContent = sanitizeRichHtml(
-        generateHTML(content as Parameters<typeof generateHTML>[0], articleContentExtensions)
-      );
-    } catch (error) {
-      contentRenderFailed = true;
-      console.error("Failed to render article content", error);
-    }
-  }
 
   const localizedScenes = useMemo(() => {
     const sortedScenes = sortArticleMapScenesForLanguage(articleScenes, lang);

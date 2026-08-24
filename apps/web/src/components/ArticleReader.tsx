@@ -140,7 +140,6 @@ const ArticleReader = ({
   previewLabel,
   shareUrl: providedShareUrl,
 }: ArticleReaderProps) => {
-  const articleBlockRefs = useRef<Array<HTMLDivElement | null>>([]);
   const articleContentRef = useRef<HTMLDivElement | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [mapCamera, setMapCamera] = useState<{ latitude: number; longitude: number; zoom: number } | null>(null);
@@ -399,7 +398,7 @@ const ArticleReader = ({
           ? articleContentRef.current?.querySelector<HTMLElement>(`[data-map-scene-anchor-id="${scene.anchorId}"]`) ?? null
           : null;
         const anchorIndex = Math.min(scene.anchorIndex, Math.max(contentNodes.length - 1, 0));
-        const fallbackElement = articleBlockRefs.current[anchorIndex];
+        const fallbackElement = articleContentRef.current?.children[anchorIndex] as HTMLElement | undefined;
         const top = anchorElement
           ? anchorElement.getBoundingClientRect().top + window.scrollY
           : fallbackElement
@@ -538,19 +537,9 @@ const ArticleReader = ({
                 <LiveReadCounter count={views} lang={lang} />
               </div>
 
-              {contentNodes.length > 0 && (
+              {htmlContent && (
                 <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic">
-                    {contentNodes.map((node, index) => {
-                      const blockHtml = sanitizeRichHtml(generateHTML({ type: "doc", content: [node] } as Parameters<typeof generateHTML>[0], articleContentExtensions));
-                      return <div key={`article-block-${index}`} ref={(element) => { articleBlockRefs.current[index] = element; }} data-article-block-index={index} dangerouslySetInnerHTML={{ __html: blockHtml }} />;
-                    })}
-                  </div>
-                </div>
-              )}
-              {contentNodes.length === 0 && htmlContent && (
-                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic" dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic" dangerouslySetInnerHTML={{ __html: htmlContent }} />
                 </div>
               )}
               {contentRenderFailed && <p className="text-sm font-sans text-muted-foreground">{lang === "it" ? "Il contenuto di questo articolo non puo essere mostrato al momento." : "This article content cannot be displayed right now."}</p>}

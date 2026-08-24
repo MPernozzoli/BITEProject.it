@@ -1,26 +1,14 @@
 import { lazy, Suspense } from "react";
 import type { ComponentProps } from "react";
-import { useEffect } from "react";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 import { useI18n } from "@/lib/i18n";
 
-let articleMapAsideImportPromise: Promise<typeof import("@/components/ArticleMapAside")> | null = null;
-
-const loadArticleMapAside = () => {
-  articleMapAsideImportPromise ??= import("@/components/ArticleMapAside");
-  return articleMapAsideImportPromise;
-};
-
-const ArticleMapAside = lazy(loadArticleMapAside);
+const ArticleMapAside = lazy(() => import("@/components/ArticleMapAside"));
 
 type LazyArticleMapAsideProps = ComponentProps<typeof ArticleMapAside>;
 
 const LazyArticleMapAside = (props: LazyArticleMapAsideProps) => {
   const { lang } = useI18n();
-
-  useEffect(() => {
-    void loadArticleMapAside();
-  }, []);
 
   return (
     <Suspense
