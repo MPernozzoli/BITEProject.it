@@ -147,6 +147,7 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `admin_mcp_tokens` / `admin_mcp_audit_log` — token opachi (hash HMAC col pepper lato Vercel, scope, scadenza, revoca) e registro delle chiamate del server MCP admin. RLS attiva **senza policy**: scritte solo dal service role, la UI passa da `/api/mcp/tokens`. L'indice unico parziale su `(token_id, tool, client_request_id) where outcome = 'ok'` è anche la chiave di idempotenza dei tool → [[25 - MCP Admin]]
 - Tabelle articoli, voyage, waypoint, media, profili, newsletter → modello in [[17 - Content Model]]
 - `stories` — serie di articoli collegati via `logbook_articles.story_id` (FK nullable). Campi: titolo/descrizione bilingue, slug bilingui unici, cover, `type` (`open`|`closed`, default `open`), `target_chapter_count` (nullable, CHECK ≥ 2 se valorizzato). Le story `closed` con tutti i capitoli pubblicati non mostrano il widget iscrizione; le `open` o incomplete lo attivano → [[05 - Frontend - Pagine]]
+- `logbook_articles.story_sort_order` — intero non negativo (default 0) per l'ordinamento manuale degli articoli all'interno di una story. Aggiunto da migrazione `20260824120000_story_sort_order.sql` con backfill automatico basato su `published_at`. L'admin può riordinare gli articoli con drag & drop → [[16 - Admin]]
 
 ## Hardening remoto applicato
 - `expire_pending_voyage_booking_payments` è schedulata ogni ora su Supabase Cron.

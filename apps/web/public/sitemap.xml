@@ -345,6 +345,20 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/voyages/c421e207-86d0-42e9-be1c-6b7abb3e6c89--atlantic-bound" />
   </url>
   <url>
+    <loc>https://biteproject.it/it/logbook/story/sicurezza-in-barca-persone-strumenti-e-decisioni</loc>
+    <lastmod>2026-08-23T15:58:37.309Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/story/sicurezza-in-barca-persone-strumenti-e-decisioni" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/story/safety-on-board-people-tools-and-decisions" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/story/sicurezza-in-barca-persone-strumenti-e-decisioni" />
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/logbook/story/safety-on-board-people-tools-and-decisions</loc>
+    <lastmod>2026-08-23T15:58:37.309Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/story/sicurezza-in-barca-persone-strumenti-e-decisioni" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/story/safety-on-board-people-tools-and-decisions" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/story/sicurezza-in-barca-persone-strumenti-e-decisioni" />
+  </url>
+  <url>
     <loc>https://biteproject.it/it/logbook/story/OWG</loc>
     <lastmod>2026-07-12T14:58:22.271Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/story/OWG" />
@@ -373,6 +387,30 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/story/comprare-una-barca-a-vela" />
   </url>
   <url>
+    <loc>https://biteproject.it/it/logbook/perche-una-barca-sicura-non-e-solo-una-barca-ben-equipaggiata</loc>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/perche-una-barca-sicura-non-e-solo-una-barca-ben-equipaggiata" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/why-a-safe-boat-is-not-just-a-well-equipped-boat" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/perche-una-barca-sicura-non-e-solo-una-barca-ben-equipaggiata" />
+    <image:image>
+      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1787489009582-4est3zu1ws.png</image:loc>
+      <image:caption>Why a Safe Boat Is Not Just a Well-Equipped Boat</image:caption>
+      <image:title>Why a Safe Boat Is Not Just a Well-Equipped Boat</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://biteproject.it/en/logbook/why-a-safe-boat-is-not-just-a-well-equipped-boat</loc>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
+    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/perche-una-barca-sicura-non-e-solo-una-barca-ben-equipaggiata" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/why-a-safe-boat-is-not-just-a-well-equipped-boat" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/perche-una-barca-sicura-non-e-solo-una-barca-ben-equipaggiata" />
+    <image:image>
+      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1787489009582-4est3zu1ws.png</image:loc>
+      <image:caption>Why a Safe Boat Is Not Just a Well-Equipped Boat</image:caption>
+      <image:title>Why a Safe Boat Is Not Just a Well-Equipped Boat</image:title>
+    </image:image>
+  </url>
+  <url>
     <loc>https://biteproject.it/it/logbook/cani-in-barca-non-sono-il-problema-che-sembrano</loc>
     <lastmod>2026-08-21T18:58:34.520Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/cani-in-barca-non-sono-il-problema-che-sembrano" />
@@ -398,7 +436,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/la-prima-tappa-non-e-un-riscaldamento</loc>
-    <lastmod>2026-08-21T18:59:08.909Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/la-prima-tappa-non-e-un-riscaldamento" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/the-first-leg-is-not-a-warm-up" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/la-prima-tappa-non-e-un-riscaldamento" />
@@ -410,7 +448,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/the-first-leg-is-not-a-warm-up</loc>
-    <lastmod>2026-08-21T18:59:08.909Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/la-prima-tappa-non-e-un-riscaldamento" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/the-first-leg-is-not-a-warm-up" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/la-prima-tappa-non-e-un-riscaldamento" />
@@ -422,7 +460,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/come-abbiamo-pianificato-la-rotta-da-bari-a-lisbona</loc>
-    <lastmod>2026-08-21T19:04:04.785Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/come-abbiamo-pianificato-la-rotta-da-bari-a-lisbona" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/how-we-planned-the-route-from-bari-to-lisbon" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/come-abbiamo-pianificato-la-rotta-da-bari-a-lisbona" />
@@ -434,7 +472,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/how-we-planned-the-route-from-bari-to-lisbon</loc>
-    <lastmod>2026-08-21T19:04:04.785Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/come-abbiamo-pianificato-la-rotta-da-bari-a-lisbona" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/how-we-planned-the-route-from-bari-to-lisbon" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/come-abbiamo-pianificato-la-rotta-da-bari-a-lisbona" />
@@ -446,7 +484,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/benvenuti-a-bordo.di-spritz</loc>
-    <lastmod>2026-08-21T07:20:02.972Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/benvenuti-a-bordo.di-spritz" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/welcome-aboard-spritz" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/benvenuti-a-bordo.di-spritz" />
@@ -458,7 +496,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/welcome-aboard-spritz</loc>
-    <lastmod>2026-08-21T07:20:02.972Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/benvenuti-a-bordo.di-spritz" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/welcome-aboard-spritz" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/benvenuti-a-bordo.di-spritz" />
@@ -469,32 +507,8 @@
     </image:image>
   </url>
   <url>
-    <loc>https://biteproject.it/it/logbook/spritz-cambia-mare</loc>
-    <lastmod>2026-08-20T08:43:43.446Z</lastmod>
-    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
-    <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1784315739020-m3kero4dakh.png</image:loc>
-      <image:caption>Spritz is changing seas. And perhaps this is where the real journey begins.</image:caption>
-      <image:title>Spritz is changing seas. And perhaps this is where the real journey begins.</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://biteproject.it/en/logbook/spritz-is-changing-seas</loc>
-    <lastmod>2026-08-20T08:43:43.446Z</lastmod>
-    <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
-    <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/spritz-is-changing-seas" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/spritz-cambia-mare" />
-    <image:image>
-      <image:loc>https://ekwloweuicrqjjgabfdp.supabase.co/storage/v1/object/public/logbook-media/covers/1784315739020-m3kero4dakh.png</image:loc>
-      <image:caption>Spritz is changing seas. And perhaps this is where the real journey begins.</image:caption>
-      <image:title>Spritz is changing seas. And perhaps this is where the real journey begins.</image:title>
-    </image:image>
-  </url>
-  <url>
     <loc>https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca</loc>
-    <lastmod>2026-08-20T23:58:22.251Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
@@ -506,7 +520,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard</loc>
-    <lastmod>2026-08-20T23:58:22.251Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/arrested-by-the-hellenic-coast-guard" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/arrestati-dalla-guardia-costiera-greca" />
@@ -518,7 +532,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo</loc>
-    <lastmod>2026-08-19T17:42:23.454Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
@@ -530,7 +544,7 @@
   </url>
   <url>
     <loc>https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong</loc>
-    <lastmod>2026-08-19T17:42:23.454Z</lastmod>
+    <lastmod>2026-08-24T13:11:07.873Z</lastmod>
     <xhtml:link rel="alternate" hreflang="it" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />
     <xhtml:link rel="alternate" hreflang="en" href="https://biteproject.it/en/logbook/we-bought-a-boat-in-greece-it-went-very-wrong" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://biteproject.it/it/logbook/abbiamo-comprato-una-barca-in-grecia-andata-malissimo" />

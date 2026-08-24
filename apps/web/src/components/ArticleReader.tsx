@@ -499,7 +499,7 @@ const ArticleReader = ({
                   <div className="flex-1 min-w-0">
                     <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">{lang === "it" ? "Parte della storia" : "Part of story"}</span>
                     <p className="editorial-heading text-sm group-hover:text-accent transition-colors">{lang === "en" ? story.title_en : story.title_it || story.title_en}</p>
-                    {(story.type === "closed" && story.target_chapter_count != null && storyChapters?.length) && (
+                    {(story.target_chapter_count != null && storyChapters?.length) && (
                       <span className="text-[10px] text-muted-foreground mt-0.5 block">
                         {storyChapters.length} {lang === "it" ? "di" : "of"} {story.target_chapter_count} {lang === "it" ? "capitoli" : "chapters"}
                       </span>

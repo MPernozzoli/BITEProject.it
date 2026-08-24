@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import { articlePathForLang, storyPathForLang } from "@/lib/article-slug";
-import { BookOpen, TrendingUp, Clock, Eye, Bell, BellOff, ChevronRight, Lock, Unlock } from "lucide-react";
+import { BookOpen, TrendingUp, Clock, Eye, Bell, BellOff, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface ArticleSidebarProps {
@@ -128,9 +128,10 @@ const ArticleSidebar = ({ currentArticleId, storyId, storyChapters = [] }: Artic
     queryFn: async () => {
       const { data } = await supabase
         .from("logbook_articles")
-        .select("id, title_en, title_it, slug, published_at")
+        .select("id, title_en, title_it, slug, published_at, story_sort_order")
         .eq("story_id", storyId!)
         .eq("status", "published")
+        .order("story_sort_order", { ascending: true })
         .order("published_at", { ascending: true });
       return data || [];
     },
@@ -191,8 +192,7 @@ const ArticleSidebar = ({ currentArticleId, storyId, storyChapters = [] }: Artic
     const currentIdx = allPublished.findIndex((c) => c.id === currentArticleId);
     const nextPublished = currentIdx >= 0 ? allPublished.slice(currentIdx + 1).find((c) => !c.status || c.status === "published") : null;
 
-    const isComplete = story.type === "closed"
-      && story.target_chapter_count != null
+    const isComplete = story.target_chapter_count != null
       && allPublished.length >= story.target_chapter_count;
 
     // Next upcoming (scheduled/draft) after all published ones
@@ -269,12 +269,6 @@ const ArticleSidebar = ({ currentArticleId, storyId, storyChapters = [] }: Artic
             <h3 className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
               {lang === "it" ? "Storia" : "Story"}
             </h3>
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-              {storyMeta.type === "closed" ? <Lock size={9} /> : <Unlock size={9} />}
-              {storyMeta.type === "closed"
-                ? (lang === "it" ? "Chiusa" : "Closed")
-                : (lang === "it" ? "Aperta" : "Open")}
-            </span>
           </div>
 
           <Link

@@ -102,6 +102,8 @@ Deno.serve(async (req) => {
     const scopes = [
       'instagram_business_basic',
       'instagram_business_content_publish',
+      'instagram_business_manage_insights',
+      'instagram_business_manage_comments',
     ].join(',')
     const auth = new URL('https://www.instagram.com/oauth/authorize')
     auth.searchParams.set('client_id', appId)

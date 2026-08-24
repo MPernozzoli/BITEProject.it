@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { format } from "date-fns";
-import { ArrowLeft, Bell, BellOff, BookOpen, Clock, Lock, Unlock } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, BookOpen, Clock } from "lucide-react";
 import ProfileCard from "@/components/ProfileCard";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -84,8 +84,8 @@ const StoryPage = () => {
         .select("*") as any)
         .eq("story_id", story!.id)
         .in("status", ["published", "scheduled", "draft"])
+        .order("story_sort_order", { ascending: true })
         .order("published_at", { ascending: true, nullsFirst: true })
-        .order("scheduled_at", { ascending: true, nullsFirst: true })
         .order("created_at", { ascending: true });
       if (error) throw error;
 
@@ -121,7 +121,7 @@ const StoryPage = () => {
     [allChapters]
   );
 
-  const isClosedComplete = story?.type === "closed" && story?.target_chapter_count != null
+  const isComplete = story?.target_chapter_count != null
     && publishedChapters.length >= story.target_chapter_count;
 
   // Subscription status
@@ -212,7 +212,7 @@ const StoryPage = () => {
     );
   }
 
-  const showSubscribe = !isClosedComplete;
+  const showSubscribe = !isComplete;
 
   return (
     <div>
@@ -234,19 +234,13 @@ const StoryPage = () => {
             <span className="text-xs font-sans tracking-[0.2em] uppercase text-accent">
               {lang === "it" ? "Storia" : "Story"}
             </span>
-            <span className="glass-chip inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.15em] text-muted-foreground">
-              {story.type === "closed" ? <Lock size={10} /> : <Unlock size={10} />}
-              {story.type === "closed"
-                ? (lang === "it" ? "Chiusa" : "Closed")
-                : (lang === "it" ? "Aperta" : "Open")}
-            </span>
           </div>
 
           <h1 className="editorial-heading text-3xl md:text-5xl lg:text-6xl mb-4">{title}</h1>
           {desc && <p className="editorial-body text-lg text-muted-foreground mb-6">{desc}</p>}
 
-          {/* Progress for closed stories */}
-          {story.type === "closed" && story.target_chapter_count != null && (
+          {/* Progress for stories with a planned chapter count */}
+          {story.target_chapter_count != null && (
             <div className="flex items-center gap-3 mb-6">
               <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden max-w-xs">
                 <div
@@ -255,12 +249,12 @@ const StoryPage = () => {
                 />
               </div>
               <span className="text-xs font-sans text-muted-foreground">
-                {publishedChapters.length} {lang === "it" ? "di" : "of"} {story.target_chapter_count} {lang === "it" ? "capitoli pubblicati" : "chapters published"}
+                {publishedChapters.length} {lang === "it" ? "di" : "of"} {story.target_chapter_count} {lang === "it" ? "capitoli previsti" : "planned chapters"}
               </span>
             </div>
           )}
 
-          {/* Subscribe button — hidden when closed story is complete */}
+          {/* Subscribe button — hidden when story has reached its planned chapter count */}
           {showSubscribe && userId && (
             <button
               onClick={() => toggleSubscription.mutate()}
@@ -292,8 +286,8 @@ const StoryPage = () => {
           <div className="space-y-8">
             <h2 className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">
               {lang === "it"
-                ? `${publishedChapters.length} Capitoli${story.type === "closed" && story.target_chapter_count != null ? ` di ${story.target_chapter_count}` : ""}`
-                : `${publishedChapters.length} Chapters${story.type === "closed" && story.target_chapter_count != null ? ` of ${story.target_chapter_count}` : ""}`}
+                ? `${publishedChapters.length} Capitoli${story.target_chapter_count != null ? ` di ${story.target_chapter_count}` : ""}`
+                : `${publishedChapters.length} Chapters${story.target_chapter_count != null ? ` of ${story.target_chapter_count}` : ""}`}
             </h2>
 
             {/* Published chapters */}
@@ -394,8 +388,8 @@ const StoryPage = () => {
             )}
           </div>
 
-          {/* Footer link to logbook when story is complete */}
-          {isClosedComplete && (
+          {/* Footer link to logbook when story has reached its planned chapter count */}
+          {isComplete && (
             <div className="mt-12 pt-8 border-t border-border">
               <Link
                 to="/logbook"

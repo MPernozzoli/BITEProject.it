@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BarChart3,
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -29,6 +30,7 @@ import {
   type ArticleViewInsightRow,
 } from "@/lib/article-insights";
 import AdminArticleInsightDialog from "@/components/admin/AdminArticleInsightDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ArticleScoreRow = {
   article_id: string;
@@ -62,9 +64,9 @@ type MergedArticle = ArticleScoreRow & {
 
 const AXIS_CONFIG = [
   { key: "reach", label: "Reach", icon: Eye, description: "Lettori unici (30gg)" },
-  { key: "read", label: "Read", icon: Eye, description: "Dwell time + scroll" },
-  { key: "react", label: "React", icon: Heart, description: "Like + commenti + share / 100 lettori" },
-  { key: "retain", label: "Retain", icon: MessageCircle, description: "Lettori unici totali" },
+  { key: "read", label: "Read", icon: BookOpen, description: "Dwell time + scroll" },
+  { key: "react", label: "React", icon: Heart, description: "(Like + commenti + share) / 100 lettori unici (30gg)" },
+  { key: "retain", label: "Retain", icon: MessageCircle, description: "Lettori unici totali (all-time)" },
   { key: "revenue", label: "Lead", icon: MousePointerClick, description: "Click su link/CTA (30gg)" },
 ] as const;
 
@@ -177,35 +179,51 @@ const AdminPerformanceDashboard = () => {
               <span>Media totale: <span className="text-foreground font-medium">{avgTotal}</span>/10</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {AXIS_CONFIG.map(({ key, label, description }) => (
-              <div key={key} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1">{label}</p>
-                <p className={`text-xl font-sans font-semibold tabular-nums ${scoreColor(totals[key], totals.count * 2)}`}>
-                  {totals[key]}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">/ {totals.count * 2}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{description}</p>
-              </div>
-            ))}
-          </div>
+<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {AXIS_CONFIG.map(({ key, label, description }) => (
+                <div key={key} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1 cursor-help">{label}</p>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="center" className="text-xs">
+                      {description}
+                    </TooltipContent>
+                  </Tooltip>
+                  <p className={`text-xl font-sans font-semibold tabular-nums ${scoreColor(totals[key], totals.count * 2)}`}>
+                    {totals[key]}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">/ {totals.count * 2}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{description}</p>
+                </div>
+              ))}
+            </div>
         </section>
 
         {/* Ranking */}
         <section className="glass-panel rounded-[30px] p-5 md:p-8 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="editorial-heading text-xl mr-2">Ranking</h2>
-            {(["total", "reach", "read", "react", "retain", "revenue"] as const).map((key) => (
-              <button
-                key={key}
-                onClick={() => setSortBy(key)}
-                className={`px-3 py-1 rounded-full text-xs font-sans transition-colors ${
-                  sortBy === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {key === "total" ? "Total" : AXIS_CONFIG.find((a) => a.key === key)?.label ?? key}
-              </button>
-            ))}
+            {(["total", "reach", "read", "react", "retain", "revenue"] as const).map((key) => {
+              const axis = AXIS_CONFIG.find((a) => a.key === key);
+              return (
+                <Tooltip key={key}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setSortBy(key)}
+                      className={`px-3 py-1 rounded-full text-xs font-sans transition-colors cursor-help ${
+                        sortBy === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {key === "total" ? "Total" : axis?.label ?? key}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="center" className="text-xs">
+                    {axis?.description ?? ""}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
           </div>
 
           {loading && <p className="text-sm font-sans text-muted-foreground animate-pulse">Caricamento...</p>}
@@ -252,20 +270,26 @@ const AdminPerformanceDashboard = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                      {AXIS_CONFIG.map(({ key, icon: Icon }) => (
-                        <div
-                          key={key}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-sans ${
-                            row.score[key] >= 2
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : row.score[key] >= 1
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                                : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          <Icon size={10} />
-                          <span>{row.score[key]}</span>
-                        </div>
+                      {AXIS_CONFIG.map(({ key, icon: Icon, description }) => (
+                        <Tooltip key={key}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-sans cursor-help ${
+                                row.score[key] >= 2
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  : row.score[key] >= 1
+                                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                    : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              <Icon size={10} />
+                              <span>{row.score[key]}</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="center" className="text-xs">
+                            {description}
+                          </TooltipContent>
+                        </Tooltip>
                       ))}
                       <span className="text-sm font-sans font-semibold tabular-nums text-foreground ml-1">
                         {row.score.total}/10

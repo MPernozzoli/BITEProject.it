@@ -131,8 +131,9 @@ export function registerStoryTools(server: McpServer, ctx: McpContext): void {
 
       const { data: articles, error: articlesError } = await context.service
         .from("logbook_articles")
-        .select("id,slug_it,slug_en,title_it,title_en,status,editorial_type,category,cover_image,scheduled_at,published_at,created_at")
+        .select("id,slug_it,slug_en,title_it,title_en,status,editorial_type,category,cover_image,scheduled_at,published_at,created_at,story_sort_order")
         .eq("story_id", id)
+        .order("story_sort_order", { ascending: true })
         .order("created_at", { ascending: true });
 
       if (articlesError) throw new McpToolError("db_error", `Lettura articoli fallita: ${articlesError.message}`);

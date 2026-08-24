@@ -932,6 +932,7 @@ export type Database = {
           slug_it: string | null
           status: Database["public"]["Enums"]["article_status"]
           story_id: string | null
+          story_sort_order: number
           title_en: string
           title_it: string
           updated_at: string
@@ -972,6 +973,7 @@ export type Database = {
           slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
+          story_sort_order?: number
           title_en?: string
           title_it?: string
           updated_at?: string
@@ -1012,6 +1014,7 @@ export type Database = {
           slug_it?: string | null
           status?: Database["public"]["Enums"]["article_status"]
           story_id?: string | null
+          story_sort_order?: number
           title_en?: string
           title_it?: string
           updated_at?: string

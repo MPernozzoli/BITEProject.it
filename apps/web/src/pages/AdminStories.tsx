@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, BookOpen, Edit, Eye, Link2, Plus, Trash2, Unlink, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, BookOpen, Edit, Eye, GripVertical, Link2, Plus, Trash2, Unlink, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -504,10 +504,52 @@ const AdminStories = () => {
                   ) : linkedArticles.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Nessun articolo collegato.</p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {linkedArticles.map((article, idx) => (
-                        <div key={article.id} className="glass-panel-soft rounded-[18px] flex items-center gap-3 px-4 py-3">
-                          <span className="text-[11px] font-sans text-muted-foreground w-5 text-center">{idx + 1}</span>
+                        <div
+                          key={article.id}
+                          onDragOver={(e) => {
+                            if (!draggedArticleId || draggedArticleId === article.id) return;
+                            e.preventDefault();
+                            if (dragOverArticleId !== article.id) setDragOverArticleId(article.id);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (!draggedArticleId || draggedArticleId === article.id) return;
+                            const fromIndex = linkedArticles.findIndex((a) => a.id === draggedArticleId);
+                            const toIndex = linkedArticles.findIndex((a) => a.id === article.id);
+                            setDraggedArticleId(null);
+                            setDragOverArticleId(null);
+                            reorderArticle(fromIndex, toIndex);
+                          }}
+                          onDragLeave={(e) => {
+                            if (!(e.currentTarget as HTMLDivElement).contains(e.relatedTarget as Node | null)) {
+                              setDragOverArticleId((c) => (c === article.id ? null : c));
+                            }
+                          }}
+                          className={`glass-panel-soft rounded-[18px] flex items-center gap-3 px-4 py-3 transition-colors ${
+                            dragOverArticleId === article.id ? "bg-accent/10" : ""
+                          } ${draggedArticleId === article.id ? "opacity-50" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("text/plain", article.id);
+                              setDraggedArticleId(article.id);
+                              setDragOverArticleId(article.id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedArticleId(null);
+                              setDragOverArticleId(null);
+                            }}
+                            className="p-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing shrink-0"
+                            title="Trascina per riordinare"
+                          >
+                            <GripVertical size={14} />
+                          </button>
+                          <span className="text-[11px] font-sans text-muted-foreground w-5 text-center shrink-0">{idx + 1}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-sans truncate">{article.title_en || article.title_it}</p>
                             <p className="text-[11px] text-muted-foreground">
@@ -518,7 +560,7 @@ const AdminStories = () => {
                           </div>
                           <button
                             onClick={() => unlinkArticle(article.id)}
-                            className="glass-chip inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+                            className="glass-chip inline-flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-destructive transition-colors shrink-0"
                             title="Scollega"
                           >
                             <Unlink size={13} />
