@@ -17,6 +17,12 @@ interface BookingPartyPanelProps {
   members: BookingPartyMember[];
   /** True when the viewer owns the booking: only they get the "someone did not pay" actions. */
   isLead: boolean;
+  /**
+   * How the party pays. Needed to read a missing share amount correctly: under 'lead_pays_all'
+   * a guest genuinely owes nothing, while under 'each_pays_own' it only means the figure has not
+   * been computed for them yet.
+   */
+  paymentMode?: "lead_pays_all" | "each_pays_own" | null;
   /** Set while a drop request is in flight, so the row can show it. */
   droppingParticipantId?: string | null;
   onDropParticipant?: (participantId: string) => void;
@@ -33,6 +39,7 @@ const BookingPartyPanel = ({
   lang,
   members,
   isLead,
+  paymentMode = null,
   droppingParticipantId = null,
   onDropParticipant,
   onCancelWholeBooking,
@@ -64,7 +71,11 @@ const BookingPartyPanel = ({
     if (member.status === "cancelled") return { text: it ? "Annullato" : "Cancelled", tone: "out" };
     if (member.status === "balance_unpaid") return { text: it ? "Uscito, quota non versata" : "Left, share unpaid", tone: "out" };
     if (member.status === "pending") return { text: it ? "Invito da accettare" : "Invite pending", tone: "wait" };
-    if (member.share_due_cents == null) return { text: it ? "Coperto da chi ha prenotato" : "Covered by the booker", tone: "ok" };
+    if (member.share_due_cents == null) {
+      return paymentMode === "each_pays_own"
+        ? { text: it ? "Quota ancora da calcolare" : "Share not computed yet", tone: "wait" }
+        : { text: it ? "Coperto da chi ha prenotato" : "Covered by the booker", tone: "ok" };
+    }
     if (member.share_paid_cents >= member.share_due_cents) return { text: it ? "Quota versata" : "Share paid", tone: "ok" };
     if (member.share_payment_due_at && new Date(member.share_payment_due_at).getTime() <= now) {
       return { text: it ? "Quota non versata" : "Share unpaid", tone: "late" };

@@ -1810,6 +1810,7 @@ const UserBookings = () => {
                                 lang={lang}
                                 members={partyMembers}
                                 isLead
+                                paymentMode={ownRequestForSelectedVoyage.payment_mode ?? null}
                                 droppingParticipantId={droppingParticipantId}
                                 onDropParticipant={(participantId) => void dropParticipant(participantId)}
                                 onCancelWholeBooking={() => void cancelBooking(ownRequestForSelectedVoyage)}
