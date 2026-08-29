@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { createCartoRasterStyle } from "@/lib/maplibre";
 
 interface VoyageRouteHeroMapProps {
   /** [lng, lat] pairs, in route order. */
@@ -18,20 +19,7 @@ const VoyageRouteHeroMap = ({ coordinates, className }: VoyageRouteHeroMapProps)
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-          },
-        },
-        layers: [{ id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 }],
-      },
+      style: createCartoRasterStyle(),
       center: coordinates[0],
       zoom: 4,
       attributionControl: false,

@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { createCartoRasterStyle } from "@/lib/maplibre";
 import {
   totalWaypointDistance,
   totalCoordinateDistanceKm,
@@ -2007,20 +2008,7 @@ const AdminVoyageManager = ({
 
     mapRef.current = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-          },
-        },
-        layers: [{ id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 }],
-      },
+      style: createCartoRasterStyle(),
       center: [15, 40],
       zoom: 5,
       attributionControl: false,

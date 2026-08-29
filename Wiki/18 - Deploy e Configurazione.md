@@ -71,6 +71,7 @@ Prefisso Vite `VITE_` (esposte al client):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PROJECT_ID`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_CARTO_API_KEY` — chiave basemap CARTO. Da agosto 2026 le tile raster senza `key` in query string vengono servite con il watermark "API key required": le mappe restano navigabili ma sporche. È una chiave pubblica (viaggia in ogni richiesta tile del browser), quindi sta in `.env` e nelle env Vercel — **non** nei sorgenti, il repo è pubblico. Unico punto che compone la URL delle tile: `shared/maps/carto.ts`, usato sia da `apps/web` sia da `apps/data`; ruotare la chiave è una modifica di sola env, senza toccare il codice.
 - `VITE_LOGIN_URL` opzionale per lo sviluppo delle sub-app: se assente, i bridge locali `/login` puntano a `http://127.0.0.1:5173`.
 - `VITE_LIVEKIT_URL` opzionale solo se si vuole mostrare esplicitamente l'URL LiveKit lato client; la room usa comunque `/api/community/livekit-token`.
 

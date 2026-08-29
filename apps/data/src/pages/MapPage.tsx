@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { createCartoRasterStyle } from "@shared/maps/carto";
 import MapControlPanel from "@/components/MapControlPanel";
 import { useVoyages } from "@/hooks/use-voyages";
 import {
@@ -222,22 +223,7 @@ const MapPage = () => {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          "carto-light": {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-            attribution:
-              '&copy; <a href="https://carto.com">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-          },
-        },
-        layers: [{ id: "carto-light-layer", type: "raster", source: "carto-light", minzoom: 0, maxzoom: 20 }],
-      },
+      style: createCartoRasterStyle(),
       center: [18, 39],
       zoom: 5.5,
       attributionControl: false,

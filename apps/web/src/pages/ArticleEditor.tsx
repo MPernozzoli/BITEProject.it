@@ -11,6 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, Crop, Languages, Loader2, Sparkles, Eye } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { createCartoRasterStyle } from "@/lib/maplibre";
 import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, getWaypointOptionLabel, resolveArticleRouteRange } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
@@ -1494,11 +1495,7 @@ const ArticleEditor = () => {
     if (!geoMapRef.current || geoMapInstanceRef.current) return;
     const map = new maplibregl.Map({
       container: geoMapRef.current,
-      style: {
-        version: 8,
-        sources: { carto: { type: "raster", tiles: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], tileSize: 256 } },
-        layers: [{ id: "carto", type: "raster", source: "carto", minzoom: 0, maxzoom: 20 }],
-      },
+      style: createCartoRasterStyle(),
       center: [longitude || 15, latitude || 40],
       zoom: latitude ? 10 : 5,
       attributionControl: false,

@@ -1,46 +1,9 @@
 import maplibregl from "maplibre-gl";
 
-type NavigatorWithConnection = Navigator & {
-  connection?: {
-    effectiveType?: string;
-    saveData?: boolean;
-  };
-};
-
-const CARTO_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
+// Base raster CARTO (URL delle tile + API key) condivisa con `apps/data`.
+export { CARTO_ATTRIBUTION, createCartoRasterStyle } from "@shared/maps/carto";
 
 const RESIZE_RETRY_DELAYS_MS = [0, 120, 480];
-
-const isSlowConnection = () => {
-  if (typeof navigator === "undefined") return false;
-  const connection = (navigator as NavigatorWithConnection).connection;
-  return Boolean(connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g");
-};
-
-const shouldUseRetinaTiles = () => {
-  if (typeof window === "undefined") return false;
-  return window.devicePixelRatio > 1.25 && !isSlowConnection();
-};
-
-export const createCartoRasterStyle = () => {
-  const retinaSuffix = shouldUseRetinaTiles() ? "@2x" : "";
-
-  return {
-    version: 8 as const,
-    sources: {
-      carto: {
-        type: "raster" as const,
-        tiles: ["a", "b", "c", "d"].map(
-          (subdomain) => `https://${subdomain}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}${retinaSuffix}.png`
-        ),
-        tileSize: 256,
-        attribution: CARTO_ATTRIBUTION,
-      },
-    },
-    layers: [{ id: "carto", type: "raster" as const, source: "carto", minzoom: 0, maxzoom: 20 }],
-  };
-};
 
 export const isMapLibreSupported = () =>
 {
