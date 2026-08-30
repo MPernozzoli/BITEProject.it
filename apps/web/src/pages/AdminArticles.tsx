@@ -91,7 +91,7 @@ const statusIcon = (status: string) => {
     case "draft":
       return <FileText size={14} className="text-muted-foreground" />;
     case "scheduled":
-      return <Clock size={14} className="text-amber-600" />;
+      return <Clock size={14} className="text-amber-600 dark:text-amber-300" />;
     case "published":
       return <Send size={14} className="text-accent" />;
     default:

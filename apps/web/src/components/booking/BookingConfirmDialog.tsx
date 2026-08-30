@@ -330,14 +330,14 @@ const BookingConfirmDialog = ({
           )}
 
           {hazardSummary && (
-            <div className="mb-4 rounded-2xl border border-orange-300/70 bg-orange-50/70 p-4 text-sm dark:border-orange-400/30 dark:bg-orange-400/10">
+            <div className="mb-4 rounded-2xl border border-orange-300/70 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 p-4 text-sm dark:border-orange-400/30 dark:bg-orange-400/10">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={15} className="shrink-0 text-orange-700 dark:text-orange-300" />
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-800 dark:text-orange-300">
                   {lang === "it" ? "Tratta impegnativa" : "Challenging leg"}
                 </span>
               </div>
-              <p className="mt-2 text-xs leading-relaxed text-orange-900/90 dark:text-orange-100/80">
+              <p className="mt-2 text-xs leading-relaxed text-orange-900/90 dark:text-orange-300 dark:text-orange-100/80">
                 {lang === "it"
                   ? `Hai selezionato almeno una tratta di complessità "${getComplexityLabel(hazardSummary.maxComplexity, lang)}".`
                   : `You've selected at least one leg rated "${getComplexityLabel(hazardSummary.maxComplexity, lang)}" complexity.`}
@@ -356,7 +356,7 @@ const BookingConfirmDialog = ({
                     return (
                       <span
                         key={key}
-                        className="inline-flex items-center gap-1 rounded-full border border-orange-300/70 bg-white/70 px-2 py-1 text-[11px] font-medium text-orange-800 dark:bg-white/10 dark:text-orange-200"
+                        className="inline-flex items-center gap-1 rounded-full border border-orange-300/70 dark:border-orange-500/30 bg-glass/70 px-2 py-1 text-[11px] font-medium text-orange-800 dark:text-orange-300 dark:bg-glass/10 dark:text-orange-200"
                       >
                         <Icon size={12} strokeWidth={2.4} aria-hidden />
                         {lang === "it" ? reason.label_it : reason.label_en}
@@ -412,11 +412,11 @@ const BookingConfirmDialog = ({
             )}
 
           {requiresPayment && typeof depositTotalEur === "number" && depositTotalEur <= 0 && (
-            <div className="mb-4 rounded-2xl border border-emerald-300/70 bg-emerald-50/70 p-4 text-sm dark:border-emerald-400/30 dark:bg-emerald-400/10">
+            <div className="mb-4 rounded-2xl border border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-500/10 p-4 text-sm dark:border-emerald-400/30 dark:bg-emerald-400/10">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-300">
                 {lang === "it" ? "Nessun contributo fisso da versare ora" : "No fixed contribution due now"}
               </p>
-              <p className="mt-2 text-xs leading-relaxed text-emerald-900/90 dark:text-emerald-100/80">
+              <p className="mt-2 text-xs leading-relaxed text-emerald-900/90 dark:text-emerald-300 dark:text-emerald-100/80">
                 {lang === "it"
                   ? "Hai già una candidatura attiva su questo viaggio che copre la quota fissa: non ti viene richiesta di nuovo."
                   : "You already have an active application on this voyage covering the fixed share: it's not being asked of you again."}
@@ -425,7 +425,7 @@ const BookingConfirmDialog = ({
           )}
 
           {requiresPayment && typeof depositTotalEur === "number" && depositTotalEur > 0 && (
-            <div className="mb-4 rounded-2xl border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
+            <div className="mb-4 rounded-2xl border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 p-4 text-sm dark:border-amber-400/30 dark:bg-amber-400/10">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
                   {lang === "it"
@@ -436,7 +436,7 @@ const BookingConfirmDialog = ({
                       <TooltipTrigger asChild>
                         <button
                           type="button"
-                          className="ml-1 inline-flex align-middle text-amber-900/70 hover:text-amber-950 dark:text-amber-200/80"
+                          className="ml-1 inline-flex align-middle text-amber-900/70 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-300 dark:text-amber-200/80"
                           aria-label={lang === "it" ? "Come viene calcolato il contributo" : "How the contribution is calculated"}
                         >
                           <Info size={13} aria-hidden />
@@ -448,7 +448,7 @@ const BookingConfirmDialog = ({
                     </Tooltip>
                   </TooltipProvider>
                 </span>
-                <span className="text-lg font-bold text-amber-900 dark:text-amber-200">
+                <span className="text-lg font-bold text-amber-900 dark:text-amber-300 dark:text-amber-200">
                   {formatDepositEur(depositTotalEur, lang === "it" ? "it" : "en")}
                 </span>
               </div>
@@ -460,13 +460,13 @@ const BookingConfirmDialog = ({
                 </p>
               )}
               {partySize > 1 && (
-                <p className="mt-2 rounded-xl border border-amber-400/50 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
+                <p className="mt-2 rounded-xl border border-amber-400/50 bg-glass/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:text-amber-300 dark:bg-glass/5 dark:text-amber-100">
                   {lang === "it"
                     ? "L'importo qui sopra è quello dell'intero gruppo. Nel passo successivo indichi le altre persone e scegli se versare tu per tutti oppure solo la tua quota, lasciando che ciascuno paghi la propria: l'importo effettivamente addebitato dipende da quella scelta."
                     : "The amount above covers the whole party. In the next step you list the other people and choose whether you pay for everyone or only your own share, letting each guest pay theirs: the amount actually charged follows that choice."}
                 </p>
               )}
-              <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+              <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-300 dark:text-amber-200">
                 {fixedOnlyPayment
                   ? lang === "it"
                     ? `Da versare ora: ${formatDepositEur(depositTotalEur, "it")} (quota fissa). L'eventuale saldo verra richiesto solo dopo la revisione della tua proposta.`
@@ -475,7 +475,7 @@ const BookingConfirmDialog = ({
                     ? `Acconto da versare ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza della tua tratta: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
                     : `Deposit due now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance due within 15 days of your leg's departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
               </p>
-              <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80">
+              <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-300 dark:text-amber-100/80">
                 {lang === "it"
                   ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico."
                   : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility."}
@@ -483,9 +483,9 @@ const BookingConfirmDialog = ({
               <ContributionEstimateNote
                 lang={lang}
                 workawayEnabled={workawayEnabled}
-                className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80"
+                className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-300 dark:text-amber-100/80"
               />
-              <div className="mt-3 rounded-xl border border-amber-400/60 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
+              <div className="mt-3 rounded-xl border border-amber-400/60 bg-glass/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:text-amber-300 dark:bg-glass/5 dark:text-amber-100">
                 <p className="font-semibold">
                   {lang === "it"
                     ? "Per completare la candidatura dovrai versare l'acconto subito dopo. Senza pagamento la prenotazione non si conclude e non potrai partecipare al viaggio."

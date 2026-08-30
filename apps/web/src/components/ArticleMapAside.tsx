@@ -6,7 +6,8 @@ import { CalendarCheck, MapPin, Navigation, Ship } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import type { ArticleMapOverlay, ArticleMapVessel } from "@/lib/article-map";
 import { buildVesselRouteCoordinates, destinationPoint, getRouteTerminalAngle } from "@/lib/article-map";
-import { bindMapToContainerResize, createCartoRasterStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
+import { bindMapToContainerResize, bindMapToTheme,
+  createThemedCartoStyle, isMapLibreSupported, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
 export interface ArticleMapSceneView {
@@ -97,7 +98,7 @@ const ArticleMapAside = ({
     } as const;
     const color = customColor || palette[kind];
 
-    element.className = "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-white/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
+    element.className = "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-glass-edge/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
     element.innerHTML = `
       <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;font-size:14px;color:${color};transform:rotate(${angle ?? 0}deg);">${symbol[kind]}</span>
       ${titleText ? `<span style="font:600 11px/1.2 ui-sans-serif,system-ui;color:rgba(15,23,42,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${titleText}</span>` : ""}
@@ -118,11 +119,14 @@ const ArticleMapAside = ({
 
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: createCartoRasterStyle(),
+        style: createThemedCartoStyle(),
         center: [longitude, latitude],
         zoom: 7,
         attributionControl: false,
       });
+
+      // La basemap segue il tema anche se cambia a mappa aperta.
+      bindMapToTheme(map);
 
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -267,7 +271,7 @@ const ArticleMapAside = ({
 
       if (activeScene?.windAngle != null) {
         const markerEl = document.createElement("div");
-        markerEl.className = "flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-[rgba(255,255,255,0.92)] shadow-[0_14px_30px_rgba(15,23,42,0.20)]";
+        markerEl.className = "flex h-11 w-11 items-center justify-center rounded-full border border-glass-edge/70 bg-[rgba(255,255,255,0.92)] shadow-[0_14px_30px_rgba(15,23,42,0.20)]";
         markerEl.innerHTML = `<div style="transform: rotate(${activeScene.windAngle}deg); color: hsl(201, 58%, 35%); font-size: 18px;">➤</div>`;
         windMarkerRef.current = new maplibregl.Marker({ element: markerEl, anchor: "center" })
           .setLngLat([activeScene.longitude, activeScene.latitude])
@@ -476,13 +480,13 @@ const ArticleMapAside = ({
               )}
               <div className="flex flex-wrap gap-2">
                 {activeScene?.windLabel && (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-foreground/8 bg-glass/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
                     <Navigation size={12} className="text-accent" />
                     {activeScene.windLabel}
                   </span>
                 )}
                 {(distanceValue ?? 0) > 0 && distanceUnit && (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-foreground/8 bg-glass/70 px-2.5 py-1 text-[11px] font-sans text-foreground">
                     <Ship size={12} className="text-accent" />
                     {Math.round(distanceValue ?? 0).toLocaleString()} {distanceUnit}
                   </span>
@@ -493,7 +497,7 @@ const ArticleMapAside = ({
                   {activeVessels.map((vessel) => (
                     <span
                       key={vessel.id}
-                      className="inline-flex items-center gap-1.5 rounded-full border bg-white/70 px-2.5 py-1 text-[11px] font-sans text-foreground"
+                      className="inline-flex items-center gap-1.5 rounded-full border bg-glass/70 px-2.5 py-1 text-[11px] font-sans text-foreground"
                       style={{ borderColor: `${vessel.color}55` }}
                     >
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: vessel.color }} />
@@ -501,7 +505,7 @@ const ArticleMapAside = ({
                     </span>
                   ))}
                   {activeOverlays.map((overlay) => (
-                    <span key={overlay.id} className="rounded-full border border-black/8 bg-white/70 px-2.5 py-1 text-[11px] font-sans text-muted-foreground">
+                    <span key={overlay.id} className="rounded-full border border-foreground/8 bg-glass/70 px-2.5 py-1 text-[11px] font-sans text-muted-foreground">
                       {overlay.label || overlay.kind}
                     </span>
                   ))}
@@ -510,15 +514,15 @@ const ArticleMapAside = ({
               {bookingCta && (
                 <Link
                   to={bookingCta.href}
-                  className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-emerald-300/70 bg-emerald-50/85 px-3 py-3 text-left transition-colors hover:border-emerald-400 hover:bg-emerald-50"
+                  className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-50/85 dark:bg-emerald-500/10 px-3 py-3 text-left transition-colors hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
                 >
                   <span className="min-w-0">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-emerald-950">
-                      <CalendarCheck size={15} className="shrink-0 text-emerald-700" />
+                    <span className="flex items-center gap-2 text-sm font-semibold text-emerald-950 dark:text-emerald-300">
+                      <CalendarCheck size={15} className="shrink-0 text-emerald-700 dark:text-emerald-300" />
                       {bookingCta.label}
                     </span>
                     {bookingCta.description && (
-                      <span className="mt-1 block text-xs leading-relaxed text-emerald-900/80">
+                      <span className="mt-1 block text-xs leading-relaxed text-emerald-900/80 dark:text-emerald-300">
                         {bookingCta.description}
                       </span>
                     )}

@@ -66,7 +66,7 @@ const ArticleSlidePanel = ({
 
       <div
         ref={panelRef}
-        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 min-h-0 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl flex flex-col transition-[opacity,transform] duration-300 ${
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 min-h-0 overflow-hidden rounded-[32px] border border-glass-edge/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl flex flex-col transition-[opacity,transform] duration-300 ${
           disableEntranceAnimation ? "" : "animate-slide-in-right"
         } ${
           isSoftHidden ? "opacity-0 pointer-events-none" : "opacity-100"
@@ -74,17 +74,17 @@ const ArticleSlidePanel = ({
           isAutoHidden ? "translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none" : "translate-x-0"
         }`}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-glass-edge/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
           <div className="min-w-0 flex items-center gap-2 text-xs font-sans text-muted-foreground flex-wrap">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-glass/60 px-3 py-1">
               <MapPin size={12} className="shrink-0 text-accent" />
               <span className="truncate">{pinLabel}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-glass/60 px-3 py-1">
               <Eye size={12} className="shrink-0 text-accent" />
               <span>{views}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/60 px-3 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-glass/60 px-3 py-1">
               <Heart size={12} className="shrink-0 text-accent" />
               <span>{likes}</span>
             </span>
@@ -92,7 +92,7 @@ const ArticleSlidePanel = ({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/60 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-glass-edge/70 bg-glass/60 text-muted-foreground hover:text-foreground transition-colors shrink-0"
             aria-label={lang === "it" ? "Chiudi" : "Close"}
           >
             <X size={18} />
@@ -106,7 +106,7 @@ const ArticleSlidePanel = ({
           >
             <div className="space-y-4">
               {article.cover_image && (
-                <div className="overflow-hidden rounded-[26px] border border-white/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div className="overflow-hidden rounded-[26px] border border-glass-edge/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                   <div className="aspect-[16/10] overflow-hidden bg-muted shrink-0">
                     <img
                       src={article.cover_image}
@@ -120,7 +120,7 @@ const ArticleSlidePanel = ({
                 </div>
               )}
 
-              <div className="rounded-[26px] border border-white/55 bg-white/58 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[26px] border border-glass-edge/55 bg-glass/58 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <h2 className="editorial-heading text-2xl md:text-3xl mb-5 text-balance leading-tight">{title}</h2>
 
                 {(article.authors && article.authors.length > 0) || dateLabel ? (
@@ -131,9 +131,9 @@ const ArticleSlidePanel = ({
                           key={a.id}
                           type="button"
                           onClick={() => onAuthorClick(a.id)}
-                          className="inline-flex items-center gap-2 rounded-full border border-white/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                          className="inline-flex items-center gap-2 rounded-full border border-glass-edge/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
                         >
-                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-glass-edge/45 bg-glass/70">
                             <ProfileAvatar
                               name={a.name || "Anonymous"}
                               avatarUrl={a.avatar_url || undefined}
@@ -147,9 +147,9 @@ const ArticleSlidePanel = ({
                         <Link
                           key={a.id}
                           to={`/profile/${a.id}`}
-                          className="inline-flex items-center gap-2 rounded-full border border-white/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                          className="inline-flex items-center gap-2 rounded-full border border-glass-edge/75 bg-background/75 px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
                         >
-                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-glass-edge/45 bg-glass/70">
                             <ProfileAvatar
                               name={a.name || "Anonymous"}
                               avatarUrl={a.avatar_url || undefined}
@@ -170,14 +170,14 @@ const ArticleSlidePanel = ({
                   </div>
                 ) : null}
                 {excerpt && (
-                  <div className="rounded-[22px] border border-white/65 bg-background/65 px-4 py-4">
+                  <div className="rounded-[22px] border border-glass-edge/65 bg-background/65 px-4 py-4">
                     <p className="editorial-body text-muted-foreground leading-[1.75] whitespace-pre-wrap">{excerpt}</p>
                   </div>
                 )}
               </div>
 
               {article.tags && article.tags.length > 0 && (
-                <div className="rounded-[26px] border border-white/55 bg-white/50 p-4">
+                <div className="rounded-[26px] border border-glass-edge/55 bg-glass/50 p-4">
                   <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
                     {lang === "it" ? "Hashtag" : "Tags"}
                   </p>
@@ -185,7 +185,7 @@ const ArticleSlidePanel = ({
                     {article.tags.map((tag) => (
                       <span
                         key={tag.id}
-                        className="rounded-full border border-white/70 bg-background/72 px-3 py-1.5 text-xs font-sans text-muted-foreground"
+                        className="rounded-full border border-glass-edge/70 bg-background/72 px-3 py-1.5 text-xs font-sans text-muted-foreground"
                       >
                         #{tag.name}
                       </span>
@@ -196,7 +196,7 @@ const ArticleSlidePanel = ({
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-white/45 bg-background/88 px-4 py-3 backdrop-blur-xl md:px-5">
+          <div className="shrink-0 border-t border-glass-edge/45 bg-background/88 px-4 py-3 backdrop-blur-xl md:px-5">
             <button
               type="button"
               onClick={() => onOpenArticle?.(article)}

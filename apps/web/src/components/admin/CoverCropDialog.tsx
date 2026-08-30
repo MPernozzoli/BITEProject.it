@@ -274,7 +274,7 @@ const CoverCropDialog = ({
             )}
 
             <div
-              className="absolute inset-0 rounded-2xl border-2 border-white/90 pointer-events-none"
+              className="absolute inset-0 rounded-2xl border-2 border-glass-edge/90 pointer-events-none"
               style={{ boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.58)" }}
             />
           </div>

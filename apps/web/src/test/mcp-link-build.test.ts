@@ -17,6 +17,8 @@ import { createStubSupabase, type StubFixtures } from "./mcp-stub-supabase";
 const ARTICLE_ID = "44444444-4444-4444-8444-000000000001";
 const STORY_ID = "44444444-4444-4444-8444-000000000002";
 const GROUP_ID = "44444444-4444-4444-8444-000000000003";
+const VOYAGE_ID = "44444444-4444-4444-8444-000000000004";
+const VOYAGE_NO_SLUG_ID = "44444444-4444-4444-8444-000000000005";
 const SITE_URL = "https://biteproject.it";
 
 const fixtures: StubFixtures = {
@@ -40,6 +42,26 @@ const fixtures: StubFixtures = {
         slug_en: "refit-chronicles",
         title_it: "Cronache di refit",
         title_en: "Refit chronicles",
+      },
+    ],
+    voyages: [
+      {
+        id: VOYAGE_ID,
+        name: "Adriatico del sud",
+        name_it: "Adriatico del sud",
+        name_en: "Southern Adriatic",
+        slug: "adriatico-del-sud",
+        slug_it: "adriatico-del-sud",
+        slug_en: "southern-adriatic",
+      },
+      {
+        id: VOYAGE_NO_SLUG_ID,
+        name: "Rotta senza slug",
+        name_it: null,
+        name_en: null,
+        slug: null,
+        slug_it: null,
+        slug_en: null,
       },
     ],
     fb_promo_groups: [{ id: GROUP_ID, name: "Vela Lenta Mediterraneo" }],
@@ -140,6 +162,32 @@ describe("link_build", () => {
     expect(page.url).toBe(`${SITE_URL}/it/voyages?utm_source=facebook&utm_medium=page&utm_campaign=voyages`);
   });
 
+  it("tagga un viaggio, che ha i nomi su altre colonne", async () => {
+    const client = await connect();
+    const data = payloadOf(
+      await client.callTool({ name: "link_build", arguments: { voyage_id: VOYAGE_ID, channel: "instagram-bio" } }),
+    );
+
+    expect(data).toMatchObject({
+      url_it: `${SITE_URL}/it/voyages/adriatico-del-sud?utm_source=instagram&utm_medium=bio&utm_campaign=adriatico-del-sud`,
+      url_en: `${SITE_URL}/en/voyages/southern-adriatic?utm_source=instagram&utm_medium=bio&utm_campaign=adriatico-del-sud`,
+    });
+  });
+
+  it("un viaggio senza slug resta linkabile per id", async () => {
+    const client = await connect();
+    const data = payloadOf(
+      await client.callTool({
+        name: "link_build",
+        arguments: { voyage_id: VOYAGE_NO_SLUG_ID, channel: "whatsapp" },
+      }),
+    );
+
+    expect(data.url_it).toBe(
+      `${SITE_URL}/it/voyages/${VOYAGE_NO_SLUG_ID}?utm_source=whatsapp&utm_medium=chat&utm_campaign=${VOYAGE_NO_SLUG_ID}`,
+    );
+  });
+
   it("rifiuta di produrre un link senza sorgente", async () => {
     const client = await connect();
     const text = textOf(await client.callTool({ name: "link_build", arguments: { article_id: ARTICLE_ID } }));
@@ -152,7 +200,7 @@ describe("link_build", () => {
     const text = textOf(
       await client.callTool({
         name: "link_build",
-        arguments: { article_id: ARTICLE_ID, story_id: STORY_ID, channel: "newsletter" },
+        arguments: { article_id: ARTICLE_ID, voyage_id: VOYAGE_ID, channel: "newsletter" },
       }),
     );
 

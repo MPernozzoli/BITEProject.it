@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { createCartoRasterStyle } from "@/lib/maplibre";
+import { bindMapToTheme,
+  createThemedCartoStyle } from "@/lib/maplibre";
 
 interface VoyageRouteHeroMapProps {
   /** [lng, lat] pairs, in route order. */
@@ -19,12 +20,15 @@ const VoyageRouteHeroMap = ({ coordinates, className }: VoyageRouteHeroMapProps)
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: createCartoRasterStyle(),
+      style: createThemedCartoStyle(),
       center: coordinates[0],
       zoom: 4,
       attributionControl: false,
       interactive: false,
     });
+
+    // La basemap segue il tema anche se cambia a mappa aperta.
+    bindMapToTheme(map);
     mapRef.current = map;
 
     map.once("load", () => {

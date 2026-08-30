@@ -106,7 +106,7 @@ const ManualPaymentDialog = ({
               </p>
             )}
             {amountValid && outstandingEur != null && parsedAmount < outstandingEur && (
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-300">
                 Meno del dovuto: il posto risulta pagato, ma resteranno{" "}
                 {formatDepositEur(Math.round((outstandingEur - parsedAmount + Number.EPSILON) * 100) / 100)} da
                 incassare fuori piattaforma.
@@ -143,7 +143,7 @@ const ManualPaymentDialog = ({
           </div>
 
           {bookingStatus === "expired" && (
-            <p className="rounded-lg border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900">
+            <p className="rounded-lg border border-amber-300/70 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-300">
               La candidatura è scaduta: confermando il pagamento viene riattivata e torna in
               revisione come candidatura pagata. Dovrai poi approvarla.
             </p>

@@ -43,8 +43,8 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
         onMouseLeave={onMouseLeave}
         className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-[transform,box-shadow,border-color,background-color] duration-reveal ease-out-expo active:scale-[0.99] ${
           isActive
-            ? "border-accent/50 bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
-            : "border-white/55 bg-white/48 hover:bg-white/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
+            ? "border-accent/50 bg-glass/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
+            : "border-glass-edge/55 bg-glass/48 hover:bg-glass/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
         } ${isDimmed && !isActive ? "opacity-40 saturate-[0.65] scale-[0.985]" : ""}`}
       >
         <div className="flex gap-3">
@@ -83,11 +83,11 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                   {format(new Date(article.published_at), "MMM d")}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full border border-glass-edge/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
                 <Eye size={10} className="text-accent" />
                 {views}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full border border-glass-edge/70 bg-background/70 px-2 py-0.5 text-[10px] font-sans text-muted-foreground">
                 <Heart size={10} className="text-accent" />
                 {likes}
               </span>
@@ -102,9 +102,9 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
                 {article.authors.slice(0, 3).map((author) => (
                   <span
                     key={author.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-background/72 px-2 py-1 text-[10px] font-sans text-foreground"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-background/72 px-2 py-1 text-[10px] font-sans text-foreground"
                   >
-                    <span className="flex h-4 w-4 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                    <span className="flex h-4 w-4 items-center justify-center overflow-hidden rounded-full border border-glass-edge/45 bg-glass/70">
                       <ProfileAvatar
                         name={author.name || "Anonymous"}
                         avatarUrl={author.avatar_url || undefined}

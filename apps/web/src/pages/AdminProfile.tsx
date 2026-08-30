@@ -1299,7 +1299,7 @@ const AdminProfile = () => {
   return (
     <div className="min-h-screen pt-24 pb-36 px-6 md:px-12 md:pb-20">
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
-        <section className="relative overflow-hidden rounded-[38px] border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
+        <section className="relative overflow-hidden rounded-[38px] border border-glass-edge/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] dark:bg-[linear-gradient(145deg,rgba(26,37,55,0.85),rgba(21,31,47,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
           <div className="absolute -top-20 right-8 h-64 w-64 rounded-full bg-accent/12 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-primary/8 blur-3xl" />
 
@@ -1314,12 +1314,12 @@ const AdminProfile = () => {
                 </div>
               </div>
 
-              <div className="rounded-[30px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
+              <div className="rounded-[30px] border border-border/85 bg-glass/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.21),inset_0_1px_0_rgba(255,255,255,0.081)]">
                 <div className="flex flex-col gap-5 md:flex-row md:items-center">
                   <button
                     type="button"
                     onClick={() => avatarInputRef.current?.click()}
-                    className="group relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-[30px] border border-white/70 bg-muted shadow-[0_14px_45px_rgba(15,23,42,0.12)]"
+                    className="group relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-[30px] border border-glass-edge/70 bg-muted shadow-[0_14px_45px_rgba(15,23,42,0.12)]"
                   >
                     <ProfileAvatar
                       name={name || "Avatar"}
@@ -1354,7 +1354,7 @@ const AdminProfile = () => {
                       <Button
                         type="button"
                         variant="outline"
-                        className="rounded-full border-white/70 bg-white/70 hover:bg-white/90"
+                        className="rounded-full border-glass-edge/70 bg-glass/70 hover:bg-glass/90"
                         onClick={() => avatarInputRef.current?.click()}
                       >
                         <Camera size={14} />
@@ -1364,7 +1364,7 @@ const AdminProfile = () => {
                         asChild
                         type="button"
                         variant="ghost"
-                        className="rounded-full text-foreground hover:bg-white/60"
+                        className="rounded-full text-foreground hover:bg-glass/60"
                       >
                         <Link to={`/profile/${session.user.id}`}>
                           {copy.viewPublicProfile}
@@ -1395,9 +1395,9 @@ const AdminProfile = () => {
                 return (
                   <div
                     key={item.label}
-                    className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]"
+                    className="rounded-[28px] border border-border/85 bg-glass/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.21),inset_0_1px_0_rgba(255,255,255,0.081)]"
                   >
-                    <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                    <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-glass-edge/70 bg-background/75">
                       <Icon size={16} className="text-accent" />
                     </div>
                     <p className="editorial-heading text-2xl md:text-4xl leading-none mb-2 break-words">
@@ -1415,7 +1415,7 @@ const AdminProfile = () => {
 
         <section className="grid grid-cols-1 xl:grid-cols-[1.08fr_0.92fr] gap-6">
           <div className="space-y-6">
-            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                 {copy.sections.identityEyebrow}
               </p>
@@ -1443,7 +1443,7 @@ const AdminProfile = () => {
                   <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
                     {copy.fields.email}
                   </label>
-                  <div className="flex items-center gap-3 rounded-[22px] border border-white/60 bg-white/58 px-4 py-4 text-sm font-sans text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.32)]">
+                  <div className="flex items-center gap-3 rounded-[22px] border border-glass-edge/60 bg-glass/58 px-4 py-4 text-sm font-sans text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.058)]">
                     <Mail size={16} className="text-accent" />
                     <span className="truncate">{email}</span>
                   </div>
@@ -1466,7 +1466,7 @@ const AdminProfile = () => {
               </div>
             </div>
 
-            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                 {copy.sections.socialsEyebrow}
               </p>
@@ -1479,10 +1479,10 @@ const AdminProfile = () => {
                 {socialFields.map((field) => (
                   <div
                     key={field.key}
-                    className="rounded-[24px] border border-white/60 bg-white/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                    className="rounded-[24px] border border-glass-edge/60 bg-glass/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]"
                   >
                     <div className="mb-3 flex items-center gap-3">
-                      <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                      <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-glass-edge/70 bg-background/75">
                         {field.icon}
                       </div>
                       <label className="text-xs font-sans uppercase tracking-[0.22em] text-muted-foreground">
@@ -1499,7 +1499,7 @@ const AdminProfile = () => {
                         }))
                       }
                       placeholder={field.placeholder}
-                      className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus-visible:ring-1"
+                      className="h-11 rounded-2xl border-glass-edge/65 bg-glass/72 shadow-none focus-visible:ring-1"
                     />
                   </div>
                 ))}
@@ -1549,7 +1549,7 @@ const AdminProfile = () => {
               formatPasskeyDate={formatPasskeyDate}
             />
 
-            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                 {lang === "en" ? "Membership" : "Community"}
               </p>
@@ -1564,7 +1564,7 @@ const AdminProfile = () => {
 
             {isAdmin && <AdminMcpTokens lang={lang === "en" ? "en" : "it"} />}
 
-            <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                 {copy.sections.subscriptionsEyebrow}
               </p>
@@ -1578,7 +1578,7 @@ const AdminProfile = () => {
                   {storySubscriptions.map((subscription) => (
                     <div
                       key={subscription.id}
-                      className="flex items-center justify-between gap-3 rounded-[24px] border border-white/60 bg-white/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+                      className="flex items-center justify-between gap-3 rounded-[24px] border border-glass-edge/60 bg-glass/68 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]"
                     >
                       <Link
                         to={`/stories/${subscription.story.slug}`}
@@ -1603,7 +1603,7 @@ const AdminProfile = () => {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-white/70 bg-white/52 px-5 py-8 text-sm font-sans text-muted-foreground">
+                <div className="rounded-[24px] border border-dashed border-glass-edge/70 bg-glass/52 px-5 py-8 text-sm font-sans text-muted-foreground">
                   {copy.subscription.empty}
                 </div>
               )}
@@ -1615,7 +1615,7 @@ const AdminProfile = () => {
 
       {isDirty && (
         <div className="fixed inset-x-4 bottom-24 z-40 md:inset-x-auto md:right-6 md:bottom-6">
-          <div className="ml-auto flex items-center justify-between gap-4 rounded-full border border-white/70 bg-[linear-gradient(145deg,rgba(20,33,54,0.94),rgba(39,62,96,0.9))] px-4 py-3 text-white shadow-[0_24px_56px_rgba(15,23,42,0.28)] backdrop-blur-xl md:min-w-[360px]">
+          <div className="ml-auto flex items-center justify-between gap-4 rounded-full border border-glass-edge/70 bg-[linear-gradient(145deg,rgba(20,33,54,0.94),rgba(39,62,96,0.9))] px-4 py-3 text-white shadow-[0_24px_56px_rgba(15,23,42,0.28)] backdrop-blur-xl md:min-w-[360px]">
             <div className="min-w-0">
               <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/65">
                 {copy.actions.dirtyBadge}
@@ -1628,7 +1628,7 @@ const AdminProfile = () => {
               type="button"
               onClick={() => void saveProfile()}
               disabled={saving || uploadingAvatar || saveAndLeavePending}
-              className="h-11 rounded-full border border-white/20 bg-white text-primary hover:bg-white/92"
+              className="h-11 rounded-full border border-glass-edge/20 bg-glass text-primary hover:bg-glass/92"
             >
               <Save size={15} />
               {saving ? copy.actions.saving : copy.actions.save}
@@ -1650,7 +1650,7 @@ const AdminProfile = () => {
       />
 
       <AlertDialog open={leaveDialogOpen}>
-        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-white/20 bg-[linear-gradient(160deg,rgba(255,255,255,0.94),rgba(247,245,239,0.92))] shadow-[0_28px_90px_rgba(15,23,42,0.18)]">
+        <AlertDialogContent className="max-w-[560px] rounded-[28px] border-glass-edge/20 bg-[linear-gradient(160deg,rgba(255,255,255,0.94),rgba(247,245,239,0.92))] dark:bg-[linear-gradient(160deg,rgba(26,37,55,0.94),rgba(21,31,47,0.92))] shadow-[0_28px_90px_rgba(15,23,42,0.18)]">
           <AlertDialogHeader className="text-left">
             <AlertDialogTitle className="editorial-heading text-2xl leading-tight">
               {copy.prompt.title}
@@ -1662,7 +1662,7 @@ const AdminProfile = () => {
           <AlertDialogFooter className="gap-2 sm:justify-end">
             <AlertDialogCancel
               onClick={handleStayOnPage}
-              className="mt-0 rounded-full border-white/60 bg-white/70 hover:bg-white"
+              className="mt-0 rounded-full border-glass-edge/60 bg-glass/70 hover:bg-glass"
             >
               {copy.actions.stayHere}
             </AlertDialogCancel>

@@ -297,7 +297,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
         <span className="text-xs font-sans text-muted-foreground">{voyageName}</span>
         <span className="glass-chip px-2.5 py-1 text-[11px] font-sans text-muted-foreground">{phaseLabel}</span>
         {delayed && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[11px] font-sans text-amber-800">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 px-2.5 py-1 text-[11px] font-sans text-amber-800 dark:text-amber-300">
             <AlertTriangle size={12} />
             {t.delayed(getLegDelayHours(currentLeg))}
           </span>
@@ -320,7 +320,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
       </h2>
 
       <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-[20px] border border-white/55 bg-white/45 p-4">
+        <div className="rounded-[20px] border border-glass-edge/55 bg-glass/45 p-4">
           <dt className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
             {fromWaypoint?.actual_departure_at ? t.actualDeparture : t.plannedDeparture}
           </dt>
@@ -328,7 +328,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
             {formatWindow(currentLeg.starts_at_window_start, currentLeg.starts_at_window_end, locale)}
           </dd>
         </div>
-        <div className="rounded-[20px] border border-white/55 bg-white/45 p-4">
+        <div className="rounded-[20px] border border-glass-edge/55 bg-glass/45 p-4">
           <dt className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
             {toWaypoint?.actual_arrival_at ? t.actualArrival : t.plannedArrival}
           </dt>
@@ -366,7 +366,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
           </div>
 
           {manualOpen && (
-            <div className="mt-3 rounded-[20px] border border-white/55 bg-white/45 p-4">
+            <div className="mt-3 rounded-[20px] border border-glass-edge/55 bg-glass/45 p-4">
               <label className="flex items-center gap-2 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
                 <Clock size={12} />
                 {pendingKind === "departure" ? t.pickDeparture : t.pickArrival}
@@ -376,7 +376,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
                   type="datetime-local"
                   value={manualValue}
                   onChange={(event) => setManualValue(event.target.value)}
-                  className="rounded-full border border-white/60 bg-white/70 px-3 py-2 text-sm font-sans text-foreground"
+                  className="rounded-full border border-glass-edge/60 bg-glass/70 px-3 py-2 text-sm font-sans text-foreground"
                 />
                 <button
                   type="button"

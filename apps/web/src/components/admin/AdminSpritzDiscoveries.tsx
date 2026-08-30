@@ -133,7 +133,7 @@ const AdminSpritzDiscoveries = () => {
       </div>
 
       <div className="glass-panel rounded-[32px] overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-glass-edge/10">
           <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
             Chi ha trovato Spritz
           </p>
@@ -170,7 +170,7 @@ const AdminSpritzDiscoveries = () => {
                   const profile = row.user_id ? profiles[row.user_id] : undefined;
                   const displayName = profile?.name || profile?.email || "Utente registrato";
                   return (
-                    <tr key={row.id} className="border-t border-white/8">
+                    <tr key={row.id} className="border-t border-glass-edge/8">
                       <td className="px-6 py-4">
                         {row.user_id ? (
                           <div className="flex items-center gap-3">

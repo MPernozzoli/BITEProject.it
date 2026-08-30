@@ -62,7 +62,7 @@ const CopyRow = ({ label, value }: { label: string; value: string }) => {
         className="shrink-0 rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         aria-label={lang === "it" ? "Copia" : "Copy"}
       >
-        {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+        {copied ? <Check size={16} className="text-green-600 dark:text-green-300" /> : <Copy size={16} />}
       </button>
     </div>
   );
@@ -190,7 +190,7 @@ const BankTransferDialog = ({
             <CopyRow label={lang === "it" ? "Intestatario" : "Account holder"} value={state.details.holder} />
             <CopyRow label={lang === "it" ? "Causale (obbligatoria)" : "Reference (required)"} value={state.details.reference} />
 
-            <div className="rounded-md border border-red-300/70 bg-red-50/80 px-3 py-2 text-xs font-semibold leading-relaxed text-red-900 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100/90">
+            <div className="rounded-md border border-red-300/70 dark:border-red-500/30 bg-red-50/80 dark:bg-red-500/10 px-3 py-2 text-xs font-semibold leading-relaxed text-red-900 dark:text-red-300 dark:border-red-400/30 dark:bg-red-400/10 dark:text-red-100/90">
               {state.details.phase === "balance"
                 ? lang === "it"
                   ? "Questo bonifico non ha una scadenza stretta: puoi completarlo quando puoi. Ricorda però che il saldo complessivo va comunque ricevuto entro la scadenza indicata nella tua area prenotazioni, altrimenti la prenotazione decade e l'acconto non è rimborsabile."
@@ -200,7 +200,7 @@ const BankTransferDialog = ({
                   : "You have 24 hours to complete the transfer. If payment does not arrive within 24 hours, the application lapses automatically."}
             </div>
 
-            <div className="rounded-md border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
+            <div className="rounded-md border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-300 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
               {state.details.phase === "balance"
                 ? lang === "it"
                   ? "Per convalidare automaticamente il pagamento devono combaciare sia l'importo sia la causale."

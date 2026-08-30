@@ -138,11 +138,11 @@ const BookingPartyPanel = ({
       </ul>
 
       {isLead && overdueMembers.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-orange-300/60 bg-orange-50/70 p-3 dark:border-orange-400/30 dark:bg-orange-400/10">
-          <p className="text-xs font-semibold text-orange-900 dark:text-orange-200">
+        <div className="mt-4 rounded-2xl border border-orange-300/60 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 p-3 dark:border-orange-400/30 dark:bg-orange-400/10">
+          <p className="text-xs font-semibold text-orange-900 dark:text-orange-300 dark:text-orange-200">
             {it ? "Una quota non è stata versata in tempo" : "A share was not paid in time"}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-orange-900/90 dark:text-orange-100/80">
+          <p className="mt-1 text-xs leading-relaxed text-orange-900/90 dark:text-orange-300 dark:text-orange-100/80">
             {it
               ? "Decidi tu come procedere: puoi proseguire senza chi non ha pagato, oppure annullare la prenotazione per tutto il gruppo. Annullando per tutti si applicano le condizioni di rimborso previste dai Termini."
               : "It's your call: continue without whoever did not pay, or cancel the booking for the whole party. Cancelling for everybody follows the refund terms."}
@@ -154,7 +154,7 @@ const BookingPartyPanel = ({
                 type="button"
                 onClick={() => onDropParticipant?.(member.participant_id)}
                 disabled={droppingParticipantId === member.participant_id}
-                className="inline-flex items-center gap-2 rounded-full border border-orange-400/70 bg-white/70 px-3 py-2 text-xs font-semibold text-orange-950 hover:bg-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full border border-orange-400/70 bg-glass/70 px-3 py-2 text-xs font-semibold text-orange-950 dark:text-orange-300 hover:bg-glass disabled:opacity-50"
               >
                 {droppingParticipantId === member.participant_id ? (
                   <Loader2 size={13} className="animate-spin" />

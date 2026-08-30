@@ -33,9 +33,9 @@ const getVoyageStatusLabel = (status: Voyage["status"], lang: "it" | "en") => {
 };
 
 const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
-  if (status === "planned") return "border border-dashed border-slate-300/80 bg-slate-50/65 text-slate-600";
-  if (status === "active") return "border border-sky-300/75 bg-sky-50/75 text-sky-800";
-  return "border border-emerald-300/70 bg-emerald-50/70 text-emerald-800";
+  if (status === "planned") return "border border-dashed border-border/80 bg-muted/65 text-muted-foreground";
+  if (status === "active") return "border border-sky-300/75 dark:border-sky-500/30 bg-sky-50/75 dark:bg-sky-500/10 text-sky-800 dark:text-sky-300";
+  return "border border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300";
 };
 
 const VoyagesPage = () => {
@@ -246,7 +246,7 @@ const VoyagesPage = () => {
                         {getVoyageStatusLabel(voyage.status, lang)}
                       </span>
                       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <TypeIcon size={13} className={isWater ? "text-sky-600" : "text-orange-600"} />
+                        <TypeIcon size={13} className={isWater ? "text-sky-600 dark:text-sky-300" : "text-orange-600 dark:text-orange-300"} />
                         {isWater ? (lang === "it" ? "Via mare" : "By sea") : (lang === "it" ? "Via terra" : "By land")}
                       </span>
                     </div>

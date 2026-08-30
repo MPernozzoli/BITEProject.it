@@ -17,7 +17,7 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `ArticlePage.tsx` | `logbook/:slug` | Articolo singolo (con mappa, related) |
 | `StoryPage.tsx` | `logbook/story/:slug` | Racconto/story: elenco capitoli pubblicati + anteprime articoli futuri (draft/schedulati), badge tipo (aperta/chiusa), progresso, iscrizione |
 | `Voyages.tsx` | `voyages` | Elenco viaggi |
-| `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta; supporta `?leg=<bookable_leg_id>` per evidenziare una tratta referenziata dalla community |
+| `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta; supporta `?leg=<bookable_leg_id>` per evidenziare una tratta referenziata dalla community. La sezione `#partecipa` ospita l'intero flusso di candidatura in pagina (`VoyageJoinPanel`), senza rimandare a `/bookings` → [[13 - Booking Voyage]] |
 | `Collaborations.tsx` | `collaborations` | Collaborazioni aperte: ricerca in mare, creator/editoriale e brand |
 | `Contact.tsx` | `contact` | Form contatti → [[09 - Edge Functions\|contact-form-submit]] |
 | `Links.tsx` | `links` | Pagina linktree |
@@ -66,7 +66,7 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `ArticleEditor.tsx` | `/admin/article/:id` |
 | `AdminProfile.tsx` | `/profile` |
 | `AdminContentNotes.tsx` | `/admin/content-notes` |
-| `AdminPerformanceDashboard.tsx` | `/admin/performance` |
+| `AdminPerformanceDashboard.tsx` | `/admin/performance` (scheda **Articoli** / **Viaggi**: la seconda monta `components/admin/AdminVoyageScores.tsx`) |
 | `AdminTrafficSources.tsx` | `/admin/sorgenti` |
 
 `/profilo` è un alias verso `/profile`.

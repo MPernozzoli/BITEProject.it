@@ -224,7 +224,7 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
   };
 
   return (
-    <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+    <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
       <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">{copy.eyebrow}</p>
       <h2 className="editorial-heading text-2xl md:text-3xl mb-3 flex items-center gap-3">
         <Bot size={22} className="text-accent" />
@@ -237,7 +237,7 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
           <p className="font-sans text-sm font-medium text-foreground">{copy.onceTitle}</p>
           <p className="mt-1 text-xs font-sans text-muted-foreground">{copy.onceText}</p>
           <div className="mt-3 flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-[14px] border border-white/70 bg-background/80 px-3 py-2 text-xs">
+            <code className="flex-1 overflow-x-auto rounded-[14px] border border-glass-edge/70 bg-background/80 px-3 py-2 text-xs">
               {freshToken}
             </code>
             <Button
@@ -255,13 +255,13 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
             </Button>
           </div>
           <p className="mt-3 text-xs font-sans text-muted-foreground">{copy.hint}</p>
-          <code className="mt-1 block overflow-x-auto rounded-[14px] border border-white/70 bg-background/80 px-3 py-2 text-[11px]">
+          <code className="mt-1 block overflow-x-auto rounded-[14px] border border-glass-edge/70 bg-background/80 px-3 py-2 text-[11px]">
             {`claude mcp add --transport http bite-admin https://admin.biteproject.it/mcp --header "Authorization: Bearer ${freshToken}"`}
           </code>
         </div>
       )}
 
-      <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 space-y-4">
+      <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 space-y-4">
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -324,14 +324,14 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
         {loading ? (
           <p className="text-sm font-sans text-muted-foreground">…</p>
         ) : activeTokens.length === 0 ? (
-          <div className="rounded-[24px] border border-dashed border-white/70 bg-white/52 px-5 py-8 text-sm font-sans text-muted-foreground">
+          <div className="rounded-[24px] border border-dashed border-glass-edge/70 bg-glass/52 px-5 py-8 text-sm font-sans text-muted-foreground">
             {copy.empty}
           </div>
         ) : (
           activeTokens.map((token) => {
             const editing = editingId === token.id;
             return (
-              <div key={token.id} className="rounded-[24px] border border-white/60 bg-white/68 px-4 py-4">
+              <div key={token.id} className="rounded-[24px] border border-glass-edge/60 bg-glass/68 px-4 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-sans text-sm font-medium text-foreground truncate">

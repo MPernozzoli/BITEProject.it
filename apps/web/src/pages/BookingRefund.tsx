@@ -248,7 +248,7 @@ export default function BookingRefund() {
                   state.done && !state.done.queued ? (
                     <div className="flex flex-col items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-8 text-center">
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/20">
-                        <Check className="text-emerald-500" size={22} />
+                        <Check className="text-emerald-500 dark:text-emerald-400" size={22} />
                       </div>
                       <p className="font-semibold">{it ? "Rimborso avviato" : "Refund started"}</p>
                       <p className="text-sm text-muted-foreground">
@@ -270,7 +270,7 @@ export default function BookingRefund() {
                   ) : (
                     <div className="flex flex-col items-center gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-5 py-8 text-center">
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-500/20">
-                        <Clock className="text-sky-500" size={22} />
+                        <Clock className="text-sky-500 dark:text-sky-400" size={22} />
                       </div>
                       <p className="font-semibold">{it ? "Richiesta presa in carico" : "Request received"}</p>
                       <p className="text-sm text-muted-foreground">

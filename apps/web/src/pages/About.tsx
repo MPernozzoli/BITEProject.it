@@ -85,19 +85,19 @@ const TheCrew = () => {
 
       <section className="page-section pt-0">
         <div className="page-section-narrow glass-panel-light rounded-[38px] px-6 py-10 text-center md:px-10 md:py-12">
-          <div className="glass-chip-light inline-flex h-14 w-14 items-center justify-center mb-6 text-slate-700">
+          <div className="glass-chip-light inline-flex h-14 w-14 items-center justify-center mb-6 text-foreground/80">
             <Music size={20} />
           </div>
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-8 text-slate-950">{t("crew.name.title")}</h2>
+          <h2 className="editorial-heading text-3xl md:text-5xl mb-8 text-foreground">{t("crew.name.title")}</h2>
           <p className="editorial-body text-muted-foreground text-lg leading-relaxed max-w-2xl mx-auto mb-12">
             {t("crew.name.text")}
           </p>
-          <blockquote className="glass-chip-light max-w-lg mx-auto mb-8 px-6 py-6 font-serif italic text-xl md:text-2xl text-slate-900 leading-relaxed">
+          <blockquote className="glass-chip-light max-w-lg mx-auto mb-8 px-6 py-6 font-serif italic text-xl md:text-2xl text-foreground leading-relaxed">
             "Like a love that started out as friends<br />
             We couldn't comprehend<br />
             How better is the end"
           </blockquote>
-          <p className="text-xs font-sans tracking-[0.2em] uppercase text-slate-500 mb-8">
+          <p className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground mb-8">
             — Tophouse, "Better Is The End"
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
@@ -193,20 +193,20 @@ const TheCrew = () => {
       <section className="page-section pt-0">
         <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="page-section-narrow text-center mb-10">
-            <div className="glass-chip-light inline-flex h-14 w-14 items-center justify-center mb-6 text-slate-700">
+            <div className="glass-chip-light inline-flex h-14 w-14 items-center justify-center mb-6 text-foreground/80">
               <Heart size={24} />
             </div>
-            <p className="text-xs font-sans tracking-[0.3em] uppercase text-slate-500 mb-4">
+            <p className="text-xs font-sans tracking-[0.3em] uppercase text-muted-foreground mb-4">
               {t("crew.snow.subtitle")}
             </p>
-            <h3 className="editorial-heading text-3xl md:text-5xl mb-8 text-slate-950">{t("crew.snow.title")}</h3>
+            <h3 className="editorial-heading text-3xl md:text-5xl mb-8 text-foreground">{t("crew.snow.title")}</h3>
             <p className="editorial-body text-muted-foreground text-lg leading-relaxed max-w-2xl mx-auto">
               {t("crew.snow.text")}
             </p>
           </div>
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-2">
             <div className="glass-frame w-full rounded-[30px] p-2">
-              <div className="aspect-square overflow-hidden rounded-[24px] bg-white/45">
+              <div className="aspect-square overflow-hidden rounded-[24px] bg-glass/45">
                 <img
                   src={snowDaisyGarden}
                   alt="Snow Daisy smiling behind garden plants"
@@ -217,7 +217,7 @@ const TheCrew = () => {
               </div>
             </div>
             <div className="glass-frame w-full rounded-[30px] p-2">
-              <div className="aspect-square overflow-hidden rounded-[24px] bg-white/45">
+              <div className="aspect-square overflow-hidden rounded-[24px] bg-glass/45">
                 <img
                   src={snowDaisyAntlers}
                   alt="Snow Daisy wearing antlers"

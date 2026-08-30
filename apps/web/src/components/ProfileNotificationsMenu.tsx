@@ -380,7 +380,7 @@ const ProfileNotificationsMenu = ({
                 onClick={() => onNavigate?.()}
                 className="flex gap-3 rounded-xl outline-none transition-colors hover:text-accent focus:text-accent"
               >
-                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-white/80 text-orange-600">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-glass-edge/70 bg-glass/80 text-orange-600 dark:text-orange-300">
                   <Wallet size={16} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -406,7 +406,7 @@ const ProfileNotificationsMenu = ({
                 onClick={() => onNavigate?.()}
                 className="flex gap-3 rounded-xl outline-none transition-colors hover:text-accent focus:text-accent"
               >
-                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-white/80 text-amber-600">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-glass-edge/70 bg-glass/80 text-amber-600 dark:text-amber-300">
                   <Wallet size={16} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -443,12 +443,12 @@ const ProfileNotificationsMenu = ({
                 className={cn(
                   "rounded-[1.25rem] border px-3 py-3 transition-colors",
                   notification.read_at
-                    ? "border-black/6 bg-white/55"
+                    ? "border-foreground/6 bg-glass/55"
                     : "border-destructive/18 bg-destructive/5",
                 )}
               >
                 <div className="flex gap-3">
-                  <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-full border border-white/70 bg-white/80">
+                  <div className="relative mt-0.5 h-10 w-10 overflow-hidden rounded-full border border-glass-edge/70 bg-glass/80">
                     <ProfileAvatar
                       name={actorName}
                       avatarUrl={notification.actor?.avatar_url}
@@ -459,9 +459,9 @@ const ProfileNotificationsMenu = ({
                       }
                       imgClassName="h-10 w-10 rounded-full object-cover"
                     />
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-white bg-white text-accent shadow-sm">
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-glass-edge bg-glass text-accent shadow-sm">
                       {notification.notification_category === "like" ? (
-                        <Heart size={10} className="text-red-500" />
+                        <Heart size={10} className="text-red-500 dark:text-red-400" />
                       ) : notification.notification_category === "publication" ? (
                         <Bell size={10} />
                       ) : (
@@ -500,7 +500,7 @@ const ProfileNotificationsMenu = ({
                             void markAsRead(notification.id);
                             onNavigate?.();
                           }}
-                          className="font-medium text-foreground/80 underline decoration-black/20 underline-offset-2 hover:text-accent"
+                          className="font-medium text-foreground/80 underline decoration-foreground/20 underline-offset-2 hover:text-accent"
                         >
                           {actorName}
                         </Link>

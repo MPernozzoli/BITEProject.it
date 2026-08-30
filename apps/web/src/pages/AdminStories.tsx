@@ -383,7 +383,7 @@ const AdminStories = () => {
                     type="text"
                     value={form.title_en}
                     onChange={(e) => setForm((f) => ({ ...f, title_en: e.target.value }))}
-                    className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    className="w-full rounded-[18px] border border-border/90 bg-glass/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
                 <div>
@@ -392,7 +392,7 @@ const AdminStories = () => {
                     type="text"
                     value={form.title_it}
                     onChange={(e) => setForm((f) => ({ ...f, title_it: e.target.value }))}
-                    className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                    className="w-full rounded-[18px] border border-border/90 bg-glass/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
               </div>
@@ -404,7 +404,7 @@ const AdminStories = () => {
                     value={form.description_en}
                     onChange={(e) => setForm((f) => ({ ...f, description_en: e.target.value }))}
                     rows={3}
-                    className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
+                    className="w-full rounded-[18px] border border-border/90 bg-glass/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
                   />
                 </div>
                 <div>
@@ -413,7 +413,7 @@ const AdminStories = () => {
                     value={form.description_it}
                     onChange={(e) => setForm((f) => ({ ...f, description_it: e.target.value }))}
                     rows={3}
-                    className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
+                    className="w-full rounded-[18px] border border-border/90 bg-glass/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors resize-none"
                   />
                 </div>
               </div>
@@ -429,7 +429,7 @@ const AdminStories = () => {
                       className={`flex-1 rounded-[18px] border px-4 py-3 text-sm font-sans transition-colors ${
                         form.type === "open"
                           ? "border-accent bg-accent/10 text-accent"
-                          : "border-stone-200/90 bg-white/78 text-muted-foreground hover:border-stone-300"
+                          : "border-border/90 bg-glass/78 text-muted-foreground hover:border-border"
                       }`}
                     >
                       Aperta
@@ -440,7 +440,7 @@ const AdminStories = () => {
                       className={`flex-1 rounded-[18px] border px-4 py-3 text-sm font-sans transition-colors ${
                         form.type === "closed"
                           ? "border-accent bg-accent/10 text-accent"
-                          : "border-stone-200/90 bg-white/78 text-muted-foreground hover:border-stone-300"
+                          : "border-border/90 bg-glass/78 text-muted-foreground hover:border-border"
                       }`}
                     >
                       Chiusa
@@ -461,7 +461,7 @@ const AdminStories = () => {
                       value={form.target_chapter_count}
                       onChange={(e) => setForm((f) => ({ ...f, target_chapter_count: e.target.value }))}
                       placeholder="Es. 5"
-                      className="w-full rounded-[18px] border border-stone-200/90 bg-white/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
+                      className="w-full rounded-[18px] border border-border/90 bg-glass/78 px-4 py-3 text-sm font-sans focus:outline-none focus:border-accent transition-colors"
                     />
                   </div>
                 )}
@@ -479,7 +479,7 @@ const AdminStories = () => {
 
               {/* Linked articles section — only when editing */}
               {editingStory && (
-                <div className="border-t border-stone-200/60 pt-5 mt-5 space-y-4">
+                <div className="border-t border-border/60 pt-5 mt-5 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h4 className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">Articoli della storia</h4>
@@ -587,7 +587,7 @@ const AdminStories = () => {
                         value={linkSearch}
                         onChange={(e) => setLinkSearch(e.target.value)}
                         placeholder="Cerca per titolo..."
-                        className="w-full rounded-[14px] border border-stone-200/90 bg-white/78 px-3 py-2 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
+                        className="w-full rounded-[14px] border border-border/90 bg-glass/78 px-3 py-2 text-xs font-sans focus:outline-none focus:border-accent transition-colors"
                       />
                       <div className="max-h-48 overflow-y-auto space-y-1">
                         {filteredUnassigned.length === 0 ? (

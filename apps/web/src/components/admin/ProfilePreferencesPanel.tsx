@@ -121,7 +121,7 @@ const ProfilePreferencesPanel = ({
   formatPasskeyDate,
 }: ProfilePreferencesPanelProps) => {
   return (
-          <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+          <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
             <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
               {copy.sections.preferencesEyebrow}
             </p>
@@ -145,7 +145,7 @@ const ProfilePreferencesPanel = ({
                         "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
                         preferredLanguage === language.code
                           ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
-                          : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
+                          : "border-glass-edge/70 bg-glass/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
                       )}
                     >
                       {language.label}
@@ -155,7 +155,7 @@ const ProfilePreferencesPanel = ({
               </div>
 
               {!isSiteNative && (
-                <div className="space-y-3 rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div className="space-y-3 rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                   <div className="space-y-2">
                     <label className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
                       {copy.fields.secondaryLanguage}
@@ -176,7 +176,7 @@ const ProfilePreferencesPanel = ({
                             "rounded-full border px-4 py-2.5 text-sm font-sans transition-all",
                             secondaryLanguage === code
                               ? "border-accent/40 bg-accent/12 text-accent shadow-[0_8px_24px_rgba(52,120,127,0.12)]"
-                              : "border-white/70 bg-white/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
+                              : "border-glass-edge/70 bg-glass/68 text-muted-foreground hover:border-accent/30 hover:text-foreground",
                           )}
                         >
                           {label}
@@ -187,7 +187,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               )}
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="space-y-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-2">
@@ -198,13 +198,13 @@ const ProfilePreferencesPanel = ({
                         {copy.fields.passkeyHint}
                       </p>
                     </div>
-                    <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                    <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-glass-edge/70 bg-background/75">
                       <Fingerprint size={16} className="text-accent" />
                     </div>
                   </div>
 
                   {passkeyUnavailableMessage ? (
-                    <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                    <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/72 p-4">
                       <p className="text-sm font-sans text-muted-foreground leading-relaxed">
                         {passkeyUnavailableMessage}
                       </p>
@@ -213,14 +213,14 @@ const ProfilePreferencesPanel = ({
                     <>
                       <div className="space-y-3">
                         {passkeysLoading ? (
-                          <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
+                          <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/52 px-4 py-5 text-sm font-sans text-muted-foreground">
                             {copy.loading}
                           </div>
                         ) : passkeys.length > 0 ? (
                           passkeys.map((passkey) => (
                             <div
                               key={passkey.id}
-                              className="flex items-start justify-between gap-3 rounded-[20px] border border-white/60 bg-white/72 px-4 py-4"
+                              className="flex items-start justify-between gap-3 rounded-[20px] border border-glass-edge/60 bg-glass/72 px-4 py-4"
                             >
                               <div className="min-w-0 space-y-1">
                                 <p className="truncate text-sm font-sans font-medium text-foreground">
@@ -250,7 +250,7 @@ const ProfilePreferencesPanel = ({
                             </div>
                           ))
                         ) : (
-                          <div className="rounded-[20px] border border-dashed border-white/70 bg-white/52 px-4 py-5 text-sm font-sans text-muted-foreground">
+                          <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/52 px-4 py-5 text-sm font-sans text-muted-foreground">
                             {copy.fields.passkeyEmpty}
                           </div>
                         )}
@@ -259,7 +259,7 @@ const ProfilePreferencesPanel = ({
                       <Button
                         type="button"
                         variant="outline"
-                        className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                        className="rounded-full border-glass-edge/70 bg-glass/80 hover:bg-glass"
                         disabled={registeringPasskey}
                         onClick={() => void handleRegisterPasskey()}
                       >
@@ -271,7 +271,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2">
                     <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
@@ -285,7 +285,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="space-y-3">
                   <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
                     {copy.fields.likeNotificationsTitle}
@@ -302,7 +302,7 @@ const ProfilePreferencesPanel = ({
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
+                    <SelectTrigger className="h-11 rounded-2xl border-glass-edge/65 bg-glass/72 shadow-none focus:ring-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -316,7 +316,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="space-y-3">
                   <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
                     {copy.fields.commentNotificationsTitle}
@@ -333,7 +333,7 @@ const ProfilePreferencesPanel = ({
                       }))
                     }
                   >
-                    <SelectTrigger className="h-11 rounded-2xl border-white/65 bg-white/72 shadow-none focus:ring-1">
+                    <SelectTrigger className="h-11 rounded-2xl border-glass-edge/65 bg-glass/72 shadow-none focus:ring-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -347,7 +347,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2">
                     <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
@@ -364,7 +364,7 @@ const ProfilePreferencesPanel = ({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2">
                     <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
@@ -382,7 +382,7 @@ const ProfilePreferencesPanel = ({
               </div>
 
               {shouldShowMobileAppCard && (
-                <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                   <div className="space-y-3">
                     <p className="text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
                       {isInstalledApp ? copy.fields.pushConfiguredLabel : copy.fields.pushInstructionLabel}
@@ -395,26 +395,26 @@ const ProfilePreferencesPanel = ({
                     </p>
 
                     {!isInstalledApp ? (
-                      <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                      <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/72 p-4">
                         <p className="text-sm font-sans text-foreground">{copy.fields.pushNotInstalled}</p>
                         <p className="mt-2 text-sm font-sans text-muted-foreground leading-relaxed">
                           {pushInstallInstructions}
                         </p>
                       </div>
                     ) : !canUseWebPush ? (
-                      <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                      <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/72 p-4">
                         <p className="text-sm font-sans text-muted-foreground leading-relaxed">
                           {copy.fields.pushUnsupported}
                         </p>
                       </div>
                     ) : !pushPublicKey ? (
-                      <div className="rounded-[20px] border border-dashed border-white/70 bg-white/72 p-4">
+                      <div className="rounded-[20px] border border-dashed border-glass-edge/70 bg-glass/72 p-4">
                         <p className="text-sm font-sans text-muted-foreground leading-relaxed">
                           {copy.fields.pushMissingKey}
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-4 rounded-[20px] border border-white/70 bg-white/72 p-4">
+                      <div className="space-y-4 rounded-[20px] border border-glass-edge/70 bg-glass/72 p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-1">
                             <p className="text-sm font-sans font-medium text-foreground">
@@ -428,7 +428,7 @@ const ProfilePreferencesPanel = ({
                             <Button
                               type="button"
                               variant="outline"
-                              className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                              className="rounded-full border-glass-edge/70 bg-glass/80 hover:bg-glass"
                               disabled={pushStateLoading}
                               onClick={() => void handleDisablePushNotifications()}
                             >
@@ -441,7 +441,7 @@ const ProfilePreferencesPanel = ({
                           <Button
                             type="button"
                             variant="outline"
-                            className="rounded-full border-white/70 bg-white/80 hover:bg-white"
+                            className="rounded-full border-glass-edge/70 bg-glass/80 hover:bg-glass"
                             disabled={pushStateLoading}
                             onClick={() => void handleEnablePushNotifications()}
                           >
@@ -454,13 +454,13 @@ const ProfilePreferencesPanel = ({
                         ) : null}
 
                         {pushReady ? (
-                          <div className="space-y-0 border-t border-black/6 pt-2">
+                          <div className="space-y-0 border-t border-foreground/6 pt-2">
                             {pushPreferenceRows.map((row, index) => (
                               <div
                                 key={row.key}
                                 className={cn(
                                   "flex items-start justify-between gap-4 py-4",
-                                  index > 0 && "border-t border-black/6",
+                                  index > 0 && "border-t border-foreground/6",
                                 )}
                               >
                                 <div className="space-y-1">
@@ -488,9 +488,9 @@ const ProfilePreferencesPanel = ({
                 </div>
               )}
 
-              <div className="rounded-[24px] border border-white/60 bg-white/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+              <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-background/75">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-glass-edge/70 bg-background/75">
                     <UserRound size={16} className="text-accent" />
                   </div>
                   <div>

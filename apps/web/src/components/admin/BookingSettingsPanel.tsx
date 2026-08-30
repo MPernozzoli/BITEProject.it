@@ -48,7 +48,7 @@ const BookingSettingsPanel = ({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isBookingSettingsDirty && (
-            <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+            <span className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
               Modifiche non salvate
             </span>
           )}
@@ -129,7 +129,7 @@ const BookingSettingsPanel = ({
             Vita a bordo, lavaggio a mano, Starlink, audio/proiettore, prese tipo L/F, USB-A/USB-C, frigo e suggerimenti per luoghi o esperienze.
           </p>
           <div className="mb-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
+            <div className="rounded-[16px] border border-border/70 bg-glass/55 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo L</p>
               <div className="mt-3 flex h-16 items-center justify-center gap-3 rounded-xl border border-border/60 bg-background/80">
                 <span className="h-3 w-3 rounded-full border border-foreground/70" />
@@ -137,7 +137,7 @@ const BookingSettingsPanel = ({
                 <span className="h-3 w-3 rounded-full border border-foreground/70" />
               </div>
             </div>
-            <div className="rounded-[16px] border border-border/70 bg-white/55 p-3">
+            <div className="rounded-[16px] border border-border/70 bg-glass/55 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Tipo F</p>
               <div className="mt-3 flex h-16 items-center justify-center rounded-xl border border-border/60 bg-background/80">
                 <div className="flex h-12 w-12 items-center justify-center gap-4 rounded-full border-2 border-foreground/70">

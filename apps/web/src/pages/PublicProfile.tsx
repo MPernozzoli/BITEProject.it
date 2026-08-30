@@ -368,14 +368,14 @@ const PublicProfile = () => {
   return (
     <div className="min-h-screen pt-24 pb-20 px-6 md:px-12">
       <div className="max-w-6xl mx-auto space-y-8">
-        <section className="relative overflow-hidden rounded-[38px] border border-white/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
+        <section className="relative overflow-hidden rounded-[38px] border border-glass-edge/55 bg-[linear-gradient(145deg,rgba(255,255,255,0.85),rgba(247,245,239,0.74))] dark:bg-[linear-gradient(145deg,rgba(26,37,55,0.85),rgba(21,31,47,0.74))] shadow-[0_28px_90px_rgba(15,23,42,0.10)]">
           <div className="absolute -top-20 right-8 w-64 h-64 rounded-full bg-accent/12 blur-3xl" />
           <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full bg-primary/8 blur-3xl" />
 
           <div className="relative grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 p-6 md:p-8 lg:p-10">
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center gap-5">
-                <div className="w-28 h-28 md:w-32 md:h-32 rounded-[32px] overflow-hidden bg-muted ring-1 ring-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.12)]">
+                <div className="w-28 h-28 md:w-32 md:h-32 rounded-[32px] overflow-hidden bg-muted ring-1 ring-glass-edge/70 shadow-[0_14px_45px_rgba(15,23,42,0.12)]">
                   <ProfileAvatar
                     name={profile.name || "Anonymous"}
                     avatarUrl={profile.avatar_url}
@@ -390,14 +390,14 @@ const PublicProfile = () => {
                   </h1>
                   <div className="flex flex-wrap gap-2">
                     {memberSince && (
-                      <span className="rounded-full border border-white/70 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground">
+                      <span className="rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground">
                         {lang === "it" ? "Membro da" : "Member since"} {memberSince}
                       </span>
                     )}
                     {profileLanguages.map((language) => (
                       <span
                         key={language}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1.5 text-xs font-sans text-muted-foreground"
                       >
                         <Languages size={12} className="text-accent" />
                         {language}
@@ -407,7 +407,7 @@ const PublicProfile = () => {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
+              <div className="rounded-[28px] border border-border/85 bg-glass/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.21),inset_0_1px_0_rgba(255,255,255,0.081)]">
                 <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-3">
                   {lang === "it" ? "Biografia" : "Biography"}
                 </p>
@@ -423,9 +423,9 @@ const PublicProfile = () => {
                 return (
                   <div
                     key={item.label}
-                    className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]"
+                    className="rounded-[28px] border border-border/85 bg-glass/72 p-5 md:p-6 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.21),inset_0_1px_0_rgba(255,255,255,0.081)]"
                   >
-                    <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-background/75 border border-white/70 mb-4">
+                    <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-background/75 border border-glass-edge/70 mb-4">
                       <Icon size={16} className="text-accent" />
                     </div>
                     <p className="editorial-heading text-3xl md:text-4xl leading-none mb-2">{item.value}</p>
@@ -438,7 +438,7 @@ const PublicProfile = () => {
         </section>
 
         {activeSocials.length > 0 && (
-          <section className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+          <section className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
             <div className="flex items-center justify-between gap-4 mb-6">
               <div>
                 <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
@@ -459,11 +459,11 @@ const PublicProfile = () => {
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group rounded-[26px] border border-stone-200/90 bg-white/76 p-4 md:p-5 hover:translate-y-[-2px] hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
+                    className="group rounded-[26px] border border-border/90 bg-glass/76 p-4 md:p-5 hover:translate-y-[-2px] hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-white/70 bg-background/70 mb-4">
+                        <div className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-glass-edge/70 bg-background/70 mb-4">
                           <Icon size={17} className="text-accent" />
                         </div>
                         <p className="font-sans font-medium text-foreground">{social.label}</p>
@@ -482,7 +482,7 @@ const PublicProfile = () => {
           <section className="grid grid-cols-1 xl:grid-cols-[0.72fr_1.28fr] gap-6">
             <div className="space-y-6">
               {badges.length > 0 && (
-                <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+                <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                     {lang === "it" ? "Riconoscimenti" : "Recognition"}
                   </p>
@@ -494,7 +494,7 @@ const PublicProfile = () => {
                     {badges.map((badge) => (
                       <div
                         key={badge.id}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/65 bg-white/60 px-4 py-2 text-sm font-sans text-foreground"
+                        className="inline-flex items-center gap-2 rounded-full border border-glass-edge/65 bg-glass/60 px-4 py-2 text-sm font-sans text-foreground"
                       >
                         {badge.badge_icon && <span className="text-base leading-none">{badge.badge_icon}</span>}
                         <span>{badge.badge_name}</span>
@@ -505,7 +505,7 @@ const PublicProfile = () => {
               )}
 
               {!featuredArticle && (
-                <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+                <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
                   <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                     {lang === "it" ? "Attività" : "Activity"}
                   </p>
@@ -522,7 +522,7 @@ const PublicProfile = () => {
             </div>
 
             {(featuredArticle || recentArticles.length > 0) && (
-              <div className="rounded-[34px] border border-stone-200/85 bg-white/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
                 <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                   {lang === "it" ? "Dal logbook" : "From the logbook"}
                 </p>
@@ -534,7 +534,7 @@ const PublicProfile = () => {
                   {featuredArticle && (
                     <Link
                       to={`/logbook/${featuredArticle.slug}`}
-                      className="group grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] overflow-hidden rounded-[30px] border border-stone-200/90 bg-white/78 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.995]"
+                      className="group grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] overflow-hidden rounded-[30px] border border-border/90 bg-glass/78 hover:shadow-[0_20px_50px_rgba(15,23,42,0.10)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.995]"
                     >
                       <div className="relative min-h-[260px] overflow-hidden bg-muted">
                         {featuredArticle.cover_image ? (
@@ -561,16 +561,16 @@ const PublicProfile = () => {
                       <div className="p-5 md:p-6 flex flex-col">
                         <div className="flex flex-wrap gap-2 mb-4">
                           {featuredArticleLocationLabel && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
                               <MapPin size={11} className="text-accent" />
                               {featuredArticleLocationLabel}
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
                             <Eye size={11} className="text-accent" />
                             {formatNumber(featuredArticle.view_count)}
                           </span>
-                          <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
                             <Heart size={11} className="text-accent" />
                             {formatNumber(featuredArticle.like_count)}
                           </span>
@@ -606,7 +606,7 @@ const PublicProfile = () => {
                         <Link
                           key={article.id}
                           to={`/logbook/${article.slug}`}
-                          className="group rounded-[28px] border border-stone-200/90 bg-white/76 overflow-hidden hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
+                          className="group rounded-[28px] border border-border/90 bg-glass/76 overflow-hidden hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition-[transform,box-shadow,border-color] duration-reveal ease-out-expo active:scale-[0.99]"
                         >
                           <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                             {article.cover_image ? (

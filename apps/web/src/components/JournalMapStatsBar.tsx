@@ -4,18 +4,18 @@ import { getLocalizedVoyageName, type Voyage } from "@/lib/voyage-utils";
 import type { Language } from "@/lib/language";
 
 const getVoyageTypeIconClassName = (voyageType: Voyage["type"]) =>
-  voyageType === "water" ? "text-sky-700" : "text-orange-700";
+  voyageType === "water" ? "text-sky-700 dark:text-sky-300" : "text-orange-700 dark:text-orange-300";
 
 const getVoyageStatusPillClassName = (status: Voyage["status"]) => {
   if (status === "planned") {
-    return "border border-dashed border-slate-300/80 bg-slate-50/65 text-slate-600";
+    return "border border-dashed border-border/80 bg-muted/65 text-muted-foreground";
   }
 
   if (status === "active") {
-    return "border border-sky-300/75 bg-sky-50/75 text-sky-800";
+    return "border border-sky-300/75 dark:border-sky-500/30 bg-sky-50/75 dark:bg-sky-500/10 text-sky-800 dark:text-sky-300";
   }
 
-  return "border border-slate-300/75 bg-white/70 text-slate-700";
+  return "border border-border/75 bg-glass/70 text-foreground/80";
 };
 
 export interface JournalMapStats {
@@ -58,15 +58,15 @@ const JournalMapStatsBar = ({
   if (stats.seaNM <= 0 && stats.landKM <= 0) return null;
 
   return (
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-white/60 shadow-lg px-4 py-2">
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 rounded-full bg-background/75 backdrop-blur-xl border border-glass-edge/60 shadow-lg px-4 py-2">
           {stats.seaNM > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-sky-800/85">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-sky-800/85 dark:text-sky-300">
               <Ship size={10} /> {stats.seaNM.toLocaleString()} NM
             </span>
           ) : null}
           {stats.seaNM > 0 && stats.landKM > 0 ? <span className="w-px h-3 bg-border" /> : null}
           {stats.landKM > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-orange-800/85">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-orange-800/85 dark:text-orange-300">
               <Mountain size={10} /> {stats.landKM.toLocaleString()} KM
             </span>
           ) : null}
@@ -87,7 +87,7 @@ const JournalMapStatsBar = ({
             <PopoverContent
               align="center"
               sideOffset={12}
-              className="w-[340px] max-h-[min(72vh,560px)] flex flex-col overflow-hidden rounded-[24px] border-white/60 bg-background/88 p-2 backdrop-blur-2xl"
+              className="w-[340px] max-h-[min(72vh,560px)] flex flex-col overflow-hidden rounded-[24px] border-glass-edge/60 bg-background/88 p-2 backdrop-blur-2xl"
             >
               <div className="mb-1 shrink-0 px-2 py-1">
                 <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
@@ -101,7 +101,7 @@ const JournalMapStatsBar = ({
                   className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                     voyageTypeFilter === "all"
                       ? "bg-foreground text-background"
-                      : "bg-white/60 text-muted-foreground hover:text-foreground"
+                      : "bg-glass/60 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {lang === "it" ? "tutti" : "all"}
@@ -111,8 +111,8 @@ const JournalMapStatsBar = ({
                   onClick={() => setVoyageTypeFilter("water")}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                     voyageTypeFilter === "water"
-                      ? "bg-sky-100 text-sky-800"
-                      : "bg-sky-50/70 text-sky-700 hover:bg-sky-100"
+                      ? "bg-sky-100 dark:bg-sky-500/15 text-sky-800 dark:text-sky-300"
+                      : "bg-sky-50/70 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/15"
                   }`}
                 >
                   <Ship size={10} />
@@ -123,8 +123,8 @@ const JournalMapStatsBar = ({
                   onClick={() => setVoyageTypeFilter("land")}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-sans uppercase tracking-[0.18em] transition-colors duration-interaction ease-out-expo ${
                     voyageTypeFilter === "land"
-                      ? "bg-orange-100 text-orange-800"
-                      : "bg-orange-50/70 text-orange-700 hover:bg-orange-100"
+                      ? "bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300"
+                      : "bg-orange-50/70 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-500/15"
                   }`}
                 >
                   <Mountain size={10} />
@@ -136,7 +136,7 @@ const JournalMapStatsBar = ({
                   type="button"
                   onClick={() => handleVoyageFilterSelect(null)}
                   className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors duration-interaction ease-out-expo ${
-                    !focusedVoyageId ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
+                    !focusedVoyageId ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-glass/55 hover:text-foreground"
                   }`}
                 >
                   <span>{lang === "it" ? "Tutti i viaggi" : "All voyages"}</span>
@@ -162,7 +162,7 @@ const JournalMapStatsBar = ({
                       type="button"
                       onClick={() => handleVoyageFilterSelect(voyage.id)}
                       className={`flex w-full items-center justify-between rounded-[18px] px-3 py-2 text-left text-xs font-sans transition-colors duration-interaction ease-out-expo ${
-                        isSelected ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-white/55 hover:text-foreground"
+                        isSelected ? "bg-accent/10 text-foreground" : "text-muted-foreground hover:bg-glass/55 hover:text-foreground"
                       }`}
                     >
                       <span className="flex min-w-0 flex-wrap items-center gap-2">

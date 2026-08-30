@@ -67,6 +67,10 @@ export default {
           DEFAULT: "hsl(var(--salt))",
           warm: "hsl(var(--salt-warm))",
         },
+        glass: {
+          DEFAULT: "hsl(var(--glass))",
+          edge: "hsl(var(--glass-edge))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

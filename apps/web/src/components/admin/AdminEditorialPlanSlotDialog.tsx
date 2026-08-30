@@ -613,7 +613,7 @@ export default function AdminEditorialPlanSlotDialog({
       : [];
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto border-stone-200/90 p-0 sm:rounded-[24px]">
+        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto border-border/90 p-0 sm:rounded-[24px]">
           <DialogHeader className="border-b border-border/60 bg-muted/20 px-6 py-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -1004,7 +1004,7 @@ export default function AdminEditorialPlanSlotDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md sm:rounded-[22px] border-stone-200/90">
+      <DialogContent className="max-w-md sm:rounded-[22px] border-border/90">
         <DialogHeader>
           <DialogTitle className="font-serif text-xl">
             Slot {slot.slot_date} · {String(slot.slot_time).slice(0, 5)}

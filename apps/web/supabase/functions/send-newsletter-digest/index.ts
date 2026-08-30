@@ -20,7 +20,8 @@ import {
 } from '../_shared/newsletterapp.ts'
 import { createNewsletterContext, newsletterConfig } from '../_shared/newsletter.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { localizedUrl } from '../_shared/email-config.ts'
+import { localizedUrl, trackedUrl } from '../_shared/email-config.ts'
+import { EMAIL_TRACKING } from '../_shared/tracking.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -138,7 +139,15 @@ Deno.serve(async (req) => {
         return (data ?? []) as unknown as DigestArticle[]
       },
 
-      buildTemplateData: ({ recipient, issueLabel, periodLabel, items }) => {
+      buildTemplateData: ({ recipient, issueLabel, periodLabel, items, range }) => {
+        // La campagna è la finestra del digest, non l'etichetta dell'edizione:
+        // quella è tradotta, e due lingue produrrebbero due campagne per lo
+        // stesso invio.
+        const digest = {
+          ...EMAIL_TRACKING.newsletter,
+          campaign: `digest-${range.endDate.toISOString().slice(0, 10)}`,
+        }
+
         const articles = items.map((article) => ({
           title: localizeValue(
             newsletterConfig,
@@ -150,7 +159,7 @@ Deno.serve(async (req) => {
             it: article.excerpt_it,
             en: article.excerpt_en,
           }),
-          url: localizedUrl(recipient.language, `/logbook/${article.slug}`),
+          url: trackedUrl(recipient.language, `/logbook/${article.slug}`, digest),
           coverImageUrl: article.cover_image,
           storyTitle: article.stories
             ? localizeValue(newsletterConfig, recipient.language, {
@@ -159,7 +168,10 @@ Deno.serve(async (req) => {
               })
             : null,
           storyUrl: article.stories?.slug
-            ? localizedUrl(recipient.language, `/logbook/story/${article.stories.slug}`)
+            ? trackedUrl(recipient.language, `/logbook/story/${article.stories.slug}`, {
+                ...digest,
+                content: 'story',
+              })
             : null,
           publishedLabel: article.published_at
             ? dateFormatter(recipient.language).format(new Date(article.published_at))

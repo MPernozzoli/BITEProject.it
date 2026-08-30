@@ -4,7 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
   bindMapToContainerResize,
-  createCartoRasterStyle,
+  bindMapToTheme,
+  createThemedCartoStyle,
   isMapLibreSupported,
   requestMapResize,
 } from "@/lib/maplibre";
@@ -51,11 +52,14 @@ const PhotoPointLocationPicker = ({
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: createCartoRasterStyle(),
+        style: createThemedCartoStyle(),
         center: lat != null && lng != null ? [lng, lat] : DEFAULT_CENTER,
         zoom: lat != null && lng != null ? PINNED_ZOOM : DEFAULT_ZOOM,
         attributionControl: false,
       });
+
+      // La basemap segue il tema anche se cambia a mappa aperta.
+      bindMapToTheme(map);
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.on("load", () => requestMapResize(map!));

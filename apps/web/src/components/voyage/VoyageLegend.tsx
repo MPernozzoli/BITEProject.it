@@ -318,10 +318,10 @@ const VoyageLegend = ({
 
   const dotBase = isWater ? "bg-sky-500" : "bg-orange-500";
   const dotHover = isWater ? "group-hover:bg-sky-700" : "group-hover:bg-orange-700";
-  const ringColor = isWater ? "ring-sky-200/50" : "ring-orange-200/50";
-  const stemBg = isWater ? "bg-sky-300/40" : "bg-orange-300/40";
-  const lineBg = isWater ? "bg-sky-300/60" : "bg-orange-300/60";
-  const distColor = isWater ? "text-sky-500/70" : "text-orange-500/70";
+  const ringColor = isWater ? "ring-sky-200/50 dark:ring-sky-500/30" : "ring-orange-200/50 dark:ring-orange-500/30";
+  const stemBg = isWater ? "bg-sky-300/40 dark:bg-sky-500/25" : "bg-orange-300/40 dark:bg-orange-500/25";
+  const lineBg = isWater ? "bg-sky-300/60 dark:bg-sky-500/25" : "bg-orange-300/60 dark:bg-orange-500/25";
+  const distColor = isWater ? "text-sky-500/70 dark:text-sky-400" : "text-orange-500/70 dark:text-orange-400";
 
   const routeRegionLabel = lang === "it" ? "Schema percorso" : "Route diagram";
   const scrollHint =
@@ -338,12 +338,12 @@ const VoyageLegend = ({
   };
 
   return (
-    <div className="pointer-events-auto w-full min-w-0 rounded-[24px] border border-white/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
+    <div className="pointer-events-auto w-full min-w-0 rounded-[24px] border border-glass-edge/55 bg-background/72 backdrop-blur-2xl shadow-[0_30px_90px_rgba(15,23,42,0.18)] px-6 pt-4 pb-4">
       <div className="flex items-start justify-between gap-3 mb-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <TypeIcon
             size={15}
-            className={`shrink-0 ${isWater ? "text-sky-600" : "text-orange-600"}`}
+            className={`shrink-0 ${isWater ? "text-sky-600 dark:text-sky-300" : "text-orange-600 dark:text-orange-300"}`}
           />
           <span className="truncate text-sm font-semibold font-sans text-foreground">{voyageName}</span>
           <Link
@@ -403,7 +403,7 @@ const VoyageLegend = ({
             <span className="text-muted-foreground/65"> · </span>
           ) : null}
           {fullVoyageDistanceNm != null ? (
-            <span className={isWater ? "font-medium text-sky-700/90" : "font-medium text-orange-700/90"}>
+            <span className={isWater ? "font-medium text-sky-700/90 dark:text-sky-300" : "font-medium text-orange-700/90 dark:text-orange-300"}>
               {lang === "it" ? "Lunghezza totale " : "Total distance "}
               <span className="tabular-nums">{formatDistance(fullVoyageDistanceNm, isWater)}</span>
             </span>
@@ -412,16 +412,16 @@ const VoyageLegend = ({
       )}
 
       {voyageIsBookable ? (
-        <div className="mb-3 flex flex-col gap-3 rounded-[18px] border border-emerald-200/70 bg-gradient-to-br from-emerald-50/95 to-white/70 p-3.5 font-sans shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="mb-3 flex flex-col gap-3 rounded-[18px] border border-emerald-200/70 dark:border-emerald-500/30 bg-gradient-to-br from-emerald-50/95 dark:from-emerald-500/10 to-glass/70 p-3.5 font-sans shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="flex min-w-0 items-start gap-2.5">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
               <TicketCheck size={16} />
             </span>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-800 dark:text-emerald-300">
                 {lang === "it" ? "Puoi partecipare a questo viaggio" : "You can join this voyage"}
               </p>
-              <p className="mt-1 text-[12px] leading-relaxed text-emerald-900/75">
+              <p className="mt-1 text-[12px] leading-relaxed text-emerald-900/75 dark:text-emerald-300">
                 {!hasBookableLegs
                   ? (lang === "it"
                     ? "Le adesioni non sono ancora aperte per le singole tratte."
@@ -701,7 +701,7 @@ const VoyageLegend = ({
                     ) : null}
 
                     {edgeIsSelected ? (
-                      <span className="absolute left-1/2 top-full z-[12] -translate-x-1/2 rounded-full border border-emerald-300/80 bg-emerald-50/95 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-800 shadow-sm" style={{ marginTop: 5 }}>
+                      <span className="absolute left-1/2 top-full z-[12] -translate-x-1/2 rounded-full border border-emerald-300/80 dark:border-emerald-500/30 bg-emerald-50/95 dark:bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-300 shadow-sm" style={{ marginTop: 5 }}>
                         {lang === "it" ? "Selezionata" : "Selected"}
                       </span>
                     ) : null}

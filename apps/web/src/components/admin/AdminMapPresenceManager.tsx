@@ -14,7 +14,8 @@ import type { TablesInsert } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
 import {
   bindMapToContainerResize,
-  createCartoRasterStyle,
+  bindMapToTheme,
+  createThemedCartoStyle,
   isMapLibreSupported,
   requestMapResize,
 } from "@/lib/maplibre";
@@ -339,11 +340,14 @@ const AdminMapPresenceManager = () => {
     try {
       map = new maplibregl.Map({
         container: mapContainerRef.current,
-        style: createCartoRasterStyle(),
+        style: createThemedCartoStyle(),
         center: [15, 40],
         zoom: 5,
         attributionControl: false,
       });
+
+      // La basemap segue il tema anche se cambia a mappa aperta.
+      bindMapToTheme(map);
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.on("load", () => {
@@ -485,11 +489,11 @@ const AdminMapPresenceManager = () => {
           </div>
         </div>
 
-        <div className="relative h-[30rem] overflow-hidden rounded-[26px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(243,246,247,0.7))]">
+        <div className="relative h-[30rem] overflow-hidden rounded-[26px] border border-glass-edge/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(243,246,247,0.7))] dark:bg-[linear-gradient(180deg,rgba(26,37,55,0.46),rgba(20,30,46,0.7))]">
           <div ref={mapContainerRef} className="absolute inset-0" />
           {mapUnavailable ? (
             <div className="absolute inset-0 flex items-center justify-center p-6">
-              <div className="pointer-events-none w-[min(26rem,100%)] rounded-[24px] border border-white/70 bg-white/82 px-5 py-5 text-center shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-sm">
+              <div className="pointer-events-none w-[min(26rem,100%)] rounded-[24px] border border-glass-edge/70 bg-glass/82 px-5 py-5 text-center shadow-[0_20px_44px_rgba(15,23,42,0.10)] backdrop-blur-sm">
                 <p className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-3">Mappa non disponibile</p>
                 <p className="text-sm font-sans text-foreground/72 leading-relaxed">
                   Questo browser o dispositivo non riesce a inizializzare MapLibre in questa pagina admin. Puoi comunque inserire latitudine e

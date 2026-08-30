@@ -709,7 +709,7 @@ const UserLogin = () => {
       {!isMobile && (
         <>
           <div className="absolute inset-0 -z-20 bg-[linear-gradient(135deg,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_44%,_hsl(var(--secondary))_100%)]" />
-          <div className="absolute inset-x-0 top-0 -z-10 h-32 border-b border-white/70 bg-white/35 backdrop-blur-sm" />
+          <div className="absolute inset-x-0 top-0 -z-10 h-32 border-b border-glass-edge/70 bg-glass/35 backdrop-blur-sm" />
           <div className="absolute inset-0 -z-10 bg-[linear-gradient(to_right,_hsl(var(--foreground)/0.045)_1px,_transparent_1px),linear-gradient(to_bottom,_hsl(var(--foreground)/0.035)_1px,_transparent_1px)] bg-[size:72px_72px] opacity-45" />
         </>
       )}
@@ -735,7 +735,7 @@ const UserLogin = () => {
             {featureCards.map(({ icon: Icon, title, description }) => (
               <div
                 key={title}
-                className="rounded-[1.5rem] border border-white/70 bg-white/55 p-5 shadow-[0_24px_50px_-34px_hsl(var(--navy)/0.45)] backdrop-blur"
+                className="rounded-[1.5rem] border border-glass-edge/70 bg-glass/55 p-5 shadow-[0_24px_50px_-34px_hsl(var(--navy)/0.45)] backdrop-blur"
               >
                 <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-[hsl(var(--secondary)/0.9)] text-accent">
                   <Icon className="h-5 w-5" />
@@ -746,7 +746,7 @@ const UserLogin = () => {
             ))}
           </div>
 
-          <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/60 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur">
+          <div className="relative overflow-hidden rounded-[2rem] border border-glass-edge/70 bg-glass/60 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur">
             <img
               src={boatHarbor}
               alt={ui.hero.imageAlt}
@@ -770,7 +770,7 @@ const UserLogin = () => {
         <section className="fade-in">
           <div
             className={cn(
-              "border border-white/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] backdrop-blur",
+              "border border-glass-edge/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] dark:bg-[linear-gradient(180deg,_rgba(26,37,55,0.86)_0%,_rgba(21,31,47,0.72)_100%)] backdrop-blur",
               isMobile
                 ? "rounded-[1.5rem] p-5 shadow-[0_20px_48px_-36px_hsl(var(--navy)/0.3)]"
                 : "rounded-[2rem] p-6 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] md:p-8",
@@ -778,7 +778,7 @@ const UserLogin = () => {
           >
             <div className="space-y-6">
               <div className="space-y-4">
-                <div className="inline-flex w-full rounded-full border border-white/80 bg-white/70 p-1 shadow-[0_20px_40px_-30px_hsl(var(--navy)/0.35)]">
+                <div className="inline-flex w-full rounded-full border border-glass-edge/80 bg-glass/70 p-1 shadow-[0_20px_40px_-30px_hsl(var(--navy)/0.35)]">
                   <Link
                     to={{ pathname: "/login", search: location.search }}
                     state={location.state}
@@ -831,7 +831,7 @@ const UserLogin = () => {
                       variant="outline"
                       onClick={handleGoogleAuth}
                       disabled={loading}
-                      className="h-12 w-full rounded-full border-white/85 bg-white/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-white"
+                      className="h-12 w-full rounded-full border-glass-edge/85 bg-glass/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-glass"
                     >
                       <span className="flex w-full items-center justify-between gap-3">
                         <span className="flex items-center gap-3">
@@ -844,7 +844,7 @@ const UserLogin = () => {
                           <span>{ui.form.google}</span>
                         </span>
                         {lastUsedMethod === "google" && (
-                          <span className="rounded-full border border-white/80 bg-white/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          <span className="rounded-full border border-glass-edge/80 bg-glass/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                             {ui.form.lastUsed}
                           </span>
                         )}
@@ -856,7 +856,7 @@ const UserLogin = () => {
                         variant="outline"
                         onClick={handlePasskeyAuth}
                         disabled={loading}
-                        className="h-12 w-full rounded-full border-white/85 bg-white/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-white"
+                        className="h-12 w-full rounded-full border-glass-edge/85 bg-glass/72 px-4 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-glass"
                       >
                         <span className="flex w-full items-center justify-between gap-3">
                           <span className="flex items-center gap-3">
@@ -864,7 +864,7 @@ const UserLogin = () => {
                             <span>{ui.form.passkey}</span>
                           </span>
                           {lastUsedMethod === "passkey" && (
-                            <span className="rounded-full border border-white/80 bg-white/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            <span className="rounded-full border border-glass-edge/80 bg-glass/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                               {ui.form.lastUsed}
                             </span>
                           )}
@@ -878,7 +878,7 @@ const UserLogin = () => {
                       {ui.form.emailMethod}
                     </p>
                     {lastUsedMethod === "email" && (
-                      <span className="rounded-full border border-white/80 bg-white/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      <span className="rounded-full border border-glass-edge/80 bg-glass/88 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                         {ui.form.lastUsed}
                       </span>
                     )}
@@ -900,7 +900,7 @@ const UserLogin = () => {
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
                         placeholder={ui.form.namePlaceholder}
-                        className="h-12 rounded-2xl border-white/80 bg-white/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                        className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
                       />
                       <p className="text-xs leading-5 text-muted-foreground">{ui.form.nameHint}</p>
                     </div>
@@ -924,11 +924,11 @@ const UserLogin = () => {
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
                       placeholder={ui.form.emailPlaceholder}
-                      className="h-12 rounded-2xl border-white/80 bg-white/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                      className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
                     />
                   </div>
 
-                  <label className="flex cursor-pointer items-start gap-3 rounded-[1.5rem] border border-white/75 bg-white/65 p-4">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-[1.5rem] border border-glass-edge/75 bg-glass/65 p-4">
                     <input
                       type="checkbox"
                       checked={rememberMe}
@@ -987,7 +987,7 @@ const UserLogin = () => {
 
               {step === "verify" && (
                 <div className="space-y-6">
-                  <div className="rounded-[1.5rem] border border-white/80 bg-white/68 p-5 shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.35)]">
+                  <div className="rounded-[1.5rem] border border-glass-edge/80 bg-glass/68 p-5 shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.35)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                       {ui.verify.label}
                     </p>
@@ -1009,38 +1009,38 @@ const UserLogin = () => {
                       <InputOTPGroup className="gap-2">
                         <InputOTPSlot
                           index={0}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={1}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={2}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={3}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                       </InputOTPGroup>
                       <InputOTPSeparator className="mx-1 text-muted-foreground" />
                       <InputOTPGroup className="gap-2">
                         <InputOTPSlot
                           index={4}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={5}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={6}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                         <InputOTPSlot
                           index={7}
-                          className="h-12 w-10 rounded-xl border border-white/85 bg-white/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
+                          className="h-12 w-10 rounded-xl border border-glass-edge/85 bg-glass/76 text-base shadow-[0_18px_36px_-28px_hsl(var(--navy)/0.45)]"
                         />
                       </InputOTPGroup>
                     </InputOTP>
@@ -1074,7 +1074,7 @@ const UserLogin = () => {
                         setOtp("");
                         setError("");
                       }}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-white/80 bg-white/65 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      className="inline-flex items-center justify-center gap-2 rounded-full border border-glass-edge/80 bg-glass/65 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       {ui.verify.changeEmail}
@@ -1102,7 +1102,7 @@ const UserLogin = () => {
           if (!open) setMissingAccountEmail("");
         }}
       >
-        <AlertDialogContent className="max-w-[520px] rounded-[28px] border-white/75 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96)_0%,_rgba(255,255,255,0.9)_100%)] shadow-[0_32px_80px_-42px_hsl(var(--navy)/0.55)]">
+        <AlertDialogContent className="max-w-[520px] rounded-[28px] border-glass-edge/75 bg-[linear-gradient(180deg,_rgba(255,255,255,0.96)_0%,_rgba(255,255,255,0.9)_100%)] dark:bg-[linear-gradient(180deg,_rgba(26,37,55,0.96)_0%,_rgba(21,31,47,0.9)_100%)] shadow-[0_32px_80px_-42px_hsl(var(--navy)/0.55)]">
           <AlertDialogHeader className="text-left">
             <AlertDialogTitle className="editorial-heading text-2xl leading-tight text-foreground">
               {ui.missingAccountDialog.title}
@@ -1114,7 +1114,7 @@ const UserLogin = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:justify-end">
-            <AlertDialogCancel className="mt-0 rounded-full border-white/80 bg-white/70">
+            <AlertDialogCancel className="mt-0 rounded-full border-glass-edge/80 bg-glass/70">
               {ui.missingAccountDialog.cancel}
             </AlertDialogCancel>
             <AlertDialogAction

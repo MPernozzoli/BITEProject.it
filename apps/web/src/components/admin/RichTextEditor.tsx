@@ -117,7 +117,7 @@ const RichTextEditor = ({
     editorProps: {
       attributes: {
         class:
-          "article-rich-body prose prose-lg max-w-none focus:outline-none min-h-[300px] p-4 font-sans [&_p]:min-h-[1em]",
+          "article-rich-body prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[300px] p-4 font-sans [&_p]:min-h-[1em]",
       },
       handleDrop: (_view, event) => {
         const droppedFiles = Array.from(event.dataTransfer?.files ?? []).filter((file) =>

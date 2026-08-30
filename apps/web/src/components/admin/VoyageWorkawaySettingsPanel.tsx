@@ -51,7 +51,7 @@ const VoyageWorkawaySettingsPanel = ({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {isBookingSettingsDirty && (
-              <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+              <span className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
                 Modifiche non salvate
               </span>
             )}
@@ -160,7 +160,7 @@ const VoyageWorkawaySettingsPanel = ({
                   onClick={() => void toggleWorkawayRoleActive(role)}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                     role.active
-                      ? "border-emerald-300/70 bg-emerald-100/60 text-emerald-900"
+                      ? "border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-100/60 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
                       : "border-border/70 bg-background/40 text-muted-foreground line-through"
                   }`}
                   title={role.active ? "Clicca per disattivare globalmente" : "Clicca per riattivare globalmente"}

@@ -16,6 +16,30 @@
     <meta name="format-detection" content="telephone=no, address=no, email=no" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta name="theme-color" content="#111c2b" />
+    <script>
+      // Tema applicato prima del primo paint: senza questo la pagina lampeggia in
+      // chiaro per un frame prima che React monti. Deve restare allineato a
+      // src/lib/theme.tsx (stessa chiave, stessa classe, stessi colori).
+      (function () {
+        try {
+          var stored = localStorage.getItem("bite-theme");
+          var resolved =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          var root = document.documentElement;
+          if (resolved === "dark") root.classList.add("dark");
+          root.dataset.theme = resolved;
+          root.style.colorScheme = resolved;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", resolved === "dark" ? "#0b1220" : "#111c2b");
+        } catch (e) {
+          /* storage negato: resta il tema chiaro */
+        }
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="BITE Project" />

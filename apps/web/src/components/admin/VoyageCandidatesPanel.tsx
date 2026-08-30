@@ -598,8 +598,8 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
   };
 
   const depositStatusClass = (status: string) => {
-    if (status === "pending") return "border-amber-300/70 bg-amber-100/70 text-amber-900";
-    if (status === "paid") return "border-emerald-300/70 bg-emerald-100/70 text-emerald-900";
+    if (status === "pending") return "border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300";
+    if (status === "paid") return "border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-100/70 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300";
     if (status === "cancelled" || status === "failed") return "border-destructive/30 bg-destructive/10 text-destructive";
     return "border-border/70 bg-background/60 text-muted-foreground";
   };
@@ -674,7 +674,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         {getBookingStatusLabel(request.status, "it")}
                       </span>
                       {request.plan_change_status === "pending_user_approval" && (
-                        <span className="rounded-full border border-sky-300/70 bg-sky-100/70 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                        <span className="rounded-full border border-sky-300/70 dark:border-sky-500/30 bg-sky-100/70 dark:bg-sky-500/15 px-2.5 py-1 text-[11px] font-semibold text-sky-800 dark:text-sky-300">
                           Proposta inviata
                         </span>
                       )}
@@ -776,7 +776,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                             </div>
                           ))}
                           {hasPendingDeposit && (
-                            <p className="rounded-2xl border border-amber-300/70 bg-amber-100/70 p-3 text-xs font-semibold text-amber-900">
+                            <p className="rounded-2xl border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 p-3 text-xs font-semibold text-amber-900 dark:text-amber-300">
                               Non approvare finche il conto Bunq non conferma importo e causale: la candidatura resta in pending.
                             </p>
                           )}
@@ -887,10 +887,10 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                             <span
                               className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                                 contributionProposal.status === "accepted"
-                                  ? "border-emerald-300/70 bg-emerald-100/70 text-emerald-900"
+                                  ? "border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-100/70 dark:bg-emerald-500/15 text-emerald-900 dark:text-emerald-300"
                                   : contributionProposal.status === "rejected"
                                     ? "border-destructive/40 bg-destructive/10 text-destructive"
-                                    : "border-amber-300/70 bg-amber-100/70 text-amber-900"
+                                    : "border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300"
                               }`}
                             >
                               {contributionProposal.status === "pending_admin_review"
@@ -977,7 +977,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                                 )}
                               </div>
                               {contributionProposal.workaway_requests_compensation && (
-                                <p className="mt-2 rounded-xl border border-sky-300/70 bg-sky-100/70 p-2 text-[11px] font-semibold text-sky-900">
+                                <p className="mt-2 rounded-xl border border-sky-300/70 dark:border-sky-500/30 bg-sky-100/70 dark:bg-sky-500/15 p-2 text-[11px] font-semibold text-sky-900 dark:text-sky-300">
                                   Il candidato richiede inoltre un compenso di{" "}
                                   {contributionProposal.workaway_requested_compensation_cents != null
                                     ? formatDepositEur(contributionProposal.workaway_requested_compensation_cents / 100, "it")
@@ -1110,7 +1110,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                         placeholder="Messaggio opzionale per approvazione o rifiuto"
                       />
                       {(hasPendingDeposit || hasUnresolvedContributionProposal || negotiatedBalanceDue) && (
-                        <p className="mt-3 rounded-2xl border border-amber-300/70 bg-amber-100/60 px-3 py-2 text-xs font-medium text-amber-900">
+                        <p className="mt-3 rounded-2xl border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/60 dark:bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-900 dark:text-amber-300">
                           {hasPendingDeposit
                             ? "Approvazione bloccata: pagamento contributo in attesa di conferma Bunq."
                             : hasUnresolvedContributionProposal
@@ -1373,14 +1373,14 @@ const CandidateReviewGantt = ({
                       "relative flex items-center justify-center border-r border-border/40 px-1 py-2 text-[10px] last:border-r-0 disabled:cursor-default",
                       isCandidate ? "hover:bg-accent/10" : "",
                       currentlySelected ? "bg-accent/15" : "",
-                      proposed ? "bg-sky-100/60 text-sky-900" : "",
+                      proposed ? "bg-sky-100/60 dark:bg-sky-500/15 text-sky-900 dark:text-sky-300" : "",
                       emptyCandidateCell ? "text-muted-foreground/55" : "text-foreground",
                     ].join(" ")}
                   >
                     {currentlySelected || proposed ? (
                       <span className={[
                         "h-5 w-full rounded-full",
-                        proposed ? "border-2 border-dashed border-sky-500/80 bg-sky-100/70" : "border border-accent/40 bg-accent/30",
+                        proposed ? "border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15" : "border border-accent/40 bg-accent/30",
                       ].join(" ")} />
                     ) : (
                       <span className="h-2 w-2 rounded-full bg-border" />
@@ -1394,7 +1394,7 @@ const CandidateReviewGantt = ({
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/70 px-3 py-2.5 text-[12px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded-full border border-accent/40 bg-accent/30" /> Tratte attuali</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70" /> Proposta (non ancora confermata)</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15" /> Proposta (non ancora confermata)</span>
         <span>Le tratte prenotate o proposte mostrano percorso, distanza, durata e date.</span>
         <span>Maiuscolo+click seleziona un intervallo.</span>
       </div>

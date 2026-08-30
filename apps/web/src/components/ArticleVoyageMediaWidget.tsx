@@ -275,11 +275,11 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
           <>
             <CarouselPrevious
               variant="secondary"
-              className="left-4 top-[110px] translate-y-0 border border-white/15 bg-black/55 text-white hover:bg-black/70 hover:text-white"
+              className="left-4 top-[110px] translate-y-0 border border-glass-edge/15 bg-black/55 text-white hover:bg-black/70 hover:text-white"
             />
             <CarouselNext
               variant="secondary"
-              className="right-4 top-[110px] translate-y-0 border border-white/15 bg-black/55 text-white hover:bg-black/70 hover:text-white"
+              className="right-4 top-[110px] translate-y-0 border border-glass-edge/15 bg-black/55 text-white hover:bg-black/70 hover:text-white"
             />
           </>
         )}
@@ -288,7 +288,7 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
 
     <Dialog open={expandedIndex != null} onOpenChange={(open) => !open && setExpandedIndex(null)}>
       {expandedItem && (
-        <DialogContent className="max-w-[min(96vw,1120px)] overflow-hidden border border-white/10 bg-[rgba(10,14,20,0.96)] p-0 text-white shadow-2xl">
+        <DialogContent className="max-w-[min(96vw,1120px)] overflow-hidden border border-glass-edge/10 bg-[rgba(10,14,20,0.96)] p-0 text-white shadow-2xl">
           <div className="grid max-h-[90vh] grid-rows-[minmax(0,1fr)_auto]">
             <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden bg-black">
               <div className="max-h-[68vh] w-full">
@@ -301,7 +301,7 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
                     type="button"
                     variant="secondary"
                     size="icon"
-                    className="absolute left-4 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full border border-white/15 bg-black/60 text-white hover:bg-black/80"
+                    className="absolute left-4 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full border border-glass-edge/15 bg-black/60 text-white hover:bg-black/80"
                     onClick={() => setExpandedIndex((current) => (current == null ? current : (current - 1 + items.length) % items.length))}
                   >
                     <ChevronLeft size={18} />
@@ -310,7 +310,7 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
                     type="button"
                     variant="secondary"
                     size="icon"
-                    className="absolute right-4 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full border border-white/15 bg-black/60 text-white hover:bg-black/80"
+                    className="absolute right-4 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full border border-glass-edge/15 bg-black/60 text-white hover:bg-black/80"
                     onClick={() => setExpandedIndex((current) => (current == null ? current : (current + 1) % items.length))}
                   >
                     <ChevronRight size={18} />
@@ -319,7 +319,7 @@ const ArticleVoyageMediaWidget = ({ items, lang }: ArticleVoyageMediaWidgetProps
               )}
             </div>
 
-            <div className="border-t border-white/10 bg-[rgba(10,14,20,0.98)] p-5 md:p-6">
+            <div className="border-t border-glass-edge/10 bg-[rgba(10,14,20,0.98)] p-5 md:p-6">
               <DialogTitle className="editorial-heading text-2xl text-white">
                 {expandedItem.waypointName}
               </DialogTitle>

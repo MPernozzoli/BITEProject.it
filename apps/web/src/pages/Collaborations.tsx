@@ -127,14 +127,14 @@ const Collaborations = () => {
 
       <section className="page-section pt-0">
         <div className="page-section-narrow glass-panel-light rounded-[28px] px-6 py-10 md:px-10 md:py-12">
-          <h2 className="editorial-heading text-3xl md:text-4xl mb-6 text-slate-950">{t("collab.values.title")}</h2>
+          <h2 className="editorial-heading text-3xl md:text-4xl mb-6 text-foreground">{t("collab.values.title")}</h2>
           <p className="editorial-body text-muted-foreground text-lg leading-relaxed mb-8">
             {t("collab.values.text")}
           </p>
           <div className="grid gap-4 md:grid-cols-3">
             {principles.map((principle) => (
-              <div key={principle.en} className="border-t border-slate-950/15 pt-4">
-                <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.18em] text-slate-950">
+              <div key={principle.en} className="border-t border-foreground/15 pt-4">
+                <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.18em] text-foreground">
                   {isEnglish ? principle.en : principle.it}
                 </h3>
                 <p className="editorial-body mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -167,7 +167,7 @@ const Collaborations = () => {
 
       <section className="page-section pt-0">
         <div className="page-section-narrow glass-panel-light rounded-[28px] px-6 py-10 text-center md:px-10 md:py-12">
-          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 whitespace-pre-line text-slate-950">
+          <h2 className="editorial-heading text-3xl md:text-5xl mb-6 whitespace-pre-line text-foreground">
             {t("collab.title")}
           </h2>
           <p className="editorial-body text-muted-foreground text-lg mb-10 max-w-lg mx-auto">

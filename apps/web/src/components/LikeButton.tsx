@@ -100,7 +100,7 @@ const LikeButton = ({ articleId, size = 18, liked: externalLiked, likeCount: ext
       onClick={toggleLike}
       disabled={busy}
       className={`inline-flex items-center gap-1.5 text-sm font-sans transition-colors ${
-        liked ? "text-red-500" : "text-muted-foreground hover:text-foreground"
+        liked ? "text-red-500 dark:text-red-400" : "text-muted-foreground hover:text-foreground"
       }`}
       title={liked ? "Rimuovi mi piace" : "Mi piace"}
     >

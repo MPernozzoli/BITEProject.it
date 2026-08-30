@@ -30,7 +30,8 @@ import {
 } from "@/lib/booking-utils";
 import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
-import { bindMapToContainerResize, createCartoRasterStyle, requestMapResize } from "@/lib/maplibre";
+import { bindMapToContainerResize, bindMapToTheme,
+  createThemedCartoStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
 const MAP_MARKER_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
@@ -535,11 +536,14 @@ const VoyageMap = ({
 
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: createCartoRasterStyle(),
+        style: createThemedCartoStyle(),
         center: [15, 40],
         zoom: 5,
         attributionControl: false,
       });
+
+      // La basemap segue il tema anche se cambia a mappa aperta.
+      bindMapToTheme(map);
 
       map.on("load", () => {
         setMapLoaded(true);
@@ -1800,7 +1804,7 @@ const VoyageMap = ({
             <button
               type="button"
               onClick={onMapUnavailable}
-              className="inline-flex items-center justify-center rounded-full border border-white/60 bg-background/80 px-4 py-2 text-xs font-sans text-foreground shadow-lg transition-colors duration-interaction ease-out-expo hover:bg-background active:scale-[0.98]"
+              className="inline-flex items-center justify-center rounded-full border border-glass-edge/60 bg-background/80 px-4 py-2 text-xs font-sans text-foreground shadow-lg transition-colors duration-interaction ease-out-expo hover:bg-background active:scale-[0.98]"
             >
               {lang === "it" ? "Apri vista lista" : "Open list view"}
             </button>

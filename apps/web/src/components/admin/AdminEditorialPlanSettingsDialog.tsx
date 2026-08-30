@@ -438,7 +438,7 @@ export default function AdminEditorialPlanSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-hidden flex flex-col sm:rounded-[22px] border-stone-200/90 p-0 gap-0">
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-hidden flex flex-col sm:rounded-[22px] border-border/90 p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
           <DialogTitle className="font-serif text-xl pr-8">Impostazioni piano editoriale</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -489,7 +489,7 @@ export default function AdminEditorialPlanSettingsDialog({
                             className={cn(
                               "text-[10px] font-sans uppercase tracking-wider px-2 py-0.5 rounded-full",
                               oauthActive
-                                ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                                ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 dark:text-emerald-200"
                                 : oauthMetaOnly
                                   ? "bg-accent/20 text-accent"
                                   : "bg-muted text-muted-foreground",
@@ -519,7 +519,7 @@ export default function AdminEditorialPlanSettingsDialog({
                                 className={cn(
                                   "inline-flex items-center gap-2 rounded-[14px] border px-3 py-2 text-xs font-medium",
                                   oauthActive
-                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 dark:text-emerald-200"
                                     : oauthMetaOnly
                                       ? "border-accent/25 bg-accent/10 text-accent"
                                       : "border-border bg-muted/40 text-muted-foreground",

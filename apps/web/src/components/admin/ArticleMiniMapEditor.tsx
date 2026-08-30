@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { createCartoRasterStyle } from "@/lib/maplibre";
+import { bindMapToTheme,
+  createThemedCartoStyle } from "@/lib/maplibre";
 import {
   Anchor,
   Camera,
@@ -386,11 +387,14 @@ const ArticleMiniMapWorkspace = ({
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: createCartoRasterStyle(),
+      style: createThemedCartoStyle(),
       center: [15, 40],
       zoom: 4,
       attributionControl: false,
     });
+
+    // La basemap segue il tema anche se cambia a mappa aperta.
+    bindMapToTheme(map);
 
     const updateVisibleCamera = () => {
       const center = map.getCenter();
@@ -539,7 +543,7 @@ const ArticleMiniMapWorkspace = ({
       if (selectedScene && typeof selectedScene.latitude === "number" && typeof selectedScene.longitude === "number") {
         const markerEl = document.createElement("div");
         markerEl.className =
-          "flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-[rgba(255,255,255,0.92)] shadow-[0_10px_24px_rgba(15,23,42,0.18)]";
+          "flex h-10 w-10 items-center justify-center rounded-full border border-glass-edge/70 bg-[rgba(255,255,255,0.92)] shadow-[0_10px_24px_rgba(15,23,42,0.18)]";
         markerEl.innerHTML = `<div style="transform: rotate(${selectedScene.wind_angle ?? 0}deg); color: hsl(201, 58%, 35%);">➤</div>`;
         activeMarkerRef.current = new maplibregl.Marker({ element: markerEl, anchor: "center" })
           .setLngLat([selectedScene.longitude, selectedScene.latitude])
@@ -629,7 +633,7 @@ const ArticleMiniMapWorkspace = ({
       const createMarkerElement = (symbol: string, color: string, angle?: number | null, label?: string) => {
         const element = document.createElement("div");
         element.className =
-          "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-white/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
+          "flex min-w-[34px] max-w-[140px] items-center gap-1.5 rounded-full border border-glass-edge/75 bg-[rgba(255,255,255,0.94)] px-2 py-1 shadow-[0_10px_22px_rgba(15,23,42,0.18)]";
         element.innerHTML = `
           <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;font-size:14px;color:${color};transform:rotate(${angle ?? 0}deg);">${symbol}</span>
           ${label ? `<span style="font:600 11px/1.2 ui-sans-serif,system-ui;color:rgba(15,23,42,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</span>` : ""}

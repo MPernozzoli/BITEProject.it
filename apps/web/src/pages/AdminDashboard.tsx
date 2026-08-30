@@ -400,7 +400,7 @@ const AdminDashboard = () => {
                         "inline-flex h-7 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full px-2 font-sans text-sm font-semibold tabular-nums",
                         pending
                           ? "bg-accent text-accent-foreground shadow-[0_6px_16px_rgba(15,23,42,0.18)]"
-                          : "border border-white/60 bg-white/40 text-muted-foreground",
+                          : "border border-glass-edge/60 bg-glass/40 text-muted-foreground",
                       )}
                       aria-label={`${item.count} ${item.pendingLabel}`}
                     >
@@ -413,7 +413,7 @@ const AdminDashboard = () => {
 
             {/* Tutte le aree in un solo pannello: etichetta di gruppo a sinistra, tessere a destra. */}
             <section className="glass-panel rounded-[26px] px-4 py-4 md:px-5">
-              <div className="divide-y divide-white/30">
+              <div className="divide-y divide-glass-edge/30">
                 {navGroups.map((group) => (
                   <div
                     key={group.label}
@@ -429,9 +429,9 @@ const AdminDashboard = () => {
                           <Link
                             key={item.to}
                             to={item.to}
-                            className="group flex items-center gap-3 rounded-[18px] border border-white/55 bg-white/40 px-3 py-2.5 transition-[transform,border-color,background-color] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
+                            className="group flex items-center gap-3 rounded-[18px] border border-glass-edge/55 bg-glass/40 px-3 py-2.5 transition-[transform,border-color,background-color] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-glass/70 active:translate-y-0"
                           >
-                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-white/50 text-muted-foreground transition-colors group-hover:text-accent">
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-glass-edge/60 bg-glass/50 text-muted-foreground transition-colors group-hover:text-accent">
                               <Icon size={15} />
                             </span>
                             <span className="min-w-0 flex-1">
@@ -465,9 +465,9 @@ const AdminDashboard = () => {
                   return (
                     <div
                       key={item.label}
-                      className="flex items-center gap-3 rounded-[18px] border border-white/55 bg-white/45 px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-[18px] border border-glass-edge/55 bg-glass/45 px-3 py-2.5"
                     >
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-white/50 text-muted-foreground">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-glass-edge/60 bg-glass/50 text-muted-foreground">
                         <Icon size={14} />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -486,12 +486,12 @@ const AdminDashboard = () => {
             </section>
 
             {seoIssues.length > 0 && (
-              <section className="rounded-[24px] border border-amber-300/70 bg-amber-50/80 p-4 shadow-[0_14px_40px_rgba(180,83,9,0.08)]">
+              <section className="rounded-[24px] border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 p-4 shadow-[0_14px_40px_rgba(180,83,9,0.08)]">
                 <div className="mb-2 flex items-center gap-2">
-                  <AlertTriangle size={15} className="shrink-0 text-amber-700" />
-                  <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-amber-700">SEO IA da rivedere</p>
+                  <AlertTriangle size={15} className="shrink-0 text-amber-700 dark:text-amber-300" />
+                  <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-amber-700 dark:text-amber-300">SEO IA da rivedere</p>
                 </div>
-                <p className="mb-3 text-xs font-sans leading-relaxed text-amber-950/80">
+                <p className="mb-3 text-xs font-sans leading-relaxed text-amber-950/80 dark:text-amber-300">
                   Alcune ottimizzazioni non sono state generate. Rilancia dal pulsante dentro l'articolo.
                 </p>
                 <div className="space-y-1.5">
@@ -502,15 +502,15 @@ const AdminDashboard = () => {
                       <Link
                         key={issue.article_id}
                         to={`/admin/article/${issue.article_id}`}
-                        className="flex items-center justify-between gap-3 rounded-[14px] border border-amber-200/80 bg-white/65 px-3 py-2 transition-colors hover:bg-white"
+                        className="flex items-center justify-between gap-3 rounded-[14px] border border-amber-200/80 dark:border-amber-500/30 bg-glass/65 px-3 py-2 transition-colors hover:bg-glass"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-xs font-sans font-medium text-amber-950">{title}</span>
-                          <span className="block truncate text-[11px] font-sans text-amber-900/70">
+                          <span className="block truncate text-xs font-sans font-medium text-amber-950 dark:text-amber-300">{title}</span>
+                          <span className="block truncate text-[11px] font-sans text-amber-900/70 dark:text-amber-300">
                             {issue.error_message || "Errore SEO IA non specificato"}
                           </span>
                         </span>
-                        <ArrowUpRight size={14} className="shrink-0 text-amber-700" />
+                        <ArrowUpRight size={14} className="shrink-0 text-amber-700 dark:text-amber-300" />
                       </Link>
                     );
                   })}

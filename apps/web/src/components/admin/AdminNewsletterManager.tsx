@@ -263,8 +263,8 @@ const StatusPill = ({
   <span
     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-sans uppercase tracking-[0.2em] ${
       ok
-        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-        : "border-amber-500/30 bg-amber-500/10 text-amber-700"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
     }`}
   >
     {ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
@@ -1586,7 +1586,7 @@ const AdminNewsletterManager = () => {
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-glass shadow transition-transform ${
                         form.automationActive ? "translate-x-6" : "translate-x-0.5"
                       }`}
                     />
@@ -1837,7 +1837,7 @@ const AdminNewsletterManager = () => {
                         "<p class='text-[#6a7484]'>Nessun contenuto disponibile per questa lingua.</p>",
                     }}
                   />
-                  <div className="mt-6 rounded-[18px] border border-[#e6ddd1] bg-white/70 px-4 py-3">
+                  <div className="mt-6 rounded-[18px] border border-[#e6ddd1] bg-glass/70 px-4 py-3">
                     <p className="text-xs text-[#6a7484]">
                       Ricevi questa email perché ti sei iscritto alla newsletter di BITE.
                     </p>

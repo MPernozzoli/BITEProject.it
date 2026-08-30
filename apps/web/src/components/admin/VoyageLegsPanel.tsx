@@ -151,7 +151,7 @@ const VoyageLegsPanel = ({
                       title="Navigazione d'altura (>12 nm dalla costa): aumenta complessità e contributo"
                       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         leg.open_sea
-                          ? "border-indigo-300/70 bg-indigo-100/70 text-indigo-800"
+                          ? "border-indigo-300/70 dark:border-indigo-500/30 bg-indigo-100/70 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300"
                           : "border-border/70 bg-background text-muted-foreground"
                       }`}
                     >
@@ -172,7 +172,7 @@ const VoyageLegsPanel = ({
                             title={reason.label_it}
                             className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
                               active
-                                ? "border-red-300/70 bg-red-100/70 text-red-800"
+                                ? "border-red-300/70 dark:border-red-500/30 bg-red-100/70 dark:bg-red-500/15 text-red-800 dark:text-red-300"
                                 : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
                             }`}
                           >

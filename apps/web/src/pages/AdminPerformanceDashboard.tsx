@@ -14,6 +14,7 @@ import {
   MessageCircle,
   MousePointerClick,
   Pencil,
+  Ship,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import {
   type ArticleViewInsightRow,
 } from "@/lib/article-insights";
 import AdminArticleInsightDialog from "@/components/admin/AdminArticleInsightDialog";
+import AdminVoyageScores from "@/components/admin/AdminVoyageScores";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ArticleScoreRow = {
@@ -72,8 +74,8 @@ const AXIS_CONFIG = [
 
 const scoreColor = (score: number, max: number) => {
   const ratio = max > 0 ? score / max : 0;
-  if (ratio >= 0.8) return "text-emerald-500";
-  if (ratio >= 0.5) return "text-amber-500";
+  if (ratio >= 0.8) return "text-emerald-500 dark:text-emerald-400";
+  if (ratio >= 0.5) return "text-amber-500 dark:text-amber-400";
   return "text-muted-foreground";
 };
 
@@ -86,6 +88,8 @@ const AdminPerformanceDashboard = () => {
   const [sortBy, setSortBy] = useState<"total" | "reach" | "read" | "react" | "retain" | "revenue">("total");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detailArticleId, setDetailArticleId] = useState<string | null>(null);
+  /** Le due metà del sito che si possono misurare: cosa si legge e dove si parte. */
+  const [scope, setScope] = useState<"articles" | "voyages">("articles");
 
   const fetchData = useCallback(async () => {
     if (!session?.user?.id && !isAdminDevBypassEnabled()) return;
@@ -162,14 +166,39 @@ const AdminPerformanceDashboard = () => {
                 <BarChart3 size={14} />
                 Performance
               </div>
-              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Article Scores</h1>
+              <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Content Scores</h1>
               <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
-                punteggio 5 punti per ogni articolo pubblicato: Reach (visite), Read (tempo + scroll),
-                React (engagement), Retain (ritorno), Lead (click CTA). Ogni asse vale 0-2, totale /10.
+                {scope === "articles"
+                  ? "punteggio 5 punti per ogni articolo pubblicato: Reach (visite), Read (tempo + scroll), React (engagement), Retain (ritorno), Lead (click CTA). Ogni asse vale 0-2, totale /10."
+                  : "punteggio 5 punti per ogni viaggio pubblicato: Reach (visite), Read (permanenza + scroll), React (watchlist e bozze), Retain (pubblico totale), Lead (richieste di imbarco). Ogni asse vale 0-2, totale /10."}
               </p>
+              <div className="mt-6 flex items-center gap-2">
+                {([
+                  { key: "articles", label: "Articoli", icon: BookOpen },
+                  { key: "voyages", label: "Viaggi", icon: Ship },
+                ] as const).map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setScope(key)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-sans transition-colors ${
+                      scope === key
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Icon size={13} />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
+          {scope === "voyages" ? (
+            <AdminVoyageScores />
+          ) : (
+            <>
           {/* Aggregate */}
           <section className="glass-panel rounded-[30px] p-5 md:p-8 space-y-6">
             <div className="flex items-center gap-4 flex-wrap">
@@ -277,9 +306,9 @@ const AdminPerformanceDashboard = () => {
                               <div
                                 className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-sans cursor-help ${
                                   row.score[key] >= 2
-                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                    ? "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400"
                                     : row.score[key] >= 1
-                                      ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                      ? "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 dark:bg-amber-900/30 dark:text-amber-400"
                                       : "bg-muted text-muted-foreground"
                                 }`}
                               >
@@ -457,6 +486,8 @@ const AdminPerformanceDashboard = () => {
               })}
             </div>
           </section>
+            </>
+          )}
         </div>
 
         {/* Detail dialog */}

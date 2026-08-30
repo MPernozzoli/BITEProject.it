@@ -46,7 +46,7 @@ const MediaFigureNodeView = ({ node, updateAttributes, selected }: NodeViewProps
           />
         )}
         {aiGenerated && (
-          <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center justify-center rounded-full border border-white/30 bg-black/58 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.26)] backdrop-blur-md">
+          <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center justify-center rounded-full border border-glass-edge/30 bg-black/58 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.26)] backdrop-blur-md">
             AI
           </span>
         )}

@@ -24,6 +24,10 @@ import {
   type CandidateInfo,
 } from "@/lib/booking-candidate-info";
 import {
+  getBookingApplicationBlocker,
+  type BookingApplicationStep,
+} from "@/lib/booking-application-gate";
+import {
   buildBookingApplicationDraft,
   clearCloudBookingApplicationDraft,
   clearLocalBookingApplicationDraft,
@@ -164,6 +168,22 @@ const UserBookings = () => {
   const [selectedVoyageId, setSelectedVoyageId] = useState<string>("");
   const [selectedLegIds, setSelectedLegIds] = useState<string[]>([]);
   const [partySize, setPartySize] = useState("1");
+  /** The step a refused submit points at, briefly ringed so the traveller sees where to look. */
+  const [highlightedStep, setHighlightedStep] = useState<BookingApplicationStep | null>(null);
+  const legsStepRef = useRef<HTMLDivElement | null>(null);
+  const partyStepRef = useRef<HTMLDivElement | null>(null);
+  const candidateInfoStepRef = useRef<HTMLDivElement | null>(null);
+  const highlightTimeoutRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+    },
+    []
+  );
+  const stepRingClass = (step: BookingApplicationStep) =>
+    highlightedStep === step
+      ? "rounded-[26px] ring-2 ring-amber-400/90 ring-offset-4 ring-offset-background transition-shadow"
+      : "transition-shadow";
   const [message, setMessage] = useState("");
   const [candidateInfo, setCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [candidateInfoPrefill, setCandidateInfoPrefill] = useState<CandidateInfo>(emptyCandidateInfo);
@@ -920,48 +940,61 @@ const UserBookings = () => {
     window.open(signedUrl, "_blank", "noopener,noreferrer");
   };
 
+  /** Everything the traveller still has to do before the application can be sent, as one
+   * object shared by the inline hint, the matrix button and the toast — so the form can never
+   * refuse silently again. */
+  const applicationBlocker = useMemo(
+    () =>
+      getBookingApplicationBlocker(
+        {
+          voyageSelected: Boolean(selectedVoyageId),
+          voyageStillOpen: isVoyageBookableNow(selectedVoyage),
+          selectedLegIds,
+          candidateInfo,
+          partySize: Math.max(1, Number.parseInt(partySize, 10) || 1),
+          maxGuests: selectedVoyage?.booking_max_guests || 1,
+          remainingSeatsByLegId,
+          legLabelById: Object.fromEntries(
+            selectedLegIds
+              .map((legId) => [legId, legsById[legId]] as const)
+              .filter(([, leg]) => Boolean(leg))
+              .map(([legId, leg]) => [legId, getLegLabel(leg, waypointsById, lang)])
+          ),
+        },
+        lang
+      ),
+    [
+      candidateInfo,
+      lang,
+      legsById,
+      partySize,
+      remainingSeatsByLegId,
+      selectedLegIds,
+      selectedVoyage,
+      selectedVoyageId,
+      waypointsById,
+    ]
+  );
+
+  /** Brings the blocking step on screen and rings it, so "manca un passaggio" is not just words. */
+  const revealBlockedStep = (step: BookingApplicationStep) => {
+    const target =
+      step === "about"
+        ? candidateInfoStepRef.current
+        : step === "party"
+          ? partyStepRef.current
+          : legsStepRef.current;
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedStep(step);
+    if (highlightTimeoutRef.current) window.clearTimeout(highlightTimeoutRef.current);
+    highlightTimeoutRef.current = window.setTimeout(() => setHighlightedStep(null), 2600);
+  };
+
   const validateBookingRequest = () => {
-    if (!selectedVoyageId || selectedLegIds.length === 0) {
-      toast.error(lang === "it" ? "Seleziona almeno una tratta." : "Select at least one leg.");
-      return false;
-    }
-    if (!isVoyageBookableNow(selectedVoyage)) {
-      toast.error(lang === "it" ? "Questo viaggio non è più aperto alle adesioni." : "This voyage is no longer open to join.");
-      return false;
-    }
-    const candidateInfoError = getCandidateInfoValidationError(candidateInfo, lang);
-    if (candidateInfoError) {
-      toast.error(candidateInfoError);
-      return false;
-    }
-    const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
-    const maxGuests = selectedVoyage?.booking_max_guests || 1;
-    if (parsedPartySize > maxGuests) {
-      toast.error(
-        lang === "it"
-          ? `Per questo viaggio puoi richiedere al massimo ${maxGuests} persone.`
-          : `You can request at most ${maxGuests} people for this voyage.`
-      );
-      return false;
-    }
-    // A party only fits where there is room for *all* of it: an application the organiser could
-    // never approve as-is is worse than a refusal here, because the contribution is paid first.
-    const tooTightLegIds = selectedLegIds.filter(
-      (legId) => legId in remainingSeatsByLegId && remainingSeatsByLegId[legId] < parsedPartySize
-    );
-    if (tooTightLegIds.length > 0) {
-      const labels = tooTightLegIds
-        .map((legId) => legsById[legId])
-        .filter(Boolean)
-        .map((leg) => getLegLabel(leg, waypointsById, lang));
-      toast.error(
-        lang === "it"
-          ? `Non ci sono ${parsedPartySize} posti liberi su: ${labels.join(", ")}. Riduci il numero di persone o togli queste tratte.`
-          : `There aren't ${parsedPartySize} free seats on: ${labels.join(", ")}. Reduce the party size or remove these legs.`
-      );
-      return false;
-    }
-    return true;
+    if (!applicationBlocker) return true;
+    toast.error(applicationBlocker.detail);
+    revealBlockedStep(applicationBlocker.step);
+    return false;
   };
 
   const openBookingConfirm = () => {
@@ -1843,7 +1876,7 @@ const UserBookings = () => {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
+                  <div ref={legsStepRef} className={`space-y-2 ${stepRingClass("legs")}`}>
                     <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
                       {lang === "it" ? "Tratte" : "Legs"}
                     </p>
@@ -1868,10 +1901,13 @@ const UserBookings = () => {
                         onSubmitDraft={openBookingConfirm}
                         onProposeChange={(requestId, proposedLegIds) => void proposeLegChange(requestId, proposedLegIds)}
                         onOpenOwnRequest={(request) => setDetailsRequestId(request.id)}
+                        remainingSeatsByLegId={remainingSeatsByLegId}
+                        partySize={Math.max(1, Number.parseInt(partySize, 10) || 1)}
+                        blocker={applicationBlocker}
                       />
                     )}
                     {ownRequestForSelectedVoyage?.status === "pending_payment" && (
-                      <div className="rounded-[22px] border border-orange-300/60 bg-orange-50/70 p-4 text-sm text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+                      <div className="rounded-[22px] border border-orange-300/60 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 p-4 text-sm text-orange-950 dark:text-orange-300 dark:bg-orange-400/10 dark:text-orange-100/90">
                         <p className="font-medium">
                           {lang === "it"
                             ? "Candidatura non ancora inviata"
@@ -1882,7 +1918,7 @@ const UserBookings = () => {
                             ? "Manca solo il pagamento del contributo: finché non arriva, la candidatura non viene inviata all'organizzatore."
                             : "Only the contribution payment is missing: until it arrives the application is not sent to the organiser."}
                         </p>
-                        <p className="mt-2 rounded-xl border border-orange-400/40 bg-white/50 px-3 py-2 text-xs leading-relaxed dark:bg-white/5">
+                        <p className="mt-2 rounded-xl border border-orange-400/40 bg-glass/50 px-3 py-2 text-xs leading-relaxed dark:bg-glass/5">
                           {lang === "it"
                             ? "Se non completi il pagamento in tempo la richiesta viene annullata in automatico: 1 ora per carta e link di pagamento, 24 ore per bonifico."
                             : "If you don't complete the payment in time the request is cancelled automatically: 1 hour for card and payment link, 24 hours for bank transfer."}
@@ -1969,7 +2005,7 @@ const UserBookings = () => {
                       ownRequestForSelectedVoyage.payment_mode === "each_pays_own" &&
                       !ownRequestForSelectedVoyage.is_comped &&
                       !paidDepositRequestIds.has(ownRequestForSelectedVoyage.id) && (
-                        <div className="rounded-[22px] border border-orange-300/60 bg-orange-50/70 p-4 text-sm text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+                        <div className="rounded-[22px] border border-orange-300/60 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 p-4 text-sm text-orange-950 dark:text-orange-300 dark:bg-orange-400/10 dark:text-orange-100/90">
                           <p className="font-medium">
                             {lang === "it" ? "In attesa di pagamento" : "Awaiting payment"}
                           </p>
@@ -1991,7 +2027,7 @@ const UserBookings = () => {
                         </div>
                       )}
                     {ownRequestBalanceDue && (
-                      <div className="rounded-[22px] border border-sky-300/60 bg-sky-50/70 p-4 text-sm text-sky-950 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-100/90">
+                      <div className="rounded-[22px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-4 text-sm text-sky-950 dark:text-sky-300 dark:border-sky-400/30 dark:bg-sky-400/10 dark:text-sky-100/90">
                         <p className="font-medium">
                           {lang === "it" ? "Saldo da versare" : "Balance due"}
                         </p>
@@ -2034,7 +2070,7 @@ const UserBookings = () => {
                       return (
                         <div
                           key={request.id}
-                          className="rounded-[22px] border border-stone-300/60 bg-stone-50/70 p-4 text-sm text-stone-800 dark:bg-stone-400/10 dark:text-stone-100/90"
+                          className="rounded-[22px] border border-border/60 bg-muted/70 p-4 text-sm text-foreground/90 dark:bg-muted-foreground/10 dark:text-stone-100/90"
                         >
                           <p className="font-medium">
                             {lang === "it" ? "Candidatura scaduta" : "Expired application"}
@@ -2049,7 +2085,7 @@ const UserBookings = () => {
                               {requestLegLabels.map((label) => (
                                 <span
                                   key={label}
-                                  className="rounded-full border border-stone-300/70 bg-white/60 px-2.5 py-1 text-[11px] text-stone-800"
+                                  className="rounded-full border border-border/70 bg-glass/60 px-2.5 py-1 text-[11px] text-foreground/90"
                                 >
                                   {label}
                                 </span>
@@ -2074,7 +2110,7 @@ const UserBookings = () => {
                     })}
 
                     {selectedFullLegIds.length > 0 && !ownRequestForSelectedVoyage && (
-                      <div className="rounded-[22px] border border-amber-300/50 bg-amber-50/60 p-4 text-sm text-amber-950 dark:bg-amber-400/10 dark:text-amber-100/90">
+                      <div className="rounded-[22px] border border-amber-300/50 dark:border-amber-500/30 bg-amber-50/60 dark:bg-amber-500/10 p-4 text-sm text-amber-950 dark:text-amber-300 dark:bg-amber-400/10 dark:text-amber-100/90">
                         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                           <div>
                             <p className="font-medium">
@@ -2087,7 +2123,7 @@ const UserBookings = () => {
                             </p>
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               {selectedFullLegLabels.map((label) => (
-                                <span key={label} className="rounded-full border border-amber-300/70 bg-white/60 px-2.5 py-1 text-[11px] text-amber-950">
+                                <span key={label} className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-glass/60 px-2.5 py-1 text-[11px] text-amber-950 dark:text-amber-300">
                                   {label}
                                 </span>
                               ))}
@@ -2104,7 +2140,7 @@ const UserBookings = () => {
                               })
                             }
                             disabled={saving}
-                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-amber-400/70 bg-white/70 px-3 py-2 text-xs font-semibold text-amber-950 hover:bg-white disabled:opacity-50"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-amber-400/70 bg-glass/70 px-3 py-2 text-xs font-semibold text-amber-950 dark:text-amber-300 hover:bg-glass disabled:opacity-50"
                           >
                             {selectedWatchTracksCurrentFullLegs ? <BellOff size={14} /> : <Bell size={14} />}
                             {selectedWatchTracksCurrentFullLegs
@@ -2122,10 +2158,10 @@ const UserBookings = () => {
 
                   {!ownRequestForSelectedVoyage && (
                     <>
-                      <div className="grid grid-cols-[120px_1fr] gap-3">
+                      <div ref={partyStepRef} className={`grid grid-cols-[120px_1fr] gap-3 ${stepRingClass("party")}`}>
                         <div>
                           <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                            Persone
+                            {lang === "it" ? "Persone" : "People"}
                           </label>
                           <input
                             type="number"
@@ -2138,7 +2174,7 @@ const UserBookings = () => {
                         </div>
                         <div>
                           <label className="mb-1 block text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-                            Note
+                            {lang === "it" ? "Note" : "Notes"}
                           </label>
                           <input
                             value={message}
@@ -2149,9 +2185,22 @@ const UserBookings = () => {
                         </div>
                       </div>
 
-                      <div className="rounded-[24px] border border-border/70 bg-background/40 p-4">
+                      <div
+                        ref={candidateInfoStepRef}
+                        className={`rounded-[24px] border p-4 ${
+                          highlightedStep === "about"
+                            ? "border-amber-400/80 bg-amber-50/60 dark:bg-amber-500/10 dark:bg-amber-400/10"
+                            : "border-border/70 bg-background/40"
+                        } ${stepRingClass("about")}`}
+                      >
                         <div className="mb-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            <span
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground"
+                              aria-hidden
+                            >
+                              2
+                            </span>
                             {lang === "it" ? "Dicci di te" : "Tell us about you"}
                           </p>
                           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -2238,14 +2287,14 @@ const UserBookings = () => {
                       <DialogDescription className="flex flex-wrap items-center gap-2 pt-1">
                         {formatBookingDate(detailsRequest.requested_at, locale)} · {detailsRequest.party_size} pax
                         {detailsRequest.is_crew && (
-                          <span className="inline-flex items-center rounded-full border border-indigo-300/70 bg-indigo-100/70 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-indigo-800">
+                          <span className="inline-flex items-center rounded-full border border-indigo-300/70 dark:border-indigo-500/30 bg-indigo-100/70 dark:bg-indigo-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-indigo-800 dark:text-indigo-300">
                             {lang === "it" ? "Equipaggio" : "Crew"}
                           </span>
                         )}
                         <span
                           className={`inline-flex rounded-full border px-3 py-1 text-xs ${
                             isAwaitingContributionPayment(detailsRequest)
-                              ? "border-orange-300/70 bg-orange-100/70 text-orange-900"
+                              ? "border-orange-300/70 dark:border-orange-500/30 bg-orange-100/70 dark:bg-orange-500/15 text-orange-900 dark:text-orange-300"
                               : getBookingStatusClass(detailsRequest.status)
                           }`}
                         >
@@ -2272,7 +2321,7 @@ const UserBookings = () => {
                     {detailsRequest.message && <p className="mt-3 text-sm text-muted-foreground">{detailsRequest.message}</p>}
 
                     {detailsShowAwaitingAdminApproval && (
-                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-3 text-sm text-sky-950 dark:text-sky-300">
                         {lang === "it"
                           ? "La tua richiesta di modifica tratte è in attesa di approvazione da parte del team."
                           : "Your leg-change request is pending approval from the team."}
@@ -2280,25 +2329,25 @@ const UserBookings = () => {
                     )}
 
                     {detailsShowPendingPlanChange && (
-                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-3 text-sm text-sky-950 dark:text-sky-300">
                         <div className="flex items-start gap-2">
-                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
+                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700 dark:text-sky-300" size={16} />
                           <div>
                             <p className="font-semibold">
                               {lang === "it" ? "Proposta di modifica tratte" : "Route change proposal"}
                             </p>
-                            {detailsAdminPlanMessage && <p className="mt-1 whitespace-pre-line text-sky-900/80">{detailsAdminPlanMessage}</p>}
+                            {detailsAdminPlanMessage && <p className="mt-1 whitespace-pre-line text-sky-900/80 dark:text-sky-300">{detailsAdminPlanMessage}</p>}
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {detailsProposedLegLabels.map((label) => (
-                            <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                            <span key={label} className="rounded-full border border-sky-300/70 dark:border-sky-500/30 bg-glass/65 px-3 py-1 text-xs text-sky-900 dark:text-sky-300">
                               {label}
                             </span>
                           ))}
                         </div>
                         {detailsRequiresSettlement && (
-                          <div className="mt-3 rounded-2xl border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                          <div className="mt-3 rounded-2xl border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-300">
                             <p className="font-semibold">
                               {lang === "it"
                                 ? `Accettando dovrai versare il contributo del nuovo percorso: ${formatDepositEur(detailsProposedAmountEur, "it")}.`
@@ -2318,7 +2367,7 @@ const UserBookings = () => {
                           value={planChangeMessages[detailsRequest.id] || ""}
                           onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))}
                           rows={3}
-                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-glass/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
                           placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
                         />
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -2326,7 +2375,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "accept_proposed_change")}
                             disabled={saving}
-                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                            className="rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-900 dark:text-emerald-300 disabled:opacity-50"
                           >
                             {detailsRequiresSettlement
                               ? lang === "it" ? "Accetta e paga" : "Accept & pay"
@@ -2336,7 +2385,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "request_different_route")}
                             disabled={saving}
-                            className="rounded-full border border-sky-300 bg-white/70 px-3 py-2 text-xs font-semibold text-sky-900 disabled:opacity-50"
+                            className="rounded-full border border-sky-300 dark:border-sky-500/30 bg-glass/70 px-3 py-2 text-xs font-semibold text-sky-900 dark:text-sky-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Controproponi" : "Counter"}
                           </button>
@@ -2344,7 +2393,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "reject_proposed_change")}
                             disabled={saving}
-                            className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                            className="rounded-full border border-amber-300 dark:border-amber-500/30 bg-amber-100 dark:bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Rifiuta" : "Decline"}
                           </button>
@@ -2352,7 +2401,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "cancel_with_full_refund")}
                             disabled={saving}
-                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                            className="rounded-full border border-red-300 dark:border-red-500/30 bg-red-100 dark:bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-900 dark:text-red-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Annulla" : "Cancel"}
                           </button>
@@ -2360,12 +2409,12 @@ const UserBookings = () => {
                       </div>
                     )}
                     {detailsShowScheduleDelay && (
-                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-300">
                         <div className="flex items-start gap-2">
-                          <Hourglass className="mt-0.5 shrink-0 text-amber-700" size={16} />
+                          <Hourglass className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300" size={16} />
                           <div>
                             <p className="font-semibold">{lang === "it" ? "Il viaggio è in ritardo" : "The voyage is running late"}</p>
-                            <p className="mt-1 text-amber-900/80">
+                            <p className="mt-1 text-amber-900/80 dark:text-amber-300">
                               {lang === "it"
                                 ? "Le tue tratte restano le stesse, solo le date si spostano."
                                 : "Your legs stay the same, only the dates shift."}
@@ -2375,14 +2424,14 @@ const UserBookings = () => {
                         {detailsDelayedLegLabels.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {detailsDelayedLegLabels.map((label) => (
-                              <span key={label} className="rounded-full border border-amber-300/70 bg-white/65 px-3 py-1 text-xs text-amber-900">
+                              <span key={label} className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-glass/65 px-3 py-1 text-xs text-amber-900 dark:text-amber-300">
                                 {label}
                               </span>
                             ))}
                           </div>
                         )}
                         {detailsDelayNewDeparture && (
-                          <p className="mt-2 text-amber-900/80">
+                          <p className="mt-2 text-amber-900/80 dark:text-amber-300">
                             {lang === "it" ? "Nuova partenza prevista: " : "New expected departure: "}
                             {formatBookingDate(detailsDelayNewDeparture, locale)}
                           </p>
@@ -2392,7 +2441,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "acknowledge_delay")}
                             disabled={saving}
-                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                            className="rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-900 dark:text-emerald-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Ho capito" : "Got it"}
                           </button>
@@ -2400,7 +2449,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToPlanChange(detailsRequest.id, "cancel_with_full_refund")}
                             disabled={saving}
-                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                            className="rounded-full border border-red-300 dark:border-red-500/30 bg-red-100 dark:bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-900 dark:text-red-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Annulla con rimborso" : "Cancel with refund"}
                           </button>
@@ -2408,34 +2457,34 @@ const UserBookings = () => {
                       </div>
                     )}
                     {detailsShowCounterWaiting && (
-                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-300">
                         {lang === "it"
                           ? "Controproposta inviata: il team la sta revisionando."
                           : "Counterproposal sent: the team is reviewing it."}
                       </div>
                     )}
                     {detailsContributionAwaitingReview && (
-                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-3 text-sm text-sky-950 dark:text-sky-300">
                         {lang === "it"
                           ? "La tua proposta di contributo/workaway e in revisione: ti avviseremo appena c'e una risposta."
                           : "Your contribution/workaway proposal is under review: we'll notify you as soon as there's a response."}
                       </div>
                     )}
                     {detailsContributionCounterPending && detailsContributionProposal && (
-                      <div className="mt-4 rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                      <div className="mt-4 rounded-[18px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-3 text-sm text-sky-950 dark:text-sky-300">
                         <div className="flex items-start gap-2">
-                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700" size={16} />
+                          <MessageSquare className="mt-0.5 shrink-0 text-sky-700 dark:text-sky-300" size={16} />
                           <div>
                             <p className="font-semibold">
                               {lang === "it" ? "Contro-proposta sul contributo" : "Counter-proposal on the contribution"}
                             </p>
                             {detailsContributionProposal.admin_note && (
-                              <p className="mt-1 whitespace-pre-line text-sky-900/80">{detailsContributionProposal.admin_note}</p>
+                              <p className="mt-1 whitespace-pre-line text-sky-900/80 dark:text-sky-300">{detailsContributionProposal.admin_note}</p>
                             )}
                           </div>
                         </div>
                         {detailsContributionProposal.proposed_variable_cents != null && (
-                          <p className="mt-2 text-sky-900">
+                          <p className="mt-2 text-sky-900 dark:text-sky-300">
                             {lang === "it"
                               ? `Nuovo contributo variabile proposto: ${formatDepositEur(detailsContributionProposal.proposed_variable_cents / 100, "it")} (il fisso di €20 resta invariato).`
                               : `New proposed variable contribution: ${formatDepositEur(detailsContributionProposal.proposed_variable_cents / 100, "en")} (the fixed €20 stays unchanged).`}
@@ -2444,19 +2493,19 @@ const UserBookings = () => {
                         {(detailsContributionProposal.workaway_role_keys.length > 0 || detailsContributionProposal.workaway_other_role_text) && (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {detailsContributionProposal.workaway_role_keys.map((key) => (
-                              <span key={key} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                              <span key={key} className="rounded-full border border-sky-300/70 dark:border-sky-500/30 bg-glass/65 px-3 py-1 text-xs text-sky-900 dark:text-sky-300">
                                 {key}
                               </span>
                             ))}
                             {detailsContributionProposal.workaway_other_role_text && (
-                              <span className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                              <span className="rounded-full border border-sky-300/70 dark:border-sky-500/30 bg-glass/65 px-3 py-1 text-xs text-sky-900 dark:text-sky-300">
                                 {detailsContributionProposal.workaway_other_role_text}
                               </span>
                             )}
                           </div>
                         )}
                         {detailsContributionProposal.workaway_hours_commitment_value != null && (
-                          <p className="mt-1 text-xs text-sky-900/80">
+                          <p className="mt-1 text-xs text-sky-900/80 dark:text-sky-300">
                             {lang === "it" ? "Ore: " : "Hours: "}
                             {detailsContributionProposal.workaway_hours_commitment_value}{" "}
                             {detailsContributionProposal.workaway_hours_commitment_type === "per_week"
@@ -2464,7 +2513,7 @@ const UserBookings = () => {
                               : lang === "it" ? "al giorno" : "per day"}
                           </p>
                         )}
-                        <p className="mt-2 text-xs text-sky-900/80">
+                        <p className="mt-2 text-xs text-sky-900/80 dark:text-sky-300">
                           {lang === "it"
                             ? "Puoi solo accettare o rifiutare: non e possibile un ulteriore rilancio."
                             : "You can only accept or reject: no further counter-offer is possible."}
@@ -2475,7 +2524,7 @@ const UserBookings = () => {
                             setContributionCounterMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))
                           }
                           rows={2}
-                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 bg-white/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-glass/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
                           placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
                         />
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -2483,7 +2532,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToContributionCounter("accept")}
                             disabled={contributionCounterSaving}
-                            className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                            className="rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-900 dark:text-emerald-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Accetta" : "Accept"}
                           </button>
@@ -2491,7 +2540,7 @@ const UserBookings = () => {
                             type="button"
                             onClick={() => void respondToContributionCounter("reject")}
                             disabled={contributionCounterSaving}
-                            className="rounded-full border border-red-300 bg-red-100 px-3 py-2 text-xs font-semibold text-red-900 disabled:opacity-50"
+                            className="rounded-full border border-red-300 dark:border-red-500/30 bg-red-100 dark:bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-900 dark:text-red-300 disabled:opacity-50"
                           >
                             {lang === "it" ? "Rifiuta" : "Reject"}
                           </button>
@@ -2499,17 +2548,17 @@ const UserBookings = () => {
                       </div>
                     )}
                     {detailsContributionMissingFiles && (
-                      <div className="mt-4 rounded-[18px] border border-amber-300/60 bg-amber-50/70 p-3 text-sm text-amber-950">
+                      <div className="mt-4 rounded-[18px] border border-amber-300/60 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 p-3 text-sm text-amber-950 dark:text-amber-300">
                         <p className="font-semibold">
                           {lang === "it" ? "CV/portfolio non caricati" : "CV/portfolio not uploaded"}
                         </p>
-                        <p className="mt-1 text-amber-900/80">
+                        <p className="mt-1 text-amber-900/80 dark:text-amber-300">
                           {lang === "it"
                             ? "Il caricamento potrebbe non essere andato a buon fine. Puoi riprovare qui."
                             : "The upload may not have gone through. You can retry here."}
                         </p>
                         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-white/60 px-3 py-2 text-xs text-amber-900">
+                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-glass/60 px-3 py-2 text-xs text-amber-900 dark:text-amber-300">
                             <span className="truncate">{retryCvFile ? retryCvFile.name : lang === "it" ? "CV" : "CV"}</span>
                             <input
                               type="file"
@@ -2518,7 +2567,7 @@ const UserBookings = () => {
                               onChange={(event) => setRetryCvFile(event.target.files?.[0] ?? null)}
                             />
                           </label>
-                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-white/60 px-3 py-2 text-xs text-amber-900">
+                          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-glass/60 px-3 py-2 text-xs text-amber-900 dark:text-amber-300">
                             <span className="truncate">{retryPortfolioFile ? retryPortfolioFile.name : lang === "it" ? "Portfolio" : "Portfolio"}</span>
                             <input
                               type="file"
@@ -2531,7 +2580,7 @@ const UserBookings = () => {
                           type="button"
                           onClick={() => void retryWorkawayUpload()}
                           disabled={retryUploadSaving || (!retryCvFile && !retryPortfolioFile)}
-                          className="mt-2 w-full rounded-full border border-amber-400 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                          className="mt-2 w-full rounded-full border border-amber-400 bg-amber-100 dark:bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
                         >
                           {retryUploadSaving
                             ? lang === "it" ? "Caricamento..." : "Uploading..."
@@ -2588,7 +2637,7 @@ const UserBookings = () => {
                                 {lang === "it" ? "2. Seconda mail operativa" : "2. Second operational email"}
                               </p>
                               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                <div className="rounded-[14px] border border-border/70 bg-glass/55 p-3">
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type L</p>
                                   <div className="mt-2 flex h-12 items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/80">
                                     <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
@@ -2596,7 +2645,7 @@ const UserBookings = () => {
                                     <span className="h-2.5 w-2.5 rounded-full border border-foreground/70" />
                                   </div>
                                 </div>
-                                <div className="rounded-[14px] border border-border/70 bg-white/55 p-3">
+                                <div className="rounded-[14px] border border-border/70 bg-glass/55 p-3">
                                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Type F</p>
                                   <div className="mt-2 flex h-12 items-center justify-center rounded-xl border border-border/60 bg-background/80">
                                     <div className="flex h-9 w-9 items-center justify-center gap-3 rounded-full border-2 border-foreground/70">

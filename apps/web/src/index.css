@@ -94,6 +94,13 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
 
+    /* Vetro: la superficie traslucida su cui poggia mezzo sito. In chiaro è
+       bianco puro — cioè esattamente ciò che le classi `bg-white/NN` facevano
+       prima — così il tema chiaro resta identico; in scuro diventa navy e tutte
+       le opacità già scritte continuano a valere. */
+    --glass: 0 0% 100%;
+    --glass-edge: 0 0% 100%;
+
     /* Motion tokens (design-taste / high-end-visual) */
     --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -101,6 +108,63 @@
     --duration-interaction: 220ms;
     --duration-hero-crossfade: 2000ms;
     --duration-glass: 220ms;
+  }
+
+  /* Notte in mare. Il chiaro è crema e navy; lo scuro è il suo negativo marino:
+     fondali blu profondi, testo salso caldo, accento teal schiarito — a 180 20% 35%
+     il teal originale su fondo scuro sparisce. */
+  .dark {
+    --background: 218 33% 8%;
+    --foreground: 40 18% 92%;
+
+    --card: 218 28% 11%;
+    --card-foreground: 40 18% 92%;
+
+    --popover: 218 30% 10%;
+    --popover-foreground: 40 18% 92%;
+
+    --primary: 40 18% 92%;
+    --primary-foreground: 220 40% 12%;
+
+    --secondary: 217 22% 17%;
+    --secondary-foreground: 40 18% 92%;
+
+    --muted: 217 22% 16%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 180 32% 58%;
+    --accent-foreground: 218 40% 10%;
+
+    --destructive: 0 62% 54%;
+    --destructive-foreground: 40 20% 96%;
+
+    --border: 216 20% 21%;
+    --input: 216 20% 21%;
+    --ring: 180 32% 58%;
+
+    /* Colori di marca: restano se stessi, solo ricalibrati per il fondo scuro.
+       navy e salt non si invertono — sono usati come colori letterali (sezioni
+       navy con testo salt sopra), non come coppia semantica sfondo/testo. */
+    --sand: 35 28% 64%;
+    --fog: 218 14% 48%;
+    --navy: 218 34% 12%;
+    --navy-light: 218 26% 20%;
+    --teal: 180 32% 52%;
+    --teal-muted: 180 20% 44%;
+    --salt: 40 18% 92%;
+    --salt-warm: 38 14% 86%;
+
+    --sidebar-background: 218 30% 10%;
+    --sidebar-foreground: 40 14% 86%;
+    --sidebar-primary: 180 32% 58%;
+    --sidebar-primary-foreground: 218 40% 10%;
+    --sidebar-accent: 217 22% 17%;
+    --sidebar-accent-foreground: 40 18% 92%;
+    --sidebar-border: 216 20% 21%;
+    --sidebar-ring: 180 32% 58%;
+
+    --glass: 218 26% 17%;
+    --glass-edge: 214 16% 38%;
   }
 }
 
@@ -1893,4 +1957,511 @@ html {
   background: hsl(220 18% 96%);
   color: hsl(220 10% 48%);
   cursor: not-allowed;
+}
+
+/* ============================================================================
+   TEMA SCURO — controparti delle superfici su misura
+   ----------------------------------------------------------------------------
+   I token semantici (:root / .dark, in cima al file) coprono già tutto ciò che
+   passa da `bg-background`, `text-foreground`, `border-border` e dai componenti
+   shadcn. Restano le superfici disegnate a mano: il vetro, i fondali del body,
+   la navbar, la posta, il reader e i popup della mappa, che in chiaro sono
+   bianchi per costruzione. Qui c'è la loro versione notturna.
+
+   Le regole chiare non si toccano: queste sono override `.dark …`, a
+   specificità più alta, così il tema chiaro resta identico a com'era.
+   ========================================================================== */
+
+@layer base {
+  /* Il fondale: crema con fioriture pastello diventa mare notturno con
+     bagliori teal e ambra molto tenui — la stessa struttura, un'altra ora. */
+  .dark body {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 12% 16%, rgba(56, 122, 138, 0.20), transparent 24%),
+      radial-gradient(circle at 82% 12%, rgba(140, 106, 58, 0.16), transparent 27%),
+      radial-gradient(circle at 68% 72%, rgba(64, 92, 128, 0.18), transparent 23%),
+      linear-gradient(180deg, rgba(15, 22, 34, 0.96) 0%, rgba(11, 17, 27, 0.94) 45%, rgba(13, 20, 31, 0.96) 100%);
+  }
+
+  .dark body::before,
+  .dark body::after {
+    opacity: 0.5;
+  }
+
+  .dark body::before {
+    background: linear-gradient(135deg, rgba(78, 140, 156, 0.26), rgba(30, 58, 74, 0.14));
+  }
+
+  .dark body::after {
+    background: linear-gradient(135deg, rgba(146, 114, 66, 0.22), rgba(52, 42, 28, 0.12));
+  }
+}
+
+@layer components {
+  /* --- Orb ambientali ---------------------------------------------------- */
+
+  .dark .site-shell__orb {
+    opacity: 0.22;
+  }
+
+  .dark .site-shell__orb--one {
+    background: linear-gradient(160deg, rgba(74, 146, 160, 0.85), rgba(16, 26, 40, 0.1));
+  }
+
+  .dark .site-shell__orb--two {
+    background: linear-gradient(160deg, rgba(150, 118, 68, 0.8), rgba(16, 26, 40, 0.1));
+  }
+
+  .dark .site-shell__orb--three {
+    background: linear-gradient(160deg, rgba(78, 104, 148, 0.72), rgba(16, 26, 40, 0.08));
+  }
+
+  /* --- Vetro ------------------------------------------------------------- */
+
+  /* La luce che scorre sul bordo: in chiaro è bianca e generosa, in scuro va
+     abbassata di molto o il pannello sembra illuminato da dentro. */
+  .dark .glass-panel::before,
+  .dark .glass-panel-soft::before,
+  .dark .glass-chip::before,
+  .dark .glass-input::before,
+  .dark .glass-button-secondary::before,
+  .dark .glass-frame::before,
+  .dark .glass-panel-light::before {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.09),
+      transparent 32%,
+      rgba(255, 255, 255, 0.03) 64%,
+      transparent 84%
+    );
+  }
+
+  .dark .glass-panel {
+    border-color: rgba(148, 178, 204, 0.16);
+    background: linear-gradient(
+      145deg,
+      rgba(24, 35, 52, 0.82),
+      rgba(21, 32, 48, 0.66) 54%,
+      rgba(24, 42, 56, 0.54)
+    );
+    box-shadow:
+      0 28px 90px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark .glass-panel-soft {
+    border-color: rgba(148, 178, 204, 0.13);
+    background: linear-gradient(
+      145deg,
+      rgba(23, 33, 50, 0.7),
+      rgba(20, 30, 46, 0.54) 54%,
+      rgba(22, 39, 53, 0.42)
+    );
+    box-shadow:
+      0 22px 70px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .glass-panel-light {
+    border-color: rgba(148, 178, 204, 0.15);
+    background:
+      linear-gradient(145deg, rgba(24, 35, 52, 0.84), rgba(21, 32, 48, 0.68) 52%, rgba(23, 41, 55, 0.56)),
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 44%);
+    box-shadow:
+      0 24px 78px rgba(0, 0, 0, 0.46),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .dark .glass-chip {
+    border-color: rgba(148, 178, 204, 0.18);
+    background: linear-gradient(180deg, rgba(28, 40, 58, 0.74), rgba(22, 32, 48, 0.5));
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.36),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark .glass-chip-light {
+    border-color: rgba(148, 178, 204, 0.18);
+    background: linear-gradient(180deg, rgba(28, 40, 58, 0.76), rgba(22, 32, 48, 0.52));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 10px 28px rgba(0, 0, 0, 0.34);
+  }
+
+  .dark .glass-input {
+    border-color: rgba(148, 178, 204, 0.18);
+    background: linear-gradient(180deg, rgba(26, 37, 55, 0.66), rgba(21, 31, 47, 0.48));
+    box-shadow:
+      0 16px 45px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .glass-input:focus-within {
+    border-color: hsl(var(--accent) / 0.55);
+    box-shadow:
+      0 20px 52px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  /* .glass-button è il bottone primario: già scuro in chiaro. In scuro va
+     schiarito, non scurito, o sparisce dentro il fondale. */
+  .dark .glass-button {
+    border-color: rgba(148, 178, 204, 0.22);
+    background: linear-gradient(135deg, rgba(52, 78, 102, 0.98), rgba(36, 56, 78, 0.94));
+    box-shadow:
+      0 20px 52px rgba(0, 0, 0, 0.46),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .dark .glass-button:hover {
+    box-shadow:
+      0 26px 64px rgba(0, 0, 0, 0.54),
+      inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .dark .glass-button-secondary {
+    border-color: rgba(148, 178, 204, 0.18);
+    background: linear-gradient(180deg, rgba(28, 40, 58, 0.74), rgba(22, 32, 48, 0.52));
+    color: hsl(var(--foreground));
+    box-shadow:
+      0 18px 46px rgba(0, 0, 0, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark .glass-button-secondary:hover {
+    box-shadow:
+      0 24px 54px rgba(0, 0, 0, 0.46),
+      inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  }
+
+  .dark .glass-frame {
+    border-color: rgba(148, 178, 204, 0.16);
+    background: rgba(20, 30, 46, 0.34);
+    box-shadow:
+      0 22px 56px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .glass-divider {
+    border-color: rgba(148, 178, 204, 0.16);
+  }
+
+  /* --- Navbar ------------------------------------------------------------ */
+
+  .dark .nav-shell-light {
+    border-color: rgba(148, 178, 204, 0.16);
+    background:
+      linear-gradient(180deg, rgba(20, 30, 46, 0.9), rgba(16, 25, 38, 0.72)),
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 42%);
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.44),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+  }
+
+  .dark .nav-shell-light::before {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
+      radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.08), transparent 24%);
+  }
+
+  .dark .nav-chip-light {
+    border-color: rgba(148, 178, 204, 0.18);
+    background: linear-gradient(180deg, rgba(32, 45, 64, 0.82), rgba(24, 35, 52, 0.6));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 8px 22px rgba(0, 0, 0, 0.32);
+  }
+
+  .dark .nav-menu-light {
+    border-color: rgba(148, 178, 204, 0.16);
+    background: linear-gradient(180deg, rgba(19, 28, 43, 0.96), rgba(15, 23, 36, 0.94));
+  }
+
+  /* --- Posta admin ------------------------------------------------------- */
+
+  .dark .mail-mobile-toolbar {
+    border-color: rgba(148, 178, 204, 0.16);
+    background: linear-gradient(180deg, rgba(24, 35, 52, 0.9), rgba(18, 27, 42, 0.74));
+    box-shadow:
+      0 16px 42px rgba(0, 0, 0, 0.44),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark .mail-mobile-toolbar__back:hover,
+  .dark .mail-mobile-toolbar__button:hover {
+    background: rgba(46, 64, 88, 0.78);
+  }
+
+  .dark .mail-detail-header {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--card) / 0.94),
+      hsl(var(--card) / 0.8) 74%,
+      hsl(var(--card) / 0)
+    );
+  }
+
+  .dark .mail-message-card {
+    box-shadow:
+      0 16px 46px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .mail-attachments {
+    border-block-start-color: hsl(var(--border));
+  }
+
+  .dark .mail-attachment-card {
+    border-color: hsl(var(--border));
+    background: rgba(26, 37, 55, 0.62);
+  }
+
+  .dark .mail-attachment-card:hover:not(:disabled) {
+    background: rgba(38, 53, 74, 0.82);
+  }
+
+  .dark .mail-attachment-card__icon {
+    background: rgba(46, 62, 84, 0.7);
+  }
+
+  .dark .mail-quote-block {
+    background: linear-gradient(90deg, rgba(46, 62, 84, 0.42), rgba(46, 62, 84, 0));
+  }
+
+  .dark .mail-compose-dropzone {
+    border-color: hsl(var(--accent) / 0.42);
+    background: rgba(26, 37, 55, 0.55);
+  }
+
+  .dark .mail-compose-attachment {
+    border-color: hsl(var(--border));
+    background: rgba(26, 37, 55, 0.58);
+  }
+
+  .dark .mail-compose-attachment__remove:hover {
+    background: rgba(46, 62, 84, 0.82);
+  }
+
+  /* --- Marker mappa ------------------------------------------------------ */
+
+  /* I marker restano colorati e con l'anello chiaro: sono segnaposto sopra una
+     mappa, e la mappa non cambia tema. Solo l'ombra si approfondisce. */
+  .dark .map-presence-marker__chip {
+    box-shadow:
+      0 12px 24px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  }
+
+  /* --- Reader e corpo articolo ------------------------------------------- */
+
+  .dark .article-rich-body img,
+  .dark .article-rich-body iframe,
+  .dark .article-rich-body video {
+    border-color: rgba(148, 178, 204, 0.16);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  }
+
+  .dark .article-rich-body .article-media-meta {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .dark .article-rich-body blockquote {
+    background: linear-gradient(135deg, rgba(26, 38, 56, 0.92), rgba(21, 32, 48, 0.72));
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .article-rich-body hr {
+    border-color: hsl(var(--border));
+  }
+
+  .dark .article-rich-body th,
+  .dark .article-rich-body td {
+    border-color: hsl(var(--border));
+  }
+
+  .dark .article-rich-body th {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .dark .article-rich-body .selectedCell::after {
+    background: hsl(var(--accent) / 0.22);
+  }
+
+  .dark .article-rich-body .column-resize-handle {
+    background: hsl(var(--accent) / 0.8);
+  }
+}
+
+/* --- Selezione testo ----------------------------------------------------- */
+
+/* In chiaro il testo selezionato diventa navy su velo teal; in scuro il navy
+   sarebbe illeggibile sul fondo, quindi si usa il colore di primo piano. */
+.dark ::selection {
+  background: hsl(var(--teal) / 0.34);
+  color: hsl(var(--foreground));
+}
+
+/* --- Flash di notifica --------------------------------------------------- */
+
+@keyframes notificationFlashDark {
+  0% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0);
+    background-color: rgba(15, 23, 42, 0);
+  }
+  16% {
+    box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.2);
+    background-color: rgba(80, 26, 26, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0);
+    background-color: rgba(15, 23, 42, 0);
+  }
+}
+
+.dark .comment-notification-flash {
+  animation-name: notificationFlashDark;
+}
+
+/* --- Popup della mappa (maplibre) ---------------------------------------- */
+
+.dark .voyage-waypoint-popup .maplibregl-popup-tip {
+  border-top-color: hsl(218 28% 13%);
+}
+
+.dark .voyage-waypoint-popup .maplibregl-popup-close-button {
+  background: hsl(218 28% 16% / 0.82);
+  color: hsl(40 14% 84%);
+}
+
+.dark .voyage-waypoint-popup .maplibregl-popup-close-button:hover {
+  background: hsl(218 28% 22% / 0.95);
+  color: hsl(40 18% 94%);
+}
+
+.dark .voyage-popup {
+  border-color: hsl(216 20% 26% / 0.92);
+  background:
+    linear-gradient(145deg, hsl(218 28% 13% / 0.98) 0%, hsl(216 26% 12% / 0.98) 62%, hsl(200 24% 13% / 0.96) 100%);
+  box-shadow:
+    0 24px 70px hsl(220 60% 2% / 0.6),
+    0 2px 8px hsl(220 60% 2% / 0.4);
+  color: hsl(40 16% 90%);
+}
+
+.dark .voyage-popup__header {
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 26%, transparent), transparent 58%),
+    linear-gradient(180deg, hsl(0 0% 100% / 0.05), hsl(0 0% 100% / 0));
+}
+
+.dark .voyage-popup__badge {
+  border-color: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 52%, hsl(218 28% 18%));
+  background: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 22%, hsl(218 28% 14%));
+  color: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 30%, hsl(40 18% 92%));
+}
+
+.dark .voyage-popup__detail-link {
+  color: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 42%, hsl(40 18% 92%));
+}
+
+.dark .voyage-popup__module {
+  border-color: hsl(216 20% 26% / 0.92);
+  background: hsl(218 26% 16% / 0.7);
+}
+
+.dark .voyage-popup__module--article {
+  border-color: hsl(210 28% 28% / 0.95);
+  background: linear-gradient(135deg, hsl(206 32% 18% / 0.92), hsl(218 26% 14% / 0.78));
+}
+
+.dark .voyage-popup__module--booking {
+  border-color: hsl(166 26% 26% / 0.95);
+  background: linear-gradient(135deg, hsl(163 30% 16% / 0.92), hsl(218 26% 14% / 0.78));
+}
+
+.dark .voyage-popup__module-kicker,
+.dark .voyage-popup__meta {
+  color: hsl(215 14% 62%);
+}
+
+.dark .voyage-popup__module-title,
+.dark .voyage-popup__complexity-label,
+.dark .voyage-popup__text {
+  color: hsl(40 14% 86%);
+}
+
+.dark .voyage-popup__schedule {
+  color: hsl(215 14% 66%);
+}
+
+/* Le pastiglie di complessità restano una scala semantica verde→rosso: si
+   scuriscono il fondo e si schiarisce il testo, mantenendo la stessa tinta. */
+.dark .voyage-popup__complexity-dot--1 {
+  border-color: hsl(152 32% 34% / 0.9);
+  background: hsl(152 34% 18%);
+  color: hsl(152 52% 74%);
+}
+
+.dark .voyage-popup__complexity-dot--2 {
+  border-color: hsl(84 30% 32% / 0.9);
+  background: hsl(84 32% 17%);
+  color: hsl(84 46% 72%);
+}
+
+.dark .voyage-popup__complexity-dot--3 {
+  border-color: hsl(42 40% 36% / 0.9);
+  background: hsl(42 42% 18%);
+  color: hsl(45 68% 74%);
+}
+
+.dark .voyage-popup__complexity-dot--4 {
+  border-color: hsl(26 44% 36% / 0.9);
+  background: hsl(26 46% 18%);
+  color: hsl(28 70% 74%);
+}
+
+.dark .voyage-popup__complexity-dot--5 {
+  border-color: hsl(0 40% 40% / 0.9);
+  background: hsl(0 42% 20%);
+  color: hsl(0 66% 78%);
+}
+
+.dark .voyage-popup__help-trigger {
+  border-color: hsl(168 28% 32% / 0.95);
+  background: hsl(218 26% 18% / 0.8);
+  color: hsl(168 46% 68%);
+}
+
+.dark .voyage-popup__help-tooltip {
+  border-color: hsl(166 24% 28% / 0.95);
+  background: hsl(218 28% 13% / 0.98);
+  box-shadow: 0 18px 42px hsl(220 60% 2% / 0.55);
+  color: hsl(40 14% 86%);
+}
+
+.dark .voyage-popup__module--media .voyage-popup__module-kicker {
+  background: hsl(218 28% 12% / 0.84);
+  color: hsl(40 16% 88%);
+}
+
+.dark .voyage-popup__action {
+  border-color: hsl(168 34% 34% / 0.8);
+  background: hsl(168 34% 16%);
+  color: hsl(168 46% 74%);
+}
+
+.dark .voyage-popup__action:hover:not(:disabled) {
+  border-color: hsl(168 40% 44%);
+  background: hsl(168 36% 21%);
+}
+
+.dark .voyage-popup__action:disabled {
+  border-color: hsl(216 16% 26%);
+  background: hsl(218 20% 15%);
+  color: hsl(215 12% 52%);
 }

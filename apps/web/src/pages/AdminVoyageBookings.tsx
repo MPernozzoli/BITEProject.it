@@ -1328,7 +1328,7 @@ const AdminVoyageBookings = () => {
   const routePlanningActions = (
     <div className="flex flex-wrap items-center gap-2">
       {isRoutePlanningDirty && (
-        <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+        <span className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
           Modifiche non salvate
         </span>
       )}
@@ -1394,7 +1394,7 @@ const AdminVoyageBookings = () => {
               type="button"
               onClick={() => setVoyageTypeFilter("water")}
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                voyageTypeFilter === "water" ? "bg-sky-100 text-sky-800" : "glass-chip text-sky-700 hover:bg-sky-50"
+                voyageTypeFilter === "water" ? "bg-sky-100 dark:bg-sky-500/15 text-sky-800 dark:text-sky-300" : "glass-chip text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-500/10"
               }`}
             >
               <Ship size={11} /> Mare
@@ -1403,7 +1403,7 @@ const AdminVoyageBookings = () => {
               type="button"
               onClick={() => setVoyageTypeFilter("land")}
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                voyageTypeFilter === "land" ? "bg-orange-100 text-orange-800" : "glass-chip text-orange-700 hover:bg-orange-50"
+                voyageTypeFilter === "land" ? "bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300" : "glass-chip text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10"
               }`}
             >
               <Mountain size={11} /> Terra
@@ -1541,14 +1541,14 @@ const AdminVoyageBookings = () => {
                     .map((leg) => getLegLabel(leg, waypointsById, "it"));
                   const userMessage = request.plan_change_metadata?.user_message as string | undefined;
                   return (
-                    <div key={request.id} className="rounded-[18px] border border-sky-300/60 bg-sky-50/70 p-3 text-sm text-sky-950">
+                    <div key={request.id} className="rounded-[18px] border border-sky-300/60 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-3 text-sm text-sky-950 dark:text-sky-300">
                       <p className="font-semibold">
                         {profile?.name || profile?.email || request.profile_id} · proposta modifica tratte
                       </p>
-                      {userMessage && <p className="mt-1 text-sky-900/80">{userMessage}</p>}
+                      {userMessage && <p className="mt-1 text-sky-900/80 dark:text-sky-300">{userMessage}</p>}
                       <div className="mt-2 flex flex-wrap gap-2">
                         {proposedLabels.map((label) => (
-                          <span key={label} className="rounded-full border border-sky-300/70 bg-white/65 px-3 py-1 text-xs text-sky-900">
+                          <span key={label} className="rounded-full border border-sky-300/70 dark:border-sky-500/30 bg-glass/65 px-3 py-1 text-xs text-sky-900 dark:text-sky-300">
                             {label}
                           </span>
                         ))}
@@ -1558,7 +1558,7 @@ const AdminVoyageBookings = () => {
                           type="button"
                           onClick={() => void respondToUserPlanChange(request.id, "accept")}
                           disabled={saving}
-                          className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-900 disabled:opacity-50"
+                          className="rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-900 dark:text-emerald-300 disabled:opacity-50"
                         >
                           Accetta
                         </button>
@@ -1566,7 +1566,7 @@ const AdminVoyageBookings = () => {
                           type="button"
                           onClick={() => void respondToUserPlanChange(request.id, "reject")}
                           disabled={saving}
-                          className="rounded-full border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                          className="rounded-full border border-amber-300 dark:border-amber-500/30 bg-amber-100 dark:bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
                         >
                           Rifiuta
                         </button>
@@ -1644,7 +1644,7 @@ const AdminVoyageBookings = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {isRoutePlanningDirty && (
-                <span className="rounded-full border border-amber-300/70 bg-amber-100/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+                <span className="rounded-full border border-amber-300/70 dark:border-amber-500/30 bg-amber-100/70 dark:bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-300">
                   Modifiche non salvate
                 </span>
               )}

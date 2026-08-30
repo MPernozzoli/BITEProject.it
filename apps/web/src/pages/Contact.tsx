@@ -281,19 +281,19 @@ const Contact = () => {
 
       <section className="px-6 md:px-12 pt-2">
         <div className="page-section-narrow">
-          <div className="glass-panel rounded-[34px] border-emerald-200/60 bg-gradient-to-br from-emerald-50/80 to-white/55 p-6 md:p-8">
+          <div className="glass-panel rounded-[34px] border-emerald-200/60 dark:border-emerald-500/30 bg-gradient-to-br from-emerald-50/80 dark:from-emerald-500/10 to-glass/55 p-6 md:p-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                 <Ship size={20} />
               </span>
               <div className="min-w-0 space-y-3">
-                <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-emerald-800/80">
+                <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-emerald-800/80 dark:text-emerald-300">
                   {t("contact.voyages.eyebrow")}
                 </p>
-                <h2 className="editorial-heading text-2xl md:text-3xl text-emerald-950">
+                <h2 className="editorial-heading text-2xl md:text-3xl text-emerald-950 dark:text-emerald-300">
                   {t("contact.voyages.title")}
                 </h2>
-                <p className="editorial-body text-emerald-900/80 max-w-xl">{t("contact.voyages.body")}</p>
+                <p className="editorial-body text-emerald-900/80 dark:text-emerald-300 max-w-xl">{t("contact.voyages.body")}</p>
 
                 {bookableVoyages.length === 1 ? (
                   <div className="space-y-1.5">
@@ -305,7 +305,7 @@ const Contact = () => {
                       <ArrowRight size={16} />
                     </Link>
                     {formatVoyageDateRange(bookableVoyages[0], lang === "it" ? "it-IT" : "en-US") ? (
-                      <p className="text-xs font-sans text-emerald-900/70">
+                      <p className="text-xs font-sans text-emerald-900/70 dark:text-emerald-300">
                         {formatVoyageDateRange(bookableVoyages[0], lang === "it" ? "it-IT" : "en-US")}
                       </p>
                     ) : null}
@@ -321,7 +321,7 @@ const Contact = () => {
                   </button>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-sm font-sans text-emerald-900/75">{t("contact.voyages.none")}</p>
+                    <p className="text-sm font-sans text-emerald-900/75 dark:text-emerald-300">{t("contact.voyages.none")}</p>
                     <Link
                       to={withLang(lang, "/voyages")}
                       className="glass-button inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium"
@@ -332,7 +332,7 @@ const Contact = () => {
                   </div>
                 )}
 
-                <p className="pt-1 text-sm font-sans text-emerald-900/70">{t("contact.form.note")}</p>
+                <p className="pt-1 text-sm font-sans text-emerald-900/70 dark:text-emerald-300">{t("contact.form.note")}</p>
               </div>
             </div>
           </div>

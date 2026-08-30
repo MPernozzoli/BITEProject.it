@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
-import { PUBLIC_SITE_URL, localizedUrl } from '../_shared/email-config.ts'
+import { PUBLIC_SITE_URL, localizedUrl, trackedUrl } from '../_shared/email-config.ts'
+import { EMAIL_TRACKING } from '../_shared/tracking.ts'
 import { normalizeSystemEmailAutomation } from '../_shared/system-email-automation.ts'
 
 const corsHeaders = {
@@ -294,12 +295,18 @@ Deno.serve(async (req) => {
         article.excerpt_en,
         ''
       )
+      // Una notifica esce dal sito: il click torna da fuori e va attribuito
+      // alla storia che lo ha generato, non al mucchio del traffico diretto.
+      const storyTracking = { ...EMAIL_TRACKING.notification, campaign: story.slug }
       const articleUrl =
         fallbackArticleUrl ||
-        localizedUrl(profile.preferred_language, `/logbook/${article.slug}`)
+        trackedUrl(profile.preferred_language, `/logbook/${article.slug}`, {
+          ...storyTracking,
+          content: 'nuovo-capitolo',
+        })
       const storyUrl =
         fallbackStoryUrl ||
-        localizedUrl(profile.preferred_language, `/logbook/story/${story.slug}`)
+        trackedUrl(profile.preferred_language, `/logbook/story/${story.slug}`, storyTracking)
       const publishedLabel = article.published_at
         ? new Intl.DateTimeFormat(
             normalizeLanguage(profile.preferred_language) === 'en'

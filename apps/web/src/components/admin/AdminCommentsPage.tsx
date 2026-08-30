@@ -318,8 +318,8 @@ export default function AdminCommentsPage() {
                         </span>
                         <span className={`ml-auto text-[9px] px-2 py-0.5 rounded-full ${
                           comment.local_status === "new" ? "bg-accent/20 text-accent" :
-                          comment.local_status === "replied" ? "bg-green-500/10 text-green-600" :
-                          comment.local_status === "hidden" ? "bg-yellow-500/10 text-yellow-600" :
+                          comment.local_status === "replied" ? "bg-green-500/10 text-green-600 dark:text-green-300" :
+                          comment.local_status === "hidden" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-300" :
                           "bg-muted text-muted-foreground"
                         }`}>
                           {STATUS_LABELS[comment.local_status]}

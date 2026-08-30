@@ -24,7 +24,8 @@ import {
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { createCartoRasterStyle } from "@/lib/maplibre";
+import { bindMapToTheme,
+  createThemedCartoStyle } from "@/lib/maplibre";
 import {
   totalWaypointDistance,
   totalCoordinateDistanceKm,
@@ -2017,11 +2018,14 @@ const AdminVoyageManager = ({
 
     mapRef.current = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: createCartoRasterStyle(),
+      style: createThemedCartoStyle(),
       center: [15, 40],
       zoom: 5,
       attributionControl: false,
     });
+
+    // La basemap segue il tema anche se cambia a mappa aperta.
+    bindMapToTheme(mapRef.current);
 
     mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
@@ -3211,7 +3215,7 @@ const AdminVoyageManager = ({
                             : "Genera e salva la polyline stradale persistita da riusare nel logbook senza ricalcoli."}
                         </p>
                         {isRouteDraftDirty ? (
-                          <p className="mt-2 text-[11px] font-sans text-amber-700">
+                          <p className="mt-2 text-[11px] font-sans text-amber-700 dark:text-amber-300">
                             Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
                           </p>
                         ) : null}
@@ -3249,7 +3253,7 @@ const AdminVoyageManager = ({
                             : "Genera e salva la linea sui canali/fiumi per la mappa pubblica (stesso tipo voyage: acqua)."}
                         </p>
                         {isRouteDraftDirty ? (
-                          <p className="mt-2 text-[11px] font-sans text-amber-700">
+                          <p className="mt-2 text-[11px] font-sans text-amber-700 dark:text-amber-300">
                             Salva prima la rotta per rigenerare una geometria coerente con i waypoint persistiti.
                           </p>
                         ) : null}
@@ -3282,7 +3286,7 @@ const AdminVoyageManager = ({
                             : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                     </p>
                     {isRouteDraftDirty && (
-                      <p className="mt-1 text-[11px] font-sans text-amber-700">
+                      <p className="mt-1 text-[11px] font-sans text-amber-700 dark:text-amber-300">
                         Modifiche locali non ancora salvate.
                       </p>
                     )}

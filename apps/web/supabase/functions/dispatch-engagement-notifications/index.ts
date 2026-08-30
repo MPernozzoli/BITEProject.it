@@ -5,6 +5,7 @@ import {
   type EngagementNotificationFrequency,
 } from '../_shared/email-preferences.ts'
 import { PUBLIC_SITE_URL, localizedUrl } from '../_shared/email-config.ts'
+import { EMAIL_TRACKING, buildTrackedUrl } from '../_shared/tracking.ts'
 import { normalizeLanguage } from '../_shared/newsletter-helpers.ts'
 
 const corsHeaders = {
@@ -149,7 +150,8 @@ function formatTimestamp(value: string, language: string | null): string {
 function buildNotificationUrl(
   article: ArticleRow | null | undefined,
   notification: PendingNotification,
-  lang: string | null = null
+  lang: string | null = null,
+  channel: 'email' | 'push' = 'email'
 ): string {
   const articlePath = article ? `/logbook/${article.slug}` : '/logbook'
   const params = new URLSearchParams({
@@ -161,7 +163,13 @@ function buildNotificationUrl(
     params.set('comment', notification.comment_id)
   }
 
-  return `${localizedUrl(lang, articlePath)}?${params.toString()}`
+  // Email e push sono due consegne diverse della stessa notifica: si
+  // distinguono nel mezzo, così si vede quale delle due riporta davvero
+  // qualcuno sul sito.
+  return buildTrackedUrl(`${localizedUrl(lang, articlePath)}?${params.toString()}`, {
+    ...(channel === 'push' ? EMAIL_TRACKING.push : EMAIL_TRACKING.notification),
+    campaign: notification.notification_category ?? 'engagement',
+  })
 }
 
 function buildPushMessage(params: {
@@ -509,7 +517,15 @@ Deno.serve(async (req) => {
                 notification: {
                   title: pushMessage.title,
                   body: pushMessage.body,
-                  url: item.articleUrl,
+                  // Stessa destinazione dell'email, mezzo diverso: la push va
+                  // taggata come push, altrimenti le due consegne si sommano
+                  // in un unico numero che non dice quale delle due funziona.
+                  url: buildNotificationUrl(
+                    articlesById.get(notification.article_id),
+                    notification,
+                    recipientLanguage,
+                    'push'
+                  ),
                   icon: item.articleImageUrl,
                 },
               })

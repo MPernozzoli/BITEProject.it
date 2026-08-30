@@ -156,7 +156,7 @@ const AdminMcpAuthorize = () => {
 
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen flex items-center justify-center px-6 py-24">
-      <div className="w-full max-w-lg rounded-[34px] border border-stone-200/85 bg-white/70 p-7 md:p-9 shadow-[0_20px_48px_rgba(15,23,42,0.08)]">
+      <div className="w-full max-w-lg rounded-[34px] border border-border/85 bg-glass/70 p-7 md:p-9 shadow-[0_20px_48px_rgba(15,23,42,0.08)]">
         {children}
       </div>
     </div>
@@ -205,7 +205,7 @@ const AdminMcpAuthorize = () => {
         </p>
       </div>
 
-      <div className="rounded-[24px] border border-white/60 bg-white/68 p-5">
+      <div className="rounded-[24px] border border-glass-edge/60 bg-glass/68 p-5">
         <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-3">
           {copy.permissions}
         </p>

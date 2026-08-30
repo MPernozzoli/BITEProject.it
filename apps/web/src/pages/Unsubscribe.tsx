@@ -254,7 +254,7 @@ const Unsubscribe = () => {
   return (
     <div className="min-h-screen px-6 py-20">
       <div className="mx-auto max-w-3xl">
-        <div className="glass-panel rounded-[34px] border border-black/6 bg-white/80 p-6 md:p-10 shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
+        <div className="glass-panel rounded-[34px] border border-foreground/6 bg-glass/80 p-6 md:p-10 shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
           <p className="mb-3 text-xs font-sans uppercase tracking-[0.28em] text-muted-foreground">
             {lang === "it" ? "Preferenze Email" : "Email Preferences"}
           </p>
@@ -274,7 +274,7 @@ const Unsubscribe = () => {
           )}
 
           {status === "invalid" && (
-            <div className="mt-10 rounded-[24px] border border-black/6 bg-white px-6 py-8 text-center">
+            <div className="mt-10 rounded-[24px] border border-foreground/6 bg-glass px-6 py-8 text-center">
               <p className="text-muted-foreground">
                 {lang === "it" ? "Link non valido o non più disponibile." : "This link is invalid or no longer available."}
               </p>
@@ -283,7 +283,7 @@ const Unsubscribe = () => {
 
           {(status === "ready" || status === "success" || status === "error") && (
             <div className="mt-10 space-y-8">
-              <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+              <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                 <p className="text-xs font-sans uppercase tracking-[0.22em] text-muted-foreground">
                   {lang === "it" ? "Indirizzo gestito" : "Managed address"}
                 </p>
@@ -313,7 +313,7 @@ const Unsubscribe = () => {
                       className={`rounded-[26px] border px-5 py-5 text-left transition-colors ${
                         enabled
                           ? "border-accent/30 bg-accent/10"
-                          : "border-black/8 bg-white"
+                          : "border-foreground/8 bg-glass"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-4">
@@ -339,7 +339,7 @@ const Unsubscribe = () => {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                   <p className="text-sm font-medium">
                     {lang === "it" ? "Notifiche like" : "Like notifications"}
                   </p>
@@ -372,7 +372,7 @@ const Unsubscribe = () => {
                   </div>
                 </div>
 
-                <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                   <p className="text-sm font-medium">
                     {lang === "it" ? "Notifiche commenti" : "Comment notifications"}
                   </p>
@@ -406,14 +406,14 @@ const Unsubscribe = () => {
                 </div>
               </div>
 
-              <div className="rounded-[26px] border border-black/6 bg-white px-5 py-5">
+              <div className="rounded-[26px] border border-foreground/6 bg-glass px-5 py-5">
                 <label className="text-xs font-sans uppercase tracking-[0.22em] text-muted-foreground">
                   {lang === "it" ? "Perché stai cambiando queste preferenze?" : "Why are you changing these preferences?"}
                 </label>
                 <select
                   value={reasonCode}
                   onChange={(event) => setReasonCode(event.target.value as ReasonCode | "")}
-                  className="mt-3 w-full rounded-[18px] border border-black/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none"
+                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none"
                 >
                   <option value="">{lang === "it" ? "Seleziona un motivo facoltativo" : "Select an optional reason"}</option>
                   {reasonOptions.map((option) => (
@@ -426,7 +426,7 @@ const Unsubscribe = () => {
                   value={reasonText}
                   onChange={(event) => setReasonText(event.target.value)}
                   rows={4}
-                  className="mt-3 w-full rounded-[18px] border border-black/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none resize-y"
+                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none resize-y"
                   placeholder={
                     lang === "it"
                       ? "Se vuoi, raccontaci meglio il motivo."
@@ -435,7 +435,7 @@ const Unsubscribe = () => {
                 />
               </div>
 
-              <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+              <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {hasAnyEnabled
                     ? lang === "it"

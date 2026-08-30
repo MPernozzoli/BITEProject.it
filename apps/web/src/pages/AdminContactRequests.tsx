@@ -396,12 +396,12 @@ const AdminContactRequests = () => {
                             </span>
                           )}
                           {answered && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.14em] text-emerald-800">
+                            <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-300">
                               Risposta inviata
                             </span>
                           )}
                           {request.archived && (
-                            <span className="rounded-full bg-stone-200/70 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.14em] text-stone-700">
+                            <span className="rounded-full bg-muted/70 px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.14em] text-foreground/80">
                               Archiviata
                             </span>
                           )}
@@ -460,8 +460,8 @@ const AdminContactRequests = () => {
                       Risposte inviate
                     </p>
                     {selectedReplies.map((item) => (
-                      <div key={item.id} className="rounded-[24px] border border-emerald-200/70 bg-emerald-50/50 p-5">
-                        <p className="text-xs font-sans text-emerald-900/80">
+                      <div key={item.id} className="rounded-[24px] border border-emerald-200/70 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/10 p-5">
+                        <p className="text-xs font-sans text-emerald-900/80 dark:text-emerald-300">
                           {item.from_address} → {item.to_addresses.join(", ")} · {formatDate(item.created_at)}
                           {item.sent_by_name ? ` · ${item.sent_by_name}` : ""}
                         </p>

@@ -1,7 +1,62 @@
 import maplibregl from "maplibre-gl";
 
 // Base raster CARTO (URL delle tile + API key) condivisa con `apps/data`.
+import {
+  CARTO_SOURCE_ID,
+  cartoRasterTileUrls,
+  createCartoRasterStyle,
+  type CartoBasemapVariant,
+} from "@shared/maps/carto";
+
 export { CARTO_ATTRIBUTION, createCartoRasterStyle } from "@shared/maps/carto";
+
+/** Il tema risolto, letto dal DOM: qui non c'è React, e la classe è già lì. */
+const currentBasemapVariant = (): CartoBasemapVariant =>
+  typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light";
+
+/** Stile CARTO nella variante del tema corrente. Da usare alla creazione della mappa. */
+export const createThemedCartoStyle = () => createCartoRasterStyle(currentBasemapVariant());
+
+/**
+ * Tiene la basemap allineata al tema mentre la mappa è viva.
+ *
+ * Scambia le tile della sorgente raster invece di rifare lo stile: `setStyle`
+ * ricostruirebbe la mappa da zero e porterebbe via rotte, tappe e layer che
+ * ogni componente aggiunge dopo la creazione. Così cambia solo il fondale.
+ *
+ * Si stacca da sé quando la mappa viene distrutta (MapLibre emette `remove`),
+ * così i chiamanti non devono ricordarsene nella pulizia dell'effetto.
+ */
+export const bindMapToTheme = (map: maplibregl.Map) => {
+  if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
+    return () => undefined;
+  }
+
+  let applied = currentBasemapVariant();
+
+  const observer = new MutationObserver(() => {
+    const next = currentBasemapVariant();
+    if (next === applied) return;
+    applied = next;
+    try {
+      const source = map.getSource(CARTO_SOURCE_ID);
+      // Sorgente assente: lo stile è ancora in caricamento, o la mappa è già andata.
+      if (source && "setTiles" in source) {
+        (source as maplibregl.RasterTileSource).setTiles(cartoRasterTileUrls(next));
+      }
+    } catch {
+      // Mappa distrutta tra un tick e l'altro: non c'è più niente da aggiornare.
+      observer.disconnect();
+    }
+  });
+
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  map.once("remove", () => observer.disconnect());
+
+  return () => observer.disconnect();
+};
 
 const RESIZE_RETRY_DELAYS_MS = [0, 120, 480];
 

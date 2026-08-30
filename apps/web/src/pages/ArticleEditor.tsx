@@ -11,7 +11,8 @@ import type { Json } from "@/integrations/supabase/types";
 import { ArrowLeft, Save, Send, Image as ImageIcon, X, Plus, Crop, Languages, Loader2, Sparkles, Eye } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { createCartoRasterStyle } from "@/lib/maplibre";
+import { bindMapToTheme,
+  createThemedCartoStyle } from "@/lib/maplibre";
 import { buildPublicVoyageGeometry, buildVoyageSegmentGeometry, geocodePlace, getWaypointOptionLabel, resolveArticleRouteRange } from "@/lib/voyage-utils";
 import type { Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
 import { toast } from "sonner";
@@ -1533,11 +1534,14 @@ const ArticleEditor = () => {
     if (!geoMapRef.current || geoMapInstanceRef.current) return;
     const map = new maplibregl.Map({
       container: geoMapRef.current,
-      style: createCartoRasterStyle(),
+      style: createThemedCartoStyle(),
       center: [longitude || 15, latitude || 40],
       zoom: latitude ? 10 : 5,
       attributionControl: false,
     });
+
+    // La basemap segue il tema anche se cambia a mappa aperta.
+    bindMapToTheme(map);
     geoMapInstanceRef.current = map;
     map.once("load", () => requestAnimationFrame(() => map.resize()));
 
@@ -2536,7 +2540,7 @@ const ArticleEditor = () => {
 
             {serverScheduledAt && persistedArticleStatus === "scheduled" && (
               <div className="rounded-[14px] border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs font-sans text-foreground/90 leading-relaxed">
-                <span className="font-medium text-amber-900 dark:text-amber-100">Programmato sul server</span> per{" "}
+                <span className="font-medium text-amber-900 dark:text-amber-300 dark:text-amber-100">Programmato sul server</span> per{" "}
                 {new Intl.DateTimeFormat("it-IT", { dateStyle: "short", timeStyle: "short" }).format(new Date(serverScheduledAt))}.
                 Per cambiare data e ora usa il <span className="font-medium">Piano editoriale</span> in dashboard (non più da qui).
               </div>

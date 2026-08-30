@@ -1007,7 +1007,7 @@ const Index = () => {
                 className="group glass-button hero-cta inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
               >
                 <span className="pr-1">{t("hero.cta.journey")}</span>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/14 ring-1 ring-white/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-glass/14 ring-1 ring-glass-edge/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
                   <ArrowRight size={16} aria-hidden />
                 </span>
               </Link>
@@ -1016,7 +1016,7 @@ const Index = () => {
                 className="group glass-button-dark hero-cta hero-cta-dark inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
               >
                 <span className="pr-1">{t("hero.cta.collaborate")}</span>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-glass/10 ring-1 ring-glass-edge/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
                   <ArrowRight size={16} aria-hidden />
                 </span>
               </Link>
@@ -1137,10 +1137,10 @@ const Index = () => {
               { key: "storytelling", icon: Pen },
             ].map(({ key, icon: Icon }) => (
               <motion.div key={key} variants={topicItemVariants} className="glass-chip-light rounded-[28px] p-6 active:scale-[0.99] transition-transform duration-glass ease-out-expo">
-                <div className="glass-chip-light inline-flex h-12 w-12 items-center justify-center mb-5 text-slate-800">
+                <div className="glass-chip-light inline-flex h-12 w-12 items-center justify-center mb-5 text-foreground/90">
                   <Icon size={20} />
                 </div>
-                <h3 className="editorial-heading text-xl mb-3 text-slate-950">{t(`topics.${key}`)}</h3>
+                <h3 className="editorial-heading text-xl mb-3 text-foreground">{t(`topics.${key}`)}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{t(`topics.${key}.text`)}</p>
               </motion.div>
             ))}
@@ -1237,7 +1237,7 @@ const Index = () => {
         <div className="page-section-wide glass-panel rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             <div className="glass-frame rounded-[30px] p-2">
-              <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))]">
+              <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,rgba(255,255,255,0.42),rgba(243,246,247,0.62))] dark:bg-[linear-gradient(180deg,rgba(26,37,55,0.42),rgba(20,30,46,0.62))]">
                 <LazyVoyageMap
                   voyages={voyages}
                   waypointsMap={waypointsMap}
@@ -1267,7 +1267,7 @@ const Index = () => {
                 className="group glass-button-secondary inline-flex items-center justify-between gap-3 rounded-full pl-6 pr-2 py-2 text-sm font-sans font-medium active:scale-[0.98] transition-transform duration-glass ease-out-expo"
               >
                 <span className="px-1">{t("route.explore")}</span>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/5 ring-1 ring-stone-900/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-foreground/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
                   <ArrowRight size={14} aria-hidden />
                 </span>
               </Link>
@@ -1280,14 +1280,14 @@ const Index = () => {
         <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 md:px-10 md:py-12">
           <div className="w-full">
             <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("collab.label")}</p>
-            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-slate-950">{t("collab.title")}</h2>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-8 whitespace-pre-line text-foreground">{t("collab.title")}</h2>
             <p className="editorial-body text-muted-foreground leading-relaxed text-lg mb-10">{t("collab.text")}</p>
             <Link
               to="/collaborations"
               className="group glass-button-secondary inline-flex items-center justify-between gap-3 rounded-full pl-8 pr-2 py-2 text-sm font-sans font-medium tracking-wide active:scale-[0.98] transition-transform duration-glass ease-out-expo"
             >
               <span className="px-1">{t("collab.cta")}</span>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/5 ring-1 ring-stone-900/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-foreground/5 ring-1 ring-foreground/10 transition-transform duration-glass ease-out-expo group-hover:translate-x-0.5 group-hover:-translate-y-px">
                 <ArrowRight size={16} aria-hidden />
               </span>
             </Link>
@@ -1307,7 +1307,7 @@ const Index = () => {
         <HomeAnimatedSection className="page-section pt-0">
           <div className="page-section-wide glass-panel-light rounded-[38px] px-6 py-10 text-center md:px-10 md:py-12">
             <p className="glass-chip-light inline-flex px-4 py-2 text-xs font-sans tracking-[0.3em] uppercase text-accent mb-8">{t("newsletter.label")}</p>
-            <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-slate-950">{t("newsletter.title")}</h2>
+            <h2 className="editorial-heading text-3xl md:text-5xl mb-6 text-foreground">{t("newsletter.title")}</h2>
             <p className="editorial-body text-muted-foreground mb-10 max-w-lg mx-auto">{t("newsletter.text")}</p>
             <form onSubmit={handleNewsletterSubscribe} className="max-w-xl mx-auto space-y-4">
               <input
@@ -1322,7 +1322,7 @@ const Index = () => {
               />
               <div className="flex flex-col sm:flex-row gap-3">
                 {session?.user.email ? (
-                  <div className="glass-chip-light flex-1 px-5 py-3 text-sm text-slate-800 text-left">
+                  <div className="glass-chip-light flex-1 px-5 py-3 text-sm text-foreground/90 text-left">
                     {lang === "it"
                       ? `Ti iscriveremo con ${session.user.email}`
                       : `We'll subscribe you with ${session.user.email}`}
@@ -1334,7 +1334,7 @@ const Index = () => {
                       value={newsletterEmail}
                       onChange={(event) => setNewsletterEmail(event.target.value)}
                       placeholder={t("newsletter.placeholder")}
-                      className="w-full bg-transparent px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none"
+                      className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                     />
                   </div>
                 )}
@@ -1351,13 +1351,13 @@ const Index = () => {
                   type="checkbox"
                   checked={newsletterConsent}
                   onChange={(event) => setNewsletterConsent(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 bg-transparent accent-slate-900"
+                  className="mt-1 h-4 w-4 rounded border-border bg-transparent accent-primary"
                 />
                 <span>
                   {lang === "it"
                     ? "Acconsento a ricevere gli Appunti dalla barca di BITE e confermo di aver letto la "
                     : "I agree to receive BITE's Notes from the boat and confirm that I have read the "}
-                  <Link to="/privacy-policy" className="underline decoration-slate-400 underline-offset-4 hover:text-slate-950">
+                  <Link to="/privacy-policy" className="underline decoration-muted-foreground underline-offset-4 hover:text-foreground">
                     {lang === "it" ? "Privacy Policy" : "Privacy Policy"}
                   </Link>
                   .

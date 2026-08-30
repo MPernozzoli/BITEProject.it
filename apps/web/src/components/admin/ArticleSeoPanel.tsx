@@ -64,17 +64,17 @@ const ArticleSeoPanel = ({
   switch (seoOptimization?.status) {
   case "ready":
   return {
-  className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
+  className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:text-emerald-100",
   label: "Pronta",
   };
   case "processing":
   return {
-  className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-100",
+  className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300 dark:text-sky-100",
   label: "In generazione",
   };
   case "failed":
   return {
-  className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-100",
+  className: "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300 dark:text-amber-100",
   label: "Da rivedere",
   };
   case "pending":
@@ -114,14 +114,14 @@ const ArticleSeoPanel = ({
           </p>
         ) : seoOptimization.status === "failed" ? (
           <div className="space-y-3">
-            <p className="text-xs font-sans leading-relaxed text-amber-800 dark:text-amber-100">
+            <p className="text-xs font-sans leading-relaxed text-amber-800 dark:text-amber-300 dark:text-amber-100">
               {seoOptimization.error_message || "La generazione SEO non è riuscita."}
             </p>
             <button
               type="button"
               onClick={() => void runSeoOptimization(id, { force: true })}
               disabled={saving || aiTranslating || seoOptimizing}
-              className="inline-flex items-center gap-2 border border-amber-500/40 px-3 py-1.5 text-xs font-sans text-amber-800 transition-colors hover:border-amber-600 hover:text-foreground disabled:opacity-50 dark:text-amber-100"
+              className="inline-flex items-center gap-2 border border-amber-500/40 px-3 py-1.5 text-xs font-sans text-amber-800 dark:text-amber-300 transition-colors hover:border-amber-600 hover:text-foreground disabled:opacity-50 dark:text-amber-100"
             >
               {seoOptimizing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
               Riprova

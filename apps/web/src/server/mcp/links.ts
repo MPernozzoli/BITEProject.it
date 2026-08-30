@@ -84,6 +84,15 @@ export function articleLinks(
   return buildLinks(siteUrl, "/logbook", record, tracking);
 }
 
+/** `https://biteproject.it/it/voyages/<slug>` e la sua controparte inglese. */
+export function voyageLinks(
+  siteUrl: string,
+  record: BilingualSlugs | null | undefined,
+  tracking?: TrackingParams | null,
+): PublicLinks {
+  return buildLinks(siteUrl, "/voyages", record, tracking);
+}
+
 /** `https://biteproject.it/it/logbook/story/<slug>` e la controparte inglese. */
 export function storyLinks(
   siteUrl: string,

@@ -423,7 +423,7 @@ const AdminCommunityManager = () => {
 
         <div className="space-y-4">
           {tierFamilies.map((group) => (
-            <div key={group.family} className="rounded-[24px] border border-stone-200/80 bg-white/60 p-4">
+            <div key={group.family} className="rounded-[24px] border border-border/80 bg-glass/60 p-4">
               <div className="mb-3 flex items-center gap-2">
                 <Crown size={16} className="text-accent" />
                 <h4 className="font-sans text-sm font-semibold text-foreground">{group.label}</h4>
@@ -432,7 +432,7 @@ const AdminCommunityManager = () => {
                 {group.rows.map((tier) => {
                   const form = tierForms[tier.id] || tierFormFromRow(tier);
                   return (
-                    <div key={tier.id} className="rounded-[20px] border border-white/80 bg-background/70 p-4">
+                    <div key={tier.id} className="rounded-[20px] border border-glass-edge/80 bg-background/70 p-4">
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <span className="glass-chip px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
                           {intervalLabel(tier.billing_interval)}
@@ -452,7 +452,7 @@ const AdminCommunityManager = () => {
                           <input
                             value={form.name}
                             onChange={(event) => updateTierForm(tier.id, { name: event.target.value })}
-                            className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                            className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                           />
                         </label>
                         <label className="block">
@@ -461,7 +461,7 @@ const AdminCommunityManager = () => {
                             inputMode="decimal"
                             value={form.price}
                             onChange={(event) => updateTierForm(tier.id, { price: event.target.value })}
-                            className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans tabular-nums"
+                            className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans tabular-nums"
                           />
                         </label>
                       </div>
@@ -471,7 +471,7 @@ const AdminCommunityManager = () => {
                           value={form.description}
                           onChange={(event) => updateTierForm(tier.id, { description: event.target.value })}
                           rows={2}
-                          className="w-full resize-none rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                          className="w-full resize-none rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                         />
                       </label>
                       <div className="mt-3 flex items-center justify-between gap-3">
@@ -511,7 +511,7 @@ const AdminCommunityManager = () => {
         <div className="grid gap-3 xl:grid-cols-[1fr_0.9fr]">
           <div className="space-y-3">
             {channels.map((channel) => (
-              <div key={channel.id} className="rounded-[20px] border border-stone-200/80 bg-white/60 p-4">
+              <div key={channel.id} className="rounded-[20px] border border-border/80 bg-glass/60 p-4">
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_7rem]">
                   <label className="block">
                     <span className="mb-1 block text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">Nome</span>
@@ -520,7 +520,7 @@ const AdminCommunityManager = () => {
                       onBlur={(event) => {
                         if (event.target.value !== channel.name) void saveChannel(channel, { name: event.target.value });
                       }}
-                      className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                      className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                     />
                   </label>
                   <label className="block">
@@ -528,7 +528,7 @@ const AdminCommunityManager = () => {
                     <select
                       value={channel.visibility}
                       onChange={(event) => void saveChannel(channel, { visibility: event.target.value as ChannelRow["visibility"] })}
-                      className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                      className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                     >
                       <option value="public">Pubblico</option>
                       <option value="members">Membri</option>
@@ -551,13 +551,13 @@ const AdminCommunityManager = () => {
                       if (event.target.value !== channel.description) void saveChannel(channel, { description: event.target.value });
                     }}
                     placeholder="Descrizione"
-                    className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                    className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                   />
                   <select
                     value={channel.min_tier_id || "none"}
                     disabled={channel.visibility !== "tier"}
                     onChange={(event) => void saveChannel(channel, { min_tier_id: event.target.value === "none" ? null : event.target.value })}
-                    className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
+                    className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
                   >
                     <option value="none">Nessun tier</option>
                     {tiers.map((tier) => (
@@ -570,33 +570,33 @@ const AdminCommunityManager = () => {
             ))}
           </div>
 
-          <div className="rounded-[20px] border border-stone-200/80 bg-white/60 p-4">
+          <div className="rounded-[20px] border border-border/80 bg-glass/60 p-4">
             <p className="mb-3 text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Nuovo canale</p>
             <div className="space-y-3">
               <input
                 value={channelDraft.name}
                 onChange={(event) => setChannelDraft((current) => ({ ...current, name: event.target.value }))}
                 placeholder="Nome"
-                className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
               />
               <input
                 value={channelDraft.slug}
                 onChange={(event) => setChannelDraft((current) => ({ ...current, slug: event.target.value }))}
                 placeholder="slug-canale"
-                className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
               />
               <textarea
                 value={channelDraft.description}
                 onChange={(event) => setChannelDraft((current) => ({ ...current, description: event.target.value }))}
                 placeholder="Descrizione"
                 rows={3}
-                className="w-full resize-none rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                className="w-full resize-none rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
               />
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={channelDraft.visibility}
                   onChange={(event) => setChannelDraft((current) => ({ ...current, visibility: event.target.value }))}
-                  className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                  className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                 >
                   <option value="members">Membri</option>
                   <option value="tier">Tier</option>
@@ -606,7 +606,7 @@ const AdminCommunityManager = () => {
                   value={channelDraft.minTierId}
                   disabled={channelDraft.visibility !== "tier"}
                   onChange={(event) => setChannelDraft((current) => ({ ...current, minTierId: event.target.value }))}
-                  className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
+                  className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
                 >
                   <option value="none">Tier</option>
                   {tiers.map((tier) => (
@@ -639,7 +639,7 @@ const AdminCommunityManager = () => {
               value={profileSearch}
               onChange={(event) => setProfileSearch(event.target.value)}
               placeholder="Cerca nome o email"
-              className="w-full rounded-[18px] border border-border/70 bg-white/80 px-4 py-2.5 text-sm font-sans"
+              className="w-full rounded-[18px] border border-border/70 bg-glass/80 px-4 py-2.5 text-sm font-sans"
             />
           </label>
 
@@ -651,7 +651,7 @@ const AdminCommunityManager = () => {
                   type="button"
                   onClick={() => void setModerator(profile.id, true)}
                   disabled={roleBusyId === profile.id}
-                  className="flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/80 bg-white/70 px-4 py-3 text-left text-sm font-sans hover:border-accent/50 disabled:opacity-60"
+                  className="flex w-full items-center justify-between gap-3 rounded-[18px] border border-glass-edge/80 bg-glass/70 px-4 py-3 text-left text-sm font-sans hover:border-accent/50 disabled:opacity-60"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-foreground">{profile.name || profile.email || profile.id}</span>
@@ -668,7 +668,7 @@ const AdminCommunityManager = () => {
               <p className="text-sm font-sans text-muted-foreground">Nessun ruolo community o membro attivo da mostrare.</p>
             ) : (
               roles.map((role) => (
-                <article key={role.profile_id} className="rounded-[20px] border border-stone-200/80 bg-white/60 px-4 py-3">
+                <article key={role.profile_id} className="rounded-[20px] border border-border/80 bg-glass/60 px-4 py-3">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-sans font-medium text-foreground">{role.name || role.email || role.profile_id}</p>
@@ -716,7 +716,7 @@ const AdminCommunityManager = () => {
               <p className="text-sm font-sans text-muted-foreground">Nessuna live creata.</p>
             ) : (
               liveEvents.map((event) => (
-                <article key={event.id} className="rounded-[20px] border border-stone-200/80 bg-white/60 px-4 py-4">
+                <article key={event.id} className="rounded-[20px] border border-border/80 bg-glass/60 px-4 py-4">
                   <div className="mb-3 flex items-start justify-between gap-4">
                     <span className="glass-chip px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
                       {liveStatusForAdmin(event)}
@@ -732,7 +732,7 @@ const AdminCommunityManager = () => {
                           const title = inputEvent.target.value.trim();
                           if (title && title !== event.title) void saveLiveEvent(event, { title });
                         }}
-                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                        className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                       />
                     </label>
                     <div className="grid gap-3 md:grid-cols-2">
@@ -748,7 +748,7 @@ const AdminCommunityManager = () => {
                               void saveLiveEvent(event, { starts_at: nextDate.toISOString() });
                             }
                           }}
-                          className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                          className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                         />
                       </label>
                       <label className="block">
@@ -761,7 +761,7 @@ const AdminCommunityManager = () => {
                             const nextValue = value ? new Date(value).toISOString() : null;
                             if (nextValue !== event.ends_at) void saveLiveEvent(event, { ends_at: nextValue });
                           }}
-                          className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                          className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                         />
                       </label>
                     </div>
@@ -769,7 +769,7 @@ const AdminCommunityManager = () => {
                       <select
                         value={event.visibility}
                         onChange={(selectEvent) => void saveLiveEvent(event, { visibility: selectEvent.target.value as LiveEventRow["visibility"] })}
-                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                        className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                       >
                         <option value="public">Pubblica</option>
                         <option value="members">Membri</option>
@@ -779,7 +779,7 @@ const AdminCommunityManager = () => {
                         value={event.min_tier_id || "none"}
                         disabled={event.visibility !== "tier"}
                         onChange={(selectEvent) => void saveLiveEvent(event, { min_tier_id: selectEvent.target.value === "none" ? null : selectEvent.target.value })}
-                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
+                        className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans disabled:opacity-50"
                       >
                         <option value="none">Nessun tier</option>
                         {tiers.map((tier) => (
@@ -789,7 +789,7 @@ const AdminCommunityManager = () => {
                       <select
                         value={event.livekit_mode}
                         onChange={(selectEvent) => void saveLiveEvent(event, { livekit_mode: selectEvent.target.value as LiveEventRow["livekit_mode"] })}
-                        className="w-full rounded-[16px] border border-border/70 bg-white/80 px-3 py-2 text-sm font-sans"
+                        className="w-full rounded-[16px] border border-border/70 bg-glass/80 px-3 py-2 text-sm font-sans"
                       >
                         <option value="video">Video</option>
                         <option value="audio">Audio</option>
@@ -827,7 +827,7 @@ const AdminCommunityManager = () => {
           <div className="space-y-3">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">Iscrizioni</p>
             {subscriptions.map((subscription) => (
-              <div key={subscription.id} className="rounded-[18px] border border-white/80 bg-white/60 px-4 py-3">
+              <div key={subscription.id} className="rounded-[18px] border border-glass-edge/80 bg-glass/60 px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-sans font-medium text-foreground">
@@ -848,7 +848,7 @@ const AdminCommunityManager = () => {
           <div className="space-y-3">
             <p className="text-xs font-sans uppercase tracking-[0.2em] text-muted-foreground">Pagamenti</p>
             {payments.map((payment) => (
-              <div key={payment.id} className="rounded-[18px] border border-white/80 bg-white/60 px-4 py-3">
+              <div key={payment.id} className="rounded-[18px] border border-glass-edge/80 bg-glass/60 px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-sans font-medium text-foreground">

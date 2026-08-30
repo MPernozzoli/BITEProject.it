@@ -82,7 +82,7 @@ const NewsletterConfirm = () => {
   return (
     <div className="min-h-screen px-6 py-20">
       <div className="mx-auto max-w-2xl">
-        <div className="glass-panel rounded-[34px] border border-black/6 bg-white/80 p-6 md:p-10 shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
+        <div className="glass-panel rounded-[34px] border border-foreground/6 bg-glass/80 p-6 md:p-10 shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
           <p className="mb-3 text-xs font-sans uppercase tracking-[0.28em] text-muted-foreground">
             {lang === "it" ? "Conferma iscrizione" : "Confirm subscription"}
           </p>
@@ -105,7 +105,7 @@ const NewsletterConfirm = () => {
             {status === "ready" && (
               <div className="space-y-6">
                 {email ? (
-                  <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+                  <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                     <p className="text-xs font-sans uppercase tracking-[0.22em] text-muted-foreground">
                       {lang === "it" ? "Indirizzo da confermare" : "Address to confirm"}
                     </p>
@@ -141,7 +141,7 @@ const NewsletterConfirm = () => {
             )}
 
             {status === "already" && (
-              <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+              <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                 <p className="text-sm text-muted-foreground">
                   {lang === "it"
                     ? "Questa iscrizione era già stata confermata in precedenza."
@@ -151,7 +151,7 @@ const NewsletterConfirm = () => {
             )}
 
             {status === "invalid" && (
-              <div className="rounded-[24px] border border-black/6 bg-white px-5 py-5">
+              <div className="rounded-[24px] border border-foreground/6 bg-glass px-5 py-5">
                 <p className="text-sm text-muted-foreground">
                   {lang === "it" ? "Link non valido o scaduto." : "Invalid or expired link."}
                 </p>

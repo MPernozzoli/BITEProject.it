@@ -268,15 +268,15 @@ const ProfileSlidePanel = ({
       />
 
       <div
-        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-white/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col transition-[opacity,transform] duration-300 ease-out-expo ${
+        className={`fixed inset-x-3 top-24 bottom-4 sm:left-auto sm:right-4 sm:w-[440px] xl:w-[460px] z-50 overflow-hidden rounded-[32px] border border-glass-edge/55 bg-background/72 shadow-[0_30px_90px_rgba(15,23,42,0.18)] backdrop-blur-2xl animate-slide-in-right flex flex-col transition-[opacity,transform] duration-300 ease-out-expo ${
           isAutoHidden ? "translate-x-[calc(100%+2rem)] opacity-0 pointer-events-none" : "translate-x-0 opacity-100"
         }`}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-glass-edge/45 bg-background/55 px-5 py-4 backdrop-blur-xl shrink-0">
           <button
             type="button"
             onClick={onBackToArticle}
-            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors duration-interaction ease-out-expo active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-full border border-glass-edge/70 bg-glass/60 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors duration-interaction ease-out-expo active:scale-[0.98]"
           >
             <ArrowLeft size={14} />
             {lang === "it" ? "Torna all'articolo" : "Back to article"}
@@ -285,7 +285,7 @@ const ProfileSlidePanel = ({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/60 text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo shrink-0 active:scale-[0.96]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-glass-edge/70 bg-glass/60 text-muted-foreground hover:text-foreground transition-colors duration-interaction ease-out-expo shrink-0 active:scale-[0.96]"
             aria-label={lang === "it" ? "Chiudi" : "Close"}
           >
             <X size={18} />
@@ -300,14 +300,14 @@ const ProfileSlidePanel = ({
               <div className="rounded-[28px] bg-muted h-48" />
             </div>
           ) : !profile ? (
-            <div className="rounded-[28px] border border-white/55 bg-white/58 p-6 text-center">
+            <div className="rounded-[28px] border border-glass-edge/55 bg-glass/58 p-6 text-center">
               <p className="font-sans text-muted-foreground">
                 {lang === "it" ? "Profilo non trovato." : "Profile not found."}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-[28px] border border-stone-200/85 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)]">
+              <div className="rounded-[28px] border border-border/85 bg-glass/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_16px_36px_rgba(0,0,0,0.21),inset_0_1px_0_rgba(255,255,255,0.081)]">
                 <div className="flex items-center gap-4 mb-5">
                   <div className="w-20 h-20 rounded-[24px] overflow-hidden bg-muted">
                     <ProfileAvatar
@@ -322,14 +322,14 @@ const ProfileSlidePanel = ({
                     <h2 className="editorial-heading text-2xl leading-tight mb-2">{profile.name || "Anonymous"}</h2>
                     <div className="flex flex-wrap gap-2">
                       {memberSince && (
-                        <span className="rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
+                        <span className="rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground">
                           {lang === "it" ? "Membro da" : "Member since"} {memberSince}
                         </span>
                       )}
                       {profileLanguages.map((label) => (
                         <span
                           key={label}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-background/75 px-3 py-1 text-[11px] font-sans text-muted-foreground"
                         >
                           <Languages size={11} className="text-accent" />
                           {label}
@@ -348,8 +348,8 @@ const ProfileSlidePanel = ({
                 {stats.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <div key={item.label} className="rounded-[24px] border border-stone-200/85 bg-white/72 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
-                      <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/70 bg-background/75 mb-3">
+                    <div key={item.label} className="rounded-[24px] border border-border/85 bg-glass/72 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                      <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-glass-edge/70 bg-background/75 mb-3">
                         <Icon size={14} className="text-accent" />
                       </div>
                       <p className="editorial-heading text-2xl leading-none mb-1">{item.value}</p>
@@ -360,7 +360,7 @@ const ProfileSlidePanel = ({
               </div>
 
               {activeSocials.length > 0 && (
-                <div className="rounded-[26px] border border-stone-200/85 bg-white/60 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+                <div className="rounded-[26px] border border-border/85 bg-glass/60 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
                   <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
                     {lang === "it" ? "Social e link" : "Socials and links"}
                   </p>
@@ -373,11 +373,11 @@ const ProfileSlidePanel = ({
                           href={social.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-[22px] border border-stone-200/90 bg-white/78 px-4 py-3 hover:bg-white/92 transition-colors duration-interaction ease-out-expo"
+                          className="rounded-[22px] border border-border/90 bg-glass/78 px-4 py-3 hover:bg-glass/92 transition-colors duration-interaction ease-out-expo"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-white/70 bg-white/70 mb-3">
+                              <div className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-glass-edge/70 bg-glass/70 mb-3">
                                 <Icon size={14} className="text-accent" />
                               </div>
                               <p className="text-sm font-sans font-medium text-foreground">{social.label}</p>
@@ -393,7 +393,7 @@ const ProfileSlidePanel = ({
               )}
 
               {(data.badges.length > 0 || articles.length > 0) && (
-                <div className="rounded-[26px] border border-stone-200/85 bg-white/60 p-4 space-y-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
+                <div className="rounded-[26px] border border-border/85 bg-glass/60 p-4 space-y-4 shadow-[0_16px_36px_rgba(15,23,42,0.05)]">
                   {data.badges.length > 0 && (
                     <div>
                       <p className="text-[10px] font-sans tracking-[0.2em] uppercase text-muted-foreground mb-3">
@@ -403,7 +403,7 @@ const ProfileSlidePanel = ({
                         {data.badges.map((badge) => (
                           <span
                             key={badge.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-stone-200/90 bg-white/78 px-3 py-1.5 text-xs font-sans text-foreground"
+                            className="inline-flex items-center gap-2 rounded-full border border-border/90 bg-glass/78 px-3 py-1.5 text-xs font-sans text-foreground"
                           >
                             {badge.badge_icon ? <span>{badge.badge_icon}</span> : null}
                             {badge.badge_name}
@@ -420,7 +420,7 @@ const ProfileSlidePanel = ({
                       </p>
                       <div className="space-y-3">
                         {articles.slice(0, 3).map((entry) => (
-                          <div key={entry.id} className="rounded-[20px] border border-stone-200/90 bg-white/78 px-4 py-3">
+                          <div key={entry.id} className="rounded-[20px] border border-border/90 bg-glass/78 px-4 py-3">
                             <p className="font-serif text-lg leading-tight mb-2">
                               {lang === "en" ? entry.title_en : entry.title_it || entry.title_en}
                             </p>

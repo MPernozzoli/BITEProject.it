@@ -80,7 +80,7 @@ const PaymentMethodDialog = ({
         )}
 
         {cardTooHigh && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-300 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100/90">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <span>
               {it

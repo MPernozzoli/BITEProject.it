@@ -39,10 +39,31 @@ import {
 
 type Lang = "it" | "en";
 
+/** Cosa si sta linkando. `url` è la via di fuga per le pagine senza record. */
+type TargetKind = "article" | "story" | "voyage" | "url";
+
+/** Il prefisso di percorso di ogni tipo di contenuto, come da routing pubblico. */
+const PATH_PREFIX: Record<Exclude<TargetKind, "url">, string> = {
+  article: "logbook",
+  story: "logbook/story",
+  voyage: "voyages",
+};
+
 interface ContentRow {
   id: string;
   title_it: string | null;
   title_en: string | null;
+  slug: string | null;
+  slug_it: string | null;
+  slug_en: string | null;
+}
+
+/** Come arriva un viaggio dal database, prima della normalizzazione. */
+interface VoyageRow {
+  id: string;
+  name: string | null;
+  name_it: string | null;
+  name_en: string | null;
   slug: string | null;
   slug_it: string | null;
   slug_en: string | null;
@@ -99,6 +120,7 @@ const AdminTrafficSources = () => {
 
   const [articles, setArticles] = useState<ContentRow[]>([]);
   const [stories, setStories] = useState<ContentRow[]>([]);
+  const [voyages, setVoyages] = useState<ContentRow[]>([]);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [days, setDays] = useState<number>(30);
   const [loading, setLoading] = useState(true);
@@ -107,7 +129,7 @@ const AdminTrafficSources = () => {
   const [expandedLoading, setExpandedLoading] = useState(false);
 
   // Generatore
-  const [targetKind, setTargetKind] = useState<"article" | "story" | "url">("article");
+  const [targetKind, setTargetKind] = useState<TargetKind>("article");
   const [targetId, setTargetId] = useState<string>("");
   const [customUrl, setCustomUrl] = useState<string>("");
   const [lang, setLang] = useState<Lang>("it");
@@ -129,17 +151,36 @@ const AdminTrafficSources = () => {
   );
 
   const fetchContent = useCallback(async () => {
-    const [articlesRes, storiesRes] = await Promise.all([
+    const [articlesRes, storiesRes, voyagesRes] = await Promise.all([
       supabase
         .from("logbook_articles")
         .select("id,title_it,title_en,slug,slug_it,slug_en,published_at")
         .eq("status", "published")
         .order("published_at", { ascending: false }),
       supabase.from("stories").select("id,title_it,title_en,slug,slug_it,slug_en").order("created_at", { ascending: false }),
+      // I viaggi si chiamano `name_*`, non `title_*`: si normalizzano qui una
+      // volta sola invece di piegare il resto del pannello alla differenza.
+      supabase
+        .from("voyages")
+        .select("id,name,name_it,name_en,slug,slug_it,slug_en,start_date,is_published")
+        .eq("is_published", true)
+        .order("start_date", { ascending: false }),
     ]);
-    if (await handleAuthFailure(articlesRes.error || storiesRes.error)) return;
+    if (await handleAuthFailure(articlesRes.error || storiesRes.error || voyagesRes.error)) return;
     if (articlesRes.data) setArticles(articlesRes.data as unknown as ContentRow[]);
     if (storiesRes.data) setStories(storiesRes.data as unknown as ContentRow[]);
+    if (voyagesRes.data) {
+      setVoyages(
+        (voyagesRes.data as unknown as VoyageRow[]).map((v) => ({
+          id: v.id,
+          title_it: v.name_it || v.name,
+          title_en: v.name_en || v.name,
+          slug: v.slug,
+          slug_it: v.slug_it,
+          slug_en: v.slug_en,
+        })),
+      );
+    }
   }, [handleAuthFailure]);
 
   const fetchSources = useCallback(async () => {
@@ -179,27 +220,45 @@ const AdminTrafficSources = () => {
     }
   };
 
-  const selectedContent = useMemo(() => {
-    const pool = targetKind === "article" ? articles : stories;
-    return pool.find((r) => r.id === targetId) ?? null;
-  }, [articles, stories, targetId, targetKind]);
+  const contentPool = useMemo(() => {
+    if (targetKind === "story") return stories;
+    if (targetKind === "voyage") return voyages;
+    return articles;
+  }, [articles, stories, targetKind, voyages]);
+
+  const selectedContent = useMemo(
+    () => contentPool.find((r) => r.id === targetId) ?? null,
+    [contentPool, targetId],
+  );
 
   /** L'indirizzo canonico del bersaglio, senza tracker. */
   const canonicalUrl = useMemo(() => {
     if (targetKind === "url") return customUrl.trim();
     if (!selectedContent) return "";
-    const slug = slugForLang(selectedContent, lang);
+    // Un viaggio senza slug resta raggiungibile per id: è la stessa regola di
+    // `buildVoyagePath`, e senza di essa i viaggi storici sarebbero illinkabili.
+    const slug = slugForLang(selectedContent, lang) || (targetKind === "voyage" ? selectedContent.id : "");
     if (!slug) return "";
-    const prefix = targetKind === "article" ? "logbook" : "logbook/story";
-    return `${publicOrigin()}/${lang}/${prefix}/${encodeURIComponent(slug)}`;
+    return `${publicOrigin()}/${lang}/${PATH_PREFIX[targetKind]}/${encodeURIComponent(slug)}`;
   }, [customUrl, lang, selectedContent, targetKind]);
 
-  /** La campagna proposta: lo slug del contenuto, finché non se ne scrive una. */
+  /**
+   * La campagna proposta: lo slug del contenuto, finché non se ne scrive una.
+   *
+   * Volutamente **indipendente dalla lingua scelta** — e uguale alla regola di
+   * `link_build`: una campagna è l'iniziativa, non la sua traduzione. Con lo
+   * slug della lingua, lo stesso viaggio promosso in IT e in EN comparirebbe
+   * nei report come due campagne diverse; la lingua di lettura resta comunque
+   * registrata a parte su ogni evento.
+   */
   const effectiveCampaign = useMemo(() => {
     if (campaign.trim()) return normalizeTrackingToken(campaign);
     if (targetKind === "url") return "";
-    return normalizeTrackingToken(slugForLang(selectedContent, lang));
-  }, [campaign, lang, selectedContent, targetKind]);
+    if (!selectedContent) return "";
+    return normalizeTrackingToken(
+      selectedContent.slug_it || selectedContent.slug || selectedContent.slug_en || selectedContent.id,
+    );
+  }, [campaign, selectedContent, targetKind]);
 
   const trackedUrl = useMemo(() => {
     if (!canonicalUrl) return "";
@@ -252,8 +311,6 @@ const AdminTrafficSources = () => {
     return { views, tracked, channels: new Set(sources.map((r) => r.source)).size };
   }, [sources]);
 
-  const contentPool = targetKind === "article" ? articles : stories;
-
   if (!isAdminDevBypassEnabled() && !session) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-24">
@@ -304,6 +361,7 @@ const AdminTrafficSources = () => {
                   [
                     { id: "article", label: "Articolo" },
                     { id: "story", label: "Storia" },
+                    { id: "voyage", label: "Viaggio" },
                     { id: "url", label: "Altra pagina" },
                   ] as const
                 ).map((option) => (
@@ -354,14 +412,14 @@ const AdminTrafficSources = () => {
                   type="url"
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
-                  placeholder={`${publicOrigin()}/it/voyages`}
+                  placeholder={`${publicOrigin()}/it/contact`}
                   className="mt-1 min-h-11 w-full rounded-[14px] border border-border bg-background/90 px-3 py-2 text-sm font-sans"
                 />
               </div>
             ) : (
               <div className="md:col-span-2">
                 <label htmlFor="tracker-target" className="text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                  {targetKind === "article" ? "Articolo" : "Storia"}
+                  {targetKind === "article" ? "Articolo" : targetKind === "story" ? "Storia" : "Viaggio"}
                 </label>
                 <select
                   id="tracker-target"

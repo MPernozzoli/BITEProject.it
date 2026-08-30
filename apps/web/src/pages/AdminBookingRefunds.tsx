@@ -302,8 +302,8 @@ export default function AdminBookingRefunds() {
                       <span
                         className={
                           row.payout_queued
-                            ? "rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-medium text-sky-600"
-                            : "rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600"
+                            ? "rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-300"
+                            : "rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-300"
                         }
                       >
                         {row.payout_queued ? "Da rieseguire" : "Attende IBAN"}
@@ -410,7 +410,7 @@ export default function AdminBookingRefunds() {
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">{row.traveller_name || "Senza nome"}</span>
-                      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-600">
+                      <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-600 dark:text-red-300">
                         Trattenuto
                       </span>
                       {row.environment && row.environment !== "production" ? (

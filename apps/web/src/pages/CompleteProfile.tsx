@@ -250,7 +250,7 @@ const CompleteProfile = () => {
       <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_top_left,_hsl(var(--salt))_0%,_hsl(var(--salt-warm))_28%,_hsl(var(--secondary))_58%,_hsl(var(--background))_100%)]" />
 
       <div className="mx-auto max-w-xl">
-        <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] p-6 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur md:p-8">
+        <div className="rounded-[2rem] border border-glass-edge/70 bg-[linear-gradient(180deg,_rgba(255,255,255,0.86)_0%,_rgba(255,255,255,0.72)_100%)] dark:bg-[linear-gradient(180deg,_rgba(26,37,55,0.86)_0%,_rgba(21,31,47,0.72)_100%)] p-6 shadow-[0_36px_90px_-48px_hsl(var(--navy)/0.55)] backdrop-blur md:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">{copy.badge}</p>
           <h1 className="editorial-heading mt-3 text-4xl leading-tight text-foreground">{copy.title}</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">{copy.description}</p>
@@ -259,7 +259,7 @@ const CompleteProfile = () => {
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
-              className="group relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-[24px] border border-white/70 bg-muted shadow-[0_14px_45px_rgba(15,23,42,0.12)]"
+              className="group relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-[24px] border border-glass-edge/70 bg-muted shadow-[0_14px_45px_rgba(15,23,42,0.12)]"
             >
               <ProfileAvatar
                 name={name || "Avatar"}
@@ -303,7 +303,7 @@ const CompleteProfile = () => {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={copy.namePlaceholder}
-                className="h-12 rounded-2xl border-white/80 bg-white/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
               />
             </div>
 
@@ -317,7 +317,7 @@ const CompleteProfile = () => {
                 onChange={(e) => setBio(e.target.value)}
                 placeholder={copy.bioPlaceholder}
                 rows={4}
-                className="rounded-2xl border-white/80 bg-white/72 px-4 py-3 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                className="rounded-2xl border-glass-edge/80 bg-glass/72 px-4 py-3 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
               />
             </div>
           </div>
@@ -336,7 +336,7 @@ const CompleteProfile = () => {
               variant="outline"
               onClick={goToRedirect}
               disabled={saving}
-              className="h-12 flex-1 rounded-full border-white/85 bg-white/72 px-6 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-white"
+              className="h-12 flex-1 rounded-full border-glass-edge/85 bg-glass/72 px-6 text-sm font-semibold shadow-[0_20px_44px_-34px_hsl(var(--navy)/0.4)] hover:bg-glass"
             >
               {copy.later}
             </Button>

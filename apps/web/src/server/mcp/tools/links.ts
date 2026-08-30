@@ -13,7 +13,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpToolError, requireScope, type McpContext } from "../context.js";
-import { articleLinks, storyLinks } from "../links.js";
+import { articleLinks, storyLinks, voyageLinks } from "../links.js";
 import { registerTool, type ToolOutcome } from "../registry.js";
 import {
   TRACKING_CHANNELS,
@@ -47,6 +47,35 @@ async function loadArticle(ctx: McpContext, id: string): Promise<SlugRecord> {
   if (error) throw new McpToolError("db_error", `Lettura articolo fallita: ${error.message}`);
   if (!data) throw new McpToolError("not_found", `Articolo ${id} inesistente.`);
   return data as unknown as SlugRecord;
+}
+
+async function loadVoyage(ctx: McpContext, id: string): Promise<SlugRecord> {
+  const { data, error } = await ctx.service
+    .from("voyages")
+    .select("id,name,name_it,name_en,slug,slug_it,slug_en")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new McpToolError("db_error", `Lettura viaggio fallita: ${error.message}`);
+  if (!data) throw new McpToolError("not_found", `Viaggio ${id} inesistente.`);
+  // I viaggi hanno `name_*` dove articoli e storie hanno `title_*`, e possono
+  // non avere slug: in quel caso l'id è l'indirizzo, come su `/voyages/:ref`.
+  const row = data as unknown as {
+    id: string;
+    name: string | null;
+    name_it: string | null;
+    name_en: string | null;
+    slug: string | null;
+    slug_it: string | null;
+    slug_en: string | null;
+  };
+  return {
+    id: row.id,
+    title_it: row.name_it || row.name,
+    title_en: row.name_en || row.name,
+    slug: row.slug || row.id,
+    slug_it: row.slug_it,
+    slug_en: row.slug_en,
+  };
 }
 
 async function loadStory(ctx: McpContext, id: string): Promise<SlugRecord> {
@@ -96,13 +125,14 @@ export function registerLinkTools(server: McpServer, ctx: McpContext): void {
     name: "link_build",
     title: "Genera un link tracciato",
     description:
-      "Costruisce l'indirizzo pubblico di un articolo, di una storia o di una pagina qualsiasi del sito con i parametri di tracciamento (utm_*) del canale su cui verrà pubblicato. Serve per sapere, poi, quanto traffico ha portato davvero quel post: senza tracker quelle visite finiscono indistinguibili nel mucchio. " +
+      "Costruisce l'indirizzo pubblico di un articolo, di una storia, di un viaggio o di una pagina qualsiasi del sito con i parametri di tracciamento (utm_*) del canale su cui verrà pubblicato. Serve per sapere, poi, quanto traffico ha portato davvero quel post: senza tracker quelle visite finiscono indistinguibili nel mucchio. " +
       `Canali predefiniti: ${CHANNEL_HELP}. Con fb_group_id i tracker del gruppo Facebook sono compilati da soli (facebook/group/<nome gruppo>).`,
     scope: "articles:read",
     kind: "read",
     inputSchema: {
       article_id: z.string().uuid().optional().describe("Articolo da linkare: restituisce sia url_it sia url_en."),
       story_id: z.string().uuid().optional().describe("Storia da linkare, in alternativa all'articolo."),
+      voyage_id: z.string().uuid().optional().describe("Viaggio da linkare, in alternativa all'articolo."),
       url: z
         .string()
         .url()
@@ -126,12 +156,12 @@ export function registerLinkTools(server: McpServer, ctx: McpContext): void {
     },
     annotations: { readOnlyHint: true },
     handler: async (args, context) => {
-      const targets = [args.article_id, args.story_id, args.url].filter(Boolean);
+      const targets = [args.article_id, args.story_id, args.voyage_id, args.url].filter(Boolean);
       if (targets.length === 0) {
-        throw new McpToolError("invalid_input", "Serve almeno uno fra article_id, story_id e url.");
+        throw new McpToolError("invalid_input", "Serve almeno uno fra article_id, story_id, voyage_id e url.");
       }
       if (targets.length > 1) {
-        throw new McpToolError("invalid_input", "Passa un solo bersaglio: article_id, story_id oppure url.");
+        throw new McpToolError("invalid_input", "Passa un solo bersaglio: article_id, story_id, voyage_id oppure url.");
       }
 
       let tracking = resolveTracking(args);
@@ -174,13 +204,18 @@ export function registerLinkTools(server: McpServer, ctx: McpContext): void {
         } satisfies ToolOutcome;
       }
 
-      const record = args.article_id
-        ? await loadArticle(context, args.article_id)
-        : await loadStory(context, args.story_id!);
+      const kind = args.article_id ? "article" : args.story_id ? "story" : "voyage";
+      const linksFor =
+        kind === "article" ? articleLinks : kind === "story" ? storyLinks : voyageLinks;
 
-      const canonical = args.article_id
-        ? articleLinks(context.siteUrl, record)
-        : storyLinks(context.siteUrl, record);
+      const record =
+        kind === "article"
+          ? await loadArticle(context, args.article_id!)
+          : kind === "story"
+            ? await loadStory(context, args.story_id!)
+            : await loadVoyage(context, args.voyage_id!);
+
+      const canonical = linksFor(context.siteUrl, record);
 
       const campaign =
         tracking.campaign ||
@@ -188,9 +223,7 @@ export function registerLinkTools(server: McpServer, ctx: McpContext): void {
         campaignFromUrl(canonical.url_it || canonical.url_en || "");
 
       const finalTracking = { ...tracking, campaign };
-      const tracked = args.article_id
-        ? articleLinks(context.siteUrl, record, finalTracking)
-        : storyLinks(context.siteUrl, record, finalTracking);
+      const tracked = linksFor(context.siteUrl, record, finalTracking);
 
       const title = record.title_it || record.title_en || "senza titolo";
       return {

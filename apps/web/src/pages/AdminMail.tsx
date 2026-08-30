@@ -273,7 +273,7 @@ function MailTextBody({ text }: { text: string }) {
           {quotesExpanded && (
             <blockquote
               id={quoteRegionId}
-              className="mail-quote-block m-0 space-y-1 border-l-2 border-stone-300/80 pl-4 text-foreground/62"
+              className="mail-quote-block m-0 space-y-1 border-l-2 border-border/80 pl-4 text-foreground/62"
             >
               <MailTextLines lines={quotedLines} quoted />
             </blockquote>
@@ -699,7 +699,7 @@ const AdminMail = () => {
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="Cerca mittente, destinatario, corpo o data"
-                  className="h-11 w-full rounded-full border border-stone-200/80 bg-white/70 pl-11 pr-11 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
+                  className="h-11 w-full rounded-full border border-border/80 bg-glass/70 pl-11 pr-11 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-accent"
                 />
                 {searchInput && (
                   <button
@@ -708,7 +708,7 @@ const AdminMail = () => {
                       setSearchInput("");
                       setSearchQuery("");
                     }}
-                    className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-stone-100 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     aria-label="Svuota ricerca mail"
                   >
                     <X size={14} />
@@ -756,7 +756,7 @@ const AdminMail = () => {
                       if (isMobile) clearSelectedMessage();
                     }}
                     className={`w-full rounded-[20px] px-3 py-3 text-left transition-colors sm:px-4 ${
-                      active ? "bg-white/85 border border-stone-200/90" : "glass-panel-soft hover:border-accent"
+                      active ? "bg-glass/85 border border-border/90" : "glass-panel-soft hover:border-accent"
                     }`}
                   >
                     <span className="flex min-w-0 items-center justify-between gap-3">
@@ -774,7 +774,7 @@ const AdminMail = () => {
 
           <main className="mail-workspace glass-panel rounded-[30px] overflow-hidden">
             <div className="grid min-h-[min(720px,calc(100dvh-13rem))] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
-              <div className={`border-b border-stone-200/70 lg:border-b-0 lg:border-r ${isMobileMessageOpen ? "hidden md:block" : ""}`}>
+              <div className={`border-b border-border/70 lg:border-b-0 lg:border-r ${isMobileMessageOpen ? "hidden md:block" : ""}`}>
                 {loading ? (
                   <div className="p-6 text-sm text-muted-foreground">Caricamento mail...</div>
                 ) : messages.length === 0 ? (
@@ -799,8 +799,8 @@ const AdminMail = () => {
                             if (isMobile) window.scrollTo({ top: 0, behavior: "auto" });
                             if (view !== "sent" && !message.read) markMessageRead(message.id);
                           }}
-                          className={`mail-list-item block w-full border-b border-stone-200/60 px-4 py-4 text-left transition-colors sm:px-5 ${
-                            selected ? "bg-white/85" : "bg-white/25 hover:bg-white/60"
+                          className={`mail-list-item block w-full border-b border-border/60 px-4 py-4 text-left transition-colors sm:px-5 ${
+                            selected ? "bg-glass/85" : "bg-glass/25 hover:bg-glass/60"
                           }`}
                         >
                           <span className="mb-1.5 flex items-start justify-between gap-3">
@@ -884,7 +884,7 @@ const AdminMail = () => {
                         )}
                       </div>
                     )}
-                    <div className="mail-detail-header flex flex-col gap-4 border-b border-stone-200/70 pb-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="mail-detail-header flex flex-col gap-4 border-b border-border/70 pb-5 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0">
                         <h2 className="mail-subject editorial-heading text-[2rem] leading-[1.05] md:text-[2.5rem]">
                           {selectedMessage.subject || "(nessun oggetto)"}
@@ -952,10 +952,10 @@ const AdminMail = () => {
                           <section
                             key={`${message.source ?? "inbound"}-${message.id}`}
                             className={`mail-message-card rounded-[22px] border px-4 py-4 sm:px-5 md:px-6 md:py-5 ${
-                              isSent ? "border-teal-100/80 bg-teal-50/55" : "border-stone-200/75 bg-white/72"
+                              isSent ? "border-teal-100/80 dark:border-teal-500/30 bg-teal-50/55 dark:bg-teal-500/10" : "border-border/75 bg-glass/72"
                             }`}
                           >
-                            <div className="mb-4 flex flex-col gap-1 border-b border-stone-200/60 pb-3 font-sans text-sm sm:flex-row sm:items-start sm:justify-between">
+                            <div className="mb-4 flex flex-col gap-1 border-b border-border/60 pb-3 font-sans text-sm sm:flex-row sm:items-start sm:justify-between">
                               <div className="min-w-0">
                                 <p className="break-words font-medium text-foreground">
                                   {isSent ? `A ${message.to_addresses.join(", ")}` : mailDisplaySender(message)}
@@ -966,7 +966,7 @@ const AdminMail = () => {
                               </div>
                               <p className="shrink-0 text-xs text-muted-foreground">{formatDate(message.created_at)}</p>
                             </div>
-                            <div className="mail-body prose prose-stone max-w-none">
+                            <div className="mail-body prose prose-stone dark:prose-invert max-w-none">
                               {message.html_body?.trim() ? (
                                 <div className="mail-html-body" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(message.html_body) }} />
                               ) : message.text_body?.trim() ? (
@@ -1027,7 +1027,7 @@ const AdminMail = () => {
               <select
                 value={compose.fromOptionId}
                 onChange={(event) => setCompose((current) => ({ ...current, fromOptionId: event.target.value }))}
-                className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                className="w-full rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm outline-none focus:border-accent"
               >
                 {fromOptions.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -1041,7 +1041,7 @@ const AdminMail = () => {
                     value={compose.to}
                     onChange={(event) => setCompose((current) => ({ ...current, to: event.target.value }))}
                     placeholder="destinatario@email.it"
-                    className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                    className="w-full rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm outline-none focus:border-accent"
                   />
                   {!showCcBcc && (
                     <button
@@ -1059,13 +1059,13 @@ const AdminMail = () => {
                       value={compose.cc}
                       onChange={(event) => setCompose((current) => ({ ...current, cc: event.target.value }))}
                       placeholder="Cc: destinatario@email.it"
-                      className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                      className="w-full rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm outline-none focus:border-accent"
                     />
                     <input
                       value={compose.bcc}
                       onChange={(event) => setCompose((current) => ({ ...current, bcc: event.target.value }))}
                       placeholder="Ccn: destinatario@email.it"
-                      className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                      className="w-full rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm outline-none focus:border-accent"
                     />
                   </>
                 )}
@@ -1074,14 +1074,14 @@ const AdminMail = () => {
                 value={compose.subject}
                 onChange={(event) => setCompose((current) => ({ ...current, subject: event.target.value }))}
                 placeholder="Oggetto"
-                className="w-full rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm outline-none focus:border-accent"
+                className="w-full rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm outline-none focus:border-accent"
               />
               <textarea
                 value={compose.body}
                 onChange={(event) => setCompose((current) => ({ ...current, body: event.target.value }))}
                 placeholder="Scrivi il messaggio..."
                 rows={12}
-                className="w-full resize-none rounded-[18px] border border-stone-200 bg-white/80 px-4 py-3 text-sm leading-relaxed outline-none focus:border-accent"
+                className="w-full resize-none rounded-[18px] border border-border bg-glass/80 px-4 py-3 text-sm leading-relaxed outline-none focus:border-accent"
               />
               <div className="mail-compose-attachments">
                 <input

@@ -1,3 +1,5 @@
+import { buildTrackedUrl, type TrackingParams } from './tracking.ts'
+
 export const SITE_NAME = 'BITE'
 export const FROM_DOMAIN = 'biteproject.it'
 export const SENDER_DOMAIN = 'mail.biteproject.it'
@@ -30,4 +32,20 @@ export function localizedUrl(lang: string | null | undefined, path: string): str
   const clean = path.startsWith('/') ? path : `/${path}`
   if (clean === '/' || clean === '') return `${PUBLIC_SITE_URL}/${l}`
   return `${PUBLIC_SITE_URL}/${l}${clean}`
+}
+
+/**
+ * URL pubblico localizzato **con i tracker di sorgente**: la forma da mettere
+ * dentro un'email o una push, perché quel click arriva da fuori il sito e
+ * senza `utm_*` finirebbe indistinguibile dal traffico diretto.
+ *
+ * Da non usare per i link interni al sito: sovrascriverebbero la provenienza
+ * reale della sessione di chi sta già navigando.
+ */
+export function trackedUrl(
+  lang: string | null | undefined,
+  path: string,
+  tracking: TrackingParams,
+): string {
+  return buildTrackedUrl(localizedUrl(lang, path), tracking)
 }

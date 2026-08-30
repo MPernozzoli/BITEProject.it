@@ -156,7 +156,7 @@ const Links = () => {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 p-6 text-white md:p-8">
-              <div className="glass-chip-dark mb-4 inline-flex items-center gap-2 border-white/16 px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-white/80">
+              <div className="glass-chip-dark mb-4 inline-flex items-center gap-2 border-glass-edge/16 px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-white/80">
                 <span className="h-2 w-2 rounded-full bg-accent" />
                 Better Is The End
               </div>
@@ -167,7 +167,7 @@ const Links = () => {
           </div>
 
           <div className="space-y-6 p-5 md:p-8">
-            <div className="rounded-[28px] border border-white/45 bg-white/55 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm md:p-6">
+            <div className="rounded-[28px] border border-glass-edge/45 bg-glass/55 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm md:p-6">
               <p className="mb-2 text-[11px] uppercase tracking-[0.28em] text-accent/80">
                 BITE
               </p>
@@ -185,8 +185,8 @@ const Links = () => {
                 const description = lang === "it" ? item.description : item.descriptionEn;
                 const isExternal = !item.internal;
                 const cardClass = item.featured
-                  ? "glass-panel-dark text-white border-white/12 shadow-[0_30px_90px_rgba(15,23,42,0.2)]"
-                  : "glass-panel text-foreground border-white/50";
+                  ? "glass-panel-dark text-white border-glass-edge/12 shadow-[0_30px_90px_rgba(15,23,42,0.2)]"
+                  : "glass-panel text-foreground border-glass-edge/50";
 
                 if (item.internal) {
                   return (
@@ -244,7 +244,7 @@ const Links = () => {
               })}
             </div>
 
-            <div className="flex flex-col gap-3 rounded-[28px] border border-white/45 bg-white/55 p-5 text-sm text-foreground/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm md:flex-row md:items-center md:justify-between md:p-6">
+            <div className="flex flex-col gap-3 rounded-[28px] border border-glass-edge/45 bg-glass/55 p-5 text-sm text-foreground/70 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur-sm md:flex-row md:items-center md:justify-between md:p-6">
               <p>
                 {lang === "it"
                   ? "Usa questa pagina come link in bio o come hub rapido da condividere."

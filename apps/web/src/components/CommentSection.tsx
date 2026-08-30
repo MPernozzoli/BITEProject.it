@@ -403,7 +403,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
               <button
                 onClick={() => toggleCommentLike(comment.id, comment.liked_by_me)}
                 className={`inline-flex items-center gap-1 text-xs transition-colors ${
-                  comment.liked_by_me ? "text-red-500" : "text-muted-foreground hover:text-foreground"
+                  comment.liked_by_me ? "text-red-500 dark:text-red-400" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Heart size={12} fill={comment.liked_by_me ? "currentColor" : "none"} />
@@ -511,7 +511,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
               key={p.pendingId}
               className="rounded-[24px] border border-dashed border-amber-500/50 bg-amber-500/5 p-4"
             >
-              <div className="flex items-center gap-2 mb-1 text-xs font-sans font-medium text-amber-600">
+              <div className="flex items-center gap-2 mb-1 text-xs font-sans font-medium text-amber-600 dark:text-amber-300">
                 <Clock size={12} /> In attesa di conferma email
               </div>
               <p className="text-xs font-sans text-muted-foreground mb-1">{p.guestName}</p>

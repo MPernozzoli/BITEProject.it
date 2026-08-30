@@ -149,17 +149,17 @@ export function ProfileCrewPassPanel() {
   return (
     <div className="space-y-6">
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-[24px] border border-white/55 bg-white/45 p-4">
+        <div className="rounded-[24px] border border-glass-edge/55 bg-glass/45 p-4">
           <ShieldCheck size={18} className="text-accent" />
           <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Stato</p>
           <p className="mt-1 font-serif text-2xl text-foreground">{active ? "Attivo" : "Free"}</p>
         </div>
-        <div className="rounded-[24px] border border-white/55 bg-white/45 p-4">
+        <div className="rounded-[24px] border border-glass-edge/55 bg-glass/45 p-4">
           <UsersRound size={18} className="text-accent" />
           <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Tier</p>
           <p className="mt-1 font-serif text-2xl text-foreground">{subscription?.membership_tiers?.name ?? "-"}</p>
         </div>
-        <div className="rounded-[24px] border border-white/55 bg-white/45 p-4">
+        <div className="rounded-[24px] border border-glass-edge/55 bg-glass/45 p-4">
           <CreditCard size={18} className="text-accent" />
           <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Scadenza</p>
           <p className="mt-1 font-serif text-2xl text-foreground">{formatDateTime(subscription?.current_period_end) || "manuale"}</p>
@@ -177,7 +177,7 @@ export function ProfileCrewPassPanel() {
           type="button"
           onClick={() => void checkPaymentStatus()}
           disabled={checkingStatus}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-white/70 px-5 text-sm font-medium text-foreground disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-glass/70 px-5 text-sm font-medium text-foreground disabled:opacity-50"
         >
           <RefreshCw size={15} className={checkingStatus ? "animate-spin" : ""} />
           Aggiorna pagamento
@@ -190,7 +190,7 @@ export function ProfileCrewPassPanel() {
           const currentTier = family.tiers.find((tier) => tier.id === selected?.tierId) ?? family.tiers[0];
           const quantity = selected?.quantity ?? 1;
           return (
-            <div key={family.key} className="rounded-[26px] border border-white/55 bg-white/45 p-4">
+            <div key={family.key} className="rounded-[26px] border border-glass-edge/55 bg-glass/45 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-serif text-xl text-foreground">{currentTier.sort_label || currentTier.name}</h3>
@@ -206,14 +206,14 @@ export function ProfileCrewPassPanel() {
                     key={tier.id}
                     type="button"
                     onClick={() => setTierChoices((current) => ({ ...current, [family.key]: { tierId: tier.id, quantity } }))}
-                    className={`rounded-full px-3 py-2 text-xs font-medium ${currentTier.id === tier.id ? "bg-primary text-primary-foreground" : "bg-white/70 text-muted-foreground"}`}
+                    className={`rounded-full px-3 py-2 text-xs font-medium ${currentTier.id === tier.id ? "bg-primary text-primary-foreground" : "bg-glass/70 text-muted-foreground"}`}
                   >
                     {formatCurrency(tier.price_cents, tier.currency)}/{billingIntervalLabel(tier.billing_interval)}
                   </button>
                 ))}
               </div>
               <select
-                className="mt-3 min-h-10 w-full rounded-[18px] border border-border/70 bg-white/80 px-3 py-2 text-sm"
+                className="mt-3 min-h-10 w-full rounded-[18px] border border-border/70 bg-glass/80 px-3 py-2 text-sm"
                 value={quantity}
                 onChange={(event) => setTierChoices((current) => ({ ...current, [family.key]: { tierId: currentTier.id, quantity: Number(event.target.value) } }))}
               >
@@ -238,7 +238,7 @@ export function ProfileCrewPassPanel() {
       </div>
 
       {payments.length > 0 && (
-        <div className="divide-y divide-border/70 rounded-[26px] border border-white/55 bg-white/45">
+        <div className="divide-y divide-border/70 rounded-[26px] border border-glass-edge/55 bg-glass/45">
           {payments.map((payment) => (
             <div key={payment.id} className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
               <div>

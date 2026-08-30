@@ -11,6 +11,12 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    // Gli stessi alias di `vite.config.ts`: un test che importa `@shared/...`
+    // deve risolverlo come lo risolve il bundle, altrimenti il file non si
+    // carica nemmeno e la suite lo conta come fallimento invece che come test.
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@shared": path.resolve(__dirname, "../../shared"),
+    },
   },
 });

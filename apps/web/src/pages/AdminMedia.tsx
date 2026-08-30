@@ -287,7 +287,7 @@ const AdminMedia = () => {
                 value={customFolder}
                 onChange={(event) => setCustomFolder(event.target.value)}
                 placeholder={preset.folder}
-                className="rounded-[18px] bg-white/75"
+                className="rounded-[18px] bg-glass/75"
               />
               <p className="text-xs font-sans text-muted-foreground break-all">
                 {preset.bucket}/{folder}
@@ -329,7 +329,7 @@ const AdminMedia = () => {
                   multiple
                   accept={preset.accept}
                   onChange={(event) => setSelectedFiles(Array.from(event.target.files ?? []))}
-                  className="rounded-[18px] bg-white/75 file:mr-4 file:rounded-[12px] file:bg-stone-100 file:px-3 file:py-1.5"
+                  className="rounded-[18px] bg-glass/75 file:mr-4 file:rounded-[12px] file:bg-muted file:px-3 file:py-1.5"
                 />
               </div>
 
@@ -340,7 +340,7 @@ const AdminMedia = () => {
               )}
 
               {(uploadQueue.tasks.length > 0 || uploadQueue.isUploading) && (
-                <div className="mt-5 rounded-[22px] border border-border/70 bg-white/55 p-4 space-y-4">
+                <div className="mt-5 rounded-[22px] border border-border/70 bg-glass/55 p-4 space-y-4">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Stato upload</p>
@@ -361,7 +361,7 @@ const AdminMedia = () => {
                     )}
                   </div>
 
-                  <Progress value={uploadQueue.progress} className="h-3 bg-stone-200/80" />
+                  <Progress value={uploadQueue.progress} className="h-3 bg-muted/80" />
                   <p className="text-xs font-sans text-muted-foreground">
                     {uploadQueue.progress}% · {formatBytes(uploadQueue.uploadedBytes)} / {formatBytes(uploadQueue.totalBytes)}
                   </p>
@@ -387,7 +387,7 @@ const AdminMedia = () => {
                           </div>
                           <span className="shrink-0 text-xs font-sans tabular-nums text-muted-foreground">{task.progress}%</span>
                         </div>
-                        <Progress value={task.progress} className="mt-2 h-2 bg-stone-200/80" />
+                        <Progress value={task.progress} className="mt-2 h-2 bg-muted/80" />
                       </div>
                     ))}
                   </div>
@@ -399,7 +399,7 @@ const AdminMedia = () => {
                   <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Ultimi URL</p>
                   {uploadQueue.lastCompletedUrls.map((url) => (
                     <div key={url} className="flex items-center gap-2">
-                      <code className="min-w-0 flex-1 truncate rounded-[14px] bg-white/70 px-3 py-2 text-xs">{url}</code>
+                      <code className="min-w-0 flex-1 truncate rounded-[14px] bg-glass/70 px-3 py-2 text-xs">{url}</code>
                       <Button type="button" variant="ghost" size="icon" onClick={() => void copyToClipboard(url)}>
                         <Copy size={16} />
                       </Button>

@@ -527,7 +527,7 @@ const ArticleReader = ({
               <div className="glass-panel-soft rounded-[26px] flex flex-wrap items-center gap-3 p-4 md:p-5 mb-8">
                 {authors.map((author) => (
                   <Link key={author.id} to={`/profile/${author.id}`} className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-sans text-foreground hover:text-accent transition-colors">
-                    <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-white/45 bg-white/70">
+                    <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-glass-edge/45 bg-glass/70">
                       <ProfileAvatar name={author.name || "Anonymous"} avatarUrl={author.avatar_url || undefined} imgClassName="h-full w-full object-cover" fallback={<User size={12} className="text-muted-foreground" />} />
                     </span>
                     <span>{author.name}</span>
@@ -539,7 +539,7 @@ const ArticleReader = ({
 
               {htmlContent && (
                 <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
-                  <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic" dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                  <div ref={articleContentRef} className="article-rich-body prose prose-lg dark:prose-invert max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic" dangerouslySetInnerHTML={{ __html: htmlContent }} />
                 </div>
               )}
               {contentRenderFailed && <p className="text-sm font-sans text-muted-foreground">{lang === "it" ? "Il contenuto di questo articolo non puo essere mostrato al momento." : "This article content cannot be displayed right now."}</p>}

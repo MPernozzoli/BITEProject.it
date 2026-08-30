@@ -335,7 +335,7 @@ const PackPhotoCropDialog = ({
             )}
 
             <div
-              className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-white/90"
+              className="pointer-events-none absolute inset-0 rounded-2xl border-2 border-glass-edge/90"
               style={{ boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.58)" }}
             />
           </div>

@@ -522,7 +522,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
         role="dialog"
         aria-modal="true"
         aria-label={lang === "it" ? "Articolo completo" : "Full article"}
-        className="fixed z-[71] overflow-hidden border border-black/5 bg-[rgba(255,255,255,0.97)] shadow-[0_40px_120px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
+        className="fixed z-[71] overflow-hidden border border-foreground/5 bg-[rgba(255,255,255,0.97)] dark:bg-[rgba(20,30,46,0.97)] shadow-[0_40px_120px_rgba(15,23,42,0.22)] backdrop-blur-2xl"
         style={{
           top: `${targetRect.top}px`,
           left: `${targetRect.left}px`,
@@ -548,11 +548,11 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
             transitionDelay: contentVisible ? "120ms" : "0ms",
           }}
         >
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-black/6 bg-white/96 px-4 py-4 backdrop-blur-xl md:px-5">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-foreground/6 bg-glass/96 px-4 py-4 backdrop-blur-xl md:px-5">
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-white/90"
+              className="inline-flex items-center gap-2 rounded-full border border-foreground/8 bg-glass px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-glass/90"
             >
               <ArrowLeft size={15} />
               {lang === "it" ? "Torna all'anteprima" : "Back to preview"}
@@ -561,7 +561,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
             <div className="flex items-center gap-2">
               <Link
                 to={`/logbook/${slug}`}
-                className="inline-flex items-center rounded-full border border-black/8 bg-white px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-white/90"
+                className="inline-flex items-center rounded-full border border-foreground/8 bg-glass px-4 py-2 text-sm font-sans text-foreground transition-colors hover:bg-glass/90"
               >
                 {lang === "it" ? "Apri articolo" : "Open article"}
               </Link>
@@ -569,7 +569,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/8 bg-white text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-foreground/8 bg-glass text-muted-foreground transition-colors hover:text-foreground"
                 aria-label={lang === "it" ? "Chiudi articolo" : "Close article"}
               >
                 <X size={18} />
@@ -580,19 +580,19 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-3 md:px-5 md:pb-5 md:pt-5" style={{ touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}>
             {isLoading ? (
               <div className="mx-auto max-w-4xl space-y-4 animate-pulse">
-                <div className="h-[34vh] rounded-[30px] bg-neutral-100" />
-                <div className="h-12 w-3/4 rounded-full bg-neutral-100" />
-                <div className="h-5 w-1/3 rounded-full bg-neutral-100" />
-                <div className="rounded-[28px] bg-neutral-100 p-6 space-y-3">
-                  <div className="h-4 w-full rounded-full bg-neutral-200" />
-                  <div className="h-4 w-[92%] rounded-full bg-neutral-200" />
-                  <div className="h-4 w-[88%] rounded-full bg-neutral-200" />
-                  <div className="h-4 w-[76%] rounded-full bg-neutral-200" />
+                <div className="h-[34vh] rounded-[30px] bg-muted" />
+                <div className="h-12 w-3/4 rounded-full bg-muted" />
+                <div className="h-5 w-1/3 rounded-full bg-muted" />
+                <div className="rounded-[28px] bg-muted p-6 space-y-3">
+                  <div className="h-4 w-full rounded-full bg-muted-foreground/20" />
+                  <div className="h-4 w-[92%] rounded-full bg-muted-foreground/20" />
+                  <div className="h-4 w-[88%] rounded-full bg-muted-foreground/20" />
+                  <div className="h-4 w-[76%] rounded-full bg-muted-foreground/20" />
                 </div>
               </div>
             ) : !article ? (
               <div className="mx-auto flex h-full max-w-xl items-center justify-center">
-                <div className="rounded-[28px] border border-black/6 bg-white px-6 py-10 text-center shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+                <div className="rounded-[28px] border border-foreground/6 bg-glass px-6 py-10 text-center shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                   <p className="mb-4 text-sm font-sans text-muted-foreground">
                     {lang === "it" ? "Articolo non trovato." : "Article not found."}
                   </p>
@@ -609,8 +609,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
             ) : (
               <div className="mx-auto max-w-4xl space-y-5">
                 {article.cover_image && (
-                  <div className="overflow-hidden rounded-[32px] border border-black/6 bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-                    <div className="aspect-[16/8.8] overflow-hidden bg-neutral-100">
+                  <div className="overflow-hidden rounded-[32px] border border-foreground/6 bg-glass shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+                    <div className="aspect-[16/8.8] overflow-hidden bg-muted">
                       <img
                         src={article.cover_image}
                         alt={title}
@@ -623,34 +623,34 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   </div>
                 )}
 
-                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
+                <section className="rounded-[32px] border border-foreground/6 bg-glass p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <div className="mb-5 flex flex-wrap items-center gap-2">
                     {articleDisplayLocation && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-black/7 bg-white px-3 py-1.5 text-xs font-sans text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-foreground/7 bg-glass px-3 py-1.5 text-xs font-sans text-muted-foreground">
                         <MapPin size={12} className="text-accent" />
                         {articleDisplayLocation}
                       </span>
                     )}
-                    <LiveReadCounter count={views} lang={lang} className="rounded-full border border-black/7 bg-white px-3 py-1.5" />
+                    <LiveReadCounter count={views} lang={lang} className="rounded-full border border-foreground/7 bg-glass px-3 py-1.5" />
                   </div>
 
                   <h1 className="editorial-heading text-3xl leading-tight text-balance md:text-5xl">{title}</h1>
 
                   {excerpt && (
-                    <div className="mt-5 rounded-[24px] border border-black/6 bg-white px-4 py-4 md:px-5">
+                    <div className="mt-5 rounded-[24px] border border-foreground/6 bg-glass px-4 py-4 md:px-5">
                       <p className="editorial-body whitespace-pre-wrap leading-[1.8] text-muted-foreground">{excerpt}</p>
                     </div>
                   )}
 
                   {(resolvedAuthors.length > 0 || dateLabel) && (
-                    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-black/6 pt-6">
+                    <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-foreground/6 pt-6">
                       {resolvedAuthors.map((author) => (
                         <Link
                           key={author.id}
                           to={`/profile/${author.id}`}
-                          className="inline-flex items-center gap-2 rounded-full border border-black/7 bg-white px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
+                          className="inline-flex items-center gap-2 rounded-full border border-foreground/7 bg-glass px-3 py-2 text-xs font-sans text-foreground transition-colors hover:text-accent"
                         >
-                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-black/6 bg-neutral-100">
+                          <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border border-foreground/6 bg-muted">
                             <ProfileAvatar
                               name={author.name || "Anonymous"}
                               avatarUrl={author.avatar_url || undefined}
@@ -662,7 +662,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                         </Link>
                       ))}
                       {dateLabel && (
-                        <span className="inline-flex items-center rounded-full border border-black/7 bg-white px-3 py-2 text-xs font-sans text-muted-foreground">
+                        <span className="inline-flex items-center rounded-full border border-foreground/7 bg-glass px-3 py-2 text-xs font-sans text-muted-foreground">
                           {lang === "it" ? "Pubblicato il " : "Published "}
                           <time className="ml-1" dateTime={article.published_at || undefined}>{dateLabel}</time>
                         </span>
@@ -671,11 +671,11 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   )}
                 </section>
 
-                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
+                <section className="rounded-[32px] border border-foreground/6 bg-glass p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <div className={`grid gap-6 ${hasGeo ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-1"}`}>
                     <div className="min-w-0">
                       {contentNodes.length > 0 && (
-                        <div ref={articleContentRef} className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
+                        <div ref={articleContentRef} className="article-rich-body prose prose-lg dark:prose-invert max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic">
                           {contentNodes.map((node, index) => {
                             const blockHtml = sanitizeRichHtml(
                               generateHTML(
@@ -700,7 +700,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
 
                       {contentNodes.length === 0 && htmlContent && (
                         <div
-                          className="article-rich-body prose prose-lg max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
+                          className="article-rich-body prose prose-lg dark:prose-invert max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-img:rounded-[18px] prose-blockquote:border-accent prose-blockquote:font-serif prose-blockquote:italic"
                           dangerouslySetInnerHTML={{ __html: htmlContent }}
                         />
                       )}
@@ -713,7 +713,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                         </p>
                       )}
 
-                      <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-black/6 pt-6">
+                      <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-foreground/6 pt-6">
                         <LikeButton articleId={article.id} liked={liked} likeCount={likeCount} onToggleLike={toggleLike} busy={likeBusy} />
                         <ShareButton articleId={article.id} title={title} url={shareUrl} instagramStoryImageUrl={instagramStoryImage || undefined} />
                       </div>
@@ -741,12 +741,12 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   </div>
                 </section>
 
-                <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
+                <section className="rounded-[32px] border border-foreground/6 bg-glass p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)] md:p-7">
                   <CommentSection articleId={article.id} />
                 </section>
 
                 {tags.length > 0 && (
-                  <section className="rounded-[32px] border border-black/6 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+                  <section className="rounded-[32px] border border-foreground/6 bg-glass p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                     <p className="mb-3 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
                       {lang === "it" ? "Hashtag" : "Tags"}
                     </p>
@@ -754,7 +754,7 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                       {tags.map((tag) => (
                         <span
                           key={tag.id}
-                          className="rounded-full border border-black/7 bg-white px-3 py-1.5 text-xs font-sans text-muted-foreground"
+                          className="rounded-full border border-foreground/7 bg-glass px-3 py-1.5 text-xs font-sans text-muted-foreground"
                         >
                           #{tag.name}
                         </span>

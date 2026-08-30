@@ -119,7 +119,7 @@ const AdminBadgeManager = () => {
           ) : (
             <div className="space-y-3">
               {groupedBadges.map((badge) => (
-                <div key={`${badge.badge_icon || ""}-${badge.badge_name}`} className="flex items-center justify-between rounded-[22px] border border-stone-200/80 bg-white/60 px-4 py-3">
+                <div key={`${badge.badge_icon || ""}-${badge.badge_name}`} className="flex items-center justify-between rounded-[22px] border border-border/80 bg-glass/60 px-4 py-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-lg leading-none">{badge.badge_icon || "🏷️"}</span>
                     <span className="font-sans text-sm text-foreground truncate">{badge.badge_name}</span>
@@ -144,7 +144,7 @@ const AdminBadgeManager = () => {
           ) : (
             <div className="space-y-3">
               {badges.map((badge) => (
-                <article key={badge.id} className="rounded-[22px] border border-stone-200/80 bg-white/60 px-4 py-4">
+                <article key={badge.id} className="rounded-[22px] border border-border/80 bg-glass/60 px-4 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-2">

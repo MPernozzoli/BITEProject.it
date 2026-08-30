@@ -62,5 +62,12 @@ tags: [backend, edge-functions, serverless, supabase]
 `email-preferences.ts`, `newsletter-helpers.ts`, `system-email-automation.ts` e `newsletter-subscription-activation.ts` sopravvivono come **adattatori sottili** verso `@pynkstudio/newsletterapp`, per non toccare le function non-newsletter che li importano. Non contengono logica: nuovi comportamenti vanno nel package → [[12 - Newsletter ed Email]].
 `email-config.ts`, `auth-email-hook` e `send-transactional-email` usano `mail.biteproject.it` come sender domain per le email automatiche. L'invio effettivo passa da Resend in `process-email-queue`; la casella ordinaria admin vive invece su `/api/email/*` in [[10 - API Vercel]].
 
+## Tracker di sorgente nelle email
+`_shared/tracking.ts` è il gemello Deno di `src/lib/utm.ts` (le function non possono importare dal bundle del sito; `src/test/tracking-parity.test.ts` verifica che le due implementazioni restino d'accordo). `_shared/email-config.ts` espone `trackedUrl(lang, path, tracking)`: `localizedUrl` più i parametri `utm_*`.
+
+Lo usano `send-newsletter-digest` (campagna = finestra del digest, non l'etichetta tradotta dell'edizione), `notify-story-subscribers` (campagna = slug della storia) e `dispatch-engagement-notifications`, che distingue la consegna via email da quella via push nel `utm_medium` — è l'unico modo per sapere quale delle due riporta davvero qualcuno sul sito.
+
+Si taggano solo i link che **rientrano da fuori**. I link interni — feed community, sitemap, canonical, semantic layer — restano nudi: un `utm_*` lì sovrascriverebbe la provenienza reale della sessione in corso → [[26 - Sorgenti di Traffico]]
+
 ## Collegamenti
 - [[08 - Supabase]] · [[10 - API Vercel]] · [[12 - Newsletter ed Email]]

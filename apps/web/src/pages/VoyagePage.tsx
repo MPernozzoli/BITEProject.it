@@ -4,6 +4,7 @@ import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
+import { useVoyageViewTracking } from "@/hooks/useVoyageViews";
 import {
   bilingualSlugOrFilter,
   buildVoyagePath,
@@ -32,19 +33,11 @@ import {
 } from "@/lib/voyage-utils";
 import { applySeo, withLang, voyageOgImageUrl, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { formatBookingWindow, isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
-import {
-  perPersonDepositEur,
-  legDepositEur,
-  contributionFixedMinimumEur,
-  formatDepositEur,
-  getContributionExplanation,
-  roundUpToNextEuro,
-} from "@/lib/booking-deposit";
-import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
+import VoyageJoinPanel from "@/components/voyage/VoyageJoinPanel";
 import {
   Activity,
   ArrowLeft,
@@ -63,7 +56,6 @@ import {
   Route,
   Ship,
   TicketCheck,
-  Users,
   X,
 } from "lucide-react";
 
@@ -141,6 +133,10 @@ const VoyagePage = () => {
   const voyage = snapshotVoyage ?? liveVoyage;
   const voyageId = voyage?.id ?? null;
   const isLoading = !publicContent && (isPublicContentLoading || isLiveVoyageLoading);
+
+  // La pagina viaggio alimenta gli stessi insight di performance degli
+  // articoli: visita, provenienza, permanenza, profondità di scroll.
+  useVoyageViewTracking(voyageId, lang);
 
   const snapshotWaypoints = useMemo(
     () => publicContent?.voyageWaypoints.filter((entry) => entry.voyage_id === voyageId) ?? null,
@@ -358,23 +354,6 @@ const VoyagePage = () => {
 
   const voyageIsBookable = voyage ? isVoyageBookableNow(voyage) : false;
   const bookableLegs = useMemo(() => bookingLegs.filter((leg) => leg.is_bookable), [bookingLegs]);
-  const hasAvailableLegs = bookingLegs.some((leg) => leg.available);
-  const contributionOpts = useMemo(
-    () => ({ contributionPerNmEur: voyage?.booking_contribution_per_nm_eur }),
-    [voyage?.booking_contribution_per_nm_eur]
-  );
-  const minLegPriceEur = useMemo(() => {
-    if (bookableLegs.length === 0) return null;
-    return Math.min(...bookableLegs.map((leg) => perPersonDepositEur([leg], contributionOpts)));
-  }, [bookableLegs, contributionOpts]);
-  const fullVoyagePriceEur = useMemo(() => {
-    if (bookableLegs.length === 0) return null;
-    return perPersonDepositEur(bookableLegs, contributionOpts);
-  }, [bookableLegs, contributionOpts]);
-  const contributionExplanation = useMemo(
-    () => getContributionExplanation(bookableLegs, { ...contributionOpts, lang }),
-    [bookableLegs, contributionOpts, lang]
-  );
 
   useEffect(() => {
     if (!voyage) return;
@@ -478,8 +457,10 @@ const VoyagePage = () => {
   const dateRange = formatVoyageDateRange(voyage, locale);
   const TypeIcon = voyage.type === "water" ? Ship : Mountain;
 
+  // The join panel plants a fixed bar at the bottom of the viewport; without the extra
+  // padding it would sit on top of the last section instead of below it.
   return (
-    <div className="space-y-5 pb-4 md:space-y-6 md:pb-6">
+    <div className={`space-y-5 md:space-y-6 ${voyage.booking_enabled && bookableLegs.length > 0 ? "pb-44 md:pb-40" : "pb-4 md:pb-6"}`}>
       {/* Hero */}
       <section className="relative">
         <div className={`relative h-[38vh] md:h-[48vh] overflow-hidden ${heroRouteCoordinates || heroImage ? "" : "bg-gradient-to-br from-primary via-primary/85 to-accent/60"}`}>
@@ -492,12 +473,12 @@ const VoyagePage = () => {
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-24 md:px-8 md:pt-28">
             <Link
               to="/voyages"
-              className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-sm text-white backdrop-blur-md transition-colors hover:bg-black/40"
+              className="inline-flex items-center gap-2 rounded-full border border-glass-edge/25 bg-black/25 px-4 py-2 text-sm text-white backdrop-blur-md transition-colors hover:bg-black/40"
             >
               <ArrowLeft size={14} /> {lang === "it" ? "Torna alle rotte" : "Back to voyages"}
             </Link>
             {voyageIsBookable && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-500/25 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 dark:border-emerald-500/30 bg-emerald-500/25 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white backdrop-blur-md">
                 <TicketCheck size={13} />
                 {lang === "it" ? "Adesioni aperte" : "Open to join"}
               </span>
@@ -589,127 +570,19 @@ const VoyagePage = () => {
         </div>
       </section>
 
-      {/* Booking / participation panel. #partecipa is what /contact links to. */}
+      {/* Booking / participation panel. #partecipa is what /contact links to. The whole
+          application — legs, questions, conditions, payment — now runs here instead of
+          bouncing the traveller to /bookings. */}
       {voyage.booking_enabled && (
         <section id="partecipa" className="page-section pt-0 scroll-mt-24">
           <div className="page-section-wide">
-            <div className="glass-panel rounded-[34px] border-emerald-200/60 bg-gradient-to-br from-emerald-50/85 to-white/60 p-6 md:p-8">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                    <TicketCheck size={20} />
-                  </span>
-                  <div>
-                    <h2 className="editorial-heading text-2xl md:text-3xl text-emerald-950">
-                      {lang === "it" ? "Partecipa a questo viaggio" : "Join this voyage"}
-                    </h2>
-                    <p className="mt-1 text-sm text-emerald-900/75 max-w-xl">
-                      {bookableLegs.length === 0
-                        ? (lang === "it"
-                          ? "Le tratte non sono ancora state pubblicate: torna presto per scoprire come imbarcarti."
-                          : "Legs haven't been published yet — check back soon to see how to come aboard.")
-                        : hasAvailableLegs
-                          ? (lang === "it"
-                            ? "Scegli una o più tratte e richiedi il tuo posto a bordo."
-                            : "Pick one or more legs and request your spot on board.")
-                          : (lang === "it"
-                            ? "Le tratte esistono, ma al momento non risultano posti disponibili."
-                            : "Legs exist, but no seats are currently available.")}
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  to={`/bookings?voyage=${voyage.id}`}
-                  aria-disabled={!hasAvailableLegs}
-                  className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-sm transition ${
-                    hasAvailableLegs ? "bg-emerald-700 hover:bg-emerald-800" : "pointer-events-none bg-emerald-700/30"
-                  }`}
-                >
-                  <CalendarCheck size={16} />
-                  {lang === "it" ? "Richiedi imbarco" : "Request a berth"}
-                </Link>
-              </div>
-
-              <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                <div className="glass-panel-soft rounded-[22px] p-4">
-                  <p className="flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-2">
-                    <Users size={12} /> {lang === "it" ? "Posti totali" : "Total berths"}
-                  </p>
-                  <p className="text-sm">{voyage.booking_max_guests ? voyage.booking_max_guests : "-"}</p>
-                </div>
-                <div className="glass-panel-soft rounded-[22px] p-4">
-                  <p className="flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-2">
-                    <Route size={12} /> {lang === "it" ? "A partire da" : "Starting from"}
-                  </p>
-                  <p className="text-sm">{minLegPriceEur != null ? `${formatDepositEur(minLegPriceEur, lang)} / ${lang === "it" ? "persona" : "person"}` : "-"}</p>
-                  {minLegPriceEur != null && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {lang === "it" ? "stima indicativa" : "indicative estimate"}
-                    </p>
-                  )}
-                </div>
-                <div className="glass-panel-soft rounded-[22px] p-4">
-                  <p className="flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-2">
-                    <TicketCheck size={12} /> {lang === "it" ? "Intera rotta" : "Full route"}
-                  </p>
-                  <p className="text-sm">{fullVoyagePriceEur != null ? `${formatDepositEur(fullVoyagePriceEur, lang)} / ${lang === "it" ? "persona" : "person"}` : "-"}</p>
-                  {fullVoyagePriceEur != null && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {lang === "it" ? "stima indicativa" : "indicative estimate"}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {bookableLegs.length > 0 && (
-                <div className="mt-6 space-y-2">
-                  {bookableLegs.map((leg) => {
-                    const price = roundUpToNextEuro(legDepositEur(leg, contributionOpts));
-                    return (
-                      <div
-                        key={leg.id}
-                        className="flex flex-col gap-2 rounded-[18px] border border-emerald-100 bg-white/55 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <p className="text-sm text-emerald-950">
-                          {legWaypointLabel(leg.from_waypoint_id, lang === "it" ? "Partenza" : "Departure")}
-                          {" → "}
-                          {legWaypointLabel(leg.to_waypoint_id, lang === "it" ? "Arrivo" : "Arrival")}
-                          <span className="ml-2 text-emerald-900/60">
-                            {Number(leg.planned_nautical_miles || 0).toFixed(0)} NM
-                          </span>
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-emerald-900">{formatDepositEur(price, lang)}</span>
-                          <span
-                            className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                              leg.available
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {leg.available
-                              ? (lang === "it" ? `${leg.remaining} posti liberi` : `${leg.remaining} seats left`)
-                              : (lang === "it" ? "Al completo" : "Fully booked")}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {bookableLegs.length > 0 && (
-                <div className="mt-5 max-w-2xl space-y-1.5 text-xs leading-relaxed text-emerald-900/60">
-                  <ContributionEstimateNote lang={lang} className="space-y-1.5" />
-                  <p>{contributionExplanation}</p>
-                  <p>
-                    {lang === "it"
-                      ? `* Agli importi indicati sopra va aggiunta una quota fissa una tantum di ${formatDepositEur(contributionFixedMinimumEur(), lang)} a persona, indipendentemente dal numero di tratte scelte.`
-                      : `* A one-time fixed contribution of ${formatDepositEur(contributionFixedMinimumEur(), lang)} per person must be added to the amounts above, regardless of how many legs are chosen.`}
-                  </p>
-                </div>
-              )}
-            </div>
+            <VoyageJoinPanel
+              voyage={voyage}
+              voyageName={voyageName || voyage.name}
+              legs={bookableLegs}
+              lang={lang}
+              waypointLabel={legWaypointLabel}
+            />
           </div>
         </section>
       )}
@@ -1116,7 +989,7 @@ const VoyagePage = () => {
       )}
 
       <Dialog open={lightboxIndex != null} onOpenChange={(open) => !open && setLightboxIndex(null)}>
-        <DialogContent className="max-w-[min(96vw,1120px)] overflow-hidden border border-white/10 bg-[rgba(10,14,20,0.96)] p-0 text-white shadow-2xl">
+        <DialogContent className="max-w-[min(96vw,1120px)] overflow-hidden border border-glass-edge/10 bg-[rgba(10,14,20,0.96)] p-0 text-white shadow-2xl">
           {lightboxIndex != null && galleryItems[lightboxIndex] && (
             <div className="relative flex max-h-[85vh] items-center justify-center">
               <img

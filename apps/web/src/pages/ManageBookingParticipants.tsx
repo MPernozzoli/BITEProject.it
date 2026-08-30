@@ -365,14 +365,14 @@ const ManageBookingParticipants = () => {
         </header>
 
         {bookingStatus === "pending_payment" && (
-          <div className="glass-panel rounded-[24px] border border-orange-300/50 bg-orange-50/60 p-4 text-xs leading-relaxed text-orange-950 dark:bg-orange-400/10 dark:text-orange-100/90">
+          <div className="glass-panel rounded-[24px] border border-orange-300/50 dark:border-orange-500/30 bg-orange-50/60 dark:bg-orange-500/10 p-4 text-xs leading-relaxed text-orange-950 dark:text-orange-300 dark:bg-orange-400/10 dark:text-orange-100/90">
             {lang === "it"
               ? "La candidatura non è ancora stata inviata: viene registrata solo dopo il pagamento del contributo, che si completa qui sotto dopo aver indicato i partecipanti."
               : "Your application has not been submitted yet: it is registered only once the contribution is paid, which you complete below after listing the participants."}
           </div>
         )}
 
-        <div className="glass-panel rounded-[24px] border border-amber-300/50 bg-amber-50/50 p-4 text-xs leading-relaxed text-amber-900 dark:bg-amber-400/10 dark:text-amber-100/90">
+        <div className="glass-panel rounded-[24px] border border-amber-300/50 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/10 p-4 text-xs leading-relaxed text-amber-900 dark:text-amber-300 dark:bg-amber-400/10 dark:text-amber-100/90">
           {lang === "it"
             ? "BITE non è un charter o un'attività commerciale: è un viaggio privato con condivisione equa delle spese vive. Ogni partecipante dovrà avere un proprio account sul portale BITE per prendere parte al viaggio, accettare le condizioni ed eventualmente versare la propria quota di contributo."
             : "BITE is not a charter or a commercial activity: it is a private voyage with fair sharing of out-of-pocket costs. Each participant must have their own BITE portal account to take part, accept the terms and, if applicable, pay their own contribution share."}
@@ -425,7 +425,7 @@ const ManageBookingParticipants = () => {
             </p>
           )}
           {alreadyPaid && (
-            <p className="rounded-2xl border border-emerald-300/60 bg-emerald-50/70 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:bg-emerald-400/10 dark:text-emerald-100/90">
+            <p className="rounded-2xl border border-emerald-300/60 dark:border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-500/10 px-3 py-2 text-xs leading-relaxed text-emerald-900 dark:text-emerald-300 dark:bg-emerald-400/10 dark:text-emerald-100/90">
               {lang === "it"
                 ? "Hai già versato il contributo per questa prenotazione: la modalità di pagamento non è più modificabile. Per rettifiche scrivici."
                 : "You have already paid the contribution for this booking: the payment split can no longer be changed. Contact us for adjustments."}

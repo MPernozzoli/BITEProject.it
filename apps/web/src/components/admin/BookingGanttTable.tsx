@@ -563,7 +563,7 @@ const BookingGanttTable = ({
             className="w-full rounded-lg border border-border bg-transparent px-2 py-1.5 text-xs outline-none focus:border-accent disabled:opacity-50"
           />
           {activeAddHasInviteEmail && !activeAddInviteEmailReady && (
-            <p className="mt-1 text-[10px] text-amber-700">Inserisci una email valida.</p>
+            <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">Inserisci una email valida.</p>
           )}
         </div>
         <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border/70 bg-background/70 p-2">
@@ -694,7 +694,7 @@ const BookingGanttTable = ({
                   </span>
                 )}
                 <div className="mt-1 flex items-center justify-between gap-1">
-                  <span className={`text-[11px] ${full ? "text-amber-700" : "text-muted-foreground"}`}>
+                  <span className={`text-[11px] ${full ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
                     {occupied}/{maxGuests} pax
                   </span>
                   <button
@@ -749,14 +749,14 @@ const BookingGanttTable = ({
                     <span className="block truncate">{profile?.name || profile?.email || request.profile_id}</span>
                   </button>
                   {request.is_crew && (
-                    <span className="rounded-full border border-indigo-300/70 bg-indigo-100/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-800">
+                    <span className="rounded-full border border-indigo-300/70 dark:border-indigo-500/30 bg-indigo-100/70 dark:bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-800 dark:text-indigo-300">
                       Equipaggio
                     </span>
                   )}
                   {awaitingPaymentRequestIds.has(request.id) && (
                     <span
                       title="Il posto è riservato; diventa confermata automaticamente una volta pagato il contributo."
-                      className="rounded-full border border-orange-300/70 bg-orange-100/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-orange-800"
+                      className="rounded-full border border-orange-300/70 dark:border-orange-500/30 bg-orange-100/70 dark:bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-orange-800 dark:text-orange-300"
                     >
                       In attesa di pagamento
                     </span>
@@ -783,7 +783,7 @@ const BookingGanttTable = ({
                     <div
                       key={segIndex}
                       className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${
-                        isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 text-amber-900" : statusClass
+                        isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300" : statusClass
                       }`}
                       style={{
                         top: 8,
@@ -812,7 +812,7 @@ const BookingGanttTable = ({
                   proposedSegments.map((segment, segIndex) => (
                     <div
                       key={`proposed-${segIndex}`}
-                      className="absolute flex items-center gap-1.5 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 px-3 text-[12px] font-semibold text-sky-900"
+                      className="absolute flex items-center gap-1.5 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15 px-3 text-[12px] font-semibold text-sky-900 dark:text-sky-300"
                       style={{
                         top: ROW_HEIGHT + 8,
                         height: ROW_HEIGHT - 16,
@@ -829,8 +829,8 @@ const BookingGanttTable = ({
                 {isStagedRow && (() => {
                   const isPendingInvite = pendingInviteRequestIds.has(request.id);
                   return (
-                    <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-2">
-                      <p className="w-full text-[11px] font-medium text-amber-900">
+                    <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-500/10 p-2">
+                      <p className="w-full text-[11px] font-medium text-amber-900 dark:text-amber-300">
                         Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
                         {allIndices.length === 1 ? "a" : "e"}.
                         {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
@@ -847,7 +847,7 @@ const BookingGanttTable = ({
                         type="button"
                         onClick={isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog}
                         disabled={saving}
-                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
                       >
                         <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
                       </button>
@@ -920,10 +920,10 @@ const BookingGanttTable = ({
         {anyPendingProposal && (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border/60 px-3 py-2.5 text-[12px] text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-6 rounded-full border border-emerald-300/75 bg-emerald-100/80" /> Adesso (tratte attuali)
+              <span className="h-3 w-6 rounded-full border border-emerald-300/75 dark:border-emerald-500/30 bg-emerald-100/80 dark:bg-emerald-500/15" /> Adesso (tratte attuali)
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70" /> Proposta (non ancora confermata)
+              <span className="h-3 w-6 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15" /> Proposta (non ancora confermata)
             </span>
           </div>
         )}

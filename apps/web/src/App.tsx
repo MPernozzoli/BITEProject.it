@@ -8,6 +8,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "rea
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { I18nProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import AdminRoute from "@/components/AdminRoute";
@@ -185,7 +186,7 @@ const App = () => {
   const [queryPersister] = useState(createAppPersister);
 
   const appTree = (
-    <>
+    <ThemeProvider>
       <Toaster />
       <Sonner />
       <Analytics />
@@ -303,7 +304,7 @@ const App = () => {
           </AuthProvider>
         </I18nProvider>
       </BrowserRouter>
-    </>
+    </ThemeProvider>
   );
 
   if (!queryPersister) {

@@ -35,7 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   note: "bg-muted text-muted-foreground",
   selected: "bg-accent/15 text-accent",
-  draft: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  draft: "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 dark:bg-amber-900/30 dark:text-amber-400",
   archived: "bg-muted text-muted-foreground line-through",
 };
 
@@ -301,7 +301,7 @@ const AdminContentNotes = () => {
                   )}
                   <button
                     onClick={() => void deleteNote(note.id)}
-                    className="p-1.5 rounded-full text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="p-1.5 rounded-full text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
                     title="Delete"
                   >
                     <Trash2 size={14} />

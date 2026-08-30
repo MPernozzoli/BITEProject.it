@@ -39,6 +39,14 @@ const translations: Translations = {
   "nav.collaborations": { en: "Collaborations", it: "Collaborazioni" },
   "nav.contact": { en: "Contact", it: "Contatti" },
 
+  // Tema
+  "theme.label": { en: "Theme", it: "Tema" },
+  "theme.light": { en: "Light", it: "Chiaro" },
+  "theme.dark": { en: "Dark", it: "Scuro" },
+  "theme.system": { en: "System", it: "Sistema" },
+  "theme.toDark": { en: "Switch to dark theme", it: "Passa al tema scuro" },
+  "theme.toLight": { en: "Switch to light theme", it: "Passa al tema chiaro" },
+
   // Hero
   "hero.title": { en: "Life is built,\nnot found.", it: "La vita si costruisce,\nnon si trova." },
   "hero.subtitle": { en: "A sailboat. Two humans. Two dogs. Open water.\nStories from a life that moves slowly, breaks often, and means something.", it: "Una barca a vela. Due umani. Due cani. Mare aperto.\nStorie da una vita che si muove piano, si rompe spesso, e ha un senso." },

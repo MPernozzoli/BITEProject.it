@@ -1484,7 +1484,7 @@ const Journal = () => {
           >
             <button
               onClick={toggleSidebar}
-              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
+              className="rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
               title={isMobile ? (mobileSidebarMode === "expanded" ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
             >
               {isMobile ? (
@@ -1495,7 +1495,7 @@ const Journal = () => {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className="rounded-full border border-white/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
+              className="rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
               title="Grid view"
             >
               <List size={16} />
@@ -1526,7 +1526,7 @@ const Journal = () => {
 
           {/* Floating sidebar — article list */}
           <div
-            className={`fixed z-30 overflow-hidden bg-background/72 backdrop-blur-2xl border border-white/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] flex flex-col transition-[transform,opacity,height] duration-300 ease-out-expo ${
+            className={`fixed z-30 overflow-hidden bg-background/72 backdrop-blur-2xl border border-glass-edge/55 shadow-[0_30px_90px_rgba(15,23,42,0.18)] flex flex-col transition-[transform,opacity,height] duration-300 ease-out-expo ${
               isMobile
                 ? "left-3 right-3 bottom-3 top-auto rounded-[28px]"
                 : "top-24 left-4 bottom-4 w-[340px] xl:w-[390px] rounded-[32px]"
@@ -1592,7 +1592,7 @@ const Journal = () => {
               <>
                 {/* Search inside sidebar */}
                 <div
-                  className="p-4 border-b border-white/45 shrink-0 bg-background/55 backdrop-blur-xl"
+                  className="p-4 border-b border-glass-edge/45 shrink-0 bg-background/55 backdrop-blur-xl"
                 >
                   {isMobile && (
                     <div className="mb-3 flex flex-col items-center gap-2">
@@ -1613,7 +1613,7 @@ const Journal = () => {
                       </div>
                     </div>
                   )}
-                  <div className="relative rounded-full border border-white/65 bg-white/60 px-1">
+                  <div className="relative rounded-full border border-glass-edge/65 bg-glass/60 px-1">
                     <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       type="text"
@@ -1675,7 +1675,7 @@ const Journal = () => {
           <div className="pt-24 md:pt-28 px-4 md:px-6 pb-4">
             <div className="glass-panel max-w-7xl mx-auto rounded-[30px] px-4 py-4 md:px-6 md:py-5 flex flex-col gap-4">
               {mapFallbackActive ? (
-                <div className="rounded-[24px] border border-white/60 bg-background/70 px-4 py-3 text-sm font-sans text-muted-foreground">
+                <div className="rounded-[24px] border border-glass-edge/60 bg-background/70 px-4 py-3 text-sm font-sans text-muted-foreground">
                   {lang === "it"
                     ? "La mappa non è disponibile in questo browser. Ti ho portato alla vista lista per continuare la navigazione."
                     : "The map is unavailable in this browser. You were moved to the list view so you can keep browsing."}

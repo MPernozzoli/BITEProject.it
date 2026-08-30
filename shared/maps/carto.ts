@@ -47,28 +47,52 @@ const shouldUseRetinaTiles = () => {
   return window.devicePixelRatio > 1.25 && !isSlowConnection();
 };
 
-export const cartoRasterTileUrl = (subdomain: string, retina: boolean) => {
-  const url = `https://${subdomain}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}${retina ? "@2x" : ""}.png`;
+/** CARTO serve le due basi allo stesso indirizzo, cambia solo il nome del set. */
+export type CartoBasemapVariant = "light" | "dark";
+
+const CARTO_BASEMAP: Record<CartoBasemapVariant, string> = {
+  light: "light_all",
+  dark: "dark_matter",
+};
+
+export const cartoRasterTileUrl = (
+  subdomain: string,
+  retina: boolean,
+  variant: CartoBasemapVariant = "light",
+) => {
+  const url = `https://${subdomain}.basemaps.cartocdn.com/${CARTO_BASEMAP[variant]}/{z}/{x}/{y}${retina ? "@2x" : ""}.png`;
   return CARTO_API_KEY ? `${url}?key=${encodeURIComponent(CARTO_API_KEY)}` : url;
 };
 
+/** Le URL delle tile per una variante, nell'ordine dei subdomain. */
+export const cartoRasterTileUrls = (variant: CartoBasemapVariant = "light") => {
+  const retina = shouldUseRetinaTiles();
+  return CARTO_TILE_SUBDOMAINS.map((subdomain) => cartoRasterTileUrl(subdomain, retina, variant));
+};
+
+/** Id della sorgente raster, per chi deve scambiarne le tile a mappa viva. */
+export const CARTO_SOURCE_ID = "carto";
+
 /**
- * Stile MapLibre minimo con la sola base raster CARTO light.
+ * Stile MapLibre minimo con la sola base raster CARTO.
  * Unico punto in cui viene composta la URL delle tile: la key non va duplicata altrove.
+ * `variant` resta "light" di default: chi non conosce i temi non cambia comportamento.
  */
-export const createCartoRasterStyle = () => {
+export const createCartoRasterStyle = (variant: CartoBasemapVariant = "light") => {
   const retina = shouldUseRetinaTiles();
 
   return {
     version: 8 as const,
     sources: {
-      carto: {
+      [CARTO_SOURCE_ID]: {
         type: "raster" as const,
-        tiles: CARTO_TILE_SUBDOMAINS.map((subdomain) => cartoRasterTileUrl(subdomain, retina)),
+        tiles: CARTO_TILE_SUBDOMAINS.map((subdomain) => cartoRasterTileUrl(subdomain, retina, variant)),
         tileSize: 256,
         attribution: CARTO_ATTRIBUTION,
       },
     },
-    layers: [{ id: "carto", type: "raster" as const, source: "carto", minzoom: 0, maxzoom: 20 }],
+    layers: [
+      { id: CARTO_SOURCE_ID, type: "raster" as const, source: CARTO_SOURCE_ID, minzoom: 0, maxzoom: 20 },
+    ],
   };
 };
