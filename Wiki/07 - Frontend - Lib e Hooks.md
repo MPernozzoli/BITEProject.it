@@ -45,6 +45,10 @@ tags: [frontend, lib, hooks, logica]
 - `voyage-schedule.ts` — regole di fase viaggio/tratta (`getLegPhase`, `getVoyagePhase`, `isLegBookableNow`, `getPendingActual`, `isLegDelayed`, `shouldShowLiveWidget`). Mirror TS delle funzioni SQL omonime: vanno cambiati insieme → [[21 - Tracking Real-Time Viaggi]]
 - `voyage-utils.ts` — util rotte/waypoint, reverse geocoding e naming tappe; per waypoint marittimi evita label generiche di stato/paese, usa solo la città se il marker sembra una fermata costiera/portuale e altrimenti preferisce toponimi marittimi reali (baie, cale/località, capi, isole). Il fallback visuale è `WPT NN`, non coordinate salvate come nome; vecchi nomi in formato coordinate vengono trattati come provvisori e possono essere sovrascritti dal naming automatico. L'admin può forzare il naming città o baia/cala dall'inspector WPT. Espone anche `getWaypointOptionLabel` (etichetta dei `<select>` admin: `Start`, `WP 03 · Nome`, `Arrival`), spostata qui dall'editor articoli quando il pannello di associazione geo ha iniziato a servirsene → [[06 - Frontend - Componenti]]
 
+### Sorgenti di traffico → [[26 - Sorgenti di Traffico]]
+- `utm.ts` — **grammatica dei tracker**: normalizzazione dei valori, `buildTrackedUrl`/`stripTrackingFromUrl`, classificazione del referrer, ordine dei segnali (utm → click id → referrer → `direct`) e catalogo dei canali. Modulo **puro**, importato sia dal client sia dal server MCP (come `mcp-scopes.ts`): un solo posto dove si decide che `Facebook` e `FB` sono la stessa sorgente.
+- `attribution.ts` — la parte che tocca il browser: cattura all'atterraggio (chiamata da `main.tsx` prima del mount React), ultimo tocco in `sessionStorage` e primo tocco in `localStorage`, più `attributionRpcArgs()` per allegare la provenienza alle RPC di tracking. Ogni accesso allo storage è in `try/catch`: in modalità privata salta l'attribuzione, non la pagina.
+
 ### Mappe → [[14 - Mappe e Layer Geospaziale]]
 - `maplibre.ts`, `map-presence.ts`
 
@@ -59,7 +63,7 @@ tags: [frontend, lib, hooks, logica]
 - `profile-avatar.ts`, `profile-completeness.ts`
 
 ### SEO / i18n / infra
-- `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]. `ArticlePage.tsx` preferisce `article_seo_optimizations` quando il record è `ready`, poi ricade sugli excerpt editoriali; `ArticleEditor.tsx` mostra lo stesso record in sidebar per controllo editoriale e retry manuale.
+- `seo.ts`, `i18n.tsx`, `language.ts` — traduzioni, tipi lingua condivisi e rilevamento lingua → [[03 - Routing e i18n]]. `seo.ts` espone anche `voyageOgImageUrl()`, l'anteprima social di una rotta servita da `/api/og/voyage` (rendering server in `src/server/og/` → [[14 - Mappe e Layer Geospaziale]]). `ArticlePage.tsx` preferisce `article_seo_optimizations` quando il record è `ready`, poi ricade sugli excerpt editoriali; `ArticleEditor.tsx` mostra lo stesso record in sidebar per controllo editoriale e retry manuale.
 - `pwa.ts` — service worker/PWA; viene registrato dopo il mount React per non bloccare il primo render.
 - `boot-splash-3d.ts` — splash 3D con three.js mantenuta nel codice ma non più collegata al bootstrap/route iniziale.
 - `hero-ready-event.ts` — evento legacy per readiness hero, non più usato per trattenere il caricamento della home.

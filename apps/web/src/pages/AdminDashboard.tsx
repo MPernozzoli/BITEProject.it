@@ -25,6 +25,7 @@ import {
   ClipboardList,
   MessageSquare,
   MessagesSquare,
+  Radar,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -284,6 +285,7 @@ const AdminDashboard = () => {
           { to: "/admin/content-notes", label: "Content Notes", hint: "Idee e backlog", icon: ClipboardList, count: null },
           { to: "/admin/comments", label: "Commenti", hint: "Social e risposte", icon: MessagesSquare, count: null },
           { to: "/admin/performance", label: "Performance", hint: "Punteggi articoli", icon: BarChart3, count: null },
+          { to: "/admin/sorgenti", label: "Sorgenti", hint: "Link tracciati e traffico", icon: Radar, count: null },
         ],
       },
       {

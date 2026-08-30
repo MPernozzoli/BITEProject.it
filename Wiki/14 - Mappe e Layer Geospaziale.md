@@ -30,6 +30,16 @@ tags: [mappe, geo, maplibre, funzionalita]
 - I waypoint sono **oggetti geografici di prima classe**.
 - Link rotta→articolo e waypoint→articolo devono essere espliciti.
 
+## Mappa server-side per le anteprime social (`apps/web/src/server/og/`)
+Quando una rotta viene condivisa (WhatsApp, Facebook, Telegram, Slack) l'anteprima non è più l'immagine generica del sito ma **la mappa di quella rotta**, generata da `GET /api/og/voyage?slug=...` → [[10 - API Vercel]].
+
+- `route-map.ts` — proiezione Web Mercator, scelta dello zoom che fa entrare il bbox, download delle tile CARTO `light_all` (stessa base del sito, stessa `VITE_CARTO_API_KEY`) e disegno di rotta, soste e marker. I colori vengono da `getVoyageStrokeColor` di `VoyageMap.tsx`: acqua/terra per tipo, tonalità per stato.
+- `raster.ts`, `png.ts`, `font.ts` — compositing RGBA, codec PNG su `node:zlib` e font bitmap 5x7 per l'attribuzione OSM/CARTO stampata nell'immagine (viaggia da sola, fuori dal sito).
+- Geometria: `cached_geometry.coordinates` se c'è, altrimenti i waypoint in linea retta — stessa priorità di `VoyagePage.tsx`. Le soste marcate sono i waypoint "narrativi", con la regola di `getWaypointEffectiveType`.
+- Niente `sharp` né `canvas`: sul runtime serverless non ci sono binari nativi, quindi tile e output sono decodificati/codificati a mano.
+
+> La mappa renderizzata resta un **derivato**: le coordinate raw restano la fonte, coerentemente con i principi qui sopra.
+
 ## Esposizione machine-readable → [[15 - Semantic Layer (AI Agents)]]
 La function `public-geo` serve GeoJSON:
 - `public-geo?kind=routes` → feature `LineString` (rotte)
@@ -52,4 +62,4 @@ Layout full-bleed con pannello di controllo galleggiante `MapControlPanel.tsx` (
 > ⚠️ Il container della mappa va dimensionato esplicitamente (`h-full w-full`), **non** con `absolute inset-0`: `maplibre-gl.css` marca `.maplibregl-map` con `position: relative` a pari specificità ma più avanti nel bundle, annulla il posizionamento assoluto e la mappa collassa a 0px.
 
 ## Collegamenti
-- [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]
+- [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

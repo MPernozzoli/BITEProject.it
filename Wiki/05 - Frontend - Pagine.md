@@ -67,6 +67,7 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `AdminProfile.tsx` | `/profile` |
 | `AdminContentNotes.tsx` | `/admin/content-notes` |
 | `AdminPerformanceDashboard.tsx` | `/admin/performance` |
+| `AdminTrafficSources.tsx` | `/admin/sorgenti` |
 
 `/profilo` è un alias verso `/profile`.
 
@@ -82,7 +83,7 @@ Gli slug di `ArticleEditor.tsx` (generico, IT, EN) si auto-generano dal titolo *
 
 Su iPhone/PWA, `Layout.tsx` aggiunge un dock mobile admin persistente su `/admin/*` e `/profile` per utenti con ruolo admin. Le pagine secondarie e il profilo hanno quindi sempre un link diretto alla Home admin (`/admin`) e alle altre aree operative.
 
-`AdminDashboard.tsx` usa una gerarchia da workspace: CTA primaria per nuovo articolo, shortcut solo per aree operative frequenti, KPI editoriali e navigazione interna per gruppi Contenuti/Operazioni/Audience. Il Profilo resta fuori dagli shortcut principali perché già coperto dalla propic e dal dock mobile. Le card dashboard includono: Articoli, Piano editoriale, Stories, Rotte, Community, Newsletter, Badge, Content Notes (backlog idee) e Performance (scoring 5 punti articoli pubblicati).
+`AdminDashboard.tsx` usa una gerarchia da workspace: CTA primaria per nuovo articolo, shortcut solo per aree operative frequenti, KPI editoriali e navigazione interna per gruppi Contenuti/Operazioni/Audience. Il Profilo resta fuori dagli shortcut principali perché già coperto dalla propic e dal dock mobile. Le card dashboard includono: Articoli, Piano editoriale, Stories, Rotte, Community, Newsletter, Badge, Content Notes (backlog idee), Performance (scoring 5 punti articoli pubblicati) e Sorgenti (link tracciati e provenienza del traffico).
 
 Nel tab Piano editoriale, `AdminDashboard.tsx` monta `AdminEditorialPlan`: calendario multicanale con cockpit social mensile, target social gestibili e raccolta insight sui post tramite `editorial_post_insights` → [[16 - Admin]].
 

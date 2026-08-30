@@ -30,7 +30,7 @@ import {
   type Voyage,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
-import { applySeo, withLang, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { applySeo, withLang, voyageOgImageUrl, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { formatBookingWindow, isVoyageBookableNow, type BookableLegAvailability } from "@/lib/booking-utils";
 import {
   perPersonDepositEur,
@@ -389,7 +389,8 @@ const VoyagePage = () => {
       description,
       pathname: canonicalPath,
       type: "collection",
-      image: heroImage || undefined,
+      // La mappa della rotta, non una foto: identifica il viaggio anche in anteprima.
+      image: voyageOgImageUrl(canonicalPath.split("/").pop() || voyage.id),
       structuredData: {
         "@context": "https://schema.org",
         "@type": "Trip",
@@ -419,7 +420,7 @@ const VoyagePage = () => {
         inLanguage: lang,
       },
     });
-  }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, heroImage, lang, publicWaypointEntries, publicWaypoints.length, voyage, voyageDescription, voyageName]);
+  }, [arrival, arrivalLabel, articles, canonicalPath, departure, departureLabel, lang, publicWaypointEntries, publicWaypoints.length, voyage, voyageDescription, voyageName]);
 
   const hasScrolledToHashRef = useRef(false);
   useEffect(() => {

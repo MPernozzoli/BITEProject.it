@@ -162,6 +162,8 @@ interface PageData {
   /** Path without lang prefix, per language (for canonical + hreflang). */
   paths: Record<Lang, string>;
   image?: string | null;
+  /** Dimensioni dichiarate solo quando le conosciamo (mappe rotte): aiutano l'anteprima a non ritagliare. */
+  imageSize?: { width: number; height: number };
   ogType: "website" | "article";
   jsonLd?: Record<string, unknown>;
   paragraphs?: string[];
@@ -347,6 +349,14 @@ const voyageDescription = (row: any, lang: Lang): string =>
   localizedField(row, "description", lang) || "";
 
 const voyagePath = (row: any, lang: Lang) => `/voyages/${slugFor(row, lang)}`;
+
+/**
+ * Anteprima social di una rotta: la mappa del percorso, disegnata da
+ * /api/og/voyage. Senza, ogni viaggio condiviso mostrava l'immagine generica
+ * del sito. Speculare a `voyageOgImageUrl` in src/lib/seo.ts.
+ */
+const voyageOgImage = (row: any, lang: Lang) =>
+  `${SITE_URL}/api/og/voyage?slug=${encodeURIComponent(slugFor(row, lang) || String(row?.id ?? ""))}`;
 
 const articleTitle = (row: any, lang: Lang): string =>
   localizedField(row, "title", lang) || String(row?.slug ?? "Logbook article");
@@ -539,7 +549,9 @@ const buildArticlePage = async (lang: Lang, slug: string): Promise<PageData> => 
     title: `${title} | BITE`,
     description,
     paths,
-    image: article.cover_image || null,
+    // Copertina dell'articolo; se manca, la mappa del viaggio collegato è
+    // comunque più informativa dell'immagine generica del sito.
+    image: article.cover_image || (linkedVoyage ? voyageOgImage(linkedVoyage, lang) : null),
     ogType: "article",
     paragraphs,
     status: 200,
@@ -642,6 +654,7 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
       ? `Rotta pubblica "${name}" con partenza, arrivo, waypoint e date del viaggio a bordo di S/Y Spritz.`
       : `Public route "${name}" with departure, arrival, waypoints, and voyage dates aboard S/Y Spritz.`);
   const path = voyagePath(voyage, lang);
+  const image = voyageOgImage(voyage, lang);
   const [waypoints, articleRows, otherVoyages] = await Promise.all([
     supabaseFetch(`voyage_waypoints?select=name,name_it,name_en,description,description_it,description_en,lat,lng,event_date,date_start,date_end,sort_order&voyage_id=eq.${encodeURIComponent(id)}&order=sort_order.asc`),
     supabaseFetch(
@@ -679,6 +692,8 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
     title: `${name} | BITE`,
     description,
     paths: { it: path, en: path },
+    image,
+    imageSize: { width: 1200, height: 630 },
     ogType: "website",
     paragraphs: waypointParagraphs,
     sections: [
@@ -696,6 +711,7 @@ const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
       description,
       url: canonicalUrl,
       mainEntityOfPage: canonicalUrl,
+      image,
       departureTime: voyage.start_date || undefined,
       arrivalTime: voyage.end_date || undefined,
       itinerary: (waypoints ?? []).map((waypoint, index) => ({
@@ -795,6 +811,9 @@ const renderHtml = (lang: Lang, page: PageData): string => {
     <meta property="og:url" content="${canonical}" />
     <meta property="og:locale" content="${lang === "it" ? "it_IT" : "en_US"}" />
     <meta property="og:image" content="${escapeHtml(image)}" />
+    ${page.imageSize ? `<meta property="og:image:width" content="${page.imageSize.width}" />
+    <meta property="og:image:height" content="${page.imageSize.height}" />` : ""}
+    <meta property="og:image:alt" content="${title}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />

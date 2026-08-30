@@ -13,6 +13,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpToolError, type McpContext } from "../context.js";
 import { articleLinks } from "../links.js";
+import { trackingForGroup } from "./links.js";
+import {
+  buildTrackedUrl,
+  hostOf,
+  parseTrackingParams,
+  stripTrackingFromUrl,
+  type TrackingParams,
+} from "../../../lib/utm.js";
 import { clientRequestIdShape, registerTool, type ToolOutcome } from "../registry.js";
 
 const GROUP_COLUMNS =
@@ -139,7 +147,14 @@ async function latestMetricByPost(ctx: McpContext): Promise<Map<string, MetricRo
   return latest;
 }
 
-/** Verifica che l'articolo esista e restituisce i suoi indirizzi pubblici. */
+/**
+ * Verifica che l'articolo esista e restituisce i suoi indirizzi pubblici.
+ *
+ * Sempre canonici: `url_it`/`url_en` sono l'identità dell'articolo, e restano
+ * confrontabili fra una risposta e l'altra. La versione tracciata per un canale
+ * si ottiene da qui con `buildTrackedUrl`, e vive nel campo che la usa davvero
+ * (il `link_url` del post), non al posto dell'indirizzo.
+ */
 async function resolveArticle(
   ctx: McpContext,
   articleId: string,
@@ -169,6 +184,44 @@ async function resolveArticle(
     url_it: links.url_it,
     url_en: links.url_en,
   };
+}
+
+/**
+ * Il link da registrare per un post di gruppo.
+ *
+ * Ordine: un link esplicito già tracciato si rispetta com'è; un link esplicito
+ * nudo verso il sito riceve i tracker del gruppo; senza link esplicito si usa
+ * l'indirizzo dell'articolo nella lingua del post. Un link verso un dominio
+ * altrui non viene mai riscritto: i nostri utm su casa d'altri non misurano
+ * nulla e sporcano l'URL.
+ */
+function resolvePostLink(
+  siteUrl: string,
+  explicit: string | null,
+  article: { url_it: string | null; url_en: string | null } | null,
+  language: string,
+  tracking: TrackingParams,
+): string | null {
+  if (explicit) {
+    const alreadyTracked = (() => {
+      try {
+        return !!parseTrackingParams(new URL(explicit).search).source;
+      } catch {
+        return false;
+      }
+    })();
+    if (alreadyTracked) return explicit;
+
+    const siteHost = hostOf(siteUrl);
+    const linkHost = hostOf(explicit);
+    if (!siteHost || !linkHost || linkHost !== siteHost) return explicit;
+
+    return buildTrackedUrl(stripTrackingFromUrl(explicit), tracking);
+  }
+
+  if (!article) return null;
+  const canonical = (language === "en" ? article.url_en : article.url_it) ?? article.url_it ?? article.url_en;
+  return canonical ? buildTrackedUrl(canonical, tracking) : null;
 }
 
 export function registerPromoTools(server: McpServer, ctx: McpContext): void {
@@ -351,7 +404,7 @@ export function registerPromoTools(server: McpServer, ctx: McpContext): void {
     name: "promo_post_log",
     title: "Registra un post di promozione",
     description:
-      "Registra nella memoria un post scritto in un gruppo: testo, articolo promosso, taglio usato ed esito. Non pubblica nulla su Facebook: prende atto di ciò che è già stato pubblicato (o programmato come draft).",
+      "Registra nella memoria un post scritto in un gruppo: testo, articolo promosso, taglio usato ed esito. Non pubblica nulla su Facebook: prende atto di ciò che è già stato pubblicato (o programmato come draft). Il link viene salvato tracciato per questo gruppo (utm_source=facebook, utm_medium=group, utm_campaign=<gruppo>): usa lo stesso indirizzo nel testo pubblicato, chiedendolo prima a link_build, altrimenti le letture che il post genera non risulteranno attribuite al gruppo.",
     scope: "promo:write",
     kind: "write",
     inputSchema: {
@@ -359,7 +412,13 @@ export function registerPromoTools(server: McpServer, ctx: McpContext): void {
       article_id: z.string().uuid().optional().describe("Articolo del logbook promosso da questo post."),
       language: z.enum(["it", "en"]).default("it"),
       message: z.string().min(1).max(20000).describe("Il testo pubblicato, per intero."),
-      link_url: z.string().url().optional(),
+      link_url: z
+        .string()
+        .url()
+        .optional()
+        .describe(
+          "Il link incluso nel post. Se omesso viene usato l'indirizzo dell'articolo nella lingua del post, già tracciato per questo gruppo. Un link verso il sito viene taggato; uno già tracciato o verso un dominio esterno resta com'è.",
+        ),
       angle: z
         .string()
         .max(500)
@@ -376,10 +435,16 @@ export function registerPromoTools(server: McpServer, ctx: McpContext): void {
     annotations: { destructiveHint: false, idempotentHint: false },
     handler: async (args, context) => {
       const group = await loadGroup(context, args.group_id);
+      const tracking = trackingForGroup(group.name);
       const article = args.article_id ? await resolveArticle(context, args.article_id) : null;
 
       const status = args.status ?? "published";
       const postedAt = args.posted_at ?? (status === "published" ? new Date().toISOString() : null);
+
+      // Il link registrato è quello tracciato per questo gruppo: è l'unico modo
+      // per sapere, dopo, quante letture ha portato *quel* gruppo. Se il link
+      // arriva già taggato lo si rispetta; se punta fuori dal sito non si tocca.
+      const linkUrl = resolvePostLink(context.siteUrl, args.link_url ?? null, article, args.language ?? "it", tracking);
 
       const { data, error } = await context.service
         .from("fb_promo_posts")
@@ -388,7 +453,7 @@ export function registerPromoTools(server: McpServer, ctx: McpContext): void {
           article_id: article?.id ?? null,
           language: args.language ?? "it",
           message: args.message,
-          link_url: args.link_url ?? null,
+          link_url: linkUrl,
           angle: args.angle?.trim() || null,
           status,
           platform_post_id: args.platform_post_id?.trim() || null,
@@ -417,8 +482,8 @@ export function registerPromoTools(server: McpServer, ctx: McpContext): void {
 
       return {
         text: `Post registrato in "${group.name}"${article ? ` per "${article.title_it || article.title_en}"` : ""} (${status}).${
-          nextAllowedAt ? ` Prossimo post lecito lì dal ${nextAllowedAt.slice(0, 10)}.` : ""
-        }`,
+          linkUrl ? ` Link tracciato: ${linkUrl}` : ""
+        }${nextAllowedAt ? ` Prossimo post lecito lì dal ${nextAllowedAt.slice(0, 10)}.` : ""}`,
         targetId: created?.id ?? null,
         data: { ...created, group: { id: group.id, name: group.name }, article, next_allowed_at: nextAllowedAt },
       } satisfies ToolOutcome;

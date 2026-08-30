@@ -25,6 +25,14 @@ export const WEBSITE_ID = `${SITE_URL}/#website`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpeg`;
 
 /**
+ * Anteprima social di una rotta: la mappa del percorso generata da
+ * /api/og/voyage. Sostituisce l'immagine generica del sito, che rendeva tutte
+ * le rotte condivise identiche fra loro.
+ */
+export const voyageOgImageUrl = (slugOrId: string): string =>
+  `${SITE_URL}/api/og/voyage?slug=${encodeURIComponent(slugOrId)}`;
+
+/**
  * Public routes that exist under both /it and /en prefixes.
  * Admin, auth and profile routes live outside the lang prefix
  * and don't need bilingual indexing.

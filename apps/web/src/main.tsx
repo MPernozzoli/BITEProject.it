@@ -1,7 +1,13 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
+import { captureAttribution } from "./lib/attribution";
 import { registerServiceWorker } from "./lib/pwa";
 import { reloadForStaleChunk } from "./lib/stale-chunk-reload";
+
+// I tracker di sorgente (utm_*, fbclid, referrer) vivono nell'URL solo fino al
+// primo click interno: si leggono qui, prima che React monti e che il router
+// riscriva l'indirizzo, e restano disponibili per tutta la sessione.
+captureAttribution();
 
 // A tab left open across a deploy will eventually try to fetch a lazy-loaded
 // chunk whose content hash no longer exists on the CDN. Vite dispatches this

@@ -12,6 +12,14 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrCreateVisitorKey } from "@/lib/visitor-key";
+import { getAttribution } from "@/lib/attribution";
+import {
+  READER_SHARE_SOURCE,
+  buildTrackedUrl,
+  campaignFromUrl,
+  normalizeTrackingToken,
+  stripTrackingFromUrl,
+} from "@/lib/utm";
 
 interface ShareButtonProps {
   articleId?: string;
@@ -71,15 +79,40 @@ const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 
   const [preparedInstagramFile, setPreparedInstagramFile] = useState<File | null>(null);
   const isIt = lang === "it";
 
+  /**
+   * Il link che esce da qui non è quello della barra degli indirizzi: porta i
+   * tracker della condivisione, così il traffico che ne deriva si distingue da
+   * quello dei canali che gestiamo noi. Prima si ripulisce l'URL corrente dai
+   * tracker con cui *questo* lettore è arrivato: chi riceve il link non deve
+   * ereditare la provenienza di chi glielo ha mandato.
+   */
+  const buildShareUrl = useCallback(
+    (method: string) => {
+      const base = stripTrackingFromUrl(url || window.location.href);
+      return buildTrackedUrl(base, {
+        source: READER_SHARE_SOURCE,
+        medium: normalizeTrackingToken(method),
+        campaign: campaignFromUrl(base),
+      });
+    },
+    [url]
+  );
+
   const trackShare = useCallback(
     async (method: string) => {
       if (!articleId) return;
       try {
         const visitorKey = getOrCreateVisitorKey();
+        // Da dove veniva chi condivide: una condivisione partita da un lettore
+        // arrivato via newsletter racconta che quel canale non porta solo letture.
+        const attribution = getAttribution();
         await supabase.rpc("record_article_share", {
           _article_id: articleId,
           _visitor_key: visitorKey,
           _method: method,
+          _source: attribution?.source ?? undefined,
+          _medium: attribution?.medium ?? undefined,
+          _campaign: attribution?.campaign ?? undefined,
         });
       } catch {
         // silent
@@ -108,10 +141,10 @@ const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 
   }, [instagramStoryImageUrl, title]);
 
   const handleShareLink = async () => {
-    const shareUrl = url || window.location.href;
     const shareTitle = title || document.title;
 
     if (navigator.share) {
+      const shareUrl = buildShareUrl("native");
       try {
         await navigator.share({ title: shareTitle, url: shareUrl });
         void trackShare("native");
@@ -122,7 +155,7 @@ const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 
     }
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(buildShareUrl("link"));
       void trackShare("link");
       toast.success(isIt ? "Link copiato." : "Link copied.");
     } catch {
@@ -131,7 +164,7 @@ const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 
   };
 
   const handleInstagramStoriesShare = async () => {
-    const shareUrl = url || window.location.href;
+    const shareUrl = buildShareUrl("instagram_story");
     const shareTitle = title || document.title;
 
     if (!instagramStoryImageUrl) {

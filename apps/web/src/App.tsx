@@ -72,6 +72,7 @@ const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const AdminBookingRefunds = lazy(() => import("./pages/AdminBookingRefunds"));
 const AdminContentNotes = lazy(() => import("./pages/AdminContentNotes"));
 const AdminPerformanceDashboard = lazy(() => import("./pages/AdminPerformanceDashboard"));
+const AdminTrafficSources = lazy(() => import("./pages/AdminTrafficSources"));
 const AdminCommentsRoute = lazy(() => import("./pages/AdminCommentsRoute"));
 const ArticleEditor = lazy(() => import("./pages/ArticleEditor"));
 const AdminProfile = lazy(() => import("./pages/AdminProfile"));
@@ -278,6 +279,7 @@ const App = () => {
                     <Route path="/admin/contatti" element={<AdminRoute><AdminContactRequests /></AdminRoute>} />
                     <Route path="/admin/content-notes" element={<AdminRoute><AdminContentNotes /></AdminRoute>} />
                     <Route path="/admin/performance" element={<AdminRoute><AdminPerformanceDashboard /></AdminRoute>} />
+                    <Route path="/admin/sorgenti" element={<AdminRoute><AdminTrafficSources /></AdminRoute>} />
                     <Route path="/admin/comments" element={<AdminRoute><AdminCommentsRoute /></AdminRoute>} />
                     <Route path="/admin/logbook-points" element={<AdminRoute><AdminLogbookPoints /></AdminRoute>} />
                     <Route path="/admin/pack-gallery" element={<AdminRoute><AdminPackGallery /></AdminRoute>} />

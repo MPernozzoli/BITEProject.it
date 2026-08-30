@@ -41,6 +41,7 @@ La scelta tra pagamento online e bonifico avviene in `PaymentMethodDialog` dopo 
 - `sitemap.ts` — sitemap dinamica (esposta come `/sitemap-live.xml` via rewrite `vercel.json`)
 - `prerender.ts` — prerendering per bot/crawler, in coppia con `middleware.ts` a livello edge. Per `logbook` e `voyages` genera HTML server-side con liste `<a>` IT/EN verso tutti i contenuti pubblici; per articoli e rotte genera canonical/hreflang, OpenGraph/Twitter, JSON-LD (`BlogPosting`/`Trip`), testo ed internal linking. Per le pagine statiche SEO-sensitive aggiunge anche sezioni HTML e JSON-LD specifici: `/crew` include Spritz/Deerberg Beryll 32 e la ciurma; `/collaborations` include ricerca sul campo in mare, citizen science, creator/editoriale e brand partnership documentate da uso reale.
 - `llms.ts` — proxy same-origin per `public-llms`, esposto come `/llms.txt` e `/llms-full.txt`, così gli agenti AI leggono il feed dal dominio canonico.
+- `og/voyage.ts` — `GET /api/og/voyage?slug=<slug|id>`: immagine di anteprima social di una rotta, 1200×630 PNG con la mappa del percorso su base CARTO. Legge i viaggi pubblicati con la chiave publishable, disegna geometria, soste narrative e marker partenza/arrivo, e risponde con cache CDN di un giorno. Se la rotta non esiste o non ha coordinate reindirizza a `/og-image.jpeg`. Rendering in `apps/web/src/server/og/` → [[14 - Mappe e Layer Geospaziale]]
 
 ## 🤖 MCP admin (`apps/web/api/mcp/`) → [[25 - MCP Admin]]
 | Endpoint | Metodo | Scopo |
@@ -49,6 +50,7 @@ La scelta tra pagamento online e bonifico avviene in `PaymentMethodDialog` dopo 
 | `tokens.ts` | GET/POST/DELETE | emissione, elenco e revoca dei token MCP; autenticato con l'access token Supabase dell'admin. Il valore in chiaro del token esiste solo nella risposta alla POST |
 
 ## Note
+- Il rendering delle immagini OG vive in `apps/web/src/server/og/` (`route-map.ts`, `raster.ts`, `png.ts`, `font.ts`): niente `sharp` né `canvas`, solo `node:zlib` — il runtime serverless non ha binari nativi.
 - La logica MCP server-side vive in `apps/web/src/server/mcp/` (`server.ts`, `registry.ts`, `auth.ts`, `audit.ts`, `markdown.ts`, `tools/`).
 - La logica Bunq server-side vive in `apps/web/src/server/bunq/` (`client.ts`, `payment-requests.ts`, `deposit-resolver.ts`, `refunds.ts`, `bank-details.ts`, `supabase.ts`).
 - Gli importi sono **sempre ricalcolati lato server** (`apps/web/src/lib/booking-deposit.ts`), mai fidati dal client.
@@ -56,4 +58,4 @@ La scelta tra pagamento online e bonifico avviene in `PaymentMethodDialog` dopo 
 - I token LiveKit sono sempre firmati server-side; il client non vede mai `LIVEKIT_API_SECRET`. La policy dei grant è coerente con live tipo YouTube: viewer per membri, regia solo admin.
 
 ## Collegamenti
-- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[18 - Deploy e Configurazione]] · [[23 - Community]] · [[25 - MCP Admin]]
+- [[11 - Pagamenti Bunq]] · [[13 - Booking Voyage]] · [[14 - Mappe e Layer Geospaziale]] · [[18 - Deploy e Configurazione]] · [[23 - Community]] · [[25 - MCP Admin]]

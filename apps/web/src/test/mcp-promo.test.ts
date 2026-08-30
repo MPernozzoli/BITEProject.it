@@ -297,6 +297,48 @@ describe("promo_post_log", () => {
     expect(data.article.url_en).toBe("https://biteproject.it/en/logbook/heading-south");
   });
 
+  it("salva il link tracciato per il gruppo, non l'indirizzo nudo", async () => {
+    const { client, writes } = await connect();
+    await client.callTool({
+      name: "promo_post_log",
+      arguments: { group_id: GROUP_A, article_id: ARTICLE_ID, message: "Tre notti in rada.", platform_post_id: "post-utm" },
+    });
+
+    const insert = writes.find((write) => write.table === "fb_promo_posts" && write.op === "insert");
+    expect(insert?.values?.link_url).toBe(
+      "https://biteproject.it/it/logbook/rotta-sud?utm_source=facebook&utm_medium=group&utm_campaign=vela-lenta-mediterraneo",
+    );
+  });
+
+  it("tagga un link nostro passato a mano e lascia stare quelli altrui", async () => {
+    const { client, writes } = await connect();
+
+    await client.callTool({
+      name: "promo_post_log",
+      arguments: {
+        group_id: GROUP_A,
+        message: "Guarda qui.",
+        link_url: "https://biteproject.it/it/voyages",
+        platform_post_id: "post-nostro",
+      },
+    });
+    await client.callTool({
+      name: "promo_post_log",
+      arguments: {
+        group_id: GROUP_A,
+        message: "E anche qui.",
+        link_url: "https://meteo.example.com/previsioni",
+        platform_post_id: "post-altrui",
+      },
+    });
+
+    const inserts = writes.filter((write) => write.table === "fb_promo_posts" && write.op === "insert");
+    expect(inserts[0]?.values?.link_url).toBe(
+      "https://biteproject.it/it/voyages?utm_source=facebook&utm_medium=group&utm_campaign=vela-lenta-mediterraneo",
+    );
+    expect(inserts[1]?.values?.link_url).toBe("https://meteo.example.com/previsioni");
+  });
+
   it("rifiuta un gruppo inesistente", async () => {
     const { client } = await connect();
     const result = await client.callTool({

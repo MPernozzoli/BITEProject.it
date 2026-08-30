@@ -11,7 +11,13 @@
  *
  * Nessuno scope nuovo: i link accompagnano i dati che il tool restituisce già,
  * quindi chi può leggere un articolo può leggerne l'indirizzo.
+ *
+ * Gli URL possono essere generati **tracciati**: un agente che sta per
+ * pubblicare in un gruppo Facebook non deve comporre a mano `?utm_source=...`,
+ * lo chiede qui e il vocabolario resta quello di `lib/utm.ts` — lo stesso che
+ * usano il tasto Condividi del sito e il generatore in admin.
  */
+import { buildTrackedUrl, type TrackingParams } from "../../lib/utm.js";
 
 export const LINK_LANGS = ["it", "en"] as const;
 
@@ -45,19 +51,44 @@ function slugForLang(record: BilingualSlugs | null | undefined, lang: LinkLang):
   return (record.slug ?? "").trim();
 }
 
-function buildLinks(siteUrl: string, prefix: string, record: BilingualSlugs | null | undefined): PublicLinks {
+function buildLinks(
+  siteUrl: string,
+  prefix: string,
+  record: BilingualSlugs | null | undefined,
+  tracking?: TrackingParams | null,
+): PublicLinks {
   const base = (siteUrl || "").replace(/\/$/, "");
   const links: PublicLinks = { url_it: null, url_en: null };
   if (!base) return links;
   for (const lang of LINK_LANGS) {
     const slug = slugForLang(record, lang);
     if (!slug) continue;
-    links[`url_${lang}`] = `${base}/${lang}${prefix}/${encodeURIComponent(slug)}`;
+    const url = `${base}/${lang}${prefix}/${encodeURIComponent(slug)}`;
+    links[`url_${lang}`] = buildTrackedUrl(url, tracking);
   }
   return links;
 }
 
-/** `https://biteproject.it/it/logbook/<slug>` e la sua controparte inglese. */
-export function articleLinks(siteUrl: string, record: BilingualSlugs | null | undefined): PublicLinks {
-  return buildLinks(siteUrl, "/logbook", record);
+/**
+ * `https://biteproject.it/it/logbook/<slug>` e la sua controparte inglese.
+ *
+ * Con `tracking` gli stessi indirizzi tornano con i parametri `utm_*`: è la
+ * forma da incollare in un post o in una newsletter. Senza, tornano nudi — che
+ * resta la forma giusta per mostrarli, salvarli o confrontarli.
+ */
+export function articleLinks(
+  siteUrl: string,
+  record: BilingualSlugs | null | undefined,
+  tracking?: TrackingParams | null,
+): PublicLinks {
+  return buildLinks(siteUrl, "/logbook", record, tracking);
+}
+
+/** `https://biteproject.it/it/logbook/story/<slug>` e la controparte inglese. */
+export function storyLinks(
+  siteUrl: string,
+  record: BilingualSlugs | null | undefined,
+  tracking?: TrackingParams | null,
+): PublicLinks {
+  return buildLinks(siteUrl, "/logbook/story", record, tracking);
 }

@@ -20,6 +20,7 @@ tags: [admin, cms, backoffice]
 | `/admin/media` | `AdminMedia.tsx` | libreria media/storage |
 | `/admin/mail` | `AdminMail.tsx` | casella di posta ordinaria `@biteproject.it` e automatiche `@mail.biteproject.it` → [[12 - Newsletter ed Email]] |
 | `/admin/trackers` | `AdminMapPresence.tsx` | presenza su mappa → [[14 - Mappe e Layer Geospaziale]] |
+| `/admin/sorgenti` | `AdminTrafficSources.tsx` | generatore di link tracciati e report della provenienza del traffico → [[26 - Sorgenti di Traffico]] |
 | `/admin/article/:id` | `ArticleEditor.tsx` | editor articolo (TipTap) con anteprima full-screen |
 | `/profile` | `AdminProfile.tsx` | profilo |
 

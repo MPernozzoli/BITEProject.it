@@ -15,6 +15,8 @@ iubgicrwfovrnvoqr/
 │   │   ├── api/       # Vercel Functions sorgente → [[10 - API Vercel]]
 │   │   │               #   api/mcp/ = server MCP admin → [[25 - MCP Admin]]
 │   │   │               #   (logica in src/server/mcp/)
+│   │   │               #   api/og/ = immagini anteprima social
+│   │   │               #   (rendering in src/server/og/)
 │   │   ├── public/    # asset statici del sito principale
 │   │   ├── scripts/   # generate-sitemap
 │   │   └── supabase/  # backend Supabase sorgente → [[08 - Supabase]]

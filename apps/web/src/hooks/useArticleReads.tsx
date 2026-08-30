@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getOrCreateVisitorKey } from "@/lib/visitor-key";
+import { attributionRpcArgs } from "@/lib/attribution";
 import { getCachedAccessToken, sendArticleDwell } from "@/lib/article-dwell";
 
 const READ_RETRY_MS = 5_000;
@@ -136,10 +137,14 @@ export function useRegisterArticleRead(articleSlug?: string) {
 
   return useMutation({
     mutationFn: async ({ articleId, lang }: RegisterArticleReadVars) => {
+      // La provenienza della sessione viaggia insieme alla lettura: è l'unico
+      // momento in cui sappiamo insieme *cosa* è stato letto e *da dove* è
+      // arrivato chi legge.
       const { data, error } = await supabase.rpc("increment_article_view_count", {
         _article_id: articleId,
         _visitor_key: getOrCreateVisitorKey(),
         _lang: lang ?? undefined,
+        ...attributionRpcArgs(),
       });
 
       if (!error) {

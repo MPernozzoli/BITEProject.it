@@ -105,6 +105,13 @@ Per la newsletter la stessa fedeltà arriva gratis: `newsletter_create_draft`/`u
 
 Nessuno scope nuovo: i link viaggiano nelle risposte dei tool che già restituivano l'articolo (`articles:read`, `analytics:read`). I token e i connector OAuth esistenti li vedono al collegamento successivo, senza riconvalida.
 
+## Link tracciati
+`link_build` (scope `articles:read`) è l'unico modo previsto perché un agente produca un link da pubblicare fuori dal sito: articolo, storia o URL qualsiasi, con un preset di canale (`channel`) o campi `source`/`medium`/`campaign` espliciti, e con `fb_group_id` i tracker del gruppo Facebook compilati da soli (`facebook`/`group`/`<nome gruppo>`, richiede anche `promo:read`). **Rifiuta di produrre un link senza sorgente**: un URL anonimo pubblicato là fuori è traffico che non si potrà mai attribuire. La campagna, se non passata, è lo slug del contenuto.
+
+`promo_post_log` salva in `link_url` il link già tracciato per il gruppo: uno esplicito già taggato si rispetta, uno nudo verso il sito viene taggato, uno verso un dominio altrui non si tocca. Poiché `utm_campaign` è lo slug del gruppo, `admin_traffic_sources` risponde poi a «quante letture ha portato quel gruppo» → [[26 - Sorgenti di Traffico]].
+
+`url_it`/`url_en` restano **canonici** ovunque: sono l'identità dell'articolo, la versione tracciata vive nel campo che la usa.
+
 ## Metriche articoli
 `article_metrics` e `article_metrics_detail` chiamano le RPC admin `admin_article_view_insights` e `admin_article_view_insight_one` (definite in `20260809090000_article_likes_anonymous_and_engagement_kpis.sql`). Restituiscono: visualizzazioni totali e tracciate, visitatori unici (registrati + anonimi), tempo medio di lettura, distribuzione per lingua (IT/EN), likes (registrati + anonimi), commenti, serie giornaliera degli ultimi 30 giorni. Lo scope è `analytics:read`.
 

@@ -99,6 +99,8 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)
+- `increment_article_view_count` / `record_article_share` — registrano lettura e condivisione **con la provenienza** (`source`, `medium`, `campaign`, `content`, `referrer_host`); firma unica con tutti i parametri opzionali e normalizzazione lato DB via `normalize_tracking_token` → [[26 - Sorgenti di Traffico]]
+- `admin_traffic_sources` / `admin_traffic_source_articles` (RPC admin) — aggregati per canale e articoli alimentati da un canale; autorizzate da `can_read_traffic_analytics()`, che accetta l'admin loggato **o** il ruolo `service_role` (il server MCP non ha `auth.uid()`) → [[26 - Sorgenti di Traffico]]
 - `request_voyage_booking` (RPC) — registra una candidatura viaggio (`requested`) senza bloccare posti → [[13 - Booking Voyage]]
 - `voyage_booking_drafts` — persistenza cloud delle bozze candidatura per utenti autenticati; gli anonimi usano `localStorage` e la bozza viene migrata/sincronizzata dopo login → [[13 - Booking Voyage]]
 - `admin_propose_voyage_booking_legs` (RPC admin) — registra una proposta di tratte alternative in `voyage_booking_plan_changes`, con messaggio admin opzionale in metadata, senza modificare direttamente la matrice Gantt → [[13 - Booking Voyage]]

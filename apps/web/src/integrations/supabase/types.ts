@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       _migration_chunks: {
@@ -318,6 +343,44 @@ export type Database = {
           },
         ]
       }
+      article_click_events: {
+        Row: {
+          article_id: string
+          click_type: string
+          created_at: string
+          href: string | null
+          id: string
+          profile_id: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          click_type?: string
+          created_at?: string
+          href?: string | null
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          click_type?: string
+          created_at?: string
+          href?: string | null
+          id?: string
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_click_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       article_comments: {
         Row: {
           article_id: string
@@ -426,29 +489,44 @@ export type Database = {
       article_read_events: {
         Row: {
           article_id: string
+          campaign: string | null
+          content: string | null
           counted_at: string
           dwell_ms: number | null
           id: string
           lang: string | null
+          medium: string | null
           profile_id: string | null
+          referrer_host: string | null
+          source: string | null
           visitor_key: string | null
         }
         Insert: {
           article_id: string
+          campaign?: string | null
+          content?: string | null
           counted_at?: string
           dwell_ms?: number | null
           id?: string
           lang?: string | null
+          medium?: string | null
           profile_id?: string | null
+          referrer_host?: string | null
+          source?: string | null
           visitor_key?: string | null
         }
         Update: {
           article_id?: string
+          campaign?: string | null
+          content?: string | null
           counted_at?: string
           dwell_ms?: number | null
           id?: string
           lang?: string | null
+          medium?: string | null
           profile_id?: string | null
+          referrer_host?: string | null
+          source?: string | null
           visitor_key?: string | null
         }
         Relationships: [
@@ -514,6 +592,41 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_scroll_events: {
+        Row: {
+          article_id: string
+          created_at: string
+          id: string
+          max_scroll_pct: number
+          profile_id: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          id?: string
+          max_scroll_pct?: number
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          id?: string
+          max_scroll_pct?: number
+          profile_id?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_scroll_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
             referencedColumns: ["id"]
           },
         ]
@@ -599,6 +712,50 @@ export type Database = {
             foreignKeyName: "article_seo_optimizations_article_id_fkey"
             columns: ["article_id"]
             isOneToOne: true
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_share_events: {
+        Row: {
+          article_id: string
+          campaign: string | null
+          created_at: string
+          id: string
+          medium: string | null
+          method: string
+          profile_id: string | null
+          source: string | null
+          visitor_key: string | null
+        }
+        Insert: {
+          article_id: string
+          campaign?: string | null
+          created_at?: string
+          id?: string
+          medium?: string | null
+          method?: string
+          profile_id?: string | null
+          source?: string | null
+          visitor_key?: string | null
+        }
+        Update: {
+          article_id?: string
+          campaign?: string | null
+          created_at?: string
+          id?: string
+          medium?: string | null
+          method?: string
+          profile_id?: string | null
+          source?: string | null
+          visitor_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_share_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
             referencedRelation: "logbook_articles"
             referencedColumns: ["id"]
           },
@@ -1464,6 +1621,148 @@ export type Database = {
           },
         ]
       }
+      content_notes: {
+        Row: {
+          author_id: string | null
+          body: string | null
+          created_at: string
+          id: string
+          pillar: string
+          pinned: boolean
+          promoted_to_article_id: string | null
+          status: Database["public"]["Enums"]["content_note_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          pillar?: string
+          pinned?: boolean
+          promoted_to_article_id?: string | null
+          status?: Database["public"]["Enums"]["content_note_status"]
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string | null
+          created_at?: string
+          id?: string
+          pillar?: string
+          pinned?: boolean
+          promoted_to_article_id?: string | null
+          status?: Database["public"]["Enums"]["content_note_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_notes_promoted_to_article_id_fkey"
+            columns: ["promoted_to_article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_alert_log: {
+        Row: {
+          alert_type: string
+          article_id: string
+          created_at: string
+          hours_until_publish: number | null
+          id: string
+          missing_fields: Json
+          sent_at: string
+          slot_id: string
+        }
+        Insert: {
+          alert_type: string
+          article_id: string
+          created_at?: string
+          hours_until_publish?: number | null
+          id?: string
+          missing_fields?: Json
+          sent_at?: string
+          slot_id: string
+        }
+        Update: {
+          alert_type?: string
+          article_id?: string
+          created_at?: string
+          hours_until_publish?: number | null
+          id?: string
+          missing_fields?: Json
+          sent_at?: string
+          slot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_alert_log_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_alert_log_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_channel_metrics: {
+        Row: {
+          avg_engagement_rate: number | null
+          captured_at: string
+          channel_id: string
+          created_at: string
+          extras: Json | null
+          followers: number | null
+          following: number | null
+          id: string
+          media_count: number | null
+          sample_post_count: number | null
+        }
+        Insert: {
+          avg_engagement_rate?: number | null
+          captured_at?: string
+          channel_id: string
+          created_at?: string
+          extras?: Json | null
+          followers?: number | null
+          following?: number | null
+          id?: string
+          media_count?: number | null
+          sample_post_count?: number | null
+        }
+        Update: {
+          avg_engagement_rate?: number | null
+          captured_at?: string
+          channel_id?: string
+          created_at?: string
+          extras?: Json | null
+          followers?: number | null
+          following?: number | null
+          id?: string
+          media_count?: number | null
+          sample_post_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_channel_metrics_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       editorial_media_assets: {
         Row: {
           created_at: string
@@ -1857,6 +2156,7 @@ export type Database = {
           email: string
           like_notifications_frequency: string
           newsletter_enabled: boolean
+          push_editorial_alerts_enabled: boolean
           push_engagement_enabled: boolean
           push_mail_enabled: boolean
           push_publication_enabled: boolean
@@ -1873,6 +2173,7 @@ export type Database = {
           email: string
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
+          push_editorial_alerts_enabled?: boolean
           push_engagement_enabled?: boolean
           push_mail_enabled?: boolean
           push_publication_enabled?: boolean
@@ -1889,6 +2190,7 @@ export type Database = {
           email?: string
           like_notifications_frequency?: string
           newsletter_enabled?: boolean
+          push_editorial_alerts_enabled?: boolean
           push_engagement_enabled?: boolean
           push_mail_enabled?: boolean
           push_publication_enabled?: boolean
@@ -2134,6 +2436,245 @@ export type Database = {
           },
         ]
       }
+      fb_promo_comments: {
+        Row: {
+          author_name: string | null
+          author_profile_url: string | null
+          commented_at: string | null
+          created_at: string
+          direction: string
+          handled: boolean
+          id: string
+          in_reply_to: string | null
+          message: string
+          needs_reply: boolean
+          platform_comment_id: string | null
+          post_id: string
+          sentiment: string | null
+        }
+        Insert: {
+          author_name?: string | null
+          author_profile_url?: string | null
+          commented_at?: string | null
+          created_at?: string
+          direction: string
+          handled?: boolean
+          id?: string
+          in_reply_to?: string | null
+          message: string
+          needs_reply?: boolean
+          platform_comment_id?: string | null
+          post_id: string
+          sentiment?: string | null
+        }
+        Update: {
+          author_name?: string | null
+          author_profile_url?: string | null
+          commented_at?: string | null
+          created_at?: string
+          direction?: string
+          handled?: boolean
+          id?: string
+          in_reply_to?: string | null
+          message?: string
+          needs_reply?: boolean
+          platform_comment_id?: string | null
+          post_id?: string
+          sentiment?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fb_promo_comments_in_reply_to_fkey"
+            columns: ["in_reply_to"]
+            isOneToOne: false
+            referencedRelation: "fb_promo_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fb_promo_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "fb_promo_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fb_promo_groups: {
+        Row: {
+          created_at: string
+          id: string
+          joined_at: string | null
+          language: string
+          member_count: number | null
+          min_days_between_posts: number
+          name: string
+          notes: string | null
+          platform_group_id: string | null
+          posting_rules: string | null
+          status: string
+          topic: string | null
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          joined_at?: string | null
+          language?: string
+          member_count?: number | null
+          min_days_between_posts?: number
+          name: string
+          notes?: string | null
+          platform_group_id?: string | null
+          posting_rules?: string | null
+          status?: string
+          topic?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          joined_at?: string | null
+          language?: string
+          member_count?: number | null
+          min_days_between_posts?: number
+          name?: string
+          notes?: string | null
+          platform_group_id?: string | null
+          posting_rules?: string | null
+          status?: string
+          topic?: string | null
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
+      fb_promo_post_metrics: {
+        Row: {
+          captured_at: string
+          clicks: number
+          comments: number
+          created_at: string
+          id: string
+          impressions: number
+          likes: number
+          notes: string | null
+          post_id: string
+          reach: number
+          reactions: number
+          shares: number
+          source: string
+        }
+        Insert: {
+          captured_at?: string
+          clicks?: number
+          comments?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          likes?: number
+          notes?: string | null
+          post_id: string
+          reach?: number
+          reactions?: number
+          shares?: number
+          source?: string
+        }
+        Update: {
+          captured_at?: string
+          clicks?: number
+          comments?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          likes?: number
+          notes?: string | null
+          post_id?: string
+          reach?: number
+          reactions?: number
+          shares?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fb_promo_post_metrics_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "fb_promo_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fb_promo_posts: {
+        Row: {
+          angle: string | null
+          article_id: string | null
+          created_at: string
+          failure_reason: string | null
+          group_id: string
+          id: string
+          language: string
+          link_url: string | null
+          message: string
+          notes: string | null
+          permalink: string | null
+          platform_post_id: string | null
+          posted_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          angle?: string | null
+          article_id?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          group_id: string
+          id?: string
+          language?: string
+          link_url?: string | null
+          message: string
+          notes?: string | null
+          permalink?: string | null
+          platform_post_id?: string | null
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          angle?: string | null
+          article_id?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          group_id?: string
+          id?: string
+          language?: string
+          link_url?: string | null
+          message?: string
+          notes?: string | null
+          permalink?: string | null
+          platform_post_id?: string | null
+          posted_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fb_promo_posts_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "logbook_articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fb_promo_posts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "fb_promo_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbound_emails: {
         Row: {
           archived: boolean
@@ -2141,6 +2682,7 @@ export type Database = {
           assignment_reason: string | null
           attachments: Json
           brand: string
+          cc_addresses: string[]
           created_at: string
           from_address: string
           from_name: string | null
@@ -2167,6 +2709,7 @@ export type Database = {
           assignment_reason?: string | null
           attachments?: Json
           brand?: string
+          cc_addresses?: string[]
           created_at?: string
           from_address: string
           from_name?: string | null
@@ -2193,6 +2736,7 @@ export type Database = {
           assignment_reason?: string | null
           attachments?: Json
           brand?: string
+          cc_addresses?: string[]
           created_at?: string
           from_address?: string
           from_name?: string | null
@@ -3831,6 +4375,68 @@ export type Database = {
         }
         Relationships: []
       }
+      social_comments_cache: {
+        Row: {
+          author_avatar_url: string | null
+          author_name: string | null
+          channel_id: string
+          created_at: string
+          hidden: boolean | null
+          id: string
+          last_synced_at: string
+          local_reply: string | null
+          local_status: string
+          platform_comment_id: string
+          platform_media_id: string | null
+          platform_media_permalink: string | null
+          reply_count: number | null
+          text: string | null
+          timestamp: string | null
+        }
+        Insert: {
+          author_avatar_url?: string | null
+          author_name?: string | null
+          channel_id: string
+          created_at?: string
+          hidden?: boolean | null
+          id?: string
+          last_synced_at?: string
+          local_reply?: string | null
+          local_status?: string
+          platform_comment_id: string
+          platform_media_id?: string | null
+          platform_media_permalink?: string | null
+          reply_count?: number | null
+          text?: string | null
+          timestamp?: string | null
+        }
+        Update: {
+          author_avatar_url?: string | null
+          author_name?: string | null
+          channel_id?: string
+          created_at?: string
+          hidden?: boolean | null
+          id?: string
+          last_synced_at?: string
+          local_reply?: string | null
+          local_status?: string
+          platform_comment_id?: string
+          platform_media_id?: string | null
+          platform_media_permalink?: string | null
+          reply_count?: number | null
+          text?: string | null
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_comments_cache_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_plan_channels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_oauth_connections: {
         Row: {
           access_token_expires_at: string | null
@@ -4717,6 +5323,8 @@ export type Database = {
           is_lead: boolean
           last_name: string | null
           profile_id: string | null
+          share_overdue_notified_at: string | null
+          share_payment_due_at: string | null
           status: string
           updated_at: string
         }
@@ -4739,6 +5347,8 @@ export type Database = {
           is_lead?: boolean
           last_name?: string | null
           profile_id?: string | null
+          share_overdue_notified_at?: string | null
+          share_payment_due_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -4761,6 +5371,8 @@ export type Database = {
           is_lead?: boolean
           last_name?: string | null
           profile_id?: string | null
+          share_overdue_notified_at?: string | null
+          share_payment_due_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -5620,6 +6232,8 @@ export type Database = {
           is_lead: boolean
           last_name: string | null
           profile_id: string | null
+          share_overdue_notified_at: string | null
+          share_payment_due_at: string | null
           status: string
           updated_at: string
         }
@@ -5650,6 +6264,19 @@ export type Database = {
         }
         Returns: {
           over_capacity: boolean
+        }[]
+      }
+      admin_article_scores: {
+        Args: never
+        Returns: {
+          article_id: string
+          published_at: string
+          score: Json
+          slug: string
+          status: string
+          title_en: string
+          title_it: string
+          view_count: number
         }[]
       }
       admin_article_view_insight_one: {
@@ -5847,6 +6474,39 @@ export type Database = {
           over_capacity: boolean
         }[]
       }
+      admin_traffic_source_articles: {
+        Args: {
+          _campaign?: string
+          _days?: number
+          _limit?: number
+          _medium?: string
+          _source: string
+        }
+        Returns: {
+          article_id: string
+          avg_dwell_ms: number
+          last_view_at: string
+          slug: string
+          title_en: string
+          title_it: string
+          unique_visitors: number
+          views: number
+        }[]
+      }
+      admin_traffic_sources: {
+        Args: { _article_id?: string; _days?: number }
+        Returns: {
+          articles: number
+          avg_dwell_ms: number
+          campaign: string
+          last_view_at: string
+          medium: string
+          registered_views: number
+          source: string
+          unique_visitors: number
+          views: number
+        }[]
+      }
       admin_update_booking_legs: {
         Args: {
           _allow_over_capacity?: boolean
@@ -5859,6 +6519,10 @@ export type Database = {
       }
       apply_voyage_schedule: {
         Args: { _notify?: boolean; _voyage_id: string }
+        Returns: number
+      }
+      arm_voyage_booking_guest_shares: {
+        Args: { _booking_request_id: string }
         Returns: number
       }
       attach_voyage_booking_contribution_proposal: {
@@ -5930,11 +6594,14 @@ export type Database = {
         Args: { _post_id: string; _profile_id: string }
         Returns: boolean
       }
+      can_read_traffic_analytics: { Args: never; Returns: boolean }
       cancel_voyage_booking: {
         Args: { _booking_request_id: string }
         Returns: undefined
       }
+      check_article_readiness: { Args: { _article_id: string }; Returns: Json }
       claim_pending_article_comments: { Args: never; Returns: Json }
+      compute_article_score: { Args: { _article_id: string }; Returns: Json }
       compute_voyage_schedule: {
         Args: { _use_actuals: boolean; _voyage_id: string }
         Returns: {
@@ -5985,6 +6652,8 @@ export type Database = {
           is_lead: boolean
           last_name: string | null
           profile_id: string | null
+          share_overdue_notified_at: string | null
+          share_payment_due_at: string | null
           status: string
           updated_at: string
         }
@@ -6053,6 +6722,21 @@ export type Database = {
         Args: never
         Returns: number
       }
+      get_booking_party_overview: {
+        Args: { _booking_request_id: string }
+        Returns: {
+          email: string
+          first_name: string
+          is_lead: boolean
+          is_me: boolean
+          last_name: string
+          participant_id: string
+          share_due_cents: number
+          share_paid_cents: number
+          share_payment_due_at: string
+          status: string
+        }[]
+      }
       get_my_participations: {
         Args: never
         Returns: {
@@ -6060,10 +6744,14 @@ export type Database = {
           deposit_paid: boolean
           expires_at: string
           is_lead: boolean
+          negotiation_open: boolean
           participant_id: string
           party_size: number
           payment_mode: string
           requires_payment: boolean
+          share_due_cents: number
+          share_paid_cents: number
+          share_payment_due_at: string
           status: string
           voyage_id: string
           voyage_name: string
@@ -6107,7 +6795,16 @@ export type Database = {
         Returns: boolean
       }
       increment_article_view_count: {
-        Args: { _article_id: string; _lang?: string; _visitor_key?: string }
+        Args: {
+          _article_id: string
+          _campaign?: string
+          _content?: string
+          _lang?: string
+          _medium?: string
+          _referrer_host?: string
+          _source?: string
+          _visitor_key?: string
+        }
         Returns: number
       }
       invoke_editorial_edge_function: {
@@ -6116,6 +6813,39 @@ export type Database = {
       }
       invoke_email_queue_worker: { Args: never; Returns: number }
       invoke_newsletter_dispatch: { Args: never; Returns: number }
+      lead_drop_unpaid_guest_share: {
+        Args: { _participant_id: string }
+        Returns: {
+          accepted_at: string | null
+          balance_reminder_sent_at: string | null
+          booking_request_id: string
+          candidate_info: Json
+          conditions_accepted_at: string | null
+          contribution_deposit_cents: number | null
+          contribution_due_cents: number | null
+          contribution_due_stamped_at: string | null
+          created_at: string
+          email: string
+          expires_at: string | null
+          first_name: string | null
+          id: string
+          invite_sent_at: string | null
+          invite_token: string
+          is_lead: boolean
+          last_name: string | null
+          profile_id: string | null
+          share_overdue_notified_at: string | null
+          share_payment_due_at: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "voyage_booking_participants"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       list_due_community_live_event_push_reminders: {
         Args: { _limit?: number }
         Returns: {
@@ -6210,6 +6940,8 @@ export type Database = {
         Args: { p_delivery_id: string; p_token: string }
         Returns: boolean
       }
+      normalize_tracking_token: { Args: { _value: string }; Returns: string }
+      notify_leads_of_overdue_guest_shares: { Args: never; Returns: number }
       plan_change_reason_is_force_majeure: {
         Args: { _reason: string }
         Returns: boolean
@@ -6238,8 +6970,36 @@ export type Database = {
       reattribute_logbook_photo_voyages: { Args: never; Returns: number }
       reattribute_observation_voyages: { Args: never; Returns: number }
       rebuild_observations_export_view: { Args: never; Returns: undefined }
+      record_article_click: {
+        Args: {
+          _article_id: string
+          _click_type?: string
+          _href?: string
+          _visitor_key?: string
+        }
+        Returns: undefined
+      }
       record_article_read_dwell: {
         Args: { _article_id: string; _dwell_ms: number; _visitor_key: string }
+        Returns: undefined
+      }
+      record_article_scroll: {
+        Args: {
+          _article_id: string
+          _max_scroll_pct?: number
+          _visitor_key?: string
+        }
+        Returns: undefined
+      }
+      record_article_share: {
+        Args: {
+          _article_id: string
+          _campaign?: string
+          _medium?: string
+          _method?: string
+          _source?: string
+          _visitor_key?: string
+        }
         Returns: undefined
       }
       record_spritz_discovery: {
@@ -6271,6 +7031,7 @@ export type Database = {
           _candidate_message?: string
           _leg_ids: string[]
           _message: string
+          _party_size?: number
           _proposal_kind: string
           _proposed_variable_cents?: number
           _standard_variable_cents: number
@@ -6324,6 +7085,8 @@ export type Database = {
           is_lead: boolean
           last_name: string | null
           profile_id: string | null
+          share_overdue_notified_at: string | null
+          share_payment_due_at: string | null
           status: string
           updated_at: string
         }[]
@@ -6392,10 +7155,15 @@ export type Database = {
         Args: { _voyage_id: string }
         Returns: number
       }
+      sync_voyage_end_date_from_plan: {
+        Args: { _voyage_id: string }
+        Returns: boolean
+      }
       toggle_article_like: {
         Args: { _article_id: string; _visitor_key?: string }
         Returns: Json
       }
+      unaccent_fallback: { Args: { _value: string }; Returns: string }
       update_voyage_booking_contribution_proposal_files: {
         Args: {
           _booking_request_id: string
@@ -6421,11 +7189,19 @@ export type Database = {
         Args: { _booking_request_id: string; _stamped_at: string }
         Returns: boolean
       }
+      voyage_booking_guest_share_due_cents: {
+        Args: { _booking_request_id: string; _participant_id: string }
+        Returns: number
+      }
       voyage_booking_has_paid_deposit: {
         Args: { _booking_request_id: string }
         Returns: boolean
       }
       voyage_booking_negotiated_balance_paid: {
+        Args: { _booking_request_id: string }
+        Returns: boolean
+      }
+      voyage_booking_negotiation_open: {
         Args: { _booking_request_id: string }
         Returns: boolean
       }
@@ -6441,6 +7217,15 @@ export type Database = {
       voyage_derived_status: {
         Args: { _voyage_id: string }
         Returns: Database["public"]["Enums"]["voyage_status"]
+      }
+      voyage_leg_booking_conflict_exists: {
+        Args: {
+          _email: string
+          _excluding_request_id?: string
+          _leg_ids: string[]
+          _profile_id: string
+        }
+        Returns: boolean
       }
       voyage_leg_is_bookable_now: {
         Args: {
@@ -6460,6 +7245,14 @@ export type Database = {
         }
         Returns: string
       }
+      voyage_plan_arrival: {
+        Args: { _voyage_id: string }
+        Returns: {
+          arrival_date: string
+          arrival_flex_days: number
+          arrival_time: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
@@ -6468,6 +7261,7 @@ export type Database = {
       community_message_status: "visible" | "hidden" | "deleted"
       community_post_status: "draft" | "published" | "archived"
       community_post_visibility: "public" | "members" | "tier"
+      content_note_status: "note" | "selected" | "draft" | "archived"
       membership_payment_status:
         | "pending"
         | "paid"
@@ -6616,6 +7410,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
@@ -6624,6 +7421,7 @@ export const Constants = {
       community_message_status: ["visible", "hidden", "deleted"],
       community_post_status: ["draft", "published", "archived"],
       community_post_visibility: ["public", "members", "tier"],
+      content_note_status: ["note", "selected", "draft", "archived"],
       membership_payment_status: [
         "pending",
         "paid",

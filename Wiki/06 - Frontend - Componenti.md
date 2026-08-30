@@ -26,6 +26,7 @@ tags: [frontend, componenti, ui]
 - `ProfileCard.tsx`, `ProfileAvatar.tsx`, `ProfileNotificationsMenu.tsx` — il menu notifiche mostra solo le notifiche engagement non lette; al click imposta `read_at` e rimuove subito la riga dalla lista → [[12 - Newsletter ed Email]]
 - `profile/ProfileCrewPassPanel.tsx` — pannello membership dentro `/profile`: stato Crew Pass, rinnovo manuale Bunq, tier disponibili e pagamenti recenti → [[23 - Community]]
 - `ShareButton.tsx`, `AppleShareIcon.tsx`, `SeaPeopleIcon.tsx`
+  - `ShareButton` non condivide l'URL della barra degli indirizzi: lo ripulisce dai tracker con cui *questo* lettore è arrivato — chi riceve il link non deve ereditare la provenienza di chi glielo manda — e lo ritagga `utm_source=share` con il metodo come mezzo e lo slug come campagna. Registra anche da dove veniva chi ha condiviso → [[26 - Sorgenti di Traffico]]
 
 ## SEO
 - `SeoManager.tsx` — meta/OG/canonical
