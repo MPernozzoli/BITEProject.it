@@ -24,6 +24,8 @@ export const MCP_SCOPES = [
   "stories:write",
   "voyages:read",
   "voyages:write",
+  "promo:read",
+  "promo:write",
 ] as const;
 
 export type McpScope = (typeof MCP_SCOPES)[number];
@@ -50,6 +52,14 @@ export const MCP_SCOPE_LABELS: Record<McpScope, { it: string; en: string }> = {
     it: "Modificare rotte e tappe (nomi, descrizioni, POI, attività, foto)",
     en: "Edit voyages and stops (names, descriptions, POIs, activities, photos)",
   },
+  "promo:read": {
+    it: "Leggere la memoria della promozione sui gruppi Facebook",
+    en: "Read the Facebook groups promotion memory",
+  },
+  "promo:write": {
+    it: "Registrare gruppi, post, commenti e metriche della promozione",
+    en: "Record promotion groups, posts, comments and metrics",
+  },
 };
 
 /**
@@ -75,4 +85,6 @@ export const DEFAULT_MCP_SCOPES: McpScope[] = [
   "stories:write",
   "voyages:read",
   "voyages:write",
+  "promo:read",
+  "promo:write",
 ];

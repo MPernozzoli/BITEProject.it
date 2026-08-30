@@ -25,8 +25,10 @@ Il rewrite `/mcp` → `/api/mcp` sta in `vercel.json` **prima** del catch-all SP
 - Tabella `admin_mcp_tokens`: HMAC-SHA256 con `MCP_TOKEN_PEPPER` (env Vercel), prefisso in chiaro per riconoscerlo in lista, scope, scadenza (default 90 giorni), revoca.
 - A ogni richiesta si ri-verifica `has_role(user_id,'admin')`: **togliere il ruolo invalida subito tutti i token di quell'utente**, senza revocarli uno per uno.
 - Il valore in chiaro esiste solo nella risposta alla creazione. La UI è in `AdminMcpTokens.tsx`, montata da `AdminProfile.tsx` su `/profile` per gli admin.
+- **La lista mostra sessioni vive, non righe.** `GET /api/mcp/tokens` filtra revocati e scaduti e riunisce le righe OAuth dello stesso `client_id` in una voce sola — un accesso OAuth è una coppia access+refresh che ruota a ogni rinnovo, quindi senza questo la stessa connessione lascerebbe in pagina decine di accessi morti che sembrano attivi. Rappresenta la sessione il refresh (30 giorni), che è ciò che ne determina la durata.
+- **I permessi si cambiano dopo, senza riautorizzare.** `PATCH /api/mcp/tokens` (`{ id, scopes }`) riscrive gli scope di una sessione viva; se è OAuth li riscrive su tutte le righe di quel client, altrimenti l'access token già emesso continuerebbe per un'ora coi permessi vecchi. Stessa ragione per la revoca: `DELETE` su una sessione OAuth revoca l'intera concessione al client, non solo la riga puntata.
 
-Scope: `articles:read|write`, `analytics:read`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `stories:read|write`, `voyages:read|write`. Elenco, tipo ed etichette bilingui vivono in un solo punto, `src/lib/mcp-scopes.ts`: sia la UI di creazione token (`AdminMcpTokens.tsx`) sia la pagina di consenso OAuth (`AdminMcpAuthorize.tsx`) lo importano invece di tenere un proprio elenco, quindi mostrano sempre gli stessi permessi e uno scope nuovo compare in entrambe senza toccarle. `Record<McpScope, …>` obbliga anche a dargli un'etichetta: dimenticarla è un errore di build (`tsc`), non un buco silenzioso scoperto in produzione — cosa già successa una volta con `voyages:*`, aggiunto allo scope server ma non alla pagina di consenso finché non consolidata qui.
+Scope: `articles:read|write`, `analytics:read`, `plan:read|write`, `newsletter:read|write`, `mail:read|write`, `stories:read|write`, `voyages:read|write`, `promo:read|write`. Elenco, tipo ed etichette bilingui vivono in un solo punto, `src/lib/mcp-scopes.ts`: sia la UI di creazione token (`AdminMcpTokens.tsx`) sia la pagina di consenso OAuth (`AdminMcpAuthorize.tsx`) lo importano invece di tenere un proprio elenco, quindi mostrano sempre gli stessi permessi e uno scope nuovo compare in entrambe senza toccarle. `Record<McpScope, …>` obbliga anche a dargli un'etichetta: dimenticarla è un errore di build (`tsc`), non un buco silenzioso scoperto in produzione — cosa già successa una volta con `voyages:*`, aggiunto allo scope server ma non alla pagina di consenso finché non consolidata qui.
 
 ### OAuth 2.1 (connector claude.ai)
 Un client come Claude Code punta direttamente col token manuale; un connector browser (claude.ai) non sa mandare un header custom e si aspetta un authorization server. Per quel caso c'è un AS minimale, tutto in `apps/web/api/mcp/oauth/` + `src/server/mcp/oauth.ts`:
@@ -57,6 +59,7 @@ Registrati tutti tramite `registry.ts`, che applica in un punto solo controllo d
 | Newsletter | `newsletter_list_messages`, `newsletter_get_message`, `newsletter_stats`, `newsletter_create_draft`, `newsletter_update_draft`, `newsletter_schedule`, `newsletter_cancel_schedule`, `newsletter_upload_image` |
 | Mail | `mail_list_messages`, `mail_get_message`, `mail_mark`, `mail_reply`, `mail_forward`, `mail_compose` |
 | Viaggi | `voyage_search`, `voyage_get`, `voyage_waypoint_update`, `voyage_waypoint_upload_image` |
+| Promozione FB | `promo_group_list`, `promo_group_upsert`, `promo_post_log`, `promo_post_update`, `promo_post_search`, `promo_post_get`, `promo_comment_log`, `promo_comment_list`, `promo_comment_update`, `promo_metrics_record`, `promo_report` |
 
 Risorse: `bite://guide/editorial`, `bite://article/{id}`, `bite://plan/{YYYY-MM}`.
 Prompt: `pianifica-mese`, `bozza-da-appunti`, `digest-newsletter`.
@@ -108,9 +111,26 @@ Nessuno scope nuovo: i link viaggiano nelle risposte dei tool che già restituiv
 ## Storie
 `story_*` gestisce la tabella `stories`: serie di articoli collegati via `logbook_articles.story_id` (FK nullable). Una story ha titolo e descrizione bilingue, slug bilingui (unique case-insensitive), cover, `type` (`open`|`closed`) e `target_chapter_count` (nullable). `story_assign_article`/`story_remove_article` impostano/rimuovono `story_id` sugli articoli — l'articolo non viene mai eliminato, solo scollegato. `story_delete` elimina la story e scollega gli articoli (con `confirm: true`). Scope: `stories:read|write`.
 
+## Promozione nei gruppi Facebook
+I tool `promo_*` sono la **memoria** dell'automazione che promuove il logbook nei gruppi Facebook, non il suo braccio: qui non si pubblica su Facebook, si registra ciò che è stato pubblicato là fuori e lo si rilegge alla sessione dopo. È la ragione per cui nessuno di questi tool chiede `confirm` — nessuno ha effetti visibili all'esterno.
+
+Quattro tabelle (`20260830120000_facebook_promo_memory.sql`), tutte con RLS e policy per il solo ruolo admin:
+
+| Tabella | Cosa ricorda |
+|---|---|
+| `fb_promo_groups` | i gruppi: regolamento, lingua, tema, `min_days_between_posts` (il cooldown), stato, note su cosa funziona lì |
+| `fb_promo_posts` | ogni post scritto: testo integrale, `article_id` promosso, `angle` (il gancio usato), esito, permalink |
+| `fb_promo_comments` | commenti ricevuti **e** risposte scritte, distinti da `direction`, con `needs_reply`/`handled` e il thread via `in_reply_to` |
+| `fb_promo_post_metrics` | rilevazioni di interazione come snapshot cumulativi: reazioni, mi piace, commenti, condivisioni, click, impression, copertura |
+
+Le metriche sono snapshot, non contatori: ogni rilevazione è una riga nuova e vale l'ultima, così resta la curva nel tempo invece che il solo valore finale. `promo_report` aggrega su quell'ultima rilevazione e risponde a «quali gruppi rendono di più» (`group_by: group`) e «quali articoli funzionano dove» (`group_by: article`); `promo_group_list` calcola da `min_days_between_posts` quando è di nuovo lecito pubblicare in un gruppo, e con `only_available: true` restituisce solo quelli fuori cooldown. `promo_post_log` restituisce anche `url_it`/`url_en` dell'articolo promosso, pronti da incollare nel post.
+
+Il testo dei commenti ricevuti è scritto da terzi: le istruzioni del server e il riassunto di `promo_comment_list` lo dichiarano esplicitamente come dato, non istruzione.
+
 ## Non ancora fatto
 - **Invio di prova della newsletter**: richiederebbe logica nuova, che per `AGENTS.md` va in `@pynkstudio/newsletterapp` con bump dei due pin, non qui.
 - **Libreria media**: i tool caricano un'immagine puntuale nel bucket, non gestiscono la libreria (`/admin/media`) né creano profili autore.
+- **Pubblicazione su Facebook**: i tool `promo_*` ricordano, non postano. Il post lo scrive l'automazione con la propria sessione browser; qui ne resta la traccia.
 
 ## Collegamenti
 - [[16 - Admin]] · [[15 - Semantic Layer (AI Agents)]] · [[12 - Newsletter ed Email]] · [[10 - API Vercel]] · [[08 - Supabase]] · [[17 - Content Model]]

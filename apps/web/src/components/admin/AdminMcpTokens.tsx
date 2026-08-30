@@ -1,19 +1,24 @@
 /**
- * Pannello "Accesso agenti" del profilo admin: emissione e revoca dei token del
- * server MCP (`/api/mcp`).
+ * Pannello "Accesso agenti" del profilo admin: emissione, permessi e revoca
+ * delle sessioni del server MCP (`/api/mcp`).
  *
  * Il valore in chiaro del token arriva solo nella risposta alla creazione e non
  * è recuperabile dopo: la UI lo mostra una volta sola e lo dice esplicitamente.
+ *
+ * L'elenco arriva già ripulito da `/api/mcp/tokens`: solo sessioni vive, una
+ * riga per connessione (una sessione OAuth è una coppia di token che ruota, non
+ * dieci accessi diversi). I permessi si cambiano da qui: uno scope nuovo
+ * raggiunge un client già configurato senza rigenerare nulla.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, Copy, Loader2, Plus, ShieldOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Bot, Check, Copy, Loader2, Plus, ShieldOff, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_MCP_SCOPES, MCP_SCOPES, MCP_SCOPE_LABELS, mcpScopeLabel } from "@/lib/mcp-scopes";
 
-type McpTokenRecord = {
+type McpSession = {
   id: string;
   name: string;
   token_prefix: string;
@@ -21,24 +26,34 @@ type McpTokenRecord = {
   created_at: string;
   expires_at: string;
   last_used_at: string | null;
-  revoked_at: string | null;
+  kind: "manual" | "oauth";
+  client_id: string | null;
+  token_count: number;
 };
 
 const COPY = {
   it: {
     eyebrow: "Accesso agenti",
     title: "Token MCP",
-    text: "Ogni token dà a un client MCP (Claude Code, Claude Desktop) l'accesso al backoffice con i permessi che scegli qui. Vale finché non scade o non lo revochi.",
+    text: "Ogni sessione dà a un client MCP (Claude Code, Claude Desktop) l'accesso al backoffice con i permessi che scegli qui. Vale finché non scade o non la revochi, e i permessi restano modificabili dopo.",
     namePlaceholder: "Nome del dispositivo o del client",
     create: "Genera token",
     creating: "Generazione...",
     permissions: "Permessi",
     expiry: "Scadenza",
     days: "giorni",
-    empty: "Nessun token attivo.",
+    empty: "Nessuna sessione attiva.",
     revoke: "Revoca",
-    revoked: "Revocato",
-    expired: "Scaduto",
+    editPermissions: "Permessi",
+    save: "Salva",
+    saving: "Salvo...",
+    cancel: "Annulla",
+    scopesUpdated: "Permessi aggiornati: valgono subito, senza riautorizzare il client.",
+    scopesError: "Aggiornamento dei permessi fallito.",
+    scopesRequired: "Serve almeno un permesso.",
+    oauthSession: "Sessione OAuth",
+    manualToken: "Token manuale",
+    expiresOn: "Scade",
     lastUsed: "Ultimo uso",
     never: "mai usato",
     created: "Creato",
@@ -47,7 +62,7 @@ const COPY = {
     copy: "Copia",
     copied: "Token copiato.",
     hint: "Configura il client con:",
-    loadError: "Impossibile caricare i token.",
+    loadError: "Impossibile caricare le sessioni.",
     createError: "Creazione del token fallita.",
     revokeError: "Revoca fallita.",
     revokeDone: "Token revocato.",
@@ -56,17 +71,25 @@ const COPY = {
   en: {
     eyebrow: "Agent access",
     title: "MCP tokens",
-    text: "Each token lets an MCP client (Claude Code, Claude Desktop) reach the backoffice with the permissions you pick here. It stays valid until it expires or you revoke it.",
+    text: "Each session lets an MCP client (Claude Code, Claude Desktop) reach the backoffice with the permissions you pick here. It stays valid until it expires or you revoke it, and permissions stay editable afterwards.",
     namePlaceholder: "Device or client name",
     create: "Generate token",
     creating: "Generating...",
     permissions: "Permissions",
     expiry: "Expiry",
     days: "days",
-    empty: "No active tokens.",
+    empty: "No active sessions.",
     revoke: "Revoke",
-    revoked: "Revoked",
-    expired: "Expired",
+    editPermissions: "Permissions",
+    save: "Save",
+    saving: "Saving...",
+    cancel: "Cancel",
+    scopesUpdated: "Permissions updated: they apply right away, no need to re-authorise the client.",
+    scopesError: "Permission update failed.",
+    scopesRequired: "Pick at least one permission.",
+    oauthSession: "OAuth session",
+    manualToken: "Manual token",
+    expiresOn: "Expires",
     lastUsed: "Last used",
     never: "never used",
     created: "Created",
@@ -75,7 +98,7 @@ const COPY = {
     copy: "Copy",
     copied: "Token copied.",
     hint: "Configure the client with:",
-    loadError: "Could not load tokens.",
+    loadError: "Could not load sessions.",
     createError: "Token creation failed.",
     revokeError: "Revocation failed.",
     revokeDone: "Token revoked.",
@@ -85,10 +108,13 @@ const COPY = {
 
 const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
   const copy = COPY[lang];
-  const [tokens, setTokens] = useState<McpTokenRecord[]>([]);
+  const [tokens, setTokens] = useState<McpSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editScopes, setEditScopes] = useState<string[]>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(DEFAULT_MCP_SCOPES);
   const [expiresInDays, setExpiresInDays] = useState(90);
@@ -106,7 +132,7 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
     try {
       const response = await fetch("/api/mcp/tokens", { headers: await authHeader() });
       if (!response.ok) throw new Error(String(response.status));
-      const payload = (await response.json()) as { tokens: McpTokenRecord[] };
+      const payload = (await response.json()) as { tokens: McpSession[] };
       setTokens(payload.tokens ?? []);
     } catch (error) {
       console.error("[mcp tokens] load failed", error);
@@ -163,7 +189,34 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
     }
   };
 
-  const activeTokens = useMemo(() => tokens.filter((token) => !token.revoked_at), [tokens]);
+  const saveScopes = async (id: string) => {
+    if (editScopes.length === 0) {
+      toast.error(copy.scopesRequired);
+      return;
+    }
+    setSavingId(id);
+    try {
+      const response = await fetch("/api/mcp/tokens", {
+        method: "PATCH",
+        headers: await authHeader(),
+        body: JSON.stringify({ id, scopes: editScopes }),
+      });
+      const payload = (await response.json()) as { tokens?: McpSession[]; message?: string };
+      if (!response.ok) throw new Error(payload.message || String(response.status));
+      // La risposta porta già la lista aggiornata: nessun secondo giro di rete.
+      if (payload.tokens) setTokens(payload.tokens);
+      setEditingId(null);
+      toast.success(copy.scopesUpdated);
+    } catch (error) {
+      console.error("[mcp tokens] scope update failed", error);
+      toast.error(error instanceof Error && error.message.length < 160 ? error.message : copy.scopesError);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // L'endpoint restituisce solo sessioni vive: qui non c'è più nulla da filtrare.
+  const activeTokens = tokens;
 
   const formatDate = (value: string | null) => {
     if (!value) return copy.never;
@@ -276,36 +329,103 @@ const AdminMcpTokens = ({ lang }: { lang: "it" | "en" }) => {
           </div>
         ) : (
           activeTokens.map((token) => {
-            const expired = new Date(token.expires_at).getTime() <= Date.now();
+            const editing = editingId === token.id;
             return (
-              <div
-                key={token.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/60 bg-white/68 px-4 py-4"
-              >
-                <div className="min-w-0">
-                  <p className="font-sans text-sm font-medium text-foreground truncate">
-                    {token.name}
-                    {expired && <span className="ml-2 text-xs text-destructive">{copy.expired}</span>}
-                  </p>
-                  <p className="mt-1 text-xs font-sans text-muted-foreground">
-                    <code>{token.token_prefix}…</code> · {copy.created} {formatDate(token.created_at)} ·{" "}
-                    {copy.lastUsed} {formatDate(token.last_used_at)}
-                  </p>
-                  <p className="mt-1 text-[11px] font-sans text-muted-foreground">
-                    {token.scopes.map((scope) => mcpScopeLabel(scope, lang)).join(" · ")}
-                  </p>
+              <div key={token.id} className="rounded-[24px] border border-white/60 bg-white/68 px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-sans text-sm font-medium text-foreground truncate">
+                      {token.name}
+                      <span className="ml-2 rounded-full border border-border/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        {token.kind === "oauth" ? copy.oauthSession : copy.manualToken}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs font-sans text-muted-foreground">
+                      <code>{token.token_prefix}…</code> · {copy.created} {formatDate(token.created_at)} ·{" "}
+                      {copy.lastUsed} {formatDate(token.last_used_at)} · {copy.expiresOn} {formatDate(token.expires_at)}
+                    </p>
+                    {!editing && (
+                      <p className="mt-1 text-[11px] font-sans text-muted-foreground">
+                        {token.scopes.map((scope) => mcpScopeLabel(scope, lang)).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingId(editing ? null : token.id);
+                        setEditScopes(token.scopes);
+                      }}
+                      className="rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <SlidersHorizontal size={14} />
+                      {copy.editPermissions}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={revokingId === token.id}
+                      onClick={() => void revokeToken(token.id)}
+                      className="rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <ShieldOff size={14} />
+                      {copy.revoke}
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={revokingId === token.id}
-                  onClick={() => void revokeToken(token.id)}
-                  className="rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <ShieldOff size={14} />
-                  {copy.revoke}
-                </Button>
+
+                {editing && (
+                  <div className="mt-4 border-t border-border/50 pt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {MCP_SCOPES.map((scope) => {
+                        const selected = editScopes.includes(scope);
+                        return (
+                          <button
+                            key={scope}
+                            type="button"
+                            onClick={() =>
+                              setEditScopes((prev) =>
+                                prev.includes(scope) ? prev.filter((item) => item !== scope) : [...prev, scope],
+                              )
+                            }
+                            className={`rounded-full border px-3 py-1.5 text-xs font-sans transition-colors ${
+                              selected
+                                ? "border-accent bg-accent/12 text-foreground"
+                                : "border-border/70 bg-background/60 text-muted-foreground hover:border-accent/50"
+                            }`}
+                          >
+                            {MCP_SCOPE_LABELS[scope][lang]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={savingId === token.id}
+                        onClick={() => void saveScopes(token.id)}
+                        className="rounded-full"
+                      >
+                        {savingId === token.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                        {savingId === token.id ? copy.saving : copy.save}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingId(null)}
+                        className="rounded-full text-muted-foreground"
+                      >
+                        {copy.cancel}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })
