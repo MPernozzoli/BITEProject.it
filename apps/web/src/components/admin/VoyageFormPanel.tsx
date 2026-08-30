@@ -525,7 +525,7 @@ const VoyageFormPanel = ({
           {!voyageForm.dates_tbd && estimatedVoyageArrival && (
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans text-muted-foreground">
               <span>
-                Arrivo stimato all&apos;ultimo waypoint:{" "}
+                Arrivo stimato all&apos;ultima tappa:{" "}
                 <span className="text-foreground">
                   {estimatedVoyageArrival.date} · {estimatedVoyageArrival.time}
                 </span>{" "}
@@ -554,7 +554,7 @@ const VoyageFormPanel = ({
             {voyageForm.dates_tbd
               ? "Anche la finestra di arrivo resta aperta finché non viene pianificata."
               : estimatedVoyageArrival
-                ? "Precompilata dai waypoint (distanza / velocità + soste). Puoi comunque modificarla a mano."
+                ? "Se il viaggio ha un piano, l'arrivo lo decide la finestra dell'ultima tratta: quello che scrivi qui viene riallineato al prossimo ricalcolo. Qui vale a mano solo finché non ci sono tratte."
                 : voyageFormStatus === "planned"
                   ? "Usa ± giorni per rappresentare una finestra flessibile."
                   : "Leave blank if the arrival is still open."}

@@ -313,8 +313,13 @@ const deriveWaypointLegEstimates = (waypoints: VoyageWaypoint[], speedKn: number
   ) as Record<string, WaypointLegEstimate | null>;
 
 /**
- * Arrivo stimato all'ultimo waypoint = partenza + Σ(tratte a velocità di pianificazione) + Σ(soste intermedie).
- * La sosta del primo waypoint non conta (la partenza è già `start`) né quella dell'ultimo (è l'arrivo stesso).
+ * Arrivo stimato all'ultima tappa = partenza + Σ(tratte a velocità di pianificazione) + Σ(soste intermedie).
+ * La sosta della prima tappa non conta (la partenza è già `start`) né quella dell'ultima (è l'arrivo stesso).
+ *
+ * Cammina solo sui waypoint pubblici, gli stessi che `sync_voyage_bookable_legs_plan` usa come
+ * estremi delle tratte: il tracciato tecnico è la polyline che la barca segue, non il calendario.
+ * Camminarlo tutto dava un arrivo diverso da quello del piano, ed è così che `end_date` è finita
+ * fuori sincrono con l'ultima tappa (vedi 20260830011821_voyage_arrival_date_from_plan.sql).
  */
 const computeEstimatedArrivalDateTime = (
   waypoints: VoyageWaypoint[],
@@ -322,16 +327,20 @@ const computeEstimatedArrivalDateTime = (
   startTime: string,
   speedKn: number
 ): { date: string; time: string } | null => {
-  if (waypoints.length < 2 || !startDate) return null;
+  if (!startDate) return null;
+  const publicWaypoints = waypoints.filter(
+    (waypoint, index) => getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative"
+  );
+  if (publicWaypoints.length < 2) return null;
   const start = parseDateTimeInput(startDate, startTime || null);
   if (!start) return null;
   const speed = Number.isFinite(speedKn) && speedKn > 0 ? speedKn : 5;
   let totalMinutes = 0;
-  for (let index = 1; index < waypoints.length; index += 1) {
-    const previous = waypoints[index - 1];
-    const current = waypoints[index];
+  for (let index = 1; index < publicWaypoints.length; index += 1) {
+    const previous = publicWaypoints[index - 1];
+    const current = publicWaypoints[index];
     totalMinutes += (haversineNM(previous.lat, previous.lng, current.lat, current.lng) / speed) * 60;
-    if (index < waypoints.length - 1) {
+    if (index < publicWaypoints.length - 1) {
       const arrival = new Date(start.getTime() + totalMinutes * 60 * 1000);
       const departure = getStopDepartureDate(arrival, current);
       totalMinutes += Math.max(0, (departure.getTime() - arrival.getTime()) / 60_000);

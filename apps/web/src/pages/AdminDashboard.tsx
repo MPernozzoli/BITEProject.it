@@ -20,14 +20,15 @@ import {
   MapPinned,
   UploadCloud,
   Wine,
-  ChevronDown,
   AlertTriangle,
-  ChevronRight,
   BarChart3,
   ClipboardList,
   MessageSquare,
+  MessagesSquare,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { isAuthFailureError } from "@/lib/supabase-auth";
 import { isAdminDevBypassEnabled } from "@/lib/admin-dev-bypass";
 import { useAuth } from "@/hooks/useAuth";
@@ -69,8 +70,8 @@ const AdminDashboard = () => {
   const [seoIssues, setSeoIssues] = useState<SeoIssue[]>([]);
   const [pendingCandidates, setPendingCandidates] = useState(0);
   const [openContactRequests, setOpenContactRequests] = useState(0);
+  const [unreadMail, setUnreadMail] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const navigate = useNavigate();
   const socialOAuthReturnHandled = useRef(false);
   const userId = session?.user?.id ?? null;
@@ -130,26 +131,34 @@ const AdminDashboard = () => {
     if (!userId && !isAdminDevBypassEnabled()) return;
 
     setLoading(true);
-    const [articlesRes, storiesRes, voyagesRes, candidatesRes, seoIssuesRes, contactRequestsRes] = await Promise.all([
-      supabase.from("logbook_articles").select("id,title_en,title_it,status,updated_at").order("updated_at", { ascending: false }),
-      supabase.from("stories").select("id,title_en,title_it,created_at").order("created_at", { ascending: false }),
-      supabase.from("voyages").select("id"),
-      (supabase as unknown as { from: (table: string) => { select: (columns?: string) => Promise<{ data: unknown; error: unknown }> } })
-        .from("voyage_booking_requests")
-        .select("status,is_crew,plan_change_status"),
-      supabase
-        .from("article_seo_optimizations")
-        .select("article_id,error_message,updated_at,logbook_articles(title_en,title_it,slug)")
-        .eq("status", "failed")
-        .order("updated_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("inbound_emails")
-        .select("id", { count: "exact", head: true })
-        .eq("intake_source", "contact_form")
-        .eq("archived", false)
-        .eq("read", false),
-    ]);
+    const [articlesRes, storiesRes, voyagesRes, candidatesRes, seoIssuesRes, contactRequestsRes, unreadMailRes] =
+      await Promise.all([
+        supabase.from("logbook_articles").select("id,title_en,title_it,status,updated_at").order("updated_at", { ascending: false }),
+        supabase.from("stories").select("id,title_en,title_it,created_at").order("created_at", { ascending: false }),
+        supabase.from("voyages").select("id"),
+        (supabase as unknown as { from: (table: string) => { select: (columns?: string) => Promise<{ data: unknown; error: unknown }> } })
+          .from("voyage_booking_requests")
+          .select("status,is_crew,plan_change_status"),
+        supabase
+          .from("article_seo_optimizations")
+          .select("article_id,error_message,updated_at,logbook_articles(title_en,title_it,slug)")
+          .eq("status", "failed")
+          .order("updated_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("inbound_emails")
+          .select("id", { count: "exact", head: true })
+          .eq("intake_source", "contact_form")
+          .eq("archived", false)
+          .eq("read", false),
+        // Same definition the mailbox uses for its "Non lette" counter.
+        supabase
+          .from("inbound_emails")
+          .select("id", { count: "exact", head: true })
+          .eq("read", false)
+          .eq("archived", false)
+          .eq("spam", false),
+      ]);
     const err = articlesRes.error || storiesRes.error || voyagesRes.error;
     if (err && isAuthFailureError(err)) {
       await supabase.auth.signOut();
@@ -165,7 +174,7 @@ const AdminDashboard = () => {
     } else {
       setSeoIssues((seoIssuesRes.data ?? []) as unknown as SeoIssue[]);
     }
-    // Booking chip badge: candidature still awaiting an admin decision across all voyages.
+    // Booking badge: candidature still awaiting an admin decision across all voyages.
     const candidateRows = (candidatesRes.data as { status?: string; is_crew?: boolean; plan_change_status?: string }[] | null) || [];
     setPendingCandidates(
       candidateRows.filter(
@@ -174,11 +183,18 @@ const AdminDashboard = () => {
           (row.status === "requested" || row.status === "waitlisted" || row.plan_change_status === "pending_user_approval")
       ).length
     );
-    // Contact chip badge: form submissions nobody has opened yet.
+    // Contatti badge: form submissions nobody has opened yet.
     if (contactRequestsRes.error) {
       console.error("Contact requests count fetch failed:", contactRequestsRes.error);
     } else {
       setOpenContactRequests(contactRequestsRes.count ?? 0);
+    }
+    // Mail badge: unread inbox mail (archived and spam excluded), contact form included
+    // so the number matches the counter shown inside /admin/mail.
+    if (unreadMailRes.error) {
+      console.error("Unread mail count fetch failed:", unreadMailRes.error);
+    } else {
+      setUnreadMail(unreadMailRes.count ?? 0);
     }
     setLoading(false);
   }, [navigate, userId]);
@@ -219,61 +235,84 @@ const AdminDashboard = () => {
 
   const publicationRate = articles.length > 0 ? Math.round((publishedCount / articles.length) * 100) : 0;
 
-  const sectionCards = useMemo(
+  // Le tre code che richiedono una risposta: badge con il numero di nuove/non lette.
+  const inboxItems = useMemo(
     () => [
-      { to: "/admin/articles", label: "Articoli", eyebrow: "Publishing", description: "Lista, stati e modifiche rapide", icon: FileText, count: articles.length },
-      { to: "/admin/editorial", label: "Piano editoriale", eyebrow: "Calendario", description: "Slot, assegnazioni e uscite", icon: CalendarDays, count: scheduledCount },
-      { to: "/admin/stories", label: "Stories", eyebrow: "Narrativa", description: "Archi editoriali e slug", icon: BookOpen, count: stories.length },
-      { to: "/admin/route", label: "Rotte", eyebrow: "Mappa", description: "Voyage, waypoint e geometrie", icon: Navigation, count: voyagesCount },
-      { to: "/admin/community", label: "Community", eyebrow: "Crew", description: "Prezzi, ruoli, live e rinnovi", icon: UsersRound, count: null },
-      { to: "/admin/newsletter", label: "Newsletter", eyebrow: "Audience", description: "Campagne, liste e automazioni", icon: Mail, count: null },
-      { to: "/admin/badges", label: "Badge", eyebrow: "Community", description: "Reward e profili collegati", icon: Award, count: null },
-      { to: "/admin/content-notes", label: "Content Notes", eyebrow: "Backlog", description: "Idee, appunti e bozze non assegnate", icon: ClipboardList, count: null },
-      { to: "/admin/performance", label: "Performance", eyebrow: "Analytics", description: "Punteggi 5 punti articoli pubblicati", icon: BarChart3, count: null },
+      {
+        to: "/admin/bookings",
+        label: "Booking",
+        icon: CalendarCheck,
+        count: pendingCandidates,
+        pendingLabel: "candidature da valutare",
+        emptyLabel: "nessuna richiesta aperta",
+      },
+      {
+        to: "/admin/mail",
+        label: "Mail",
+        icon: Mail,
+        count: unreadMail,
+        pendingLabel: "messaggi non letti",
+        emptyLabel: "inbox in pari",
+      },
+      {
+        to: "/admin/contatti",
+        label: "Contatti",
+        icon: MessageSquare,
+        count: openContactRequests,
+        pendingLabel: "richieste dal form",
+        emptyLabel: "nessuna nuova richiesta",
+      },
+    ],
+    [openContactRequests, pendingCandidates, unreadMail]
+  );
+
+  const metrics = [
+    { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },
+    { label: "Schedulati", value: scheduledCount, detail: "uscite pianificate", icon: CalendarClock },
+    { label: "Bozze", value: draftCount, detail: "da chiudere", icon: FileText },
+    { label: "Stories", value: stories.length, detail: "archi narrativi", icon: BookOpen },
+  ];
+
+  const navGroups = useMemo(
+    () => [
+      {
+        label: "Contenuti",
+        items: [
+          { to: "/admin/articles", label: "Articoli", hint: "Lista e stati", icon: FileText, count: articles.length },
+          { to: "/admin/editorial", label: "Piano editoriale", hint: "Slot e uscite", icon: CalendarDays, count: scheduledCount },
+          { to: "/admin/stories", label: "Stories", hint: "Archi narrativi", icon: BookOpen, count: stories.length },
+          { to: "/admin/content-notes", label: "Content Notes", hint: "Idee e backlog", icon: ClipboardList, count: null },
+          { to: "/admin/comments", label: "Commenti", hint: "Social e risposte", icon: MessagesSquare, count: null },
+          { to: "/admin/performance", label: "Performance", hint: "Punteggi articoli", icon: BarChart3, count: null },
+        ],
+      },
+      {
+        label: "Viaggi e mappa",
+        items: [
+          { to: "/admin/route", label: "Rotte", hint: "Voyage e waypoint", icon: Navigation, count: voyagesCount },
+          { to: "/admin/trackers", label: "Tracker", hint: "Posizioni in mappa", icon: MapPinned, count: null },
+          { to: "/admin/logbook-points", label: "Punti foto", hint: "Foto sulla mappa", icon: Camera, count: null },
+        ],
+      },
+      {
+        label: "Community",
+        items: [
+          { to: "/admin/community", label: "Community", hint: "Prezzi, ruoli, live", icon: UsersRound, count: null },
+          { to: "/admin/newsletter", label: "Newsletter", hint: "Campagne e liste", icon: Mail, count: null },
+          { to: "/admin/badges", label: "Badge", hint: "Reward e profili", icon: Award, count: null },
+          { to: "/admin/spritz", label: "Spritz", hint: "Easter egg", icon: Wine, count: null },
+        ],
+      },
+      {
+        label: "Media",
+        items: [
+          { to: "/admin/media", label: "Media", hint: "Asset e upload", icon: UploadCloud, count: null },
+          { to: "/admin/pack-gallery", label: "Galleria pack", hint: "Foto sito cani", icon: ImageIcon, count: null },
+        ],
+      },
     ],
     [articles.length, scheduledCount, stories.length, voyagesCount]
   );
-
-  const quickLinkGroups = [
-    {
-      label: "Comunicazioni",
-      items: [
-        { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
-        { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
-        { to: "/admin/contatti", label: "Contatti", description: "Richieste dal form", icon: MessageSquare, badge: openContactRequests },
-      ],
-    },
-    {
-      label: "Mappa",
-      items: [
-        { to: "/admin/trackers", label: "Tracker", description: "Posizioni mappa, insieme alle rotte", icon: MapPinned, badge: 0 },
-      ],
-    },
-    {
-      label: "Media",
-      collapsible: true,
-      icon: UploadCloud,
-      description: "Asset, punti foto e galleria pack",
-      items: [
-        { to: "/admin/media", label: "Media", description: "Asset e upload", icon: UploadCloud, badge: 0 },
-        { to: "/admin/logbook-points", label: "Punti foto", description: "Foto sulla mappa", icon: Camera, badge: 0 },
-        { to: "/admin/pack-gallery", label: "Galleria pack", description: "Foto del sito cani", icon: ImageIcon, badge: 0 },
-      ],
-    },
-    {
-      label: "Extra",
-      items: [
-        { to: "/admin/spritz", label: "Spritz", description: "Easter egg trovato da", icon: Wine, badge: 0 },
-      ],
-    },
-  ];
-
-  const overviewMetrics = [
-    { label: "Pubblicati", value: publishedCount, detail: `${publicationRate}% del logbook`, icon: Send },
-    { label: "Schedulati", value: scheduledCount, detail: "uscite pianificate", icon: CalendarClock },
-    { label: "Bozze", value: draftCount, detail: "contenuti da chiudere", icon: FileText },
-    { label: "Stories", value: stories.length, detail: "archi narrativi", icon: BookOpen },
-  ];
 
   if (!isAdminDevBypassEnabled() && (authLoading || !session)) {
     return (
@@ -284,243 +323,218 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-16 px-6 md:px-12">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <section className="glass-panel rounded-[34px] px-5 py-6 md:px-8 md:py-8">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(22rem,0.9fr)] xl:items-start">
-            <div className="min-w-0">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <span className="glass-chip inline-flex px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.24em] text-accent">
-                  Admin workspace
-                </span>
-              </div>
-              <h1 className="editorial-heading text-3xl md:text-5xl">Dashboard</h1>
-              <p className="mt-3 max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
-                Punto di ingresso per pubblicazione, viaggi, mail e asset. Ogni area ha una vista dedicata: entra dalla card e torna qui
-                quando hai finito.
-              </p>
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <Link
-                  to="/admin/article/new"
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-sans text-primary-foreground shadow-[0_16px_34px_rgba(15,23,42,0.16)] transition-transform duration-interaction ease-out-expo hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
-                >
-                  <Plus size={16} />
-                  Nuovo articolo
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="glass-chip inline-flex items-center gap-2 px-4 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
-                  title="Logout"
-                >
-                  <LogOut size={16} />
-                  Logout
-                </button>
-              </div>
-            </div>
-
-            <div className="glass-panel-soft rounded-[26px] p-4 md:p-5">
-              <p className="mb-3 text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Shortcut operativi</p>
-              <div className="space-y-4">
-                {quickLinkGroups.map((group) => {
-                  const GroupIcon = group.icon;
-                  return (
-                    <div key={group.label} className="space-y-2">
-                      <p className="px-1 text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground/70">{group.label}</p>
-                      {group.collapsible ? (
-                        <div className="rounded-[20px] border border-white/55 bg-white/40 overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => setMediaMenuOpen((prev) => !prev)}
-                            className="group flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-white/60"
-                            aria-expanded={mediaMenuOpen}
-                          >
-                            <span className="glass-chip inline-flex h-10 w-10 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
-                              {GroupIcon && <GroupIcon size={16} />}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block text-sm font-sans font-medium text-foreground">{group.label}</span>
-                              <span className="block truncate text-xs font-sans text-muted-foreground">{group.description}</span>
-                            </span>
-                            <ChevronDown
-                              size={16}
-                              className={`shrink-0 text-muted-foreground transition-transform duration-interaction ease-out-expo ${mediaMenuOpen ? "rotate-180" : ""}`}
-                            />
-                          </button>
-                          {mediaMenuOpen && (
-                            <div className="space-y-1 border-t glass-divider p-2">
-                              {group.items.map((item) => {
-                                const Icon = item.icon;
-                                return (
-                                  <Link
-                                    key={item.to}
-                                    to={item.to}
-                                    className="group flex items-center gap-3 rounded-[16px] px-3 py-2.5 text-left transition-colors hover:bg-white/70"
-                                  >
-                                    <span className="glass-chip inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent">
-                                      <Icon size={14} />
-                                    </span>
-                                    <span className="min-w-0">
-                                      <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
-                                      <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
-                                    </span>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className={`grid grid-cols-1 gap-2 ${group.items.length > 1 ? "sm:grid-cols-2 xl:grid-cols-1" : ""}`}>
-                          {group.items.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                              <Link
-                                key={item.to}
-                                to={item.to}
-                                className="group flex items-center gap-3 rounded-[20px] border border-white/55 bg-white/40 px-3 py-3 text-left transition-[border-color,background-color,transform] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
-                              >
-                                <span className="relative shrink-0">
-                                  <span className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground group-hover:text-accent">
-                                    <Icon size={16} />
-                                  </span>
-                                  {item.badge > 0 && (
-                                    <span className="absolute -right-1.5 -top-1.5 z-10 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-foreground shadow-[0_4px_10px_rgba(15,23,42,0.18)]">
-                                      {item.badge}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
-                                  <span className="block truncate text-xs font-sans text-muted-foreground">{item.description}</span>
-                                </span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+    <div className="min-h-screen pt-24 pb-16 px-4 md:px-8 xl:px-10">
+      <div className="mx-auto max-w-[1440px] space-y-4">
+        {/* Barra di testa compatta: identità a sinistra, azioni a destra. */}
+        <header className="glass-panel flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[24px] px-4 py-3 md:px-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-sans uppercase tracking-[0.28em] text-muted-foreground">Admin workspace</p>
+            <h1 className="editorial-heading text-2xl leading-tight md:text-3xl">Dashboard</h1>
           </div>
-
-          <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {overviewMetrics.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="rounded-[24px] border border-white/55 bg-white/45 p-4 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
-                    <span className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground">
-                      <Icon size={15} />
-                    </span>
-                  </div>
-                  <p className="font-sans text-3xl font-semibold leading-none text-foreground tabular-nums">
-                    {loading ? "–" : item.value}
-                  </p>
-                  <p className="mt-2 text-xs font-sans text-muted-foreground">{item.detail}</p>
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void fetchData()}
+              disabled={loading}
+              className="glass-chip inline-flex items-center gap-2 px-3 py-2 text-xs font-sans text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+              title="Aggiorna dati"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
+              Aggiorna
+            </button>
+            <Link
+              to="/admin/article/new"
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-sans text-primary-foreground shadow-[0_16px_34px_rgba(15,23,42,0.16)] transition-transform duration-interaction ease-out-expo hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+            >
+              <Plus size={15} />
+              Nuovo articolo
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="glass-chip inline-flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              title="Logout"
+              aria-label="Logout"
+            >
+              <LogOut size={15} />
+            </button>
           </div>
-        </section>
-
-        {seoIssues.length > 0 && (
-          <section className="rounded-[28px] border border-amber-300/70 bg-amber-50/80 px-5 py-4 shadow-[0_14px_40px_rgba(180,83,9,0.08)]">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                  <AlertTriangle size={18} />
-                </span>
-                <div>
-                  <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-amber-700">SEO IA da rivedere</p>
-                  <p className="mt-1 text-sm font-sans text-amber-950/80">
-                    Alcune ottimizzazioni SEO non sono state generate. Pubblicazione e salvataggio sono completati; puoi rilanciare dal pulsante nell'articolo.
-                  </p>
-                </div>
-              </div>
-              <div className="w-full space-y-2 md:max-w-xl">
-                {seoIssues.map((issue) => {
-                  const article = issue.logbook_articles;
-                  const title = article?.title_it || article?.title_en || "Articolo senza titolo";
-                  return (
-                    <Link
-                      key={issue.article_id}
-                      to={`/admin/article/${issue.article_id}`}
-                      className="flex items-center justify-between gap-4 rounded-[18px] border border-amber-200/80 bg-white/65 px-3 py-2 text-left transition-colors hover:bg-white"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-sans font-medium text-amber-950">{title}</span>
-                        <span className="block truncate text-xs font-sans text-amber-900/70">
-                          {issue.error_message || "Errore SEO IA non specificato"}
-                        </span>
-                      </span>
-                      <ArrowUpRight size={15} className="shrink-0 text-amber-700" />
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        )}
+        </header>
 
         <Suspense fallback={null}>
           <VoyageLiveWidget />
         </Suspense>
 
-        <section className="space-y-4">
-          <div>
-            <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">Sezioni</p>
-            <h2 className="editorial-heading text-2xl md:text-3xl">Aree dedicate</h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {sectionCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <Link
-                  key={card.to}
-                  to={card.to}
-                  className="group glass-panel rounded-[28px] p-5 transition-[transform,box-shadow] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(15,23,42,0.1)] active:translate-y-0"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="glass-chip inline-flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground group-hover:text-accent transition-colors">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="min-w-0 space-y-4">
+            {/* Code in attesa: badge con il numero di nuove/non lette. */}
+            <section className="grid gap-3 sm:grid-cols-3">
+              {inboxItems.map((item) => {
+                const Icon = item.icon;
+                const pending = !loading && item.count > 0;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "glass-panel group flex items-center gap-3 rounded-[22px] px-4 py-3.5 transition-[transform,box-shadow,border-color] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(15,23,42,0.1)] active:translate-y-0",
+                      pending && "border-accent/60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "glass-chip inline-flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-accent",
+                        pending && "text-accent",
+                      )}
+                    >
                       <Icon size={18} />
                     </span>
-                    <ChevronRight size={16} className="mt-2 shrink-0 text-muted-foreground/60 transition-transform duration-interaction ease-out-expo group-hover:translate-x-0.5 group-hover:text-accent" />
-                  </div>
-                  <p className="mt-4 text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">{card.eyebrow}</p>
-                  <div className="mt-1 flex items-center justify-between gap-3">
-                    <h3 className="editorial-heading text-xl leading-tight">{card.label}</h3>
-                    {typeof card.count === "number" && (
-                      <span className="font-sans text-xs tabular-nums text-muted-foreground">{card.count}</span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-xs font-sans text-muted-foreground leading-relaxed">{card.description}</p>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-sans font-medium text-foreground">{item.label}</span>
+                      <span className="block truncate text-xs font-sans text-muted-foreground">
+                        {loading ? "…" : pending ? item.pendingLabel : item.emptyLabel}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex h-7 min-w-[1.75rem] shrink-0 items-center justify-center rounded-full px-2 font-sans text-sm font-semibold tabular-nums",
+                        pending
+                          ? "bg-accent text-accent-foreground shadow-[0_6px_16px_rgba(15,23,42,0.18)]"
+                          : "border border-white/60 bg-white/40 text-muted-foreground",
+                      )}
+                      aria-label={`${item.count} ${item.pendingLabel}`}
+                    >
+                      {loading ? "–" : item.count}
+                    </span>
+                  </Link>
+                );
+              })}
+            </section>
 
-        <section className="glass-panel-soft rounded-[26px] p-5">
-          <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-3">Snapshot</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-sans text-muted-foreground mb-1">Ultimo articolo</p>
-              <p className="font-serif text-lg leading-tight text-foreground">
-                {latestArticle ? latestArticle.title_en || latestArticle.title_it || "Untitled" : "Nessun articolo"}
-              </p>
-            </div>
-            <div className="sm:border-l sm:pl-4 glass-divider sm:border-t-0 border-t pt-4 sm:pt-0">
-              <p className="text-xs font-sans text-muted-foreground mb-1">Ultima story</p>
-              <p className="font-serif text-lg leading-tight text-foreground">
-                {latestStory ? latestStory.title_en || latestStory.title_it : "Nessuna story"}
-              </p>
-            </div>
+            {/* Tutte le aree in un solo pannello: etichetta di gruppo a sinistra, tessere a destra. */}
+            <section className="glass-panel rounded-[26px] px-4 py-4 md:px-5">
+              <div className="divide-y divide-white/30">
+                {navGroups.map((group) => (
+                  <div
+                    key={group.label}
+                    className="grid gap-2 py-3 first:pt-0 last:pb-0 md:grid-cols-[6.5rem_minmax(0,1fr)] md:gap-4"
+                  >
+                    <p className="pt-1 text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                      {group.label}
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            className="group flex items-center gap-3 rounded-[18px] border border-white/55 bg-white/40 px-3 py-2.5 transition-[transform,border-color,background-color] duration-interaction ease-out-expo hover:-translate-y-0.5 hover:border-accent/50 hover:bg-white/70 active:translate-y-0"
+                          >
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-white/50 text-muted-foreground transition-colors group-hover:text-accent">
+                              <Icon size={15} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-sans font-medium leading-tight text-foreground">
+                                {item.label}
+                              </span>
+                              <span className="block truncate text-[11px] font-sans text-muted-foreground">{item.hint}</span>
+                            </span>
+                            {typeof item.count === "number" && (
+                              <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground">
+                                {loading ? "–" : item.count}
+                              </span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
-        </section>
+
+          {/* Colonna laterale: numeri del logbook, alert e ultimo stato. */}
+          <aside className="space-y-4">
+            <section className="glass-panel-soft rounded-[24px] p-4">
+              <p className="mb-3 text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Logbook</p>
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                {metrics.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-3 rounded-[18px] border border-white/55 bg-white/45 px-3 py-2.5"
+                    >
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-white/50 text-muted-foreground">
+                        <Icon size={14} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[11px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
+                          {item.label}
+                        </span>
+                        <span className="block truncate text-[11px] font-sans text-muted-foreground/80">{item.detail}</span>
+                      </span>
+                      <span className="font-sans text-xl font-semibold leading-none tabular-nums text-foreground">
+                        {loading ? "–" : item.value}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {seoIssues.length > 0 && (
+              <section className="rounded-[24px] border border-amber-300/70 bg-amber-50/80 p-4 shadow-[0_14px_40px_rgba(180,83,9,0.08)]">
+                <div className="mb-2 flex items-center gap-2">
+                  <AlertTriangle size={15} className="shrink-0 text-amber-700" />
+                  <p className="text-[10px] font-sans uppercase tracking-[0.24em] text-amber-700">SEO IA da rivedere</p>
+                </div>
+                <p className="mb-3 text-xs font-sans leading-relaxed text-amber-950/80">
+                  Alcune ottimizzazioni non sono state generate. Rilancia dal pulsante dentro l'articolo.
+                </p>
+                <div className="space-y-1.5">
+                  {seoIssues.map((issue) => {
+                    const article = issue.logbook_articles;
+                    const title = article?.title_it || article?.title_en || "Articolo senza titolo";
+                    return (
+                      <Link
+                        key={issue.article_id}
+                        to={`/admin/article/${issue.article_id}`}
+                        className="flex items-center justify-between gap-3 rounded-[14px] border border-amber-200/80 bg-white/65 px-3 py-2 transition-colors hover:bg-white"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-sans font-medium text-amber-950">{title}</span>
+                          <span className="block truncate text-[11px] font-sans text-amber-900/70">
+                            {issue.error_message || "Errore SEO IA non specificato"}
+                          </span>
+                        </span>
+                        <ArrowUpRight size={14} className="shrink-0 text-amber-700" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            <section className="glass-panel-soft rounded-[24px] p-4">
+              <p className="mb-3 text-[10px] font-sans uppercase tracking-[0.24em] text-muted-foreground">Ultimi lavori</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-0.5 text-[11px] font-sans text-muted-foreground">Articolo</p>
+                  <p className="font-serif text-base leading-tight text-foreground">
+                    {latestArticle ? latestArticle.title_it || latestArticle.title_en || "Untitled" : "Nessun articolo"}
+                  </p>
+                </div>
+                <div className="border-t glass-divider pt-3">
+                  <p className="mb-0.5 text-[11px] font-sans text-muted-foreground">Story</p>
+                  <p className="font-serif text-base leading-tight text-foreground">
+                    {latestStory ? latestStory.title_it || latestStory.title_en : "Nessuna story"}
+                  </p>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
     </div>
   );

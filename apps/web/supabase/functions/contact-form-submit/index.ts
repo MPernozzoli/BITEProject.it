@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import webpush from 'npm:web-push@3.6.7'
 import {
   buildFromAddress,
   FROM_DOMAIN,
@@ -23,6 +24,151 @@ const CONTACT_RECIPIENT_EMAIL =
  */
 function buildMailboxMessageId(): string {
   return `${Date.now()}.${crypto.randomUUID()}@${FROM_DOMAIN}`
+}
+
+/**
+ * Admin push for a new contact message.
+ *
+ * Mirrors the mail push in @pynkstudio/mailapp (mailbox/push.ts + mailbox/inbound.ts),
+ * which we cannot import here because it is a Node package and this runs on Deno.
+ * What has to match is the wire contract, so the rest of the mailbox keeps working:
+ *  - `tag: mail:<id>` — revokeMailPushNotification closes it with the same value in
+ *    `closeTag` when the message is read or archived from either console;
+ *  - `push_notified_at` on the row — that revocation is a no-op without it;
+ *  - `assignment_reason` — anything other than 'alias_match' makes the revocation
+ *    target every admin, which is who we notify here.
+ * Contact mail is always addressed to the shared inbox, so there is no alias to match:
+ * it is unassigned and every admin is notified, the mailbox's fallback_all_admins case.
+ */
+type PushSubscriptionRow = {
+  profile_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  profiles?: { email?: string | null } | null
+}
+
+function vapidConfig(): { subject: string; publicKey: string; privateKey: string } | null {
+  const publicKey =
+    Deno.env.get('WEB_PUSH_VAPID_PUBLIC_KEY') ?? Deno.env.get('VITE_WEB_PUSH_PUBLIC_KEY')
+  const privateKey = Deno.env.get('WEB_PUSH_VAPID_PRIVATE_KEY')
+  const subject = Deno.env.get('WEB_PUSH_VAPID_SUBJECT') ?? 'mailto:hello@biteproject.it'
+  if (!publicKey || !privateKey) return null
+  return { subject, publicKey, privateKey }
+}
+
+function rejectionStatus(reason: unknown): number | null {
+  const candidate = reason as { statusCode?: unknown; status?: unknown } | null
+  if (typeof candidate?.statusCode === 'number') return candidate.statusCode
+  if (typeof candidate?.status === 'number') return candidate.status
+  return null
+}
+
+async function notifyAdminsOfContactMessage(
+  supabase: ReturnType<typeof createClient>,
+  messageId: string,
+  senderName: string,
+  subject: string
+): Promise<void> {
+  const vapid = vapidConfig()
+  if (!vapid) {
+    console.warn('Web push not configured, skipping contact notification')
+    return
+  }
+
+  const { data: adminRoles, error: rolesError } = await supabase
+    .from('user_roles')
+    .select('user_id')
+    .eq('role', 'admin')
+  if (rolesError) throw rolesError
+
+  const adminIds = Array.from(
+    new Set(((adminRoles ?? []) as { user_id: string }[]).map((row) => row.user_id).filter(Boolean))
+  )
+  if (adminIds.length === 0) return
+
+  const { data: subscriptionRows, error: subscriptionsError } = await supabase
+    .from('push_subscriptions')
+    .select('profile_id, endpoint, p256dh, auth, profiles!inner(email)')
+    .in('profile_id', adminIds)
+    .eq('enabled', true)
+  if (subscriptionsError) throw subscriptionsError
+
+  const rows = (subscriptionRows ?? []) as unknown as PushSubscriptionRow[]
+  if (rows.length === 0) return
+
+  const emailOf = (row: PushSubscriptionRow) => row.profiles?.email?.trim().toLowerCase()
+  const recipientEmails = Array.from(
+    new Set(rows.map(emailOf).filter((value): value is string => Boolean(value)))
+  )
+
+  const { data: preferenceRows, error: preferencesError } = recipientEmails.length
+    ? await supabase
+        .from('email_notification_preferences')
+        .select('email, push_mail_enabled')
+        .in('email', recipientEmails)
+    : { data: [], error: null }
+  if (preferencesError) throw preferencesError
+
+  const preferencesByEmail = new Map(
+    ((preferenceRows ?? []) as { email: string; push_mail_enabled: boolean | null }[]).map((row) => [
+      String(row.email).trim().toLowerCase(),
+      row.push_mail_enabled,
+    ])
+  )
+
+  // No preference row means opted in: mail push is on by default.
+  const targets = rows.filter((row) => {
+    const email = emailOf(row)
+    if (!email) return false
+    return preferencesByEmail.get(email) ?? true
+  })
+  if (targets.length === 0) return
+
+  const payload = JSON.stringify({
+    type: 'mail',
+    title: 'Nuovo messaggio dai contatti',
+    body: `${senderName}: ${subject}`,
+    url: `/admin/contatti?message=${encodeURIComponent(messageId)}`,
+    tag: `mail:${messageId}`,
+  })
+
+  const results = await Promise.allSettled(
+    targets.map((target) =>
+      webpush.sendNotification(
+        {
+          endpoint: target.endpoint,
+          expirationTime: null,
+          keys: { p256dh: target.p256dh, auth: target.auth },
+        },
+        payload,
+        { TTL: 60 * 5, vapidDetails: vapid }
+      )
+    )
+  )
+
+  // 404/410 mean the push service retired the endpoint: stop sending to it.
+  const retiredEndpoints = results
+    .map((result, index) => ({ result, endpoint: targets[index].endpoint }))
+    .filter(({ result }) => result.status === 'rejected')
+    .filter(({ result }) =>
+      [404, 410].includes(rejectionStatus((result as PromiseRejectedResult).reason) ?? 0)
+    )
+    .map(({ endpoint }) => endpoint)
+
+  if (retiredEndpoints.length > 0) {
+    await supabase
+      .from('push_subscriptions')
+      .update({ enabled: false, updated_at: new Date().toISOString() })
+      .in('endpoint', retiredEndpoints)
+  }
+
+  if (!results.some((result) => result.status === 'fulfilled')) return
+
+  await supabase
+    .from('inbound_emails')
+    .update({ push_notified_at: new Date().toISOString() })
+    .eq('id', messageId)
 }
 
 type EmailJob = {
@@ -299,28 +445,47 @@ ${inner}
       email
     )
 
-    const { error: mailboxError } = await supabase.from('inbound_emails').insert({
-      message_id: buildMailboxMessageId(),
-      thread_key: `contact:${crypto.randomUUID()}`,
-      from_address: email,
-      from_name: name,
-      to_addresses: [CONTACT_RECIPIENT_EMAIL],
-      subject,
-      text_body: message,
-      html_body: `<div>${escapedMessage}</div>`,
-      headers: [
-        { name: 'X-BITE-Source', value: 'contact-form' },
-        { name: 'X-BITE-Language', value: language },
-        { name: 'X-BITE-Origin', value: `${PUBLIC_SITE_URL}/contact` },
-      ],
-      brand: 'bite_ordinary',
-      intake_source: 'contact_form',
-      created_at: submittedAt,
-    })
+    const { data: storedMessage, error: mailboxError } = await supabase
+      .from('inbound_emails')
+      .insert({
+        message_id: buildMailboxMessageId(),
+        thread_key: `contact:${crypto.randomUUID()}`,
+        from_address: email,
+        from_name: name,
+        to_addresses: [CONTACT_RECIPIENT_EMAIL],
+        subject,
+        text_body: message,
+        html_body: `<div>${escapedMessage}</div>`,
+        headers: [
+          { name: 'X-BITE-Source', value: 'contact-form' },
+          { name: 'X-BITE-Language', value: language },
+          { name: 'X-BITE-Origin', value: `${PUBLIC_SITE_URL}/contact` },
+        ],
+        brand: 'bite_ordinary',
+        intake_source: 'contact_form',
+        assigned_to_profile_id: null,
+        assignment_reason: 'fallback_all_admins',
+        created_at: submittedAt,
+      })
+      .select('id')
+      .maybeSingle()
 
-    if (mailboxError) {
+    if (mailboxError || !storedMessage?.id) {
       console.error('Failed to store contact message in the mailbox', mailboxError)
       throw new Error('Failed to store contact message')
+    }
+
+    // Best effort: the visitor's message is already safely stored, so a failing
+    // push must not turn their submission into an error.
+    try {
+      await notifyAdminsOfContactMessage(
+        supabase,
+        storedMessage.id as string,
+        name,
+        subject
+      )
+    } catch (pushError) {
+      console.error('Contact push notification failed', pushError)
     }
 
     await queueEmail(

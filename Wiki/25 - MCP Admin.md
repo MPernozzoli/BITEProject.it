@@ -97,6 +97,11 @@ Per la newsletter la stessa fedeltà arriva gratis: `newsletter_create_draft`/`u
 ## Impostazioni articolo coperte
 `article_create_draft`/`article_update` non toccano solo il corpo: cover con punto focale (`cover_focal_x/y`) e zoom (`cover_zoom`), slug bilingui SEO (`slug_it`/`slug_en`, indicizzati unique case-insensitive — un duplicato torna come errore DB leggibile), tag (per nome: risolti su quelli esistenti o creati al volo, **sostituiscono** l'elenco esistente quando passati, non lo sommano — stessa semantica "cancella e riscrivi" di `ArticleEditor.tsx`), autori (`{profile_id, role}`, stessa sostituzione, il profilo deve già esistere), collegamento voyage/waypoint/segmento, posizione (`location_name`/`latitude`/`longitude`). `article_get` li restituisce tutti, tag inclusi per nome.
 
+## Link pubblici degli articoli
+`article_search`, `article_get`, `article_metrics`, `article_metrics_detail`, `article_create_draft` e la risorsa `bite://article/{id}` restituiscono `url_it` e `url_en`: gli indirizzi dell'articolo sul sito, così che un agente possa linkarlo (post, newsletter, automazione) senza ricomporre l'URL dagli slug. Li costruisce `src/server/mcp/links.ts` con la stessa regola di `lib/article-slug.ts` — slug della lingua → slug dell'altra → `slug` legacy — e lo stesso prefisso di lingua della sitemap pubblica; la base è `PUBLIC_SITE_URL`. Sono gli indirizzi **definitivi**: su una bozza o su un articolo programmato la pagina risponde solo dopo la pubblicazione, e il riassunto di `article_get` lo dice.
+
+Nessuno scope nuovo: i link viaggiano nelle risposte dei tool che già restituivano l'articolo (`articles:read`, `analytics:read`). I token e i connector OAuth esistenti li vedono al collegamento successivo, senza riconvalida.
+
 ## Metriche articoli
 `article_metrics` e `article_metrics_detail` chiamano le RPC admin `admin_article_view_insights` e `admin_article_view_insight_one` (definite in `20260809090000_article_likes_anonymous_and_engagement_kpis.sql`). Restituiscono: visualizzazioni totali e tracciate, visitatori unici (registrati + anonimi), tempo medio di lettura, distribuzione per lingua (IT/EN), likes (registrati + anonimi), commenti, serie giornaliera degli ultimi 30 giorni. Lo scope è `analytics:read`.
 

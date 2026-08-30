@@ -92,11 +92,14 @@ Nota: `formatBookingWindow` formatta nel fuso del browser, non forzando Europe/R
 | `sync_voyage_bookable_legs_plan(_voyage_id)` | interna: il vecchio corpo del sync, rinominato intatto. Non conosce gli actual, quindi il suo output **è** il baseline |
 | `voyage_leg_phase`, `voyage_derived_status`, `voyage_leg_is_bookable_now` | le regole di fase |
 | `refresh_voyage_status`, `refresh_all_voyage_statuses` | cache di `voyages.status` |
+| `voyage_plan_arrival(_voyage_id)` | la finestra di arrivo dell'ultima tratta, in Europe/Rome. Nessuna riga se il viaggio non ha tratte |
+| `sync_voyage_end_date_from_plan(_voyage_id)` | la riporta su `voyages.end_date`/`end_time`/`end_date_flex_days`. Chiamata dai trigger di statement su `voyage_bookable_legs` |
 
 ## Note e debiti
 - `voyage_waypoints.date_start`/`date_end` sono `text` e hanno nomi ingannevoli: `date_start` è la **ripartenza**, `date_end` è l'**arrivo**. Le colonne actual sono `timestamptz` con nomi espliciti.
 - `route_legs` (con `status`/`started_at`/`completed_at`) è un abbozzo precedente di questa stessa idea, ma **non è orfana**: la legge e ci scrive la edge function `sync-bite-data` di [[19 - Sub-App (pack e data)]], e `useRouteLegs` in `apps/data/src/hooks/use-voyages.ts` la espone (senza chiamanti). Non va droppata senza prima sciogliere quel nodo. Il componente admin che la gestiva (`AdminRouteManager.tsx`) non era montato da nessuna rotta ed è stato rimosso.
 - `voyage-schedule.ts` e le funzioni SQL implementano la stessa regola: vanno cambiate insieme. `src/test/voyage-schedule.test.ts` la fissa.
+- `voyages.end_date` non è più un dato indipendente quando esiste un piano: è la finestra di arrivo dell'ultima tratta, riallineata a ogni scrittura delle finestre (`20260830011821`) → [[13 - Booking Voyage]]. Il fallback su `voyages.start_date`/`end_date` dentro `voyage_derived_status` resta com'era, e serve ai viaggi storici senza tratte.
 
 ## Collegamenti
 - [[13 - Booking Voyage]] · [[16 - Admin]] · [[08 - Supabase]] · [[06 - Frontend - Componenti]] · [[07 - Frontend - Lib e Hooks]] · [[14 - Mappe e Layer Geospaziale]]

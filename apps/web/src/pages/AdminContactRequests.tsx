@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Archive, ArrowLeft, ExternalLink, Inbox, MessageSquare, RefreshCw, Reply, Send, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -88,6 +88,10 @@ const AdminContactRequests = () => {
   const { session, loading: authLoading } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  // Push notifications for a new contact message link here with ?message=<id>
+  // (see supabase/functions/contact-form-submit), so the click opens that request.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMessageId = searchParams.get("message");
   const [requests, setRequests] = useState<ContactRequest[]>([]);
   const [replies, setReplies] = useState<ContactReply[]>([]);
   const [filter, setFilter] = useState<ListFilter>("open");
@@ -162,6 +166,14 @@ const AdminContactRequests = () => {
     (request: ContactRequest | null) => (request?.thread_key ? repliesByThread[request.thread_key] ?? [] : []),
     [repliesByThread],
   );
+
+  // A deep-linked request may be archived or already answered, so widen the view
+  // to "all" rather than opening on an empty list.
+  useEffect(() => {
+    if (!requestedMessageId) return;
+    setFilter("all");
+    setSelectedId(requestedMessageId);
+  }, [requestedMessageId]);
 
   const visibleRequests = useMemo(() => {
     if (filter === "all") return requests;
@@ -327,6 +339,11 @@ const AdminContactRequests = () => {
                   onClick={() => {
                     setFilter(option.id);
                     setSelectedId(null);
+                    if (requestedMessageId) {
+                      const next = new URLSearchParams(searchParams);
+                      next.delete("message");
+                      setSearchParams(next, { replace: true });
+                    }
                   }}
                   className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-sans transition-colors ${
                     active

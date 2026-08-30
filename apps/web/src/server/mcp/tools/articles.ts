@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getArticleTranslationGaps } from "../../../lib/article-translation-gaps.js";
 import { McpToolError, type McpContext } from "../context.js";
+import { articleLinks, type BilingualSlugs } from "../links.js";
 import { countWords, markdownToTiptap, tiptapToMarkdown } from "../markdown.js";
 import { uploadImageFromUrl } from "../media.js";
 import { clientRequestIdShape, confirmShape, registerTool, type ToolOutcome } from "../registry.js";
@@ -73,6 +74,23 @@ interface ArticleRow {
   updated_at: string;
   voyage_id: string | null;
   story_id: string | null;
+}
+
+/**
+ * Slug degli articoli indicati, in una sola query.
+ *
+ * Serve ai tool delle metriche: la RPC che li alimenta restituisce titoli e
+ * numeri ma non gli slug, e senza quelli non si può costruire il link pubblico
+ * che rende la metrica azionabile (condividere, rilanciare, ripubblicare).
+ */
+async function loadSlugsByArticleId(ctx: McpContext, ids: (string | null)[]): Promise<Map<string, BilingualSlugs>> {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return new Map();
+  const { data, error } = await ctx.service.from("logbook_articles").select("id,slug,slug_it,slug_en").in("id", unique);
+  if (error) throw new McpToolError("db_error", `Lettura slug fallita: ${error.message}`);
+  return new Map(
+    ((data ?? []) as (BilingualSlugs & { id: string })[]).map((row) => [row.id, row] as const),
+  );
 }
 
 export type AuthorInput = { profile_id: string; role?: string };
@@ -209,7 +227,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_search",
     title: "Cerca articoli",
     description:
-      "Elenca gli articoli del logbook con filtri per stato, categoria, tipo editoriale e testo nel titolo. Non restituisce il corpo: per quello serve article_get.",
+      "Elenca gli articoli del logbook con filtri per stato, categoria, tipo editoriale e testo nel titolo. Ogni risultato include url_it e url_en, gli indirizzi pubblici dell'articolo sul sito: sono quelli definitivi, ma rispondono solo dopo la pubblicazione. Non restituisce il corpo: per quello serve article_get.",
     scope: "articles:read",
     kind: "read",
     inputSchema: {
@@ -248,6 +266,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           editorial_type: row.editorial_type,
           category: row.category,
           slug: row.slug,
+          ...articleLinks(context.siteUrl, row),
           scheduled_at: row.scheduled_at,
           published_at: row.published_at,
           updated_at: row.updated_at,
@@ -260,7 +279,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_get",
     title: "Leggi un articolo",
     description:
-      "Restituisce un articolo completo, con il corpo convertito in Markdown per entrambe le lingue e le eventuali lacune di traduzione.",
+      "Restituisce un articolo completo, con il corpo convertito in Markdown per entrambe le lingue, gli indirizzi pubblici url_it e url_en e le eventuali lacune di traduzione.",
     scope: "articles:read",
     kind: "read",
     inputSchema: {
@@ -305,11 +324,14 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           .maybeSingle(),
       ]);
 
+      const links = articleLinks(context.siteUrl, article);
+
       return {
-        text: `"${article.title_it || article.title_en}" — stato ${article.status}${article.scheduled_at ? `, programmato ${article.scheduled_at}` : ""}${gaps.hasGaps ? `. Lacune: ${gaps.labels.join("; ")}` : ""}.`,
+        text: `"${article.title_it || article.title_en}" — stato ${article.status}${article.scheduled_at ? `, programmato ${article.scheduled_at}` : ""}${gaps.hasGaps ? `. Lacune: ${gaps.labels.join("; ")}` : ""}.${links.url_it ? ` Link: ${links.url_it}${links.url_en && links.url_en !== links.url_it ? ` · ${links.url_en}` : ""}${article.status === "published" ? "" : " (attivo solo dopo la pubblicazione)"}` : ""}`,
         targetId: article.id,
         data: {
           ...article,
+          ...links,
           content_it: undefined,
           content_en: undefined,
           body_markdown_it: includeBody ? tiptapToMarkdown(article.content_it) : undefined,
@@ -384,14 +406,14 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           latitude: args.latitude ?? null,
           longitude: args.longitude ?? null,
         })
-        .select("id,slug")
+        .select("id,slug,slug_it,slug_en")
         .maybeSingle();
       if (error) {
         const unique = /slug_it|slug_en/.test(error.message) ? " (slug_it/slug_en già in uso da un altro articolo)" : "";
         throw new McpToolError("db_error", `Creazione bozza fallita: ${error.message}${unique}`);
       }
 
-      const created = data as { id: string; slug: string } | null;
+      const created = data as { id: string; slug: string; slug_it: string | null; slug_en: string | null } | null;
       if (created && (args.tags !== undefined || args.authors !== undefined)) {
         await replaceTagsAndAuthors(context, created.id, args.tags, typedAuthors(args.authors));
       }
@@ -399,7 +421,14 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       return {
         text: `Bozza creata: "${args.title_it}" (slug ${created?.slug}). Modificabile in admin su /admin/article/${created?.id}.`,
         targetId: created?.id ?? null,
-        data: { article_id: created?.id, slug: created?.slug, status: "draft" },
+        data: {
+          article_id: created?.id,
+          slug: created?.slug,
+          status: "draft",
+          // Indirizzi che l'articolo avrà una volta pubblicato: cambiano se in
+          // seguito si cambiano gli slug.
+          ...articleLinks(context.siteUrl, created),
+        },
       } satisfies ToolOutcome;
     },
   });
@@ -740,7 +769,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_metrics",
     title: "Metriche aggregate degli articoli",
     description:
-      "Restituisce le metriche di tutti gli articoli: visualizzazioni, tempo medio di lettura, visitatori unici, likes, commenti, distribuzione per lingua. Ordinati per numero di visualizzazioni decrescente.",
+      "Restituisce le metriche di tutti gli articoli: visualizzazioni, tempo medio di lettura, visitatori unici, likes, commenti, distribuzione per lingua, più url_it e url_en per linkare l'articolo. Ordinati per numero di visualizzazioni decrescente.",
     scope: "analytics:read",
     kind: "read",
     inputSchema: {
@@ -779,12 +808,15 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       if (args.status) rows = rows.filter((r) => r.status === args.status);
       rows = rows.slice(0, args.limit ?? 50);
 
+      const slugs = await loadSlugsByArticleId(context, rows.map((r) => r.article_id));
+
       return {
         text: `${rows.length} articoli con metriche.`,
         data: rows.map((r) => ({
           article_id: r.article_id,
           title_it: r.title_it,
           title_en: r.title_en,
+          ...articleLinks(context.siteUrl, slugs.get(r.article_id)),
           status: r.status,
           published_at: r.published_at,
           view_count: r.view_count,
@@ -806,7 +838,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_metrics_detail",
     title: "Metriche dettagliate di un articolo",
     description:
-      "Restituisce le metriche complete di un singolo articolo: riepilogo con visualizzazioni, visitatori unici, tempo medio di lettura, likes, commenti, e serie giornaliera degli ultimi 30 giorni.",
+      "Restituisce le metriche complete di un singolo articolo: riepilogo con visualizzazioni, visitatori unici, tempo medio di lettura, likes, commenti, serie giornaliera degli ultimi 30 giorni e gli indirizzi pubblici url_it e url_en.",
     scope: "analytics:read",
     kind: "read",
     inputSchema: {
@@ -848,10 +880,12 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
         daily: Array<{ day: string; views: number; registered: number }>;
       };
 
+      const slugs = await loadSlugsByArticleId(context, [detail.article_id]);
+
       return {
         text: `Metriche per "${detail.title_it || detail.title_en}": ${detail.view_count} visualizzazioni, ${detail.summary?.distinct_visitors ?? 0} visitatori unici, ${detail.summary?.like_count ?? 0} likes, ${detail.summary?.comment_count ?? 0} commenti.`,
         targetId: detail.article_id,
-        data: detail,
+        data: { ...detail, ...articleLinks(context.siteUrl, slugs.get(detail.article_id)) },
       } satisfies ToolOutcome;
     },
   });
