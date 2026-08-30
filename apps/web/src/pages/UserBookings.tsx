@@ -32,10 +32,28 @@ import {
   saveCloudBookingApplicationDraft,
   saveLocalBookingApplicationDraft,
 } from "@/lib/booking-application-draft";
-import { formatDepositEur, perPersonDepositEur, shouldApplyContributionFixedMinimum, totalDepositEur } from "@/lib/booking-deposit";
-import { startDepositPayment } from "@/lib/booking-payment";
+import {
+  contributionFixedMinimumEur,
+  formatDepositEur,
+  legDepositEur,
+  perPersonDepositEur,
+  shouldApplyContributionFixedMinimum,
+  totalDepositEur,
+} from "@/lib/booking-deposit";
+import { settleBookingIfZeroDue, startDepositPayment } from "@/lib/booking-payment";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
-import { acceptContributionCounter, getWorkawayFileSignedUrl, uploadWorkawayProposalFiles } from "@/lib/booking-proposal-apply";
+import {
+  acceptContributionCounter,
+  applyVoyageBookingWithProposal,
+  getWorkawayFileSignedUrl,
+  uploadWorkawayProposalFiles,
+} from "@/lib/booking-proposal-apply";
+import {
+  contributionProposalKind,
+  emptyContributionProposal,
+  toApplyWithProposalPayload,
+  type ContributionProposal,
+} from "@/lib/booking-workaway-proposal";
 import { getBookingBriefingContent } from "@/lib/booking-briefings";
 import {
   listMyParticipations,
@@ -60,6 +78,7 @@ import {
   type BookingVoyage,
   type BookingWaypoint,
   type VoyageBookingOccupancyRow,
+  type WorkawayRole,
   formatBookingDate,
   getBookingStatusClass,
   getBookingStatusLabel,
@@ -149,6 +168,12 @@ const UserBookings = () => {
   const [candidateInfo, setCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [candidateInfoPrefill, setCandidateInfoPrefill] = useState<CandidateInfo>(emptyCandidateInfo);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // One negotiation per application, run by the booker for the whole party — same contract as
+  // the logbook map flow: the figures are per person and guests inherit the agreed amount.
+  const [proposal, setProposal] = useState<ContributionProposal>(emptyContributionProposal);
+  const [proposalCvFile, setProposalCvFile] = useState<File | null>(null);
+  const [proposalPortfolioFile, setProposalPortfolioFile] = useState<File | null>(null);
+  const [workawayRoles, setWorkawayRoles] = useState<WorkawayRole[]>([]);
   const [myParticipations, setMyParticipations] = useState<MyParticipation[]>([]);
   const [partyMembers, setPartyMembers] = useState<BookingPartyMember[]>([]);
   const [droppingParticipantId, setDroppingParticipantId] = useState<string | null>(null);
@@ -477,6 +502,42 @@ const UserBookings = () => {
     }),
     [requests, selectedVoyage?.booking_contribution_per_nm_eur, selectedVoyageId],
   );
+
+  const selectedVoyageSettings = useMemo(
+    () => bookingSettings.find((item) => item.voyage_id === selectedVoyageId) ?? null,
+    [bookingSettings, selectedVoyageId],
+  );
+  const selectedLegsForRequest = useMemo(
+    () => selectedLegIds.map((id) => legsById[id]).filter(Boolean),
+    [selectedLegIds, legsById],
+  );
+  /** The negotiable part of the quote: everything except the €20 fixed minimum. */
+  const standardVariableEur = useMemo(
+    () => selectedLegsForRequest.reduce((acc, leg) => acc + legDepositEur(leg, selectedContributionOptions), 0),
+    [selectedLegsForRequest, selectedContributionOptions],
+  );
+  const fixedMinimumEur = useMemo(
+    () => contributionFixedMinimumEur(selectedContributionOptions.fixedMinimumEur),
+    [selectedContributionOptions],
+  );
+
+  // Only needed to label a workaway proposal, which stays a per-voyage opt-in.
+  useEffect(() => {
+    if (!selectedVoyageSettings?.workaway_enabled) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await typedSupabase
+        .from("voyage_workaway_roles")
+        .select("*")
+        .eq("active", true)
+        .order("sort_order", { ascending: true });
+      if (cancelled || error) return;
+      setWorkawayRoles((data as WorkawayRole[] | null) || []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVoyageSettings?.workaway_enabled]);
 
   // The matrix edits a single active request per voyage; with several active requests
   // (allowed server-side when their legs don't overlap) it targets the most recent one.
@@ -959,6 +1020,19 @@ const UserBookings = () => {
     await loadData();
   };
 
+  /** Clears the application form after a successful submit, proposal included: leaving any of it
+   * behind would re-hydrate the form with what was just sent, and the next attempt would only
+   * earn a BK001. */
+  const resetBookingApplicationForm = () => {
+    setSelectedLegIds([]);
+    setMessage("");
+    candidateInfoTouchedRef.current = false;
+    setCandidateInfo(candidateInfoPrefill);
+    setProposal(emptyContributionProposal);
+    setProposalCvFile(null);
+    setProposalPortfolioFile(null);
+  };
+
   const submitRequest = async () => {
     if (!validateBookingRequest()) return;
     if (!session?.user.id) {
@@ -974,39 +1048,98 @@ const UserBookings = () => {
       return;
     }
     const parsedPartySize = Math.max(1, Number.parseInt(partySize, 10) || 1);
+    // One negotiation per application, run by the booker on everyone's behalf: the figures are
+    // per person, so guests simply inherit the agreed amount and pay their own share.
+    const attachedProposal = toApplyWithProposalPayload(proposal);
     setSaving(true);
-    const { data, error } = await typedSupabase.rpc("request_voyage_booking", {
-      _voyage_id: selectedVoyageId,
-      _leg_ids: selectedLegIds,
-      _party_size: parsedPartySize,
-      _message: message,
-      _candidate_info: candidateInfo,
-    });
-    if (error) {
-      setSaving(false);
-      if ((error as { code?: string }).code === "BK001") {
-        toast.error(
-          lang === "it"
-            ? "Hai già aderito a una di queste tratte."
-            : "You've already joined one of these legs."
-        );
-      } else {
-        toast.error(
-          lang === "it"
-            ? `Non è stato possibile inviare la candidatura. Riprova. (${error.message})`
-            : `Unable to submit the application. Please try again. (${error.message})`
-        );
-      }
-      return;
-    }
-    const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
-    toast.info(
-      lang === "it"
-        ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
-        : "One last step: pay the contribution to submit your application."
-    );
 
-    const bookingRequestId = result?.booking_request_id;
+    let bookingRequestId: string | undefined;
+    // Set only when a proposal is attached: nothing but the €20 fixed share is due until the
+    // crew has reviewed it, so this — not the standard quote — is what gets charged now.
+    let fixedOnlyAmountEur: number | null = null;
+
+    if (attachedProposal) {
+      const applyResult = await applyVoyageBookingWithProposal({
+        voyageId: selectedVoyageId,
+        legIds: selectedLegIds,
+        message: message.trim() || null,
+        candidateInfo,
+        proposal: attachedProposal,
+        candidateMessage: proposal.candidateMessage.trim() || null,
+        partySize: parsedPartySize,
+      });
+      if (applyResult.ok === false) {
+        setSaving(false);
+        toast.error(
+          applyResult.error === "proposal_out_of_range"
+            ? lang === "it"
+              ? "L'importo proposto è fuori dal range consentito."
+              : "The proposed amount is outside the allowed range."
+            : lang === "it"
+              ? "Invio della proposta non riuscito."
+              : "Couldn't submit your proposal."
+        );
+        return;
+      }
+      bookingRequestId = applyResult.bookingRequestId;
+      fixedOnlyAmountEur = fixedMinimumEur;
+
+      if (bookingRequestId && (proposalCvFile || proposalPortfolioFile)) {
+        try {
+          await uploadWorkawayProposalFiles({
+            bookingRequestId,
+            userId: session.user.id,
+            cvFile: proposalCvFile,
+            portfolioFile: proposalPortfolioFile,
+          });
+        } catch (uploadError) {
+          console.error("[UserBookings] workaway file upload failed", uploadError);
+          toast.warning(
+            lang === "it"
+              ? "Candidatura inviata, ma il caricamento dei file non è riuscito. Potrai riprovare in seguito."
+              : "Application sent, but the file upload failed. You can try again later."
+          );
+        }
+      }
+
+      toast.info(
+        lang === "it"
+          ? "Ultimo passo: versa la quota fissa per inviare la candidatura. L'eventuale saldo verrà richiesto dopo la revisione."
+          : "One last step: pay the fixed share to submit your application. Any balance will be requested after review."
+      );
+    } else {
+      const { data, error } = await typedSupabase.rpc("request_voyage_booking", {
+        _voyage_id: selectedVoyageId,
+        _leg_ids: selectedLegIds,
+        _party_size: parsedPartySize,
+        _message: message,
+        _candidate_info: candidateInfo,
+      });
+      if (error) {
+        setSaving(false);
+        if ((error as { code?: string }).code === "BK001") {
+          toast.error(
+            lang === "it"
+              ? "Hai già aderito a una di queste tratte."
+              : "You've already joined one of these legs."
+          );
+        } else {
+          toast.error(
+            lang === "it"
+              ? `Non è stato possibile inviare la candidatura. Riprova. (${error.message})`
+              : `Unable to submit the application. Please try again. (${error.message})`
+          );
+        }
+        return;
+      }
+      const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
+      bookingRequestId = result?.booking_request_id;
+      toast.info(
+        lang === "it"
+          ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
+          : "One last step: pay the contribution to submit your application."
+      );
+    }
 
     // Multi-person applications still need participant details, and payment is chosen there.
     if (bookingRequestId && parsedPartySize > 1) {
@@ -1014,36 +1147,49 @@ const UserBookings = () => {
       setConfirmOpen(false);
       // Same cleanup as the solo path below: leaving the draft behind would re-hydrate this form
       // with the legs that were just submitted, and the next attempt would only earn a BK001.
-      setSelectedLegIds([]);
-      setMessage("");
-      candidateInfoTouchedRef.current = false;
+      resetBookingApplicationForm();
       clearLocalBookingApplicationDraft(selectedVoyageId);
       await clearCloudBookingApplicationDraft(session.user.id, selectedVoyageId).catch((error) => {
         console.error("Failed to clear booking draft", error);
       });
-      setCandidateInfo(candidateInfoPrefill);
       navigate(`/bookings/${bookingRequestId}/participants`);
       return;
     }
 
     // Capture the contribution before the selection is cleared below, so the payment dialog can
     // show the amount and pick card-vs-transfer (bank transfer only above the €500 card cap).
-    const soloAmountEur = totalDepositEur(
-      selectedLegIds.map((id) => legsById[id]).filter(Boolean),
-      1,
-      selectedContributionOptions,
-    );
+    const soloAmountEur =
+      fixedOnlyAmountEur ?? totalDepositEur(selectedLegsForRequest, 1, selectedContributionOptions);
 
     setSaving(false);
     setConfirmOpen(false);
-    setSelectedLegIds([]);
-    setMessage("");
-    candidateInfoTouchedRef.current = false;
+    resetBookingApplicationForm();
     clearLocalBookingApplicationDraft(selectedVoyageId);
     await clearCloudBookingApplicationDraft(session.user.id, selectedVoyageId).catch((error) => {
       console.error("Failed to clear booking draft", error);
     });
-    setCandidateInfo(candidateInfoPrefill);
+
+    // A proposal whose fixed share resolved to €0 (already covered by another active application
+    // on this voyage) has nothing to pay at all — settle it directly instead of opening a
+    // payment dialog for a zero amount.
+    if (bookingRequestId && fixedOnlyAmountEur != null && fixedOnlyAmountEur <= 0) {
+      const settled = await settleBookingIfZeroDue(bookingRequestId);
+      if (settled.ok) {
+        toast.success(
+          lang === "it"
+            ? "Candidatura inviata: nessun contributo fisso da versare, già coperto da una tua candidatura attiva su questo viaggio."
+            : "Application submitted: no fixed contribution due, already covered by your active application on this voyage."
+        );
+      } else {
+        toast.warning(
+          lang === "it"
+            ? "Candidatura creata, ma risulta ancora un importo da versare: completa il pagamento da questa pagina."
+            : "Application created, but an amount is still due: complete the payment from this page."
+        );
+      }
+      await loadData();
+      return;
+    }
 
     // Solo applications must complete the contribution payment now: the request stays
     // unreviewable until it's paid, and a refund is issued automatically if later rejected.
@@ -2044,16 +2190,34 @@ const UserBookings = () => {
               requiresPayment
               showPaymentMethodChoice={false}
               mode="application"
-              depositPerPersonEur={perPersonDepositEur(
-                selectedLegIds.map((id) => legsById[id]).filter(Boolean),
-                selectedContributionOptions
-              )}
-              depositTotalEur={totalDepositEur(
-                selectedLegIds.map((id) => legsById[id]).filter(Boolean),
-                Math.max(1, Number.parseInt(partySize, 10) || 1),
-                selectedContributionOptions
-              )}
+              fixedOnlyPayment={Boolean(contributionProposalKind(proposal))}
+              depositPerPersonEur={
+                contributionProposalKind(proposal)
+                  ? fixedMinimumEur
+                  : perPersonDepositEur(selectedLegsForRequest, selectedContributionOptions)
+              }
+              depositTotalEur={
+                contributionProposalKind(proposal)
+                  ? fixedMinimumEur * Math.max(1, Number.parseInt(partySize, 10) || 1)
+                  : totalDepositEur(
+                      selectedLegsForRequest,
+                      Math.max(1, Number.parseInt(partySize, 10) || 1),
+                      selectedContributionOptions
+                    )
+              }
               contributionPerNmEur={selectedVoyage?.booking_contribution_per_nm_eur}
+              standardVariableEur={standardVariableEur}
+              fixedMinimumEur={fixedMinimumEur}
+              contributionProposalMaxPercent={selectedVoyageSettings?.contribution_proposal_max_percent ?? 150}
+              workawayEnabled={Boolean(selectedVoyageSettings?.workaway_enabled)}
+              workawayRoles={workawayRoles}
+              activeWorkawayRoleKeys={selectedVoyageSettings?.workaway_role_keys ?? []}
+              proposal={proposal}
+              onProposalChange={setProposal}
+              cvFile={proposalCvFile}
+              onCvFileChange={setProposalCvFile}
+              portfolioFile={proposalPortfolioFile}
+              onPortfolioFileChange={setProposalPortfolioFile}
               submitting={saving}
               onConfirm={() => void submitRequest()}
             />

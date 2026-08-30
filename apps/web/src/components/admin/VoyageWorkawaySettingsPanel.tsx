@@ -76,34 +76,25 @@ const VoyageWorkawaySettingsPanel = ({
         <div className="mb-6 rounded-[22px] border border-border/70 bg-background/35 p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-border/70 bg-background/50 p-3">
-              <label className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-foreground">Proposta economica alternativa</span>
-                <input
-                  type="checkbox"
-                  checked={bookingSettings.contribution_proposal_enabled}
-                  onChange={(event) => updateSettingsField("contribution_proposal_enabled", event.target.checked)}
-                  className="h-4 w-4"
-                />
-              </label>
+              <span className="text-sm font-medium text-foreground">Proposta economica alternativa</span>
               <p className="mt-1 text-xs text-muted-foreground">
-                Permette al candidato di proporre un contributo totale diverso da quello calcolato, per questo viaggio.
-                Il minimo di €20 (fisso) è sempre dovuto e non è configurabile.
+                Sempre attiva, su tutti i viaggi: il candidato può proporre un contributo totale diverso da quello
+                calcolato. Il minimo di €20 (fisso) è sempre dovuto e non è configurabile. Qui puoi solo regolare il
+                tetto massimo proponibile.
               </p>
-              {bookingSettings.contribution_proposal_enabled && (
-                <div className="mt-3 flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Tetto massimo: fino al</span>
-                  <input
-                    type="number"
-                    min={100}
-                    value={bookingSettings.contribution_proposal_max_percent}
-                    onChange={(event) =>
-                      updateSettingsField("contribution_proposal_max_percent", Number(event.target.value))
-                    }
-                    className="w-16 border border-border bg-background/70 px-2 py-1 text-xs focus:border-accent focus:outline-none"
-                  />
-                  <span className="text-muted-foreground">% del totale normalmente calcolato</span>
-                </div>
-              )}
+              <div className="mt-3 flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Tetto massimo: fino al</span>
+                <input
+                  type="number"
+                  min={100}
+                  value={bookingSettings.contribution_proposal_max_percent}
+                  onChange={(event) =>
+                    updateSettingsField("contribution_proposal_max_percent", Number(event.target.value))
+                  }
+                  className="w-16 border border-border bg-background/70 px-2 py-1 text-xs focus:border-accent focus:outline-none"
+                />
+                <span className="text-muted-foreground">% del totale normalmente calcolato</span>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-border/70 bg-background/50 p-3">

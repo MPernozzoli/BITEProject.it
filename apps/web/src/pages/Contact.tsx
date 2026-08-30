@@ -1,8 +1,25 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
-import { Instagram, Youtube } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, Instagram, Ship, Youtube } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
+import { withLang } from "@/lib/seo";
+import {
+  buildVoyagePath,
+  formatVoyageDateRange,
+  getLocalizedVoyageName,
+  type Voyage,
+} from "@/lib/voyage-utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const TikTokIcon = ({ size = 18, className }: { size?: number; className?: string }) => (
   <svg
@@ -63,6 +80,7 @@ const EMPTY_FORM: ContactFormValues = {
 const Contact = () => {
   const { t, lang } = useI18n();
   const { toast } = useToast();
+  const [voyagesDialogOpen, setVoyagesDialogOpen] = useState(false);
   const [formValues, setFormValues] = useState<ContactFormValues>(EMPTY_FORM);
   const [errors, setErrors] = useState<ContactFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,6 +137,32 @@ const Contact = () => {
       cancelled = true;
     };
   }, []);
+
+  const { data: publicContent, isLoading: isPublicContentLoading } = usePublicContentSnapshot();
+  const { data: liveVoyages = [] } = useQuery<Voyage[]>({
+    queryKey: ["public-voyages"],
+    enabled: !publicContent && !isPublicContentLoading,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyages")
+        .select("*")
+        .eq("is_published", true)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Voyage[];
+    },
+  });
+
+  /**
+   * Voyages you can actually apply for. There is normally at most one, so the
+   * notice links straight to it; when there are several it opens the dialog.
+   */
+  const bookableVoyages = useMemo(() => {
+    const source = publicContent?.voyages ?? liveVoyages;
+    return source.filter((voyage) => voyage.booking_enabled && voyage.status !== "completed");
+  }, [liveVoyages, publicContent]);
+
+  const voyagePath = (voyage: Voyage) => withLang(lang, `${buildVoyagePath(voyage, lang)}#partecipa`);
 
   const fieldLabels = useMemo(
     () => ({
@@ -232,6 +276,66 @@ const Contact = () => {
           <p className="editorial-body text-lg text-muted-foreground max-w-2xl">
             {t("contact.subtitle")}
           </p>
+        </div>
+      </section>
+
+      <section className="px-6 md:px-12 pt-2">
+        <div className="page-section-narrow">
+          <div className="glass-panel rounded-[34px] border-emerald-200/60 bg-gradient-to-br from-emerald-50/80 to-white/55 p-6 md:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                <Ship size={20} />
+              </span>
+              <div className="min-w-0 space-y-3">
+                <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-emerald-800/80">
+                  {t("contact.voyages.eyebrow")}
+                </p>
+                <h2 className="editorial-heading text-2xl md:text-3xl text-emerald-950">
+                  {t("contact.voyages.title")}
+                </h2>
+                <p className="editorial-body text-emerald-900/80 max-w-xl">{t("contact.voyages.body")}</p>
+
+                {bookableVoyages.length === 1 ? (
+                  <div className="space-y-1.5">
+                    <Link
+                      to={voyagePath(bookableVoyages[0])}
+                      className="glass-button inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium"
+                    >
+                      {t("contact.voyages.ctaSingle", { voyage: getLocalizedVoyageName(bookableVoyages[0], lang) })}
+                      <ArrowRight size={16} />
+                    </Link>
+                    {formatVoyageDateRange(bookableVoyages[0], lang === "it" ? "it-IT" : "en-US") ? (
+                      <p className="text-xs font-sans text-emerald-900/70">
+                        {formatVoyageDateRange(bookableVoyages[0], lang === "it" ? "it-IT" : "en-US")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : bookableVoyages.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setVoyagesDialogOpen(true)}
+                    className="glass-button inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium"
+                  >
+                    {t("contact.voyages.ctaMany")}
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm font-sans text-emerald-900/75">{t("contact.voyages.none")}</p>
+                    <Link
+                      to={withLang(lang, "/voyages")}
+                      className="glass-button inline-flex items-center gap-2 px-6 py-3 text-sm font-sans font-medium"
+                    >
+                      {t("contact.voyages.ctaNone")}
+                      <ArrowRight size={16} />
+                    </Link>
+                  </div>
+                )}
+
+                <p className="pt-1 text-sm font-sans text-emerald-900/70">{t("contact.form.note")}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -401,6 +505,39 @@ const Contact = () => {
           </div>
         </div>
       </section>
+
+      <Dialog open={voyagesDialogOpen} onOpenChange={setVoyagesDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("contact.voyages.modalTitle")}</DialogTitle>
+            <DialogDescription>{t("contact.voyages.modalBody")}</DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
+            {bookableVoyages.map((voyage) => {
+              const dates = formatVoyageDateRange(voyage, lang === "it" ? "it-IT" : "en-US");
+              return (
+                <li key={voyage.id}>
+                  <Link
+                    to={voyagePath(voyage)}
+                    onClick={() => setVoyagesDialogOpen(false)}
+                    className="flex items-center justify-between gap-3 rounded-[22px] border border-border/70 bg-background/50 px-4 py-3 transition-colors hover:border-accent/60"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-sans text-foreground">
+                        {getLocalizedVoyageName(voyage, lang)}
+                      </span>
+                      {dates ? (
+                        <span className="mt-0.5 block text-xs font-sans text-muted-foreground">{dates}</span>
+                      ) : null}
+                    </span>
+                    <ArrowRight size={16} className="shrink-0 text-accent" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

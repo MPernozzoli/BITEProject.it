@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { depositTargetEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import ContributionProposalForm from "@/components/booking/ContributionProposalForm";
 import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
@@ -172,7 +173,6 @@ interface BookingConfirmDialogProps {
   standardVariableEur?: number;
   /** This candidate's actual fixed minimum (normally €20, 0 only when waived — see shouldApplyContributionFixedMinimum). */
   fixedMinimumEur?: number;
-  contributionProposalEnabled?: boolean;
   contributionProposalMaxPercent?: number;
   workawayEnabled?: boolean;
   workawayRoles?: WorkawayRole[];
@@ -209,7 +209,6 @@ const BookingConfirmDialog = ({
   fixedOnlyPayment = false,
   standardVariableEur = 0,
   fixedMinimumEur = 20,
-  contributionProposalEnabled = false,
   contributionProposalMaxPercent = 150,
   workawayEnabled = false,
   workawayRoles = [],
@@ -264,7 +263,7 @@ const BookingConfirmDialog = ({
 
   /** Whether the proposal block is actually on screen — see proposalError below. */
   const proposalVisible =
-    requiresPayment && Boolean(proposal && onProposalChange) && (contributionProposalEnabled || workawayEnabled);
+    requiresPayment && Boolean(proposal && onProposalChange);
 
   const proposalError = useMemo(() => {
     // Only validate what the user can see and fix. A leftover proposal from a previous party
@@ -397,7 +396,6 @@ const BookingConfirmDialog = ({
                   partySize={partySize}
                   standardVariableEur={standardVariableEur}
                   fixedMinimumEur={fixedMinimumEur}
-                  contributionProposalEnabled={contributionProposalEnabled}
                   workawayEnabled={workawayEnabled}
                   maxPercent={contributionProposalMaxPercent}
                   workawayRoles={workawayRoles}
@@ -482,6 +480,11 @@ const BookingConfirmDialog = ({
                   ? "Non si tratta di un prezzo per un servizio, di un biglietto o di un'attività charter: siamo privati che devono comunque effettuare questo viaggio e cerchiamo persone che vogliano partecipare condividendo una quota equa delle spese vive. Questo importo contribuisce alle spese di navigazione e di esercizio dell'imbarcazione durante la traversata. Le spese alimentari saranno gestite a bordo durante il viaggio e non sono comprese in questo importo. Il viaggio di andata/ritorno e ogni spesa connessa restano a tuo carico."
                   : "This is not a price for a service, a ticket, or a charter activity: we are private individuals already making this voyage and looking for people who want to join by sharing a fair part of the out-of-pocket costs. This amount contributes to navigation and vessel operating expenses during the crossing. Food expenses will be managed on board during the voyage and are not included in this amount. Travel to and from the boat and any related expenses remain your responsibility."}
               </p>
+              <ContributionEstimateNote
+                lang={lang}
+                workawayEnabled={workawayEnabled}
+                className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/80"
+              />
               <div className="mt-3 rounded-xl border border-amber-400/60 bg-white/50 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:bg-white/5 dark:text-amber-100">
                 <p className="font-semibold">
                   {lang === "it"

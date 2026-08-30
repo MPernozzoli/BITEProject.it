@@ -31,6 +31,7 @@ import {
   unquoteLine,
 } from "@pynkstudio/mailapp/mailbox";
 import { sanitizeRichHtml } from "@/lib/sanitize-rich-html";
+import { fallbackFromOptions, type MailFromOption } from "@/lib/mail-from-options";
 
 type MailView = "inbox" | "unread" | "starred" | "archived" | "spam" | "sent";
 
@@ -90,12 +91,7 @@ type ComposeAttachment = {
   content: string;
 };
 
-type FromOption = {
-  id: string;
-  label: string;
-  from: string;
-  brand: MailMessage["brand"];
-};
+type FromOption = MailFromOption;
 
 type MailboxResponse = {
   view: MailView;
@@ -108,15 +104,6 @@ type MailboxResponse = {
   };
   fromOptions: FromOption[];
 };
-
-const fallbackFromOptions: FromOption[] = [
-  { id: "hello", label: "Hello", from: "BITE <hello@biteproject.it>", brand: "bite_ordinary" },
-  { id: "massimo", label: "Massimo", from: "Massimo <massimo@biteproject.it>", brand: "bite_ordinary" },
-  { id: "sami", label: "Sami", from: "Sami <sami@biteproject.it>", brand: "bite_ordinary" },
-  { id: "pack", label: "Pack", from: "Pack <pack@biteproject.it>", brand: "bite_ordinary" },
-  { id: "viaggi", label: "Viaggi", from: "Viaggi <viaggi@biteproject.it>", brand: "bite_ordinary" },
-  { id: "support", label: "Support", from: "Support <support@biteproject.it>", brand: "bite_ordinary" },
-];
 
 const MAX_COMPOSE_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 const linkPattern = /(https?:\/\/[^\s<>"')\]]+)/gi;

@@ -15,6 +15,7 @@ import { getLocalizedVoyageName } from "@/lib/voyage-utils";
 import { getDangerReasonDef } from "@/lib/danger-reasons";
 import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
+import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
 import { depositTargetEur, formatDepositEur } from "@/lib/booking-deposit";
 
@@ -29,6 +30,8 @@ interface BookingSidebarPanelProps {
   candidateInfo: CandidateInfo;
   depositPerPersonEur?: number;
   depositTotalEur?: number;
+  /** Whether this voyage also accepts a workaway trade, named in the estimate note. */
+  workawayEnabled?: boolean | null;
   submitting: boolean;
   isSignedIn: boolean;
   lang: Language;
@@ -59,6 +62,7 @@ const BookingSidebarPanel = ({
   candidateInfo,
   depositPerPersonEur,
   depositTotalEur,
+  workawayEnabled,
   submitting,
   isSignedIn,
   lang,
@@ -197,6 +201,11 @@ const BookingSidebarPanel = ({
                       ? "Non e un prezzo, un biglietto o un servizio commerciale: e una quota equa delle spese vive di un viaggio privato che l'equipaggio deve comunque effettuare."
                       : "This is not a price, ticket, or commercial service: it is a fair share of the out-of-pocket costs of a private voyage the crew is already making."}
                   </p>
+                  <ContributionEstimateNote
+                    lang={lang}
+                    workawayEnabled={workawayEnabled}
+                    className="mt-2 text-[11px] leading-relaxed text-amber-950/85"
+                  />
                 </div>
               )}
             </div>

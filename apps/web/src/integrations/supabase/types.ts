@@ -2148,6 +2148,7 @@ export type Database = {
           html_body: string | null
           id: string
           in_reply_to: string | null
+          intake_source: string
           message_id: string | null
           push_notified_at: string | null
           read: boolean
@@ -2173,6 +2174,7 @@ export type Database = {
           html_body?: string | null
           id?: string
           in_reply_to?: string | null
+          intake_source?: string
           message_id?: string | null
           push_notified_at?: string | null
           read?: boolean
@@ -2198,6 +2200,7 @@ export type Database = {
           html_body?: string | null
           id?: string
           in_reply_to?: string | null
+          intake_source?: string
           message_id?: string | null
           push_notified_at?: string | null
           read?: boolean

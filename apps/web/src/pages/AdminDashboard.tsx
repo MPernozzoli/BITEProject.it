@@ -25,6 +25,7 @@ import {
   ChevronRight,
   BarChart3,
   ClipboardList,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { isAuthFailureError } from "@/lib/supabase-auth";
@@ -67,6 +68,7 @@ const AdminDashboard = () => {
   const [voyagesCount, setVoyagesCount] = useState(0);
   const [seoIssues, setSeoIssues] = useState<SeoIssue[]>([]);
   const [pendingCandidates, setPendingCandidates] = useState(0);
+  const [openContactRequests, setOpenContactRequests] = useState(0);
   const [loading, setLoading] = useState(true);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -128,7 +130,7 @@ const AdminDashboard = () => {
     if (!userId && !isAdminDevBypassEnabled()) return;
 
     setLoading(true);
-    const [articlesRes, storiesRes, voyagesRes, candidatesRes, seoIssuesRes] = await Promise.all([
+    const [articlesRes, storiesRes, voyagesRes, candidatesRes, seoIssuesRes, contactRequestsRes] = await Promise.all([
       supabase.from("logbook_articles").select("id,title_en,title_it,status,updated_at").order("updated_at", { ascending: false }),
       supabase.from("stories").select("id,title_en,title_it,created_at").order("created_at", { ascending: false }),
       supabase.from("voyages").select("id"),
@@ -141,6 +143,12 @@ const AdminDashboard = () => {
         .eq("status", "failed")
         .order("updated_at", { ascending: false })
         .limit(5),
+      supabase
+        .from("inbound_emails")
+        .select("id", { count: "exact", head: true })
+        .eq("intake_source", "contact_form")
+        .eq("archived", false)
+        .eq("read", false),
     ]);
     const err = articlesRes.error || storiesRes.error || voyagesRes.error;
     if (err && isAuthFailureError(err)) {
@@ -166,6 +174,12 @@ const AdminDashboard = () => {
           (row.status === "requested" || row.status === "waitlisted" || row.plan_change_status === "pending_user_approval")
       ).length
     );
+    // Contact chip badge: form submissions nobody has opened yet.
+    if (contactRequestsRes.error) {
+      console.error("Contact requests count fetch failed:", contactRequestsRes.error);
+    } else {
+      setOpenContactRequests(contactRequestsRes.count ?? 0);
+    }
     setLoading(false);
   }, [navigate, userId]);
 
@@ -226,6 +240,7 @@ const AdminDashboard = () => {
       items: [
         { to: "/admin/bookings", label: "Booking", description: "Richieste e candidature", icon: CalendarCheck, badge: pendingCandidates },
         { to: "/admin/mail", label: "Mail", description: "Inbox e risposte", icon: Mail, badge: 0 },
+        { to: "/admin/contatti", label: "Contatti", description: "Richieste dal form", icon: MessageSquare, badge: openContactRequests },
       ],
     },
     {

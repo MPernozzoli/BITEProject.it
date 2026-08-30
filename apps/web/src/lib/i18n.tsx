@@ -178,6 +178,17 @@ const translations: Translations = {
   "contact.validation.subject": { en: "Please add a subject.", it: "Inserisci un oggetto." },
   "contact.validation.message": { en: "Write a longer message.", it: "Scrivi un messaggio un po' piu lungo." },
   "contact.closing": { en: "We respond from wherever we are — sometimes a marina, sometimes an anchorage, sometimes offshore. Give us a few days.", it: "Rispondiamo da dovunque siamo — a volte una marina, a volte un'ancoraggio, a volte in navigazione. Dacci qualche giorno." },
+  "contact.voyages.eyebrow": { en: "Joining a voyage", it: "Partecipare a un viaggio" },
+  "contact.voyages.title": { en: "Want to come aboard?", it: "Vuoi salire a bordo?" },
+  "contact.voyages.body": { en: "Applications don't go through this form. They open from the voyage page itself, where you pick the legs, see the seats left and send your request.", it: "Le candidature non passano da questo form. Si aprono dalla pagina del viaggio, dove scegli le tratte, vedi i posti rimasti e mandi la richiesta." },
+  "contact.voyages.ctaSingle": { en: "Apply for {{voyage}}", it: "Candidati per {{voyage}}" },
+  "contact.voyages.ctaMany": { en: "See all open voyages", it: "Vedi tutti i viaggi aperti" },
+  "contact.voyages.ctaNone": { en: "Browse the routes", it: "Guarda le rotte" },
+  "contact.voyages.none": { en: "No voyage is open for applications right now — the routes page lists everything we have sailed and everything that is coming.", it: "Al momento nessun viaggio è aperto alle candidature: nella pagina delle rotte trovi tutto quello che abbiamo navigato e quello che arriva." },
+  "contact.voyages.modalTitle": { en: "Voyages open for applications", it: "Viaggi aperti alle candidature" },
+  "contact.voyages.modalBody": { en: "Open the one you're interested in and send your request from its page.", it: "Apri quello che ti interessa e manda la richiesta dalla sua pagina." },
+  "contact.voyages.modalClose": { en: "Close", it: "Chiudi" },
+  "contact.form.note": { en: "For everything else — a question, a collaboration, or just a message — the form below is the right place.", it: "Per tutto il resto — una domanda, una collaborazione, o anche solo un messaggio — il form qui sotto è il posto giusto." },
 };
 
 interface I18nContextType {

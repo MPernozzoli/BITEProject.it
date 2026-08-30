@@ -131,22 +131,18 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
 
     const { data: settingsRow, error: settingsError } = await serviceDb
       .from("voyage_booking_settings")
-      .select("contribution_proposal_enabled, contribution_proposal_max_percent, workaway_enabled")
+      .select("contribution_proposal_max_percent, workaway_enabled")
       .eq("voyage_id", voyageId)
       .maybeSingle();
     if (settingsError) throw new Error(settingsError.message);
     const settings = settingsRow as {
-      contribution_proposal_enabled: boolean;
       contribution_proposal_max_percent: number;
       workaway_enabled: boolean;
     } | null;
 
-    if (
-      (proposalKind === "contribution" || proposalKind === "hybrid") &&
-      !settings?.contribution_proposal_enabled
-    ) {
-      throw new ApplyWithProposalError(409, "contribution_proposal_disabled");
-    }
+    // Proposing a different amount is available on every voyage — the only bound left is the
+    // ceiling checked below (and the structural €20 fixed minimum), so there is no enabled gate
+    // here any more. Workaway stays opt-in: it depends on the crew wanting help on that voyage.
     if ((proposalKind === "workaway" || proposalKind === "hybrid") && !settings?.workaway_enabled) {
       throw new ApplyWithProposalError(409, "workaway_disabled");
     }

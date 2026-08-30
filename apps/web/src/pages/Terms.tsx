@@ -15,7 +15,7 @@ const Terms = () => {
           ? "Questi Termini regolano l'uso di biteproject.it, la registrazione di un account, la partecipazione alla community e la partecipazione ai viaggi condivisi organizzati nell'ambito del progetto BITE. Prima di registrarti o richiedere di partecipare a un viaggio ti chiediamo di leggerli con attenzione: descrivono la natura non commerciale del progetto, i tuoi obblighi e i limiti di responsabilità."
           : "These Terms govern the use of biteproject.it, account registration, participation in the community, and participation in the shared voyages organized within the BITE project. Before you register or request to join a voyage, please read them carefully: they describe the non-commercial nature of the project, your obligations, and the limits of liability."
       }
-      lastUpdated={isIt ? "Ultimo aggiornamento: 11 agosto 2026" : "Last updated: August 11, 2026"}
+      lastUpdated={isIt ? "Ultimo aggiornamento: 30 agosto 2026" : "Last updated: August 30, 2026"}
     >
       <LegalSection title={isIt ? "Natura del progetto BITE" : "Nature of the BITE Project"}>
         <p>
@@ -142,6 +142,16 @@ const Terms = () => {
         </p>
         <p>
           {isIt
+            ? "Gli importi pubblicati sulle pagine dei viaggi e mostrati durante la candidatura sono una nostra stima indicativa, calcolata sulle miglia previste di ciascuna tratta e sulle relative maggiorazioni. Non costituiscono un'offerta vincolante: possono variare se il piano di viaggio, le tratte selezionate o il numero di partecipanti cambiano, e l'importo effettivamente dovuto è quello indicato al momento della richiesta e confermato al termine della candidatura."
+            : "The amounts published on the voyage pages and shown during the application are our own indicative estimate, calculated on each leg's planned mileage and its related modifiers. They are not a binding offer: they may change if the voyage plan, the selected legs, or the number of participants change, and the amount actually due is the one shown at the time of the request and confirmed at the end of the application."}
+        </p>
+        <p>
+          {isIt
+            ? "Su ogni viaggio, durante la candidatura, puoi sempre proporre un importo diverso da quello stimato, secondo quanto previsto nella sezione «Proposta di contributo alternativo e workaway»."
+            : "On every voyage you may always propose an amount different from the estimated one during the application, as set out in the “Alternative Contribution Proposal and Workaway” section."}
+        </p>
+        <p>
+          {isIt
             ? "Il contributo NON comprende le spese personali e alimentari, i biglietti e i costi delle attività che scegli di svolgere durante il viaggio (ad esempio immersioni, tour guidati, ingressi a musei, ristoranti ed escursioni). Tali spese restano a carico di ciascun partecipante."
             : "The contribution does NOT include personal and food expenses, tickets, or the costs of activities you choose to do during the voyage (for example diving, guided tours, museum entries, restaurants, and excursions). Such expenses remain the responsibility of each participant."}
         </p>
@@ -175,8 +185,8 @@ const Terms = () => {
       <LegalSection title={isIt ? "Proposta di contributo alternativo e workaway" : "Alternative Contribution Proposal and Workaway"}>
         <p>
           {isIt
-            ? "Per alcuni viaggi, se l'opzione è attiva, invece di accettare il contributo standard indicato puoi proporre un'alternativa: un importo diverso, o una collaborazione (ad esempio comunicazione social, foto, video, cucina di bordo o altre mansioni indicate come utili per quel viaggio), anche in combinazione tra loro."
-            : "For some voyages, where this option is enabled, instead of accepting the standard contribution shown you may propose an alternative: a different amount, or a workaway trade (for example social media, photography, video, galley duties, or other roles indicated as useful for that voyage), even combined with one another."}
+            ? "Su tutti i viaggi, invece di accettare il contributo standard indicato, puoi proporre un importo diverso. Per i viaggi in cui l'opzione è attiva puoi in alternativa proporre una collaborazione (ad esempio comunicazione social, foto, video, cucina di bordo o altre mansioni indicate come utili per quel viaggio), anche in combinazione con un importo."
+            : "On every voyage, instead of accepting the standard contribution shown, you may propose a different amount. For voyages where the option is enabled you may alternatively propose a workaway trade (for example social media, photography, video, galley duties, or other roles indicated as useful for that voyage), possibly combined with an amount."}
         </p>
         <p>
           {isIt

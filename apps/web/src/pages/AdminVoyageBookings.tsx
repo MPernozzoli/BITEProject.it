@@ -1472,9 +1472,9 @@ const AdminVoyageBookings = () => {
                     {badge}
                   </span>
                 )}
-                {tab.key === "candidature" && (bookingSettings.contribution_proposal_enabled || bookingSettings.workaway_enabled) && (
+                {tab.key === "candidature" && bookingSettings.workaway_enabled && (
                   <span
-                    title="Contributo alternativo e/o workaway attivi per questo viaggio"
+                    title="Workaway attivo per questo viaggio"
                     className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-background/80" : "bg-emerald-500"}`}
                   />
                 )}

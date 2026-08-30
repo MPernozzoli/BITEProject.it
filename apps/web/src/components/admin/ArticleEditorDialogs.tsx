@@ -23,12 +23,17 @@ export interface ArticleEditorDialogsProps {
   handleStayOnLeaveDialog: () => void;
   handleDiscardLeaveFromEditor: () => void;
   handleLeaveSaveDraft: () => void;
+  /** Etichetta del salvataggio non-pubblicante: bozza, oppure aggiornamento di un articolo già online. */
+  leaveSaveActionLabel: string;
   handleLeavePublish: () => void;
+  /** Su un articolo già online non si ripubblica: il salvataggio è già l'aggiornamento in produzione. */
+  showLeavePublishAction: boolean;
   /** Offerta di traduzione quando mancano campi nell'altra lingua. */
   translationOfferOpen: boolean;
   translationOfferBusy: boolean;
   translationOfferLabels: string[];
   translationOfferPublishSkipLabel: string;
+  translationOfferSaveSkipLabel: string;
   pendingTranslationAction: "draft" | "publish" | null;
   handleTranslationOfferClose: () => void;
   handleTranslationOfferSkip: () => void;
@@ -48,11 +53,14 @@ const ArticleEditorDialogs = ({
   handleStayOnLeaveDialog,
   handleDiscardLeaveFromEditor,
   handleLeaveSaveDraft,
+  leaveSaveActionLabel,
   handleLeavePublish,
+  showLeavePublishAction,
   translationOfferOpen,
   translationOfferBusy,
   translationOfferLabels,
   translationOfferPublishSkipLabel,
+  translationOfferSaveSkipLabel,
   pendingTranslationAction,
   handleTranslationOfferClose,
   handleTranslationOfferSkip,
@@ -122,17 +130,19 @@ const ArticleEditorDialogs = ({
               void handleLeaveSaveDraft();
             }}
           >
-            {saving || leaveBusy ? "Salvataggio..." : "Salva come bozza (consigliato)"}
+            {saving || leaveBusy ? "Salvataggio..." : leaveSaveActionLabel}
           </AlertDialogAction>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full rounded-full"
-            disabled={saving || leaveBusy}
-            onClick={() => void handleLeavePublish()}
-          >
-            {primaryPublishActionLabel}
-          </Button>
+          {showLeavePublishAction && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full rounded-full"
+              disabled={saving || leaveBusy}
+              onClick={() => void handleLeavePublish()}
+            >
+              {primaryPublishActionLabel}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -193,7 +203,7 @@ const ArticleEditorDialogs = ({
             disabled={saving || translationOfferBusy || aiTranslating}
             onClick={() => void handleTranslationOfferSkip()}
           >
-            {pendingTranslationAction === "publish" ? translationOfferPublishSkipLabel : "Salva bozza senza tradurre"}
+            {pendingTranslationAction === "publish" ? translationOfferPublishSkipLabel : translationOfferSaveSkipLabel}
           </Button>
           <AlertDialogCancel type="button" className="mt-0 w-full rounded-full">
             Annulla

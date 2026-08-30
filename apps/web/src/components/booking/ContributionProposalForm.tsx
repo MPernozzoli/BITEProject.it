@@ -20,7 +20,6 @@ type ContributionProposalFormProps = {
   standardVariableEur: number;
   /** This candidate's actual fixed minimum (normally €20, 0 only when waived). */
   fixedMinimumEur: number;
-  contributionProposalEnabled: boolean;
   workawayEnabled: boolean;
   /** Ceiling, as a % of the total standard contribution (variable + fixed). No floor beyond the fixed minimum itself. */
   maxPercent: number;
@@ -85,7 +84,6 @@ const ContributionProposalForm = ({
   onChange,
   standardVariableEur,
   fixedMinimumEur,
-  contributionProposalEnabled,
   workawayEnabled,
   maxPercent,
   partySize = 1,
@@ -176,58 +174,56 @@ const ContributionProposalForm = ({
 
   return (
     <div className="space-y-4">
-      {contributionProposalEnabled && (
-        <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
-          <label className="flex items-start gap-3">
-            <Checkbox
-              checked={proposal.wantsAlternativeContribution}
-              onCheckedChange={(value) => {
-                const checked = value === true;
-                onChange({
-                  ...proposal,
-                  wantsAlternativeContribution: checked,
-                  // Mutually exclusive with workaway: workaway always carries its own amount
-                  // field, so there is no separate "both at once" state to represent.
-                  wantsWorkaway: checked ? false : proposal.wantsWorkaway,
-                  proposedVariableEur: checked ? proposal.proposedVariableEur ?? defaultVariableEur : proposal.proposedVariableEur,
-                });
-              }}
-              className="mt-0.5 shrink-0"
-            />
-            <span className="text-sm font-medium text-foreground">
-              {it
-                ? "Voglio proporre un contributo economico diverso, senza lavorare a bordo"
-                : "I want to propose a different economic contribution, without working on board"}
-            </span>
-          </label>
+      <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
+        <label className="flex items-start gap-3">
+          <Checkbox
+            checked={proposal.wantsAlternativeContribution}
+            onCheckedChange={(value) => {
+              const checked = value === true;
+              onChange({
+                ...proposal,
+                wantsAlternativeContribution: checked,
+                // Mutually exclusive with workaway: workaway always carries its own amount
+                // field, so there is no separate "both at once" state to represent.
+                wantsWorkaway: checked ? false : proposal.wantsWorkaway,
+                proposedVariableEur: checked ? proposal.proposedVariableEur ?? defaultVariableEur : proposal.proposedVariableEur,
+              });
+            }}
+            className="mt-0.5 shrink-0"
+          />
+          <span className="text-sm font-medium text-foreground">
+            {it
+              ? "Voglio proporre un contributo economico diverso, senza lavorare a bordo"
+              : "I want to propose a different economic contribution, without working on board"}
+          </span>
+        </label>
 
-          {proposal.wantsAlternativeContribution && (
-            <div className="mt-3 space-y-1 pl-7">
-              <Label className="text-xs text-muted-foreground">
-                {it
-                  ? `Contributo totale che proponi (fisso + variabile). Quota normalmente calcolata per questo viaggio: ${formatDepositEur(standardTotal, "it")}.`
-                  : `Total contribution you're proposing (fixed + variable). Normally calculated quota for this voyage: ${formatDepositEur(standardTotal, "en")}.`}
-              </Label>
-              <AmountTotalSlider
-                lang={lang}
-                totalEur={currentTotalEur}
-                minEur={fixedMinimumEur}
-                maxEur={maxTotalEur}
-                standardTotal={standardTotal}
-                onChangeTotal={setTotalEur}
-              />
-              <p className="pt-1 text-xs text-muted-foreground">
-                {it
-                  ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile.`
-                  : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable.`}
-              </p>
-              {groupTotalNote && (
-                <p className="pt-1 text-xs font-medium text-foreground">{groupTotalNote}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+        {proposal.wantsAlternativeContribution && (
+          <div className="mt-3 space-y-1 pl-7">
+            <Label className="text-xs text-muted-foreground">
+              {it
+                ? `Contributo totale che proponi (fisso + variabile). Quota normalmente calcolata per questo viaggio: ${formatDepositEur(standardTotal, "it")}.`
+                : `Total contribution you're proposing (fixed + variable). Normally calculated quota for this voyage: ${formatDepositEur(standardTotal, "en")}.`}
+            </Label>
+            <AmountTotalSlider
+              lang={lang}
+              totalEur={currentTotalEur}
+              minEur={fixedMinimumEur}
+              maxEur={maxTotalEur}
+              standardTotal={standardTotal}
+              onChangeTotal={setTotalEur}
+            />
+            <p className="pt-1 text-xs text-muted-foreground">
+              {it
+                ? `Il minimo di ${formatDepositEur(fixedMinimumEur, "it")} è sempre dovuto e non è negoziabile.`
+                : `The minimum of ${formatDepositEur(fixedMinimumEur, "en")} is always due and not negotiable.`}
+            </p>
+            {groupTotalNote && (
+              <p className="pt-1 text-xs font-medium text-foreground">{groupTotalNote}</p>
+            )}
+          </div>
+        )}
+      </div>
 
       {workawayEnabled && (
         <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">

@@ -1,9 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   buildFromAddress,
+  FROM_DOMAIN,
   PUBLIC_SITE_URL,
   SENDER_DOMAIN,
-  SITE_NAME,
 } from '../_shared/email-config.ts'
 
 const corsHeaders = {
@@ -14,6 +14,16 @@ const corsHeaders = {
 
 const CONTACT_RECIPIENT_EMAIL =
   Deno.env.get('CONTACT_RECIPIENT_EMAIL')?.trim() || 'hello@biteproject.it'
+
+/**
+ * The submission is written straight into the mailbox as a message *from* the
+ * visitor, so /admin/contatti and /admin/mail both show it and replying answers
+ * the person who wrote — not our own sender address, which is what happened
+ * while the form emailed hello@ and the inbound webhook fed it back in.
+ */
+function buildMailboxMessageId(): string {
+  return `${Date.now()}.${crypto.randomUUID()}@${FROM_DOMAIN}`
+}
 
 type EmailJob = {
   messageId: string
@@ -216,7 +226,6 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey)
   const submittedAt = new Date().toISOString()
-  const ownerMessageId = crypto.randomUUID()
   const confirmationMessageId = crypto.randomUUID()
   const escapedMessage = escapeHtml(message).replaceAll('\n', '<br />')
   const FS = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
@@ -229,21 +238,6 @@ Deno.serve(async (req) => {
 <p style="color:#152338;font-family:${FH};font-size:16px;font-weight:700;letter-spacing:.32em;margin:0 0 24px;text-transform:uppercase;">BITE</p>
 ${inner}
 </div></div></div>`.trim()
-
-  const ownerSubject = `[Contact] ${subject}`
-  const ownerHtml = shell(`
-<p style="color:#3f7c7a;font-size:11px;font-weight:700;letter-spacing:.24em;margin:0 0 10px;text-transform:uppercase;">Form Contatti</p>
-<h1 style="color:#152338;font-family:${FH};font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.15;margin:0 0 20px;">Nuovo messaggio</h1>
-<p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">Nuovo messaggio dal form contatti di ${escapeHtml(SITE_NAME)}.</p>
-<table style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px;color:#3d4654;">
-<tr><td style="padding:10px 0;font-weight:600;width:110px;vertical-align:top;color:#152338;">Nome</td><td style="padding:10px 0;">${escapeHtml(name)}</td></tr>
-<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Email</td><td style="padding:10px 0;"><a href="mailto:${escapeHtml(email)}" style="color:#3f7c7a;text-decoration:underline;">${escapeHtml(email)}</a></td></tr>
-<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Lingua</td><td style="padding:10px 0;">${escapeHtml(language)}</td></tr>
-<tr><td style="padding:10px 0;font-weight:600;vertical-align:top;color:#152338;">Oggetto</td><td style="padding:10px 0;">${escapeHtml(subject)}</td></tr>
-</table>
-<div style="padding:18px 20px;border:1px solid #e6ddd1;border-radius:20px;background:#fff;margin:0 0 20px;font-size:15px;color:#3d4654;line-height:1.75;">${escapedMessage}</div>
-<hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
-<p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Rispondi a <a href="mailto:${escapeHtml(email)}" style="color:#152338;text-decoration:underline;">${escapeHtml(email)}</a>. Inviato da <a href="${PUBLIC_SITE_URL}/contact" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}/contact</a>.</p>`)
 
   const confirmationSubject =
     language === 'it'
@@ -274,20 +268,6 @@ ${inner}
 <p style="font-size:15px;color:#3d4654;line-height:1.75;margin:0 0 20px;">If you need to add anything, reply to this email or write to <a href="mailto:${CONTACT_RECIPIENT_EMAIL}" style="color:#3f7c7a;text-decoration:underline;">${CONTACT_RECIPIENT_EMAIL}</a>.</p>
 <hr style="border:none;border-top:1px solid #e6ddd1;margin:0 0 20px;" />
 <p style="font-size:12px;color:#6e7987;line-height:1.6;margin:0;">Message sent from the contact form on <a href="${PUBLIC_SITE_URL}" style="color:#152338;text-decoration:underline;">${PUBLIC_SITE_URL}</a>.</p>`)
-  const ownerText = [
-    'Nuovo messaggio dal form contatti di BITE.',
-    '',
-    `Nome: ${name}`,
-    `Email: ${email}`,
-    `Lingua: ${language}`,
-    `Oggetto: ${subject}`,
-    '',
-    message,
-    '',
-    `Rispondi a: ${email}`,
-    `Origine: ${PUBLIC_SITE_URL}/contatti`,
-  ].join('\n')
-
   const confirmationText =
     language === 'it'
       ? [
@@ -314,38 +294,34 @@ ${inner}
         ].join('\n')
 
   try {
-    const ownerUnsubscribeToken = await ensureUnsubscribeToken(
-      supabase,
-      CONTACT_RECIPIENT_EMAIL
-    )
     const confirmationUnsubscribeToken = await ensureUnsubscribeToken(
       supabase,
       email
     )
 
-    await queueEmail(
-      supabase,
-      submittedAt,
-      `${email}:owner:${subject}:${message.slice(0, 64)}`,
-      ownerUnsubscribeToken,
-      {
-        messageId: ownerMessageId,
-        recipientEmail: CONTACT_RECIPIENT_EMAIL,
-        subject: ownerSubject,
-        html: ownerHtml,
-        text: ownerText,
-        label: 'contact-form',
-        metadata: {
-          sender_name: name,
-          sender_email: email,
-          subject,
-          language,
-          source: 'contact-form',
-          direction: 'owner',
-        },
-        errorLabel: 'contact owner email',
-      }
-    )
+    const { error: mailboxError } = await supabase.from('inbound_emails').insert({
+      message_id: buildMailboxMessageId(),
+      thread_key: `contact:${crypto.randomUUID()}`,
+      from_address: email,
+      from_name: name,
+      to_addresses: [CONTACT_RECIPIENT_EMAIL],
+      subject,
+      text_body: message,
+      html_body: `<div>${escapedMessage}</div>`,
+      headers: [
+        { name: 'X-BITE-Source', value: 'contact-form' },
+        { name: 'X-BITE-Language', value: language },
+        { name: 'X-BITE-Origin', value: `${PUBLIC_SITE_URL}/contact` },
+      ],
+      brand: 'bite_ordinary',
+      intake_source: 'contact_form',
+      created_at: submittedAt,
+    })
+
+    if (mailboxError) {
+      console.error('Failed to store contact message in the mailbox', mailboxError)
+      throw new Error('Failed to store contact message')
+    }
 
     await queueEmail(
       supabase,
@@ -389,8 +365,8 @@ ${inner}
       console.warn('Inline dispatch error (emails will be sent by cron)', dispatchErr)
     }
   } catch (error) {
-    console.error('Contact form email pipeline failed', error)
-    return jsonResponse({ error: 'Failed to send contact emails' }, 500)
+    console.error('Contact form pipeline failed', error)
+    return jsonResponse({ error: 'Failed to record contact message' }, 500)
   }
 
   return jsonResponse({ success: true })

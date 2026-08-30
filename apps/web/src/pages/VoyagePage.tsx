@@ -40,6 +40,7 @@ import {
   getContributionExplanation,
   roundUpToNextEuro,
 } from "@/lib/booking-deposit";
+import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -424,10 +425,29 @@ const VoyagePage = () => {
   useEffect(() => {
     if (isLoading || hasScrolledToHashRef.current || !location.hash) return;
     hasScrolledToHashRef.current = true;
-    const el = document.getElementById(location.hash.slice(1));
-    if (!el) return;
+
     const headerOffset = 96;
-    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - headerOffset);
+    const align = () => {
+      const el = document.getElementById(location.hash.slice(1));
+      if (!el) return;
+      window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - headerOffset);
+    };
+
+    // The sections below the hero (legs, booking panel, linked articles) mount as
+    // their own queries resolve, so the target keeps moving for a beat after the
+    // voyage itself is ready. Realign a few times, and stop as soon as the reader
+    // takes over the scroll.
+    align();
+    const timers = [150, 400, 900].map((delay) => window.setTimeout(align, delay));
+    const stop = () => timers.forEach((timer) => window.clearTimeout(timer));
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchmove", stop, { once: true, passive: true });
+
+    return () => {
+      stop();
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+    };
   }, [isLoading, location.hash]);
 
   if (isLoading) {
@@ -568,9 +588,9 @@ const VoyagePage = () => {
         </div>
       </section>
 
-      {/* Booking / participation panel */}
+      {/* Booking / participation panel. #partecipa is what /contact links to. */}
       {voyage.booking_enabled && (
-        <section className="page-section pt-0">
+        <section id="partecipa" className="page-section pt-0 scroll-mt-24">
           <div className="page-section-wide">
             <div className="glass-panel rounded-[34px] border-emerald-200/60 bg-gradient-to-br from-emerald-50/85 to-white/60 p-6 md:p-8">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -621,12 +641,22 @@ const VoyagePage = () => {
                     <Route size={12} /> {lang === "it" ? "A partire da" : "Starting from"}
                   </p>
                   <p className="text-sm">{minLegPriceEur != null ? `${formatDepositEur(minLegPriceEur, lang)} / ${lang === "it" ? "persona" : "person"}` : "-"}</p>
+                  {minLegPriceEur != null && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {lang === "it" ? "stima indicativa" : "indicative estimate"}
+                    </p>
+                  )}
                 </div>
                 <div className="glass-panel-soft rounded-[22px] p-4">
                   <p className="flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-2">
                     <TicketCheck size={12} /> {lang === "it" ? "Intera rotta" : "Full route"}
                   </p>
                   <p className="text-sm">{fullVoyagePriceEur != null ? `${formatDepositEur(fullVoyagePriceEur, lang)} / ${lang === "it" ? "persona" : "person"}` : "-"}</p>
+                  {fullVoyagePriceEur != null && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {lang === "it" ? "stima indicativa" : "indicative estimate"}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -669,6 +699,7 @@ const VoyagePage = () => {
 
               {bookableLegs.length > 0 && (
                 <div className="mt-5 max-w-2xl space-y-1.5 text-xs leading-relaxed text-emerald-900/60">
+                  <ContributionEstimateNote lang={lang} className="space-y-1.5" />
                   <p>{contributionExplanation}</p>
                   <p>
                     {lang === "it"

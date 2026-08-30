@@ -67,6 +67,7 @@ const AdminMcpAuthorize = lazy(() => import("./pages/AdminMcpAuthorize"));
 const AdminLogbookPoints = lazy(() => import("./pages/AdminLogbookPoints"));
 const AdminPackGallery = lazy(() => import("./pages/AdminPackGallery"));
 const AdminMail = lazy(() => import("./pages/AdminMail"));
+const AdminContactRequests = lazy(() => import("./pages/AdminContactRequests"));
 const AdminVoyageBookings = lazy(() => import("./pages/AdminVoyageBookings"));
 const AdminBookingRefunds = lazy(() => import("./pages/AdminBookingRefunds"));
 const AdminContentNotes = lazy(() => import("./pages/AdminContentNotes"));
@@ -274,6 +275,7 @@ const App = () => {
                         AdminRoute perderebbe i parametri OAuth nel redirect al login. */}
                     <Route path="/admin/mcp/authorize" element={<AdminMcpAuthorize />} />
                     <Route path="/admin/mail" element={<AdminRoute><AdminMail /></AdminRoute>} />
+                    <Route path="/admin/contatti" element={<AdminRoute><AdminContactRequests /></AdminRoute>} />
                     <Route path="/admin/content-notes" element={<AdminRoute><AdminContentNotes /></AdminRoute>} />
                     <Route path="/admin/performance" element={<AdminRoute><AdminPerformanceDashboard /></AdminRoute>} />
                     <Route path="/admin/comments" element={<AdminRoute><AdminCommentsRoute /></AdminRoute>} />

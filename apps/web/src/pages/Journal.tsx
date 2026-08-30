@@ -214,13 +214,12 @@ const Journal = () => {
       const { data, error } = await bookingRpcClient
         .from("voyage_booking_settings")
         .select(
-          "contribution_proposal_enabled, contribution_proposal_max_percent, workaway_enabled, workaway_role_keys",
+          "contribution_proposal_max_percent, workaway_enabled, workaway_role_keys",
         )
         .eq("voyage_id", bookingAnchor!.voyageId)
         .maybeSingle();
       if (error) return null;
       return data as {
-        contribution_proposal_enabled: boolean;
         contribution_proposal_max_percent: number;
         workaway_enabled: boolean;
         workaway_role_keys: string[];
@@ -1435,7 +1434,6 @@ const Journal = () => {
             contributionPerNmEur={bookingSummaryVoyage?.booking_contribution_per_nm_eur}
             standardVariableEur={bookingStandardVariableEur}
             fixedMinimumEur={bookingFixedMinimumEur}
-            contributionProposalEnabled={Boolean(bookingProposalSettings?.contribution_proposal_enabled)}
             contributionProposalMaxPercent={bookingProposalSettings?.contribution_proposal_max_percent ?? 150}
             workawayEnabled={Boolean(bookingProposalSettings?.workaway_enabled)}
             workawayRoles={workawayRoles}
@@ -1553,6 +1551,7 @@ const Journal = () => {
                 candidateInfo={bookingCandidateInfo}
                 depositPerPersonEur={perPersonDepositEur(selectedBookingLegs, bookingContributionOptions)}
                 depositTotalEur={totalDepositEur(selectedBookingLegs, bookingPartySize, bookingContributionOptions)}
+                workawayEnabled={bookingProposalSettings?.workaway_enabled}
                 submitting={bookingSubmitting}
                 isSignedIn={Boolean(session?.user)}
                 lang={lang}

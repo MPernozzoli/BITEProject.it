@@ -183,6 +183,12 @@ const ArticleEditor = () => {
   const hydratedDraftRef = useRef(false);
   const skipNextDraftSaveRef = useRef(true);
   const hasLocalChangesRef = useRef(false);
+  /** Specchio in stato del ref: serve ad abilitare/disabilitare i pulsanti di salvataggio. */
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
+  const markLocalChanges = useCallback((next: boolean) => {
+    hasLocalChangesRef.current = next;
+    setHasLocalChanges(next);
+  }, []);
   const pendingNavigationRef = useRef<{ type: "path"; to: string } | { type: "back" } | null>(null);
   const pendingTranslationSaveRef = useRef<{ action: "draft" | "publish"; leaveTarget?: string } | null>(null);
   const leaveDialogOpenRef = useRef(false);
@@ -204,8 +210,8 @@ const ArticleEditor = () => {
   useEffect(() => {
     hydratedDraftRef.current = false;
     skipNextDraftSaveRef.current = true;
-    hasLocalChangesRef.current = false;
-  }, [draftStorageKey]);
+    markLocalChanges(false);
+  }, [draftStorageKey, markLocalChanges]);
 
   useEffect(() => {
     leaveDialogOpenRef.current = leaveDialogOpen;
@@ -269,17 +275,23 @@ const ArticleEditor = () => {
 
     const rawDraft = window.localStorage.getItem(draftStorageKey);
     hydratedDraftRef.current = true;
-    if (!rawDraft) return;
+    if (!rawDraft) {
+      // Nessuna bozza da riapplicare: non resta nessun render di assestamento
+      // da ignorare, quindi la prossima modifica è già dell'utente.
+      skipNextDraftSaveRef.current = false;
+      return;
+    }
 
     try {
       applyDraft(JSON.parse(rawDraft) as ArticleEditorDraft);
-      hasLocalChangesRef.current = true;
+      markLocalChanges(true);
       toast.message(lang === "it" ? "Bozza locale ripristinata." : "Local draft restored.");
     } catch (error) {
       console.error("Failed to restore local article draft", error);
       window.localStorage.removeItem(draftStorageKey);
+      skipNextDraftSaveRef.current = false;
     }
-  }, [applyDraft, draftStorageKey, lang]);
+  }, [applyDraft, draftStorageKey, lang, markLocalChanges]);
 
   const loadSeoOptimization = useCallback(async (articleId?: string | null) => {
     if (!articleId || articleId === "new") {
@@ -590,8 +602,9 @@ const ArticleEditor = () => {
     };
 
     window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
-    hasLocalChangesRef.current = true;
+    markLocalChanges(true);
   }, [
+    markLocalChanges,
     articleMapScenes,
     authorIds,
     category,
@@ -625,7 +638,7 @@ const ArticleEditor = () => {
     voyageSegStart,
   ]);
 
-  useBeforeUnloadPrompt(hasLocalChangesRef.current && !saving && !leaveBusy);
+  useBeforeUnloadPrompt(hasLocalChanges && !saving && !leaveBusy);
 
   const generateSlug = (title: string) =>
     title
@@ -916,6 +929,7 @@ const ArticleEditor = () => {
     let finalStatus: "draft" | "scheduled" | "published";
     let publishedAt: string | null = null;
     let scheduledAt: string | null = null;
+    const wasPublished = persistedArticleStatus === "published";
     const trimmedSlug = slug.trim();
 
     if (!trimmedSlug) {
@@ -1012,9 +1026,15 @@ const ArticleEditor = () => {
     const saveContentIt = snap?.contentIt ?? contentIt;
 
     if (action === "draft") {
-      // Preserve scheduling when editing an already-scheduled article:
-      // the editorial plan slot is still linked, so don't tear it down.
-      if (persistedArticleStatus === "scheduled" && serverScheduledAt) {
+      if (wasPublished) {
+        // Un articolo già online resta online: la modifica va in produzione
+        // in silenzio, senza retrocederlo a bozza né spostarne la data di uscita.
+        finalStatus = "published";
+        scheduledAt = null;
+        publishedAt = initialPublishedAt ?? new Date().toISOString();
+      } else if (persistedArticleStatus === "scheduled" && serverScheduledAt) {
+        // Preserve scheduling when editing an already-scheduled article:
+        // the editorial plan slot is still linked, so don't tear it down.
         finalStatus = "scheduled";
         scheduledAt = serverScheduledAt;
       } else {
@@ -1024,10 +1044,7 @@ const ArticleEditor = () => {
     } else {
       finalStatus = "published";
       scheduledAt = null;
-      publishedAt =
-        persistedArticleStatus === "published" && initialPublishedAt
-          ? initialPublishedAt
-          : new Date().toISOString();
+      publishedAt = wasPublished && initialPublishedAt ? initialPublishedAt : new Date().toISOString();
     }
 
     if (action === "publish" && articleMapScenes.length > 0) {
@@ -1049,7 +1066,7 @@ const ArticleEditor = () => {
         });
 
         const sceneMapConfirmLead =
-          persistedArticleStatus === "published"
+          wasPublished
             ? "Ci sono scene mappa non ancora agganciate correttamente. Vuoi applicare comunque le modifiche?"
             : "Ci sono scene mappa non ancora agganciate correttamente. Vuoi pubblicare comunque l'articolo?";
         const shouldContinue = window.confirm([sceneMapConfirmLead, "", ...warningLines].join("\n"));
@@ -1161,8 +1178,12 @@ const ArticleEditor = () => {
         return false;
       }
 
+      // Notifiche solo alla prima messa online: modificare un articolo già
+      // pubblicato non deve rispedire nulla agli iscritti.
+      const isFirstPublication = finalStatus === "published" && !wasPublished;
+
       // Send email notifications to story subscribers when publishing a new chapter
-      if (finalStatus === "published" && selectedStoryId && articleId) {
+      if (isFirstPublication && selectedStoryId && articleId) {
         try {
           // Get story info
           const story = allStories.find((s) => s.id === selectedStoryId);
@@ -1197,22 +1218,37 @@ const ArticleEditor = () => {
           if (error) console.error("Failed to sync community post:", error);
         });
 
-        try {
-          await supabase.functions.invoke("notify-article-publication", {
-            body: {
-              articleId,
-            },
-          });
-        } catch (e) {
-          console.error("Failed to create publication notifications:", e);
+        if (isFirstPublication) {
+          try {
+            await supabase.functions.invoke("notify-article-publication", {
+              body: {
+                articleId,
+              },
+            });
+          } catch (e) {
+            console.error("Failed to create publication notifications:", e);
+          }
         }
       }
     }
 
     window.localStorage.removeItem(draftStorageKey);
-    hasLocalChangesRef.current = false;
+    markLocalChanges(false);
     setPersistedArticleStatus(finalStatus);
-    setServerScheduledAt(null);
+    // La programmazione sopravvive al salvataggio: azzerarla qui farebbe
+    // retrocedere a bozza il salvataggio successivo della stessa sessione.
+    setServerScheduledAt(finalStatus === "scheduled" ? scheduledAt : null);
+    if (publishedAt) setInitialPublishedAt(publishedAt);
+
+    if (action === "draft") {
+      if (finalStatus === "published") {
+        toast.success(lang === "it" ? "Modifiche pubblicate." : "Changes are live.");
+      } else if (finalStatus === "scheduled") {
+        toast.success(lang === "it" ? "Modifiche salvate, programmazione invariata." : "Changes saved, schedule unchanged.");
+      } else {
+        toast.success(lang === "it" ? "Bozza salvata." : "Draft saved.");
+      }
+    }
 
     if (action === "publish" && finalStatus === "published" && articleId && articleId !== "new" && slug?.trim()) {
       window.location.assign(`${window.location.origin}/logbook/${encodeURIComponent(slug.trim())}`);
@@ -1266,6 +1302,8 @@ const ArticleEditor = () => {
     initialPublishedAt,
     runSeoOptimization,
     lang,
+    markLocalChanges,
+    serverScheduledAt,
   ]);
 
   const translationOfferLabels = useMemo(() => {
@@ -1369,7 +1407,7 @@ const ArticleEditor = () => {
 
   const handleDiscardLeaveFromEditor = () => {
     window.localStorage.removeItem(draftStorageKey);
-    hasLocalChangesRef.current = false;
+    markLocalChanges(false);
     continuePendingNavigation();
   };
 
@@ -1911,14 +1949,23 @@ const ArticleEditor = () => {
     }
   };
 
-  const primaryPublishActionLabel = useMemo(() => {
-    if (persistedArticleStatus === "published") return "Applica modifiche";
-    return "Pubblica";
-  }, [persistedArticleStatus]);
-  const translationOfferPublishSkipLabel = useMemo(() => {
-    if (persistedArticleStatus === "published") return "Applica modifiche senza tradurre";
-    return "Pubblica senza tradurre";
-  }, [persistedArticleStatus]);
+  /** Un articolo online non si ripubblica: si aggiorna e basta. Il flusso di pubblicazione resta alle bozze. */
+  const isPublishedArticle = persistedArticleStatus === "published";
+  const primaryPublishActionLabel = "Pubblica";
+  const saveActionLabel = useMemo(() => {
+    if (isPublishedArticle) return "Aggiorna";
+    if (persistedArticleStatus) return "Aggiorna bozza";
+    return "Crea bozza";
+  }, [isPublishedArticle, persistedArticleStatus]);
+  const leaveSaveActionLabel = useMemo(
+    () => (isPublishedArticle ? saveActionLabel : `${saveActionLabel} (consigliato)`),
+    [isPublishedArticle, saveActionLabel]
+  );
+  const translationOfferSaveSkipLabel = useMemo(
+    () => (isPublishedArticle ? "Aggiorna senza tradurre" : `${saveActionLabel} senza tradurre`),
+    [isPublishedArticle, saveActionLabel]
+  );
+  const translationOfferPublishSkipLabel = "Pubblica senza tradurre";
   const sceneOptionsEn = useMemo(
     () => articleMapScenes.map((scene, index) => ({ id: scene.id, label: scene.title_en || scene.title_it || `Scene ${index + 1}` })),
     [articleMapScenes]
@@ -2165,23 +2212,29 @@ const ArticleEditor = () => {
             >
               <Eye size={14} /> Anteprima
             </button>
-            <button onClick={() => saveArticle("draft")} disabled={saving} className="inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans hover:bg-muted transition-colors disabled:opacity-50">
-              <Save size={14} /> Save Draft
-            </button>
             <button
               type="button"
-              onClick={() => {
-                if (persistedArticleStatus === "published") {
-                  void saveArticle("publish");
-                } else {
-                  setPublishChoiceOpen(true);
-                }
-              }}
-              disabled={saving}
-              className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50"
+              onClick={() => void saveArticle("draft")}
+              disabled={saving || !hasLocalChanges}
+              title={hasLocalChanges ? undefined : "Nessuna modifica da salvare"}
+              className={
+                isPublishedArticle
+                  ? "inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50"
+                  : "inline-flex items-center gap-2 border border-border px-4 py-2 text-sm font-sans hover:bg-muted transition-colors disabled:opacity-50"
+              }
             >
-              <Send size={14} /> {primaryPublishActionLabel}
+              <Save size={14} /> {saveActionLabel}
             </button>
+            {!isPublishedArticle && (
+              <button
+                type="button"
+                onClick={() => setPublishChoiceOpen(true)}
+                disabled={saving}
+                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 text-sm font-sans font-medium hover:bg-navy-light transition-colors disabled:opacity-50"
+              >
+                <Send size={14} /> {primaryPublishActionLabel}
+              </button>
+            )}
           </div>
         </div>
 
@@ -2549,11 +2602,14 @@ const ArticleEditor = () => {
         handleStayOnLeaveDialog={handleStayOnLeaveDialog}
         handleDiscardLeaveFromEditor={handleDiscardLeaveFromEditor}
         handleLeaveSaveDraft={handleLeaveSaveDraft}
+        leaveSaveActionLabel={leaveSaveActionLabel}
         handleLeavePublish={handleLeavePublish}
+        showLeavePublishAction={!isPublishedArticle}
         translationOfferOpen={translationOfferOpen}
         translationOfferBusy={translationOfferBusy}
         translationOfferLabels={translationOfferLabels}
         translationOfferPublishSkipLabel={translationOfferPublishSkipLabel}
+        translationOfferSaveSkipLabel={translationOfferSaveSkipLabel}
         pendingTranslationAction={pendingTranslationAction}
         handleTranslationOfferClose={handleTranslationOfferClose}
         handleTranslationOfferSkip={handleTranslationOfferSkip}
