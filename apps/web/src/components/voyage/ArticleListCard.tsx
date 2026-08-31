@@ -1,9 +1,12 @@
-import { forwardRef } from "react";
+import { forwardRef, type MouseEvent } from "react";
 import { format } from "date-fns";
 import { MapPin, Eye, Heart, User, Glasses } from "lucide-react";
 import { getArticleDisplayLocationLabel, type GeoArticle, type VoyageWaypoint } from "@/lib/voyage-utils";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
+import { storageImageProps } from "@/lib/storage-image";
+import { articlePathForLang } from "@/lib/article-slug";
+import { localizedHref } from "@/lib/i18n";
 
 interface ArticleListCardProps {
   article: GeoArticle;
@@ -17,7 +20,7 @@ interface ArticleListCardProps {
   onMouseLeave?: () => void;
 }
 
-const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
+const ArticleListCard = forwardRef<HTMLAnchorElement, ArticleListCardProps>(
   ({ article, waypointsMap = {}, lang, isActive, isDimmed = false, isRead, onClick, onMouseEnter, onMouseLeave }, ref) => {
     const displayLocation = getArticleDisplayLocationLabel(article, waypointsMap, lang);
     const title = lang === "en" ? article.title_en : (article.title_it || article.title_en);
@@ -35,13 +38,26 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
         )
       );
 
+    // La card apre un pannello sulla mappa, non naviga: il click semplice resta
+    // quel comportamento. Ma resta un <a> con l'indirizzo vero dell'articolo, così
+    // il tocco prolungato offre «apri in una nuova scheda» e «condividi», cmd-click
+    // e rotellina funzionano, e la pagina espone link interni verso gli articoli.
+    const href = localizedHref(lang, articlePathForLang(article, lang));
+
+    const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      onClick();
+    };
+
     return (
-      <div
+      <a
         ref={ref}
-        onClick={onClick}
+        href={href}
+        onClick={handleClick}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className={`group mx-3 my-3 cursor-pointer rounded-[24px] border p-3 transition-[transform,box-shadow,border-color,background-color] duration-reveal ease-out-expo active:scale-[0.99] ${
+        className={`group mx-3 my-3 block cursor-pointer rounded-[24px] border p-3 transition-[transform,box-shadow,border-color,background-color] duration-reveal ease-out-expo active:scale-[0.99] ${
           isActive
             ? "border-accent/50 bg-glass/70 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
             : "border-glass-edge/55 bg-glass/48 hover:bg-glass/68 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)]"
@@ -52,10 +68,12 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
           {article.cover_image && (
             <div className="w-20 h-20 shrink-0 overflow-hidden rounded-[18px] relative bg-muted">
               <img
-                src={article.cover_image}
+                {...storageImageProps(article.cover_image, 96)}
                 alt={title}
                 className="absolute inset-0 max-w-none"
                 style={thumbStyle || undefined}
+                loading="lazy"
+                decoding="async"
               />
               {isRead && (
                 <span
@@ -122,7 +140,7 @@ const ArticleListCard = forwardRef<HTMLDivElement, ArticleListCardProps>(
             )}
           </div>
         </div>
-      </div>
+      </a>
     );
   }
 );

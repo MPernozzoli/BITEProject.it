@@ -413,7 +413,7 @@ const Unsubscribe = () => {
                 <select
                   value={reasonCode}
                   onChange={(event) => setReasonCode(event.target.value as ReasonCode | "")}
-                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none"
+                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-base md:text-sm font-sans focus:border-accent focus:outline-none"
                 >
                   <option value="">{lang === "it" ? "Seleziona un motivo facoltativo" : "Select an optional reason"}</option>
                   {reasonOptions.map((option) => (
@@ -426,7 +426,7 @@ const Unsubscribe = () => {
                   value={reasonText}
                   onChange={(event) => setReasonText(event.target.value)}
                   rows={4}
-                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-sm font-sans focus:border-accent focus:outline-none resize-y"
+                  className="mt-3 w-full rounded-[18px] border border-foreground/8 bg-transparent px-4 py-3 text-base md:text-sm font-sans focus:border-accent focus:outline-none resize-y"
                   placeholder={
                     lang === "it"
                       ? "Se vuoi, raccontaci meglio il motivo."

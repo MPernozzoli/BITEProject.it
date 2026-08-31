@@ -35,6 +35,7 @@ import boatSunset from "@/assets/boat-sunset.webp";
 import dogsMarina from "@/assets/dogs-marina.webp";
 import dinghyCrew from "@/assets/dinghy-crew.webp";
 
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 interface HomeTag {
   id: string;
   name: string;
@@ -978,7 +979,7 @@ const Index = () => {
           {shouldRenderHeroBackgroundImage ? (
             <img
               key={heroBackgroundImage}
-              src={heroBackgroundImage}
+              {...storageImageResponsiveProps(heroBackgroundImage, [640, 1080, 1600, 2200], "100vw")}
               alt=""
               aria-hidden="true"
               className="img-cover hero-layer hero-layer--active"
@@ -1179,7 +1180,11 @@ const Index = () => {
                           <div className={`aspect-[4/3] overflow-hidden rounded-[19px] bg-muted relative ${featured ? "md:aspect-[16/10]" : ""}`}>
                             {entry.cover_image ? (
                               <img
-                                src={entry.cover_image}
+                                {...storageImageResponsiveProps(
+                                  entry.cover_image,
+                                  [360, 640, 960],
+                                  "(min-width: 1024px) 22rem, (min-width: 640px) 45vw, 92vw"
+                                )}
                                 alt={title}
                                 className="img-cover group-hover:scale-105 transition-transform duration-reveal ease-out-expo"
                                 loading="lazy"
@@ -1334,7 +1339,7 @@ const Index = () => {
                       value={newsletterEmail}
                       onChange={(event) => setNewsletterEmail(event.target.value)}
                       placeholder={t("newsletter.placeholder")}
-                      className="w-full bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                      className="w-full bg-transparent px-4 py-3 text-base md:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
                     />
                   </div>
                 )}
@@ -1346,12 +1351,14 @@ const Index = () => {
                   {newsletterLoading ? (lang === "it" ? "Invio..." : "Sending...") : t("newsletter.submit")}
                 </button>
               </div>
-              <label className="flex items-start gap-3 text-left text-sm text-muted-foreground">
+              {/* Il consenso è obbligatorio: la casella arriva a 20px e la riga a 44,
+                  così si prende al primo tocco invece di richiedere la mira. */}
+              <label className="flex min-h-[44px] cursor-pointer items-start gap-3 py-1 text-left text-sm text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={newsletterConsent}
                   onChange={(event) => setNewsletterConsent(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-border bg-transparent accent-primary"
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-border bg-transparent accent-primary"
                 />
                 <span>
                   {lang === "it"

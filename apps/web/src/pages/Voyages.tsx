@@ -20,6 +20,7 @@ import {
 import { applySeo, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
 import { useEffect, useMemo } from "react";
 import { ArrowRight, Compass, Mountain, Ship } from "lucide-react";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 const getVoyageStatusLabel = (status: Voyage["status"], lang: "it" | "en") => {
   if (lang === "it") {
@@ -232,7 +233,11 @@ const VoyagesPage = () => {
                   {coverImage && (
                     <div className="h-40 w-full shrink-0 overflow-hidden rounded-[24px] bg-muted md:h-32 md:w-44">
                       <img
-                        src={coverImage}
+                        {...storageImageResponsiveProps(
+                          coverImage,
+                          [360, 720, 1080],
+                          "(min-width: 768px) 11rem, 92vw"
+                        )}
                         alt={voyageName}
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         loading="lazy"

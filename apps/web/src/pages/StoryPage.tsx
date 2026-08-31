@@ -8,6 +8,8 @@ import ProfileCard from "@/components/ProfileCard";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { applySeo, DEFAULT_DESCRIPTION, ORGANIZATION_ID, WEBSITE_ID } from "@/lib/seo";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
+
 import {
   articlePathForLang,
   bilingualSlugOrFilter,
@@ -218,7 +220,13 @@ const StoryPage = () => {
     <div>
       {story.cover_image && (
         <section className="relative h-[40vh] md:h-[50vh] overflow-hidden">
-          <img src={story.cover_image} alt={title} className="img-cover" loading="lazy" decoding="async" />
+          <img
+            {...storageImageResponsiveProps(story.cover_image, [640, 1024, 1600, 2000], "100vw")}
+            alt={title}
+            className="img-cover"
+            loading="lazy"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-primary/40" />
         </section>
       )}

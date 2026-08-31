@@ -54,6 +54,7 @@ import {
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
 import type { Language } from "@/lib/i18n";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 export type ArticleReaderArticle = GeoArticle & {
   article_map_scenes?: unknown;
@@ -471,7 +472,12 @@ const ArticleReader = ({
       {article.cover_image && (
         <section className="relative h-[42vh] md:h-[52vh] overflow-hidden mt-24 mx-4 md:mx-6 glass-frame rounded-[36px] p-2">
           <div className="relative h-full overflow-hidden rounded-[30px]">
-            <img src={article.cover_image} alt="" className="absolute inset-0 w-full max-w-none pointer-events-none" style={coverStyle} />
+            <img
+              {...storageImageResponsiveProps(article.cover_image, [640, 1024, 1600, 2000], "100vw")}
+              alt=""
+              className="absolute inset-0 w-full max-w-none pointer-events-none"
+              style={coverStyle}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-[rgba(12,20,31,0.72)] via-[rgba(12,20,31,0.18)] to-transparent pointer-events-none" />
             <div className="absolute bottom-0 left-0 right-0 p-6 md:p-12 lg:px-20 pb-10 md:pb-14">
               <div className="max-w-4xl">
@@ -485,7 +491,10 @@ const ArticleReader = ({
       <div className="page-section !pt-4 md:!pt-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px] gap-10 lg:gap-12">
-            <article className="min-w-0 glass-panel rounded-[34px] p-6 md:p-8 lg:p-10">
+            {/* p-4 su mobile invece di p-6: su un telefono da 375px il pannello e la
+                colonna esterna sommavano 82px di margine, e la riga scendeva a ~41
+                caratteri. Da tablet in su lo spazio non manca e il respiro resta. */}
+            <article className="min-w-0 glass-panel rounded-[34px] p-4 sm:p-6 md:p-8 lg:p-10">
               <Link to="/logbook" className="glass-chip inline-flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8">
                 <ArrowLeft size={14} /> {lang === "it" ? "Torna al diario" : "Back to Logbook"}
               </Link>
@@ -537,8 +546,10 @@ const ArticleReader = ({
                 <LiveReadCounter count={views} lang={lang} />
               </div>
 
+              {/* Terzo livello di padding attorno al testo: sommato ai due esterni
+                  erano 120px su 375, un terzo dello schermo. Su mobile scende a 12. */}
               {htmlContent && (
-                <div className="glass-panel-soft rounded-[30px] p-5 md:p-7">
+                <div className="glass-panel-soft rounded-[30px] p-3 sm:p-5 md:p-7">
                   <div ref={articleContentRef} className="article-rich-body prose prose-lg dark:prose-invert max-w-none prose-headings:font-serif prose-headings:tracking-tight prose-p:font-sans prose-p:leading-[1.75] prose-a:text-accent prose-blockquote:font-serif prose-blockquote:italic" dangerouslySetInnerHTML={{ __html: htmlContent }} />
                 </div>
               )}

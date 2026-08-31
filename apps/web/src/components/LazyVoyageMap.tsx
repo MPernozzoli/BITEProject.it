@@ -24,13 +24,19 @@ const LazyVoyageMap = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldRenderMap, setShouldRenderMap] = useState(!deferUntilVisible);
 
+  // Il chunk di maplibre pesa ~260 KB gzip: quando la mappa è sotto la piega
+  // (deferUntilVisible) va scaricato solo se l'utente ci arriva davvero, non al
+  // mount. Senza questa guardia il differimento riguarderebbe il solo rendering
+  // e la rete pagherebbe comunque il prezzo pieno al primo paint.
   useEffect(() => {
+    if (deferUntilVisible) return;
     void loadVoyageMap();
-  }, []);
+  }, [deferUntilVisible]);
 
   useEffect(() => {
     if (!deferUntilVisible || shouldRenderMap || !containerRef.current) return;
     if (typeof IntersectionObserver === "undefined") {
+      void loadVoyageMap();
       setShouldRenderMap(true);
       return;
     }
@@ -38,6 +44,9 @@ const LazyVoyageMap = ({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
+          // rootMargin anticipa di 240px: il download parte mentre la mappa è
+          // ancora fuori schermo, così l'attesa resta invisibile.
+          void loadVoyageMap();
           setShouldRenderMap(true);
           observer.disconnect();
         }

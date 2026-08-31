@@ -65,6 +65,8 @@ import {
 import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
 import type { LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
+
 import {
   type BookableLegAvailability,
   type BookingRequest,
@@ -148,7 +150,9 @@ const Journal = () => {
   );
   const flyToWaypointRef = useRef<((lat: number, lng: number, popupLabel?: string) => void) | null>(null);
   const { isRead } = useArticleReads();
-  const articleRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // La card è un <a>, non un <div>: HTMLElement copre entrambi e basta per lo
+  // scrollIntoView che è l'unico uso di questi ref.
+  const articleRefs = useRef<Record<string, HTMLElement | null>>({});
   const articlePanelRef = useRef<HTMLDivElement | null>(null);
   const lastScrollYRef = useRef(0);
   const mobileSidebarTouchStartRef = useRef<number | null>(null);
@@ -1067,6 +1071,14 @@ const Journal = () => {
     setSidebarOpen((current) => !current);
   }, [isMobile]);
 
+  const sidebarLabel = useMemo(() => {
+    const isOpen = isMobile ? mobileSidebarMode === "expanded" : sidebarOpen;
+    if (lang === "it") return isOpen ? "Nascondi l'elenco degli articoli" : "Mostra l'elenco degli articoli";
+    return isOpen ? "Hide the article list" : "Show the article list";
+  }, [isMobile, lang, mobileSidebarMode, sidebarOpen]);
+
+  const gridViewLabel = lang === "it" ? "Passa alla vista a griglia" : "Switch to grid view";
+
   const handleMobileSidebarTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -1476,6 +1488,8 @@ const Journal = () => {
             }}
           />
 
+          {/* Etichette tradotte: `title` da solo non produce tooltip su touch,
+              quindi senza aria-label questi comandi restano senza nome. */}
           {/* Floating controls — top right */}
           <div
             className={`fixed top-24 z-30 flex flex-col gap-2 transition-[right,transform] duration-300 ease-out-expo ${
@@ -1484,8 +1498,10 @@ const Journal = () => {
           >
             <button
               onClick={toggleSidebar}
-              className="rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
-              title={isMobile ? (mobileSidebarMode === "expanded" ? "Collapse list" : "Expand list") : (sidebarOpen ? "Hide list" : "Show list")}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
+              aria-expanded={isMobile ? mobileSidebarMode === "expanded" : sidebarOpen}
+              aria-label={sidebarLabel}
+              title={sidebarLabel}
             >
               {isMobile ? (
                 mobileSidebarMode === "expanded" ? <ChevronDown size={16} /> : <ChevronUp size={16} />
@@ -1495,15 +1511,18 @@ const Journal = () => {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className="rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg p-2.5 hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
-              title="Grid view"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-glass-edge/60 bg-background/75 backdrop-blur-xl shadow-lg hover:bg-background transition-colors duration-interaction ease-out-expo active:scale-[0.96]"
+              aria-label={gridViewLabel}
+              title={gridViewLabel}
             >
               <List size={16} />
             </button>
             {isAdmin && (
               <Link
                 to="/admin/article/new"
-                className="rounded-full bg-primary text-primary-foreground shadow-lg p-2.5 hover:opacity-90 transition-opacity duration-interaction ease-out-expo flex items-center justify-center active:scale-[0.96]"
+                aria-label={lang === "it" ? "Scrivi un nuovo articolo" : "Write a new article"}
+                title={lang === "it" ? "Scrivi un nuovo articolo" : "Write a new article"}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 transition-opacity duration-interaction ease-out-expo active:scale-[0.96]"
               >
                 <Plus size={16} />
               </Link>
@@ -1750,10 +1769,16 @@ const Journal = () => {
                             <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
                             {article.cover_image ? (
                               <img
-                                src={article.cover_image}
+                                {...storageImageResponsiveProps(
+                                  article.cover_image,
+                                  [360, 640, 960],
+                                  "(min-width: 1024px) 20rem, (min-width: 640px) 45vw, 92vw"
+                                )}
                                 alt={title}
                                 className="absolute inset-0 max-w-none"
                                 style={gridCoverStyle || undefined}
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-serif text-xl">BITE</div>

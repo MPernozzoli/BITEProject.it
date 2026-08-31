@@ -2,9 +2,19 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover è ciò che rende non nulle le env(safe-area-inset-*):
+         senza, iOS le riporta a 0 e le barre fisse finiscono sotto la barra home
+         quando il sito gira installato (il manifest è display: standalone). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- I font stanno qui e non in un @import di index.css: un @import non può
+         partire prima che il foglio che lo contiene sia scaricato e interpretato,
+         e su rete mobile quel round-trip in più allunga il passaggio dal fallback. -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap"
+    />
     <title>BITE — Storie da S/Y Spritz</title>
     <meta name="description" content="BITE è un progetto editoriale a bordo di S/Y Spritz: vita in mare, refit, lavoro remoto, viaggio lento e scelte intenzionali.">
     <meta name="author" content="BITE Project" />

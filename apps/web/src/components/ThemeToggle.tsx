@@ -19,7 +19,7 @@ export const ThemeToggle = ({ className }: { className?: string }) => {
       aria-label={isDark ? t("theme.toLight") : t("theme.toDark")}
       title={isDark ? t("theme.toLight") : t("theme.toDark")}
       className={cn(
-        "inline-flex items-center justify-center rounded-full transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
+        "touch-target-44 inline-flex items-center justify-center rounded-full transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
         className,
       )}
     >

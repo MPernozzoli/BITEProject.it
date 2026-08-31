@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getOrCreateVisitorKey } from "@/lib/visitor-key";
+import { useI18n } from "@/lib/i18n";
 
 interface LikeButtonProps {
   articleId: string;
@@ -13,6 +14,7 @@ interface LikeButtonProps {
 }
 
 const LikeButton = ({ articleId, size = 18, liked: externalLiked, likeCount: externalCount, onToggleLike, busy: externalBusy }: LikeButtonProps) => {
+  const { lang } = useI18n();
   const [internalLiked, setInternalLiked] = useState(false);
   const [internalCount, setInternalCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
@@ -95,14 +97,22 @@ const LikeButton = ({ articleId, size = 18, liked: externalLiked, likeCount: ext
     setInternalBusy(false);
   };
 
+  const label = lang === "it"
+    ? (liked ? "Togli il mi piace" : "Metti mi piace")
+    : (liked ? "Remove like" : "Like this article");
+
   return (
     <button
       onClick={toggleLike}
       disabled={busy}
-      className={`inline-flex items-center gap-1.5 text-sm font-sans transition-colors ${
+      aria-pressed={liked}
+      // -my-2.5 -mx-2 riassorbe il padding: l'area toccabile arriva a 44px senza
+      // che il cuore si sposti rispetto agli elementi accanto.
+      className={`-mx-2 -my-2.5 inline-flex min-h-[44px] items-center gap-1.5 px-2 py-2.5 text-sm font-sans transition-colors ${
         liked ? "text-red-500 dark:text-red-400" : "text-muted-foreground hover:text-foreground"
       }`}
-      title={liked ? "Rimuovi mi piace" : "Mi piace"}
+      aria-label={label}
+      title={label}
     >
       <Heart size={size} fill={liked ? "currentColor" : "none"} />
       {count > 0 && <span>{count}</span>}

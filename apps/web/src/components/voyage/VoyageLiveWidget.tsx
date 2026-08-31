@@ -376,7 +376,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
                   type="datetime-local"
                   value={manualValue}
                   onChange={(event) => setManualValue(event.target.value)}
-                  className="rounded-full border border-glass-edge/60 bg-glass/70 px-3 py-2 text-sm font-sans text-foreground"
+                  className="rounded-full border border-glass-edge/60 bg-glass/70 px-3 py-2 text-base md:text-sm font-sans text-foreground"
                 />
                 <button
                   type="button"

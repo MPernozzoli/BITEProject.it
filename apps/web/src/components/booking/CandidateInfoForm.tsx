@@ -377,7 +377,7 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
             <input
               value={normalizedValue.allergies}
               onChange={(event) => update("allergies", event.target.value)}
-              className="w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+              className="w-full rounded-2xl border border-border bg-background/70 px-3 py-2 text-base md:text-sm focus:border-accent focus:outline-none"
             />
           </label>
         )}
@@ -409,7 +409,7 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
           value={normalizedValue.notes}
           onChange={(event) => update("notes", event.target.value)}
           rows={compact ? 2 : 3}
-          className="w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-sm leading-relaxed focus:border-accent focus:outline-none"
+          className="w-full resize-y rounded-2xl border border-border bg-background/70 px-3 py-2 text-base md:text-sm leading-relaxed focus:border-accent focus:outline-none"
         />
       </label>
     </div>

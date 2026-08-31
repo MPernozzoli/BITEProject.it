@@ -40,6 +40,7 @@ import {
   totalWaypointDistance,
 } from "@/lib/voyage-utils";
 import type { GeoArticle, Voyage, VoyageWaypoint } from "@/lib/voyage-utils";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 export type ExpandedArticleOrigin = {
   top: number;
@@ -612,7 +613,11 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
                   <div className="overflow-hidden rounded-[32px] border border-foreground/6 bg-glass shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                     <div className="aspect-[16/8.8] overflow-hidden bg-muted">
                       <img
-                        src={article.cover_image}
+                        {...storageImageResponsiveProps(
+                          article.cover_image,
+                          [480, 960, 1440],
+                          "(min-width: 1024px) 56rem, 96vw"
+                        )}
                         alt={title}
                         className="h-full w-full max-w-none"
                         style={coverStyle}

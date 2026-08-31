@@ -2179,7 +2179,7 @@ const UserBookings = () => {
                           <input
                             value={message}
                             onChange={(event) => setMessage(event.target.value)}
-                            className="w-full border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                            className="w-full border border-border bg-transparent px-3 py-2 text-base md:text-sm focus:border-accent focus:outline-none"
                             placeholder={lang === "it" ? "Messaggio opzionale" : "Optional message"}
                           />
                         </div>
@@ -2367,7 +2367,7 @@ const UserBookings = () => {
                           value={planChangeMessages[detailsRequest.id] || ""}
                           onChange={(event) => setPlanChangeMessages((current) => ({ ...current, [detailsRequest.id]: event.target.value }))}
                           rows={3}
-                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-glass/80 px-3 py-2 text-sm text-foreground focus:border-sky-500 focus:outline-none"
+                          className="mt-3 w-full resize-y rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-glass/80 px-3 py-2 text-base md:text-sm text-foreground focus:border-sky-500 focus:outline-none"
                           placeholder={lang === "it" ? "Messaggio opzionale per il team" : "Optional message for the team"}
                         />
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

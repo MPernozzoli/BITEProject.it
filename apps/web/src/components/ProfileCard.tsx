@@ -19,6 +19,9 @@ const sizeClasses = {
   lg: "w-20 h-20 text-base",
 };
 
+/** Lato in CSS px di ogni taglia, per chiedere allo storage l'avatar giusto. */
+const avatarPixels = { sm: 32, md: 48, lg: 80 } as const;
+
 const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profileId, onProfileClick }: ProfileCardProps) => {
   const displayName = name || "Anonymous";
 
@@ -28,6 +31,7 @@ const ProfileCard = ({ name, avatarUrl, bio, size = "md", showBio = false, profi
         <ProfileAvatar
           name={displayName}
           avatarUrl={avatarUrl}
+          size={avatarPixels[size]}
           imgClassName="img-cover"
           fallback={<User className="text-muted-foreground" size={size === "sm" ? 14 : size === "md" ? 20 : 32} />}
         />

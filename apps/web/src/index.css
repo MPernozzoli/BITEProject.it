@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&display=swap');
+/* I font Google si caricano da index.html con un <link>, non da qui: un @import
+   si mette in coda a questo foglio invece di partire in parallelo. */
 
 @tailwind base;
 @tailwind components;
@@ -1584,6 +1585,26 @@ html {
   }
 }
 
+/* Porta l'area toccabile a 44px senza toccare la grafica: utile dove la misura
+   del bottone è una scelta di composizione (la navbar) e ingrandirlo davvero
+   sbilancerebbe la barra. Il riquadro invisibile è centrato sul bottone, che
+   deve quindi essere posizionato. */
+.touch-target-44 {
+  position: relative;
+}
+
+.touch-target-44::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+}
+
 .maplibregl-popup.voyage-waypoint-popup {
   z-index: 12000;
 }
@@ -2464,4 +2485,16 @@ html {
   border-color: hsl(216 16% 26%);
   background: hsl(218 20% 15%);
   color: hsl(215 12% 52%);
+}
+
+/* I controlli di serie di MapLibre sono 29px: sotto i 44 raccomandati, e sul
+   diario — dove la mappa è l'interfaccia — lo zoom si sbaglia. Solo da touch:
+   col mouse 29px vanno benissimo e allargarli ruberebbe mappa.
+   Deve stare fuori da @layer: MapLibre inietta il suo CSS senza layer, e nel
+   cascade qualunque layer perde contro ciò che è fuori, specificità a parte. */
+@media (pointer: coarse) {
+  .maplibregl-ctrl.maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
 }

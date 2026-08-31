@@ -388,13 +388,13 @@ const ManageBookingParticipants = () => {
                 value={guest.first_name}
                 onChange={(e) => updateGuest(index, "first_name", e.target.value)}
                 placeholder={lang === "it" ? "Nome" : "First name"}
-                className="rounded-xl border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                className="rounded-xl border border-border bg-transparent px-3 py-2 text-base md:text-sm focus:border-accent focus:outline-none"
               />
               <input
                 value={guest.last_name}
                 onChange={(e) => updateGuest(index, "last_name", e.target.value)}
                 placeholder={lang === "it" ? "Cognome" : "Last name"}
-                className="rounded-xl border border-border bg-transparent px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                className="rounded-xl border border-border bg-transparent px-3 py-2 text-base md:text-sm focus:border-accent focus:outline-none"
               />
               <input
                 type="email"

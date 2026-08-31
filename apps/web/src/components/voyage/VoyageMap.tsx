@@ -34,6 +34,7 @@ import { bindMapToContainerResize, bindMapToTheme,
   createThemedCartoStyle, requestMapResize } from "@/lib/maplibre";
 import MapLoadingPlaceholder from "@/components/MapLoadingPlaceholder";
 
+import { storageImage } from "@/lib/storage-image";
 const MAP_MARKER_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
 interface VoyageMapProps {
@@ -81,11 +82,13 @@ const buildPopupMediaModule = (waypoint: VoyageWaypoint, altFallback: string) =>
 
   const mediaName = media.name ? `<span class="voyage-popup__media-caption">${escapePopupHtml(media.name)}</span>` : "";
   const url = escapePopupHtml(media.url);
+  // Il popup è largo ~330px: l'immagine si chiede a 660 (2x), il video resta intero.
+  const imgUrl = escapePopupHtml(storageImage(media.url, { width: 660 }) ?? media.url);
 
   const inner =
     media.kind === "video"
       ? `<video class="voyage-popup__media" src="${url}" muted playsinline preload="metadata"></video>${mediaName}`
-      : `<img class="voyage-popup__media" src="${url}" alt="${escapePopupHtml(media.name || altFallback)}" loading="lazy" />${mediaName}`;
+      : `<img class="voyage-popup__media" src="${imgUrl}" alt="${escapePopupHtml(media.name || altFallback)}" loading="lazy" />${mediaName}`;
 
   return `<section class="voyage-popup__module voyage-popup__module--media">${inner}</section>`;
 };
@@ -1613,7 +1616,7 @@ const VoyageMap = ({
           : "";
         const popupHtml = `
           <div class="voyage-popup voyage-popup--photo">
-            <img class="voyage-popup__media" src="${escapePopupHtml(imageUrl)}" alt="${escapePopupHtml(title)}" loading="lazy" />
+            <img class="voyage-popup__media" src="${escapePopupHtml(storageImage(imageUrl, { width: 660 }) ?? imageUrl)}" alt="${escapePopupHtml(title)}" loading="lazy" />
             <div class="voyage-popup__body">
               <h3 class="voyage-popup__title">${escapePopupHtml(title)}</h3>
               <p class="voyage-popup__meta">${escapePopupHtml(dateLabel)}</p>

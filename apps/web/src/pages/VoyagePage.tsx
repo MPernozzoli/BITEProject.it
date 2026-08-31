@@ -38,6 +38,8 @@ import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
 import VoyageJoinPanel from "@/components/voyage/VoyageJoinPanel";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
+
 import {
   Activity,
   ArrowLeft,
@@ -467,7 +469,13 @@ const VoyagePage = () => {
           {heroRouteCoordinates ? (
             <VoyageRouteHeroMap coordinates={heroRouteCoordinates} className="absolute inset-0" />
           ) : heroImage ? (
-            <img src={heroImage} alt={voyageName || voyage.name} className="img-cover" loading="eager" decoding="async" />
+            <img
+              {...storageImageResponsiveProps(heroImage, [640, 1024, 1600, 2000], "100vw")}
+              alt={voyageName || voyage.name}
+              className="img-cover"
+              loading="eager"
+              decoding="async"
+            />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10" />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-24 md:px-8 md:pt-28">
@@ -668,7 +676,11 @@ const VoyagePage = () => {
                     {heroMedia && heroMedia.kind === "image" ? (
                       <div className="relative aspect-[16/8] w-full overflow-hidden sm:aspect-[16/7]">
                         <img
-                          src={heroMedia.url}
+                          {...storageImageResponsiveProps(
+                            heroMedia.url,
+                            [480, 960, 1440],
+                            "(min-width: 1024px) 46rem, 96vw"
+                          )}
                           alt={heroMedia.name || waypointName}
                           className="h-full w-full object-cover"
                           loading="lazy"

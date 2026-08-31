@@ -297,7 +297,7 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
     supabase
       .from("logbook_articles")
       .select(
-        "id, title_en, title_it, slug, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, updated_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, voyage_waypoint_start_id, voyage_waypoint_end_id, location_name, story_id, category, view_count"
+        "id, title_en, title_it, slug, slug_it, slug_en, cover_image, cover_focal_x, cover_focal_y, cover_zoom, excerpt_en, excerpt_it, published_at, updated_at, latitude, longitude, voyage_id, voyage_segment_start, voyage_segment_end, voyage_waypoint_start_id, voyage_waypoint_end_id, location_name, story_id, category, view_count"
       )
       .eq("status", "published")
       .order("published_at", { ascending: false, nullsFirst: false })
@@ -403,6 +403,10 @@ export async function fetchPublicContentSnapshot(): Promise<PublicContentSnapsho
       title_en: article.title_en,
       title_it: article.title_it,
       slug: article.slug,
+      // Servono per costruire l'indirizzo canonico nella lingua della pagina:
+      // senza, una card italiana linka lo slug inglese (vedi slugForLang).
+      slug_it: article.slug_it,
+      slug_en: article.slug_en,
       cover_image: article.cover_image,
       cover_focal_x: article.cover_focal_x,
       cover_focal_y: article.cover_focal_y,

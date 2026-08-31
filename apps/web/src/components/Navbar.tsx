@@ -60,12 +60,34 @@ const Navbar = () => {
     setMobileProfileMenuOpen(false);
   }, [location.pathname]);
 
+  // Blocco dello scroll di fondo mentre il pannello è aperto. `overflow: hidden`
+  // sul body basta su Android e desktop, ma Safari iOS lo ignora e continua a far
+  // scorrere la pagina dietro il pannello. Lì serve `position: fixed`, che però
+  // fa saltare la pagina in cima: si salva l'offset, lo si compensa con `top`
+  // negativo e alla chiusura si torna dove si era.
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = mobileOpen ? "hidden" : previousOverflow;
+    if (!mobileOpen) return;
+
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const previous = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      body.style.overflow = previous.overflow;
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      window.scrollTo(0, scrollY);
     };
   }, [mobileOpen]);
 
@@ -174,7 +196,11 @@ const Navbar = () => {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 px-4 pt-3 transition-[padding] duration-500 ease-out-expo md:px-6 md:pt-4",
+        // pt e px sommano la safe-area: con viewport-fit=cover il contenuto passa
+        // sotto tacca e angoli arrotondati, e senza questo la barra ci finirebbe dentro.
+        "fixed top-0 left-0 right-0 z-50 transition-[padding] duration-500 ease-out-expo",
+        "px-[max(1rem,env(safe-area-inset-left))] pt-[max(0.75rem,env(safe-area-inset-top))]",
+        "md:px-[max(1.5rem,env(safe-area-inset-left))] md:pt-[max(1rem,env(safe-area-inset-top))]",
       )}
     >
       <div
@@ -391,7 +417,7 @@ const Navbar = () => {
               onClick={toggleLanguage}
               aria-label={languageToggleAriaLabel}
               className={cn(
-                "inline-flex h-9 items-center rounded-full border px-3 text-[11px] font-semibold tracking-[0.24em] uppercase transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
+                "touch-target-44 inline-flex h-9 items-center rounded-full border px-3 text-[11px] font-semibold tracking-[0.24em] uppercase transition-[color,background-color,border-color,transform] duration-300 ease-out-expo active:scale-[0.98]",
                 mobileButtonClass,
               )}
             >
@@ -513,7 +539,7 @@ const Navbar = () => {
             onClick={() => setMobileOpen(false)}
           />
 
-          <div className="nav-menu-light relative h-full overflow-y-auto border-t border-glass-edge/70 px-5 pb-6 pt-5 text-foreground shadow-2xl">
+          <div className="nav-menu-light relative h-full overflow-y-auto border-t border-glass-edge/70 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 text-foreground shadow-2xl">
             <div className="mx-auto flex w-full max-w-md flex-col gap-4">
               <div className="flex flex-col gap-3">
                 {links.map((link) => {

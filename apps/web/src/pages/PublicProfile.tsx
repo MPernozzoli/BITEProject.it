@@ -23,6 +23,7 @@ import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { getArticleDisplayLocationLabel, type VoyageWaypoint } from "@/lib/voyage-utils";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import SeaPeopleIcon from "@/components/SeaPeopleIcon";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 interface ProfileData {
   id: string;
@@ -539,8 +540,14 @@ const PublicProfile = () => {
                       <div className="relative min-h-[260px] overflow-hidden bg-muted">
                         {featuredArticle.cover_image ? (
                           <img
-                            src={featuredArticle.cover_image}
+                            {...storageImageResponsiveProps(
+                              featuredArticle.cover_image,
+                              [480, 960, 1440],
+                              "(min-width: 1024px) 34rem, 96vw"
+                            )}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="absolute inset-0 max-w-none transition-transform duration-reveal ease-out-expo group-hover:scale-[1.04]"
                             style={coverImageStyle(
                               featuredArticle.cover_image,
@@ -611,8 +618,14 @@ const PublicProfile = () => {
                           <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                             {article.cover_image ? (
                               <img
-                                src={article.cover_image}
+                                {...storageImageResponsiveProps(
+                                  article.cover_image,
+                                  [360, 640, 960],
+                                  "(min-width: 1024px) 20rem, (min-width: 640px) 45vw, 92vw"
+                                )}
                                 alt=""
+                                loading="lazy"
+                                decoding="async"
                                 className="absolute inset-0 max-w-none transition-transform duration-reveal ease-out-expo group-hover:scale-[1.04]"
                                 style={coverImageStyle(
                                   article.cover_image,

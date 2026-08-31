@@ -6,6 +6,7 @@ import type { GeoArticle } from "@/lib/voyage-utils";
 import { coverImageStyle, clampCoverFocal } from "@/lib/article-cover";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { User } from "lucide-react";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 interface ArticleSlidePanelProps {
   article: GeoArticle | null;
@@ -109,7 +110,11 @@ const ArticleSlidePanel = ({
                 <div className="overflow-hidden rounded-[26px] border border-glass-edge/55 bg-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.063)]">
                   <div className="aspect-[16/10] overflow-hidden bg-muted shrink-0">
                     <img
-                      src={article.cover_image}
+                      {...storageImageResponsiveProps(
+                        article.cover_image,
+                        [400, 800, 1200],
+                        "(min-width: 1024px) 26rem, 96vw"
+                      )}
                       alt=""
                       className="w-full h-full max-w-none"
                       style={coverStyle}

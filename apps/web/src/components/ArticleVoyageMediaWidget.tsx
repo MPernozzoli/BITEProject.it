@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import type { Language } from "@/lib/i18n";
 import type { VoyageWaypointMediaItem } from "@/lib/voyage-utils";
 
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 type ArticleVoyageMediaItem = {
   id: string;
   waypointId: string;
@@ -50,9 +51,14 @@ const renderCompactMedia = (item: ArticleVoyageMediaItem, lang: Language) => {
   if (item.media.kind === "image") {
     return (
       <img
-        src={item.media.url}
+        {...storageImageResponsiveProps(
+          item.media.url,
+          [360, 720, 1080],
+          "(min-width: 768px) 22rem, 88vw"
+        )}
         alt={item.media.name || item.waypointName}
         loading="lazy"
+        decoding="async"
         className="h-full w-full object-cover"
       />
     );
@@ -94,7 +100,11 @@ const renderExpandedMedia = (item: ArticleVoyageMediaItem, lang: Language) => {
   if (item.media.kind === "image") {
     return (
       <img
-        src={item.media.url}
+        {...storageImageResponsiveProps(
+          item.media.url,
+          [720, 1120, 1600],
+          "(min-width: 1120px) 1120px, 96vw"
+        )}
         alt={item.media.name || item.waypointName}
         className="max-h-[68vh] w-full object-contain"
       />

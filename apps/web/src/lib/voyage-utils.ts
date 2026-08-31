@@ -1715,7 +1715,17 @@ export interface GeoArticle {
   id: string;
   title_en: string;
   title_it: string | null;
+  /** Slug canonico/legacy, sempre presente. Vedi slugForLang in lib/article-slug.ts. */
   slug: string;
+  /**
+   * Slug per lingua. Le query li restituiscono già (`select("*")`), ma il tipo
+   * non li dichiarava: senza, articlePathForLang ripiegava sempre su `slug` e
+   * una card italiana finiva per linkare l'indirizzo inglese. Restano opzionali
+   * perché lo snapshot pubblico può non portarli, e in quel caso il fallback
+   * su `slug` è il comportamento giusto.
+   */
+  slug_en?: string | null;
+  slug_it?: string | null;
   cover_image: string | null;
   cover_focal_x?: number | null;
   cover_focal_y?: number | null;

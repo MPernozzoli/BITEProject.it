@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
+import { storageImageResponsiveProps } from "@/lib/storage-image";
 
 type Lang = "en" | "it";
 
@@ -120,10 +121,16 @@ const ArticleRelatedSection = ({
                   <div className="aspect-[16/10] overflow-hidden bg-muted relative rounded-[19px]">
                     {item.cover_image && covStyle ? (
                       <img
-                        src={item.cover_image}
+                        {...storageImageResponsiveProps(
+                          item.cover_image,
+                          [360, 640, 960],
+                          "(min-width: 1024px) 22rem, (min-width: 640px) 45vw, 92vw"
+                        )}
                         alt=""
                         className="absolute inset-0 max-w-none transition-opacity duration-reveal ease-out-expo group-hover:opacity-90"
                         style={covStyle}
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/25 font-serif text-lg">

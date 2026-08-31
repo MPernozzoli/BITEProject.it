@@ -423,7 +423,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
                     placeholder="Scrivi una risposta..."
-                    className="w-full bg-transparent px-3 py-2.5 text-sm font-sans focus:outline-none"
+                    className="w-full bg-transparent px-3 py-2.5 text-base md:text-sm font-sans focus:outline-none"
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
                       e.preventDefault();
@@ -463,7 +463,7 @@ const CommentSection = ({ articleId, focusCommentId = null, onFocusHandled }: Co
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
                 placeholder="Nome"
-                className="w-full bg-transparent px-4 py-2.5 text-sm font-sans focus:outline-none"
+                className="w-full bg-transparent px-4 py-2.5 text-base md:text-sm font-sans focus:outline-none"
               />
             </div>
             <div className="glass-input rounded-[22px] flex-1 px-1.5 py-1.5">

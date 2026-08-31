@@ -379,7 +379,7 @@ const BookingSidebarPanel = ({
               value={message}
               onChange={(event) => onMessageChange(event.target.value)}
               placeholder={lang === "it" ? "Note opzionali" : "Optional notes"}
-              className="w-full rounded-full border border-glass-edge/70 bg-glass/65 px-3 py-2 text-xs focus:outline-none"
+              className="w-full rounded-full border border-glass-edge/70 bg-glass/65 px-3 py-2 text-base md:text-xs focus:outline-none"
             />
           </label>
           {selectedLegIds.length === 0 && (

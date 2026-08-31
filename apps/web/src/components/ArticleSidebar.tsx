@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { useArticleReads } from "@/hooks/useArticleReads";
 import { usePublicContentSnapshot } from "@/hooks/usePublicContentSnapshot";
 import { articlePathForLang, storyPathForLang } from "@/lib/article-slug";
+import { storageImageProps } from "@/lib/storage-image";
 import { BookOpen, TrendingUp, Clock, Eye, Bell, BellOff, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,7 +44,13 @@ const SidebarLink = ({
   >
     {article.cover_image && (
       <div className="glass-frame w-12 h-12 flex-shrink-0 rounded-[16px] p-1">
-        <img src={article.cover_image} alt="" className="img-cover" loading="lazy" decoding="async" />
+        <img
+          {...storageImageProps(article.cover_image, 40)}
+          alt=""
+          className="img-cover"
+          loading="lazy"
+          decoding="async"
+        />
       </div>
     )}
     <div className="flex-1 min-w-0">

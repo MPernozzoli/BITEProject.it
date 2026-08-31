@@ -223,7 +223,7 @@ const ShareButton = ({ articleId, instagramStoryImageUrl, title, url, size = 18 
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
+          className="-mx-2 -my-2.5 inline-flex min-h-[44px] items-center gap-1.5 px-2 py-2.5 text-sm font-sans text-muted-foreground hover:text-foreground transition-colors"
           title={isIt ? "Condividi" : "Share"}
         >
           <AppleShareIcon size={size} />

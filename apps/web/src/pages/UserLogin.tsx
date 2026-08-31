@@ -900,7 +900,7 @@ const UserLogin = () => {
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
                         placeholder={ui.form.namePlaceholder}
-                        className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                        className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-base md:text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
                       />
                       <p className="text-xs leading-5 text-muted-foreground">{ui.form.nameHint}</p>
                     </div>
@@ -924,7 +924,7 @@ const UserLogin = () => {
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
                       placeholder={ui.form.emailPlaceholder}
-                      className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
+                      className="h-12 rounded-2xl border-glass-edge/80 bg-glass/72 px-4 text-base md:text-sm shadow-[0_20px_44px_-32px_hsl(var(--navy)/0.45)] focus-visible:ring-accent focus-visible:ring-offset-0"
                     />
                   </div>
 
