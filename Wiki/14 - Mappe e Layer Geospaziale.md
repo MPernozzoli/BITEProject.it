@@ -61,5 +61,9 @@ Layout full-bleed con pannello di controllo galleggiante `MapControlPanel.tsx` (
 
 > ⚠️ Il container della mappa va dimensionato esplicitamente (`h-full w-full`), **non** con `absolute inset-0`: `maplibre-gl.css` marca `.maplibregl-map` con `position: relative` a pari specificità ma più avanti nel bundle, annulla il posizionamento assoluto e la mappa collassa a 0px.
 
+## Tema della basemap
+
+CARTO serve `light_all` e `dark_all` allo stesso indirizzo (attenzione: la base scura si *chiama* Dark Matter ma il percorso delle tile è `dark_all`; `dark_matter` dà 404): `createCartoRasterStyle(variant)` in `shared/maps/carto.ts` accetta la variante, con default `"light"` per non cambiare comportamento a chi non conosce i temi. In `apps/web`, `createThemedCartoStyle()` sceglie la variante alla creazione e `bindMapToTheme(map)` la tiene allineata a mappa viva **scambiando le tile** (`setTiles`) invece di rifare lo stile — `setStyle` ricostruirebbe la mappa e porterebbe via rotte, tappe e layer aggiunti dopo. Si stacca da sé sull'evento `remove` di MapLibre → [[27 - Tema Chiaro e Scuro]]
+
 ## Collegamenti
 - [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]

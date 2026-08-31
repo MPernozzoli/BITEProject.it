@@ -50,9 +50,12 @@ const shouldUseRetinaTiles = () => {
 /** CARTO serve le due basi allo stesso indirizzo, cambia solo il nome del set. */
 export type CartoBasemapVariant = "light" | "dark";
 
+// Attenzione ai nomi: le due basi si chiamano Positron e Dark Matter, ma nel
+// percorso delle tile raster valgono `light_all` e `dark_all`. `dark_matter`
+// è il nome dello stile, non un endpoint: risponde 404.
 const CARTO_BASEMAP: Record<CartoBasemapVariant, string> = {
   light: "light_all",
-  dark: "dark_matter",
+  dark: "dark_all",
 };
 
 export const cartoRasterTileUrl = (

@@ -98,6 +98,22 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     return () => media.removeEventListener("change", onChange);
   }, []);
 
+  // Rete di sicurezza per l'evento che non arriva: se il sistema passa a scuro
+  // mentre la scheda è in secondo piano, alcuni browser non consegnano `change`.
+  // Al ritorno sulla scheda rileggiamo la preferenza invece di fidarci.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setSystemDark(prefersDark());
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
+
   // Il sito si apre spesso in più schede (admin + sito pubblico): allineale.
   useEffect(() => {
     if (typeof window === "undefined") return;

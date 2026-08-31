@@ -22,6 +22,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[05 - Frontend - Pagine]] — pagine web, admin e sub-app
 - [[06 - Frontend - Componenti]] — libreria componenti (UI, admin, booking, voyage)
 - [[07 - Frontend - Lib e Hooks]] — logica condivisa lato client
+- [[27 - Tema Chiaro e Scuro]] — token, toggle e controparti scure di tutto il sito
 
 ### Backend & Dati
 - [[08 - Supabase]] — Postgres, Auth, Storage, RLS
@@ -57,6 +58,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 | **Dominio** | biteproject.it (+ sottodomini `admin.`, `login.`, `data.`, `pack.`, `crew.`) |
 | **Build tool** | Vite 5 (+ SWC) |
 | **UI** | React 18, shadcn/ui, Radix, Tailwind, framer-motion |
+| **Tema** | chiaro/scuro su tutto il sito, `bite-theme` in localStorage, default = preferenza di sistema → [[27 - Tema Chiaro e Scuro]] |
 | **Backend** | Supabase (progetto `ekwloweuicrqjjgabfdp`) |
 | **App principale** | `apps/web` (`@biteproject/web`) |
 | **Sub-app** | `apps/pack` su `/pack`, `apps/data` su `/Data`, `apps/crew` su `/Crew` |

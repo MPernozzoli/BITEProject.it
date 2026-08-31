@@ -24,6 +24,9 @@ tags: [frontend, lib, hooks, logica]
 - `supabase-auth.ts`, `supabase-auth-storage.ts`, `admin-host.ts`, `visitor-key.ts`
 - Le sessioni effimere continuano a essere pulite su chiusura/reload desktop; su mobile/PWA il cleanup non registra `beforeunload` per evitare ricariche o perdita di stato quando la pagina viene sospesa.
 
+### Tema
+- `theme.tsx` — `ThemeProvider` + `useTheme`: preferenza `light`/`dark`/`system` in `localStorage` (`bite-theme`), classe `dark` su `<html>`, `color-scheme` e `<meta name="theme-color">` allineati. `system` segue la media query anche a pagina aperta e si rilegge al ritorno sulla scheda → [[27 - Tema Chiaro e Scuro]]
+
 ### Articoli / contenuto editoriale
 - `article-content.ts`, `article-cover.ts`, `article-media.tsx`, `article-slug.ts`
 - `article-map.ts`, `article-map-anchor.ts` — geo articolo → [[14 - Mappe e Layer Geospaziale]]
@@ -88,4 +91,4 @@ Sorgente: `apps/crew/src/lib/`, `apps/crew/src/integrations/`.
 - `integrations/supabase/client.ts` — client Supabase della crew app con auth condivisa e passkey abilitate.
 
 ## Collegamenti
-- [[06 - Frontend - Componenti]] · [[08 - Supabase]]
+- [[06 - Frontend - Componenti]] · [[08 - Supabase]] · [[27 - Tema Chiaro e Scuro]]

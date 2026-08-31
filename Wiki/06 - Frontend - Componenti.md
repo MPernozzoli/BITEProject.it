@@ -8,6 +8,7 @@ tags: [frontend, componenti, ui]
 ## Componenti di layout & navigazione
 - `Layout.tsx` — shell dell'app (header + footer + main); non monta il footer sulle rotte `/admin` e `/admin/*`
 - `Navbar.tsx`, `NavLink.tsx`, `Footer.tsx`
+- `ThemeToggle.tsx` — esporta `ThemeToggle` (bottone sole/luna nella navbar, un tap chiaro ↔ scuro) e `ThemeChoice` (i tre stati Chiaro/Scuro/Sistema, nei menu profilo e nella card Account del menu mobile) → [[27 - Tema Chiaro e Scuro]]
 - `admin/AdminMobileNavigation.tsx` — dock mobile della PWA admin, visibile agli admin su `/admin/*` e `/profile`, con shortcut persistenti a Home admin, booking, community, media, mail, tracker e profilo → [[16 - Admin]]
 - `AppErrorBoundary.tsx` — error boundary globale
 - `AdminRoute.tsx` — guard rotte admin → [[16 - Admin]]
@@ -95,4 +96,4 @@ Sorgente: `apps/crew/src/components/`.
 - `ui/` — primitives shadcn copiate per rendere `apps/crew` autosufficiente.
 
 ## Collegamenti
-- [[05 - Frontend - Pagine]] · [[07 - Frontend - Lib e Hooks]]
+- [[05 - Frontend - Pagine]] · [[07 - Frontend - Lib e Hooks]] · [[27 - Tema Chiaro e Scuro]]
