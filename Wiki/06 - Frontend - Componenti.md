@@ -18,13 +18,13 @@ tags: [frontend, componenti, ui]
 - `ArticleSidebar.tsx`, `ArticleRelatedSection.tsx`
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale articolo → [[14 - Mappe e Layer Geospaziale]]
 - `ArticleVoyageMediaWidget.tsx`
-- `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement inline
+- `CommentSection.tsx`, `LikeButton.tsx`, `LiveReadCounter.tsx` — engagement inline. `LikeButton` porta l'area toccabile a 44px riassorbendo il padding con margini negativi, ed espone `aria-pressed` e un'etichetta tradotta → [[28 - Mobile e Performance]]
 - `StickyEngagementBar.tsx` — barra engagement fissa in basso (like, commenti, condivisione) con testi animati casuali che invitano all'azione, animazione heart nudge a metà scroll e comment nudge verso fine scroll. Supporta `scrollContainerRef` per contesti con scroll custom (modal). Montata da `ArticleReader.tsx` (pagina pubblica) e `ExpandedArticleModal.tsx` (anteprima logbook). Lo stato like è condiviso via `useArticleLike` hook con `LikeButton`.
 - `ArticleReader.tsx` — renderer condiviso della pagina articolo: cover, metadati/autori, contenuto TipTap sanificato, scene mappa, media di viaggio, tag, engagement inline e sidebar. In modalità pubblica monta `StickyEngagementBar` (barra fissa in basso con like/commenti/condivisione e cuore animato a metà scroll). `ArticlePage.tsx` lo usa con side effect pubblici attivi; `ArticleEditor.tsx` lo usa per anteprima admin senza like/commenti/analytics. Le citazioni TipTap hanno stile editoriale condiviso (`.article-rich-body blockquote`): ampio respiro verticale, segno laterale teal e virgolette tipografiche, invece della precedente bubble neutra. La stessa classe forza marker e indentazione di liste `ul`/`ol`, così punti e numeri sono visibili uguali nell’editor, nell’anteprima e nella pagina pubblica.
 - `AuthorSelector.tsx`
 
 ## Profilo / social
-- `ProfileCard.tsx`, `ProfileAvatar.tsx`, `ProfileNotificationsMenu.tsx` — il menu notifiche mostra solo le notifiche engagement non lette; al click imposta `read_at` e rimuove subito la riga dalla lista → [[12 - Newsletter ed Email]]
+- `ProfileCard.tsx`, `ProfileAvatar.tsx` (prop `size`: chiede allo storage l'avatar della misura mostrata invece dell'originale, spesso 1024px), `ProfileNotificationsMenu.tsx` — il menu notifiche mostra solo le notifiche engagement non lette; al click imposta `read_at` e rimuove subito la riga dalla lista → [[12 - Newsletter ed Email]]
 - `profile/ProfileCrewPassPanel.tsx` — pannello membership dentro `/profile`: stato Crew Pass, rinnovo manuale Bunq, tier disponibili e pagamenti recenti → [[23 - Community]]
 - `ShareButton.tsx`, `AppleShareIcon.tsx`, `SeaPeopleIcon.tsx`
   - `ShareButton` non condivide l'URL della barra degli indirizzi: lo ripulisce dai tracker con cui *questo* lettore è arrivato — chi riceve il link non deve ereditare la provenienza di chi glielo manda — e lo ritagga `utm_source=share` con il metodo come mezzo e lo slug come campagna. Registra anche da dove veniva chi ha condiviso → [[26 - Sorgenti di Traffico]]
@@ -35,6 +35,7 @@ tags: [frontend, componenti, ui]
 
 ## Mappe
 - `LazyVoyageMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
+  - Con `deferUntilVisible` la `import()` di maplibre (~260 KB gzip) sta **dentro** il callback dell'`IntersectionObserver`, non in un effect al mount: differire il rendering non differisce il download → [[28 - Mobile e Performance]]
 - `admin/AdminVoyageManager.tsx` — editor rotte admin con workspace mappa MapLibre; il comando `Fullscreen` usa la Fullscreen API del browser e mantiene un fallback layout `fixed` se l'API non è disponibile. L'inspector waypoint resta aperto finché non si usa `Collassa`: senza WPT selezionato mostra un invito a selezionare un punto e la stessa lista waypoint della vista sotto-mappa. Le bozze waypoint non salvate persistono in `localStorage` e vengono ripristinate dopo cambio pagina o reload; il warning `beforeunload` resta solo per il form anagrafica rotta. La cancellazione waypoint usa una conferma inline dentro il workspace e i controlli tipo/naming/sosta del WPT usano bottoni segmentati invece di picker nativi, così non interrompono il fullscreen e non forzano il teardown della mappa. Il file resta proprietario di stato, fetch e mutazioni, ma la UI è scomposta in pannelli presentazionali fratelli (sotto); `WaypointEditorPanel.tsx` era già estratto in precedenza.
   - `admin/VoyageListPanel.tsx` — filtri (base/avanzati, collassabili), ordinamento e lista viaggi selezionabili/modificabili.
   - `admin/VoyageFormPanel.tsx` — form anagrafica viaggio (nome/slug, date, stato, testi bilingui, contributo spese vive), con switch lingua interno IT/EN del form. La card "Rigenera geometria" resta nel padre: è salvataggio rotta, non anagrafica.
@@ -96,4 +97,4 @@ Sorgente: `apps/crew/src/components/`.
 - `ui/` — primitives shadcn copiate per rendere `apps/crew` autosufficiente.
 
 ## Collegamenti
-- [[05 - Frontend - Pagine]] · [[07 - Frontend - Lib e Hooks]] · [[27 - Tema Chiaro e Scuro]]
+- [[05 - Frontend - Pagine]] · [[07 - Frontend - Lib e Hooks]] · [[27 - Tema Chiaro e Scuro]] · [[28 - Mobile e Performance]]

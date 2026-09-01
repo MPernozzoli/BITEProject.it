@@ -140,6 +140,59 @@ export const strokePolyline = (
   }
 };
 
+/**
+ * Riduzione con media d'area (non un semplice campionamento): il basemap arriva
+ * da tile a zoom più fitto del necessario e le etichette devono restare
+ * leggibili invece che sgranarsi.
+ */
+export const downsample = (source: RgbaImage, width: number, height: number): RgbaImage => {
+  if (source.width === width && source.height === height) return source;
+
+  const out = createImage(width, height, [255, 255, 255, 255]);
+  const ratioX = source.width / width;
+  const ratioY = source.height / height;
+
+  for (let y = 0; y < height; y += 1) {
+    const top = y * ratioY;
+    const bottom = top + ratioY;
+    const firstRow = Math.floor(top);
+    const lastRow = Math.min(source.height, Math.ceil(bottom));
+
+    for (let x = 0; x < width; x += 1) {
+      const left = x * ratioX;
+      const right = left + ratioX;
+      const firstColumn = Math.floor(left);
+      const lastColumn = Math.min(source.width, Math.ceil(right));
+
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let total = 0;
+      for (let sourceY = firstRow; sourceY < lastRow; sourceY += 1) {
+        const weightY = Math.min(bottom, sourceY + 1) - Math.max(top, sourceY);
+        if (weightY <= 0) continue;
+        for (let sourceX = firstColumn; sourceX < lastColumn; sourceX += 1) {
+          const weight = weightY * (Math.min(right, sourceX + 1) - Math.max(left, sourceX));
+          if (weight <= 0) continue;
+          const offset = (sourceY * source.width + sourceX) * 4;
+          r += source.data[offset] * weight;
+          g += source.data[offset + 1] * weight;
+          b += source.data[offset + 2] * weight;
+          total += weight;
+        }
+      }
+
+      const offset = (y * width + x) * 4;
+      out.data[offset] = total ? Math.round(r / total) : 255;
+      out.data[offset + 1] = total ? Math.round(g / total) : 255;
+      out.data[offset + 2] = total ? Math.round(b / total) : 255;
+      out.data[offset + 3] = 255;
+    }
+  }
+
+  return out;
+};
+
 export const fillRect = (image: RgbaImage, x: number, y: number, width: number, height: number, color: Rgba) => {
   const maxX = Math.min(image.width, x + width);
   const maxY = Math.min(image.height, y + height);

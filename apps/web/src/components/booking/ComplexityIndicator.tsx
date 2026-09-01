@@ -71,6 +71,13 @@ interface ComplexityIndicatorProps {
   variant?: "badge" | "dot";
   /** Smaller footprint for dense layouts. */
   compact?: boolean;
+  /**
+   * False renders the trigger as a focusable `<span>` instead of a `<button>`. Needed when the
+   * indicator sits inside another element that is itself a `<button>` — a button nested inside a
+   * button is invalid HTML and untappable correctly on touch. Hover and keyboard-focus tooltips
+   * still work either way; there's no click behavior on the trigger itself either way.
+   */
+  interactiveTrigger?: boolean;
   className?: string;
 }
 
@@ -86,6 +93,7 @@ const ComplexityIndicator = ({
   leg,
   variant = "badge",
   compact = false,
+  interactiveTrigger = true,
   className = "",
 }: ComplexityIndicatorProps) => {
   const italian = lang === "it";
@@ -98,6 +106,37 @@ const ComplexityIndicator = ({
       : `${complexityPrefix}: ${getComplexityLabel(level, lang)}`;
   const badgePadding = compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[10px]";
 
+  const triggerContent = (
+    <>
+      {variant === "dot" ? (
+        <span
+          className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border text-[10px] font-bold leading-none ${getComplexityClass(level)} ${
+            dangerLevel > 0 ? "ring-2 ring-red-400/60" : ""
+          }`}
+        >
+          {level}
+        </span>
+      ) : (
+        <span
+          className={`inline-flex items-center rounded-full border font-semibold ${badgePadding} ${getComplexityClass(level)}`}
+        >
+          {complexityPrefix}: {getComplexityLabel(level, lang)}
+          <span aria-hidden className="ml-1 opacity-60">ⓘ</span>
+        </span>
+      )}
+
+      {variant === "badge" && dangerLevel > 0 && (
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
+        >
+          {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
+          <DangerReasonIcons leg={leg} lang={lang} />
+        </span>
+      )}
+    </>
+  );
+  const triggerClassName = `inline-flex cursor-help items-center gap-1 ${className}`;
+
   return (
     <TooltipProvider delayDuration={120}>
       <Tooltip>
@@ -105,33 +144,15 @@ const ComplexityIndicator = ({
             included) opens the same rich tooltip as hovering the complexity pill, instead
             of relying on the icons' barebones native `title` tooltip. */}
         <TooltipTrigger asChild>
-          <button type="button" aria-label={ariaLabel} className={`inline-flex cursor-help items-center gap-1 ${className}`}>
-            {variant === "dot" ? (
-              <span
-                className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border text-[10px] font-bold leading-none ${getComplexityClass(level)} ${
-                  dangerLevel > 0 ? "ring-2 ring-red-400/60" : ""
-                }`}
-              >
-                {level}
-              </span>
-            ) : (
-              <span
-                className={`inline-flex items-center rounded-full border font-semibold ${badgePadding} ${getComplexityClass(level)}`}
-              >
-                {complexityPrefix}: {getComplexityLabel(level, lang)}
-                <span aria-hidden className="ml-1 opacity-60">ⓘ</span>
-              </span>
-            )}
-
-            {variant === "badge" && dangerLevel > 0 && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full border font-semibold ${badgePadding} ${getDangerClass(dangerLevel)}`}
-              >
-                {dangerPrefix}: {getDangerLabel(dangerLevel, lang)}
-                <DangerReasonIcons leg={leg} lang={lang} />
-              </span>
-            )}
-          </button>
+          {interactiveTrigger ? (
+            <button type="button" aria-label={ariaLabel} className={triggerClassName}>
+              {triggerContent}
+            </button>
+          ) : (
+            <span tabIndex={0} aria-label={ariaLabel} className={triggerClassName}>
+              {triggerContent}
+            </span>
+          )}
         </TooltipTrigger>
         <TooltipContent
           side="top"

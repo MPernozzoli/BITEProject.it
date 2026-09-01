@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Check, Hand, Ship, Users } from "lucide-react";
+import { Check, Hand, Ship, Users } from "lucide-react";
 import {
   formatLegScheduleSummary,
-  getComplexityClass,
-  getComplexityLabel,
-  getDangerClass,
-  getDangerLabel,
   getLegComplexity,
   getLegDangerLevel,
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
-import { getDangerReasonDef } from "@/lib/danger-reasons";
+import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import { formatDepositEur, legDepositEur, roundUpToNextEuro, type ContributionOptions } from "@/lib/booking-deposit";
 import {
   getLegSelectionRole,
@@ -49,9 +45,10 @@ const cardClassName = (role: LegSelectionRole, interactive: boolean, tooTight: b
  * then say what they are in the itinerary — "Imbarco", "A bordo", "Sbarco" — instead of only
  * turning green.
  *
- * Complexity and danger are plain labelled pills here rather than the tooltip indicator used
- * elsewhere: the card is itself a button, and a button inside a button is neither valid markup
- * nor tappable on a phone without hitting the wrong one.
+ * Complexity and danger reuse the same tooltip indicator used elsewhere on the site. Once the
+ * traveller has pressed "Partecipa" the card itself becomes a button, so the indicator renders
+ * its trigger as a plain focusable span there instead of a nested `<button>` — invalid markup
+ * that would also swallow the wrong tap on a phone.
  */
 const VoyageJoinLegList = ({
   lang,
@@ -100,12 +97,18 @@ const VoyageJoinLegList = ({
             </span>
 
             <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="text-[15px] font-semibold leading-snug text-emerald-950 dark:text-emerald-300 dark:text-emerald-50 sm:text-base">
-                  {fromLabel} <span className="text-emerald-700 dark:text-emerald-300">→</span> {toLabel}
+              <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-[15px] font-semibold leading-snug text-emerald-950 dark:text-emerald-300 dark:text-emerald-50 sm:text-base">
+                    {fromLabel} <span className="text-emerald-700 dark:text-emerald-300">→</span> {toLabel}
+                  </span>
+                  <span className="text-xs text-emerald-900/60 dark:text-emerald-300 dark:text-emerald-100/60">
+                    {Number(leg.planned_nautical_miles || 0).toFixed(0)} NM
+                  </span>
                 </span>
-                <span className="text-xs text-emerald-900/60 dark:text-emerald-300 dark:text-emerald-100/60">
-                  {Number(leg.planned_nautical_miles || 0).toFixed(0)} NM
+                <span className="whitespace-nowrap text-[13px] font-semibold text-emerald-900 dark:text-emerald-300 dark:text-emerald-100">
+                  {formatDepositEur(price, lang)}{" "}
+                  <span className="font-normal text-emerald-900/60 dark:text-emerald-300 dark:text-emerald-100/60">{it ? "a persona" : "per person"}</span>
                 </span>
               </span>
 
@@ -114,10 +117,6 @@ const VoyageJoinLegList = ({
               )}
 
               <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px]">
-                <span className="font-semibold text-emerald-900 dark:text-emerald-300 dark:text-emerald-100">
-                  {formatDepositEur(price, lang)}{" "}
-                  <span className="font-normal text-emerald-900/60 dark:text-emerald-300 dark:text-emerald-100/60">{it ? "a persona" : "per person"}</span>
-                </span>
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${
                     soldOut
@@ -136,28 +135,14 @@ const VoyageJoinLegList = ({
                       ? `${leg.remaining} posti liberi`
                       : `${leg.remaining} seats left`}
                 </span>
-              </span>
-
-              <span className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getComplexityClass(complexity)}`}
-                >
-                  {it ? "Difficoltà" : "Difficulty"}: {getComplexityLabel(complexity, lang)}
-                </span>
-                {danger > 0 && (
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getDangerClass(danger)}`}
-                  >
-                    <AlertTriangle size={11} />
-                    {getDangerLabel(danger, lang)}
-                    {(leg.danger_reasons ?? []).map((key) => {
-                      const reason = getDangerReasonDef(key);
-                      if (!reason) return null;
-                      const Icon = reason.icon;
-                      return <Icon key={key} size={11} strokeWidth={2.4} aria-label={it ? reason.label_it : reason.label_en} />;
-                    })}
-                  </span>
-                )}
+                <ComplexityIndicator
+                  level={complexity}
+                  dangerLevel={danger}
+                  leg={leg}
+                  lang={lang}
+                  interactiveTrigger={!interactive}
+                  className="flex-wrap gap-1.5"
+                />
               </span>
 
               {tooTight && (

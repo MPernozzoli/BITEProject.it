@@ -7,7 +7,17 @@
  * viaggio, stessa base `light_all`. Qui però non c'è WebGL, quindi le tile
  * vengono scaricate e incollate a mano in un buffer RGBA.
  */
-import { blit, createImage, drawText, fillCircle, fillRect, strokePolyline, textWidth, type Rgba } from "./raster.js";
+import {
+  blit,
+  createImage,
+  downsample,
+  drawText,
+  fillCircle,
+  fillRect,
+  strokePolyline,
+  textWidth,
+  type Rgba,
+} from "./raster.js";
 import { decodePng, type RgbaImage } from "./png.js";
 
 export const OG_WIDTH = 1200;
@@ -20,8 +30,8 @@ const TILE_CONCURRENCY = 8;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 16;
 /** Margine interno: tiene la rotta lontana dai bordi e dall'attribuzione. */
-const PADDING_X = 90;
-const PADDING_Y = 70;
+const PADDING_X = 70;
+const PADDING_Y = 58;
 
 /** Acqua della base CARTO light: riempie i buchi se una tile non arriva. */
 const BACKGROUND: Rgba = [229, 237, 243, 255];
@@ -79,7 +89,16 @@ export const isValidCoordinate = (value: unknown): value is Coordinate =>
   && Math.abs(Number(value[1])) <= 90
   && Math.abs(Number(value[0])) <= 180;
 
-/** Zoom intero massimo a cui la rotta sta dentro l'area utile, e centro del bbox. */
+/**
+ * Inquadratura che fa entrare la rotta nell'area utile.
+ *
+ * `scale` è la scala **esatta** che riempie il riquadro, non la potenza di due
+ * più vicina: arrotondando allo zoom intero la rotta finiva persa in mezzo alla
+ * mappa, con fino al doppio di aria attorno. Le tile però esistono solo a zoom
+ * interi, quindi si scarica il primo zoom più fitto del necessario (`tileZoom`)
+ * e lo si riduce di `supersample` in fase di composizione — che come effetto
+ * collaterale rende più nitide anche le etichette del basemap.
+ */
 export const fitView = (coordinates: Coordinate[], width: number, height: number) => {
   // Niente Math.min(...array): una geometria stradale può avere decine di
   // migliaia di vertici e lo spread esploderebbe lo stack.
@@ -101,25 +120,28 @@ export const fitView = (coordinates: Coordinate[], width: number, height: number
   const spanX = Math.max(maxX - minX, 1e-6);
   const spanY = Math.max(maxY - minY, 1e-6);
 
-  const zoom = Math.max(
-    MIN_ZOOM,
-    Math.min(MAX_ZOOM, Math.floor(Math.log2(Math.min(innerWidth / spanX, innerHeight / spanY)))),
-  );
-  const scale = 2 ** zoom;
+  const fitScale = Math.min(innerWidth / spanX, innerHeight / spanY);
+  const tileZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.ceil(Math.log2(fitScale))));
+  const tileScale = 2 ** tileZoom;
+  // Fuori da [0.5, 1] il canvas intermedio esploderebbe (o andrebbe ingrandito,
+  // sfocando): capita solo oltre i limiti di zoom delle tile.
+  const supersample = Math.min(1, Math.max(0.5, fitScale / tileScale));
+  const scale = tileScale * supersample;
 
   return {
-    zoom,
+    tileZoom,
+    supersample,
     scale,
-    // Origine dell'immagine in pixel del mondo allo zoom scelto.
+    // Origine dell'immagine in pixel del mondo alla scala finale.
     originX: ((minX + maxX) / 2) * scale - width / 2,
     originY: ((minY + maxY) / 2) * scale - height / 2,
   };
 };
 
-const cartoTileUrl = (z: number, x: number, y: number, index: number) => {
+const cartoTileUrl = (z: number, x: number, y: number, index: number, retina: boolean) => {
   const key = (process.env.CARTO_API_KEY || process.env.VITE_CARTO_API_KEY || "").trim();
   const subdomain = TILE_SUBDOMAINS[index % TILE_SUBDOMAINS.length];
-  const base = `https://${subdomain}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`;
+  const base = `https://${subdomain}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}${retina ? "@2x" : ""}.png`;
   return key ? `${base}?key=${encodeURIComponent(key)}` : base;
 };
 
@@ -156,12 +178,23 @@ const mapWithConcurrency = async <T, R>(items: T[], limit: number, run: (item: T
   return results;
 };
 
-const drawBasemap = async (image: RgbaImage, zoom: number, originX: number, originY: number) => {
-  const tilesPerAxis = 2 ** zoom;
-  const firstX = Math.floor(originX / TILE_SIZE);
-  const lastX = Math.floor((originX + image.width) / TILE_SIZE);
-  const firstY = Math.floor(originY / TILE_SIZE);
-  const lastY = Math.floor((originY + image.height) / TILE_SIZE);
+/**
+ * Riempie `image` di tile.
+ *
+ * `retina` non serve a "più dettaglio": chiede lo zoom precedente in versione
+ * @2x, che copre lo stesso terreno con 512 px e le etichette disegnate al
+ * doppio. Serve quando l'immagine verrà rimpicciolita, altrimenti i nomi dei
+ * luoghi si riducono fino a sparire — ed è metà del senso di una mappa
+ * condivisa.
+ */
+const drawBasemap = async (image: RgbaImage, zoom: number, originX: number, originY: number, retina: boolean) => {
+  const tileZoom = retina ? zoom - 1 : zoom;
+  const tileSize = retina ? TILE_SIZE * 2 : TILE_SIZE;
+  const tilesPerAxis = 2 ** tileZoom;
+  const firstX = Math.floor(originX / tileSize);
+  const lastX = Math.floor((originX + image.width) / tileSize);
+  const firstY = Math.floor(originY / tileSize);
+  const lastY = Math.floor((originY + image.height) / tileSize);
 
   const requests: Array<{ tileX: number; tileY: number; drawX: number; drawY: number }> = [];
   for (let tileY = firstY; tileY <= lastY; tileY += 1) {
@@ -171,14 +204,14 @@ const drawBasemap = async (image: RgbaImage, zoom: number, originX: number, orig
         // Il mondo si ripete in longitudine: l'antimeridiano non lascia buchi.
         tileX: ((tileX % tilesPerAxis) + tilesPerAxis) % tilesPerAxis,
         tileY,
-        drawX: Math.round(tileX * TILE_SIZE - originX),
-        drawY: Math.round(tileY * TILE_SIZE - originY),
+        drawX: Math.round(tileX * tileSize - originX),
+        drawY: Math.round(tileY * tileSize - originY),
       });
     }
   }
 
   const tiles = await mapWithConcurrency(requests, TILE_CONCURRENCY, (request) =>
-    fetchTile(cartoTileUrl(zoom, request.tileX, request.tileY, request.tileX + request.tileY)),
+    fetchTile(cartoTileUrl(tileZoom, request.tileX, request.tileY, request.tileX + request.tileY, retina)),
   );
 
   tiles.forEach((tile, index) => {
@@ -236,8 +269,27 @@ export const renderRouteMap = async (options: RouteMapOptions): Promise<RgbaImag
   const image = createImage(width, height, BACKGROUND);
   if (!coordinates.length) return image;
 
-  const { zoom, scale, originX, originY } = fitView(coordinates, width, height);
-  await drawBasemap(image, zoom, originX, originY);
+  const { tileZoom, supersample, scale, originX, originY } = fitView(coordinates, width, height);
+
+  if (supersample < 1) {
+    // Basemap composto alla risoluzione nativa delle tile e poi ridotto: stessa
+    // inquadratura, ma senza tile stirate.
+    const oversized = createImage(
+      Math.ceil(width / supersample),
+      Math.ceil(height / supersample),
+      BACKGROUND,
+    );
+    await drawBasemap(
+      oversized,
+      tileZoom,
+      originX / supersample,
+      originY / supersample,
+      tileZoom - 1 >= MIN_ZOOM,
+    );
+    blit(image, downsample(oversized, width, height), 0, 0);
+  } else {
+    await drawBasemap(image, tileZoom, originX, originY, false);
+  }
 
   const project = ([lng, lat]: Coordinate): [number, number] => [
     lngToWorldX(lng) * scale - originX,

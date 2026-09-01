@@ -32,7 +32,8 @@ tags: [frontend, lib, hooks, logica]
 - `article-map.ts`, `article-map-anchor.ts` — geo articolo → [[14 - Mappe e Layer Geospaziale]]
 - `article-instagram-story.ts` — export story IG
 - `article-translation-gaps.ts`, `route-waypoint-translation-gaps.ts` — gap traduzioni IT/EN
-- `content-images.ts`, `sanitize-rich-html.ts`, `editorial-plan.ts`, `public-content.ts`
+- `content-images.ts`, `sanitize-rich-html.ts`, `editorial-plan.ts`, `public-content.ts` — `public-content.ts` seleziona anche `slug_it`/`slug_en`: senza, una card italiana finirebbe per linkare l'indirizzo inglese
+- `storage-image.ts` — riscrive le URL dello storage Supabase sull'endpoint di trasformazione (`/render/image/public/`) con `width`/`quality`, e genera `srcset`/`sizes`. **Ogni immagine da storage passa da qui**: servita in originale una miniatura costa megabyte → [[28 - Mobile e Performance]]
 
 ### Booking & pagamenti → [[13 - Booking Voyage]] / [[11 - Pagamenti Bunq]]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
@@ -91,4 +92,4 @@ Sorgente: `apps/crew/src/lib/`, `apps/crew/src/integrations/`.
 - `integrations/supabase/client.ts` — client Supabase della crew app con auth condivisa e passkey abilitate.
 
 ## Collegamenti
-- [[06 - Frontend - Componenti]] · [[08 - Supabase]] · [[27 - Tema Chiaro e Scuro]]
+- [[06 - Frontend - Componenti]] · [[08 - Supabase]] · [[27 - Tema Chiaro e Scuro]] · [[28 - Mobile e Performance]]

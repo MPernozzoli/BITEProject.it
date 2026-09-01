@@ -26,8 +26,9 @@ export type StorageImageOptions = {
   /** 20-100. Default 72: sotto si vedono gli artefatti sulle foto di mare. */
   quality?: number;
   /**
-   * `cover` (default) riempie il riquadro ritagliando, `contain` entra tutto.
-   * Rilevante solo passando anche `height`.
+   * Con `height`: `cover` (default) riempie il riquadro ritagliando, `contain`
+   * entra tutto. Senza `height` si usa sempre `contain` (proporzionale), a
+   * prescindere da questo valore: vedi la nota nel corpo di `storageImage`.
    */
   resize?: "cover" | "contain" | "fill";
   height?: number;
@@ -52,8 +53,17 @@ export const storageImage = (
   const [base, existingQuery] = raw.split("?");
   const params = new URLSearchParams(existingQuery);
   params.set("width", String(clampWidth(options.width)));
-  if (options.height) params.set("height", String(clampWidth(options.height)));
-  if (options.resize) params.set("resize", options.resize);
+  if (options.height) {
+    params.set("height", String(clampWidth(options.height)));
+    if (options.resize) params.set("resize", options.resize);
+  } else {
+    // Senza height il default del trasformatore ("cover") non scala l'altro lato:
+    // lo ritaglia lasciando l'altezza originale intatta, producendo una fetta
+    // strettissima dell'immagine invece di un ridimensionamento proporzionale.
+    // "contain" è l'unica modalità che, con un solo lato specificato, calcola
+    // l'altro mantenendo le proporzioni.
+    params.set("resize", options.resize ?? "contain");
+  }
   params.set("quality", String(options.quality ?? 72));
 
   return `${base.replace(OBJECT_MARKER, RENDER_MARKER)}?${params.toString()}`;

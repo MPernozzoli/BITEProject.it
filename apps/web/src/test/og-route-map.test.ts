@@ -103,21 +103,33 @@ describe("fitView", () => {
     [12.33, 45.43],
   ];
 
-  it("sceglie uno zoom che tiene la rotta dentro l'area utile", () => {
-    const { zoom, scale, originX, originY } = fitView(route, 1200, 630);
-    const project = ([lng, lat]: Coordinate): [number, number] => {
-      const x = ((lng + 180) / 360) * 256 * scale - originX;
-      const sin = Math.sin((lat * Math.PI) / 180);
-      const y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256 * scale - originY;
-      return [x, y];
-    };
+  const project = (view: ReturnType<typeof fitView>) => ([lng, lat]: Coordinate): [number, number] => {
+    const x = ((lng + 180) / 360) * 256 * view.scale - view.originX;
+    const sin = Math.sin((lat * Math.PI) / 180);
+    const y = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * 256 * view.scale - view.originY;
+    return [x, y];
+  };
 
-    expect(zoom).toBeGreaterThanOrEqual(2);
-    for (const point of route.map(project)) {
+  it("tiene la rotta dentro l'area utile", () => {
+    const view = fitView(route, 1200, 630);
+    expect(view.tileZoom).toBeGreaterThanOrEqual(2);
+    for (const point of route.map(project(view))) {
       expect(point[0]).toBeGreaterThan(0);
       expect(point[0]).toBeLessThan(1200);
       expect(point[1]).toBeGreaterThan(0);
       expect(point[1]).toBeLessThan(630);
+    }
+  });
+
+  it("riempie il riquadro invece di fermarsi allo zoom intero", () => {
+    // Con lo zoom arrotondato per difetto la rotta poteva occupare metà
+    // riquadro: qui deve arrivare a filo del margine su almeno un asse.
+    for (const span of [0.4, 1.7, 3.15, 8.2, 21]) {
+      const view = fitView([[9.18, 45.46], [9.18 + span, 45.46]], 1200, 630);
+      const [start, end] = [[9.18, 45.46] as Coordinate, [9.18 + span, 45.46] as Coordinate].map(project(view));
+      expect(end[0] - start[0]).toBeCloseTo(1200 - 70 * 2, 0);
+      expect(view.supersample).toBeGreaterThan(0.5);
+      expect(view.supersample).toBeLessThanOrEqual(1);
     }
   });
 

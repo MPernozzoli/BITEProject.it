@@ -307,6 +307,7 @@ const BookingSidebarPanel = ({
                   <ComplexityIndicator
                     variant="dot"
                     compact
+                    interactiveTrigger={false}
                     level={getLegComplexity(leg)}
                     dangerLevel={getLegDangerLevel(leg)}
                     leg={leg}

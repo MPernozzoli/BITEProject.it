@@ -23,6 +23,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[06 - Frontend - Componenti]] — libreria componenti (UI, admin, booking, voyage)
 - [[07 - Frontend - Lib e Hooks]] — logica condivisa lato client
 - [[27 - Tema Chiaro e Scuro]] — token, toggle e controparti scure di tutto il sito
+- [[28 - Mobile e Performance]] — peso delle immagini, chunk differiti, tocco e safe area
 
 ### Backend & Dati
 - [[08 - Supabase]] — Postgres, Auth, Storage, RLS

@@ -33,8 +33,8 @@ tags: [mappe, geo, maplibre, funzionalita]
 ## Mappa server-side per le anteprime social (`apps/web/src/server/og/`)
 Quando una rotta viene condivisa (WhatsApp, Facebook, Telegram, Slack) l'anteprima non è più l'immagine generica del sito ma **la mappa di quella rotta**, generata da `GET /api/og/voyage?slug=...` → [[10 - API Vercel]].
 
-- `route-map.ts` — proiezione Web Mercator, scelta dello zoom che fa entrare il bbox, download delle tile CARTO `light_all` (stessa base del sito, stessa `VITE_CARTO_API_KEY`) e disegno di rotta, soste e marker. I colori vengono da `getVoyageStrokeColor` di `VoyageMap.tsx`: acqua/terra per tipo, tonalità per stato.
-- `raster.ts`, `png.ts`, `font.ts` — compositing RGBA, codec PNG su `node:zlib` e font bitmap 5x7 per l'attribuzione OSM/CARTO stampata nell'immagine (viaggia da sola, fuori dal sito).
+- `route-map.ts` — proiezione Web Mercator, inquadratura che fa entrare il bbox, download delle tile CARTO `light_all` (stessa base del sito, stessa `VITE_CARTO_API_KEY`) e disegno di rotta, soste e marker. La scala è **esatta**, non arrotondata allo zoom intero: si scaricano tile a zoom più fitto e si riduce l'immagine, altrimenti la rotta resta persa in mezzo alla mappa. Quando c'è riduzione le tile sono quelle `@2x` dello zoom precedente, che disegnano le etichette al doppio: rimpicciolite tornano leggibili, e i nomi dei luoghi sono metà del senso di una mappa condivisa. I colori vengono da `getVoyageStrokeColor` di `VoyageMap.tsx`: acqua/terra per tipo, tonalità per stato.
+- `raster.ts`, `png.ts`, `font.ts` — compositing RGBA (con riduzione a media d'area), codec PNG su `node:zlib` e font bitmap 5x7 per l'attribuzione OSM/CARTO stampata nell'immagine (viaggia da sola, fuori dal sito). L'output è quantizzato a palette: 30-100 KB invece di 300-600 KB, perché le anteprime di WhatsApp scartano le immagini pesanti.
 - Geometria: `cached_geometry.coordinates` se c'è, altrimenti i waypoint in linea retta — stessa priorità di `VoyagePage.tsx`. Le soste marcate sono i waypoint "narrativi", con la regola di `getWaypointEffectiveType`.
 - Niente `sharp` né `canvas`: sul runtime serverless non ci sono binari nativi, quindi tile e output sono decodificati/codificati a mano.
 
@@ -61,9 +61,15 @@ Layout full-bleed con pannello di controllo galleggiante `MapControlPanel.tsx` (
 
 > ⚠️ Il container della mappa va dimensionato esplicitamente (`h-full w-full`), **non** con `absolute inset-0`: `maplibre-gl.css` marca `.maplibregl-map` con `position: relative` a pari specificità ma più avanti nel bundle, annulla il posizionamento assoluto e la mappa collassa a 0px.
 
+## Costo e comandi su mobile
+
+Il chunk di maplibre è ~260 KB gzip, il più pesante del sito. `LazyVoyageMap` lo differisce con `deferUntilVisible` dove la mappa sta sotto la piega (la home): la `import()` va tenuta **dentro** il callback dell'`IntersectionObserver`, perché differire il montaggio non differisce da solo il download.
+
+I controlli di zoom di serie sono 29px, sotto la soglia di tocco. La regola che li porta a 44 da touch sta in fondo a `index.css` **fuori da `@layer`**: MapLibre inietta il proprio CSS senza layer, e nel cascade un layer perde comunque contro ciò che è fuori. Le immagini nei popup passano da `storageImage()` come tutte le altre → [[28 - Mobile e Performance]].
+
 ## Tema della basemap
 
 CARTO serve `light_all` e `dark_all` allo stesso indirizzo (attenzione: la base scura si *chiama* Dark Matter ma il percorso delle tile è `dark_all`; `dark_matter` dà 404): `createCartoRasterStyle(variant)` in `shared/maps/carto.ts` accetta la variante, con default `"light"` per non cambiare comportamento a chi non conosce i temi. In `apps/web`, `createThemedCartoStyle()` sceglie la variante alla creazione e `bindMapToTheme(map)` la tiene allineata a mappa viva **scambiando le tile** (`setTiles`) invece di rifare lo stile — `setStyle` ricostruirebbe la mappa e porterebbe via rotte, tappe e layer aggiunti dopo. Si stacca da sé sull'evento `remove` di MapLibre → [[27 - Tema Chiaro e Scuro]]
 
 ## Collegamenti
-- [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]]
+- [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]] · [[28 - Mobile e Performance]]
