@@ -13,6 +13,12 @@ project_id = "ekwloweuicrqjjgabfdp"
 
 # --- pubbliche: nessuna sessione, l'autorizzazione è nel corpo della function ---
 
+# Sitemap dinamica: letta da Googlebot e da api/sitemap.ts (fetch server-to-
+# server senza alcun header). Un deploy da CLI senza questa riga la spegne
+# silenziosamente proprio come descritto sopra — è già successo una volta.
+[functions.public-sitemap]
+verify_jwt = false
+
 # Modulo di iscrizione sul sito. Protetta da honeypot, consenso obbligatorio,
 # rate limit per IP e cooldown per indirizzo.
 [functions.newsletter-subscribe]

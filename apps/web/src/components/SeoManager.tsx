@@ -211,8 +211,12 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
   }
 
   // Own profile area is private (noindex). Public profile pages /profile/:id
-  // ARE indexable — they are listed in the public sitemap.
-  if (pathname === "/profile") {
+  // are indexable ONLY for admins — bots never render this route (middleware
+  // routes them to /api/prerender's buildProfilePage, which knows the real
+  // per-profile admin status). This client-side default is defense-in-depth
+  // only, so it stays on the safe (noindex) side for the common case: a
+  // normal user who signed up to book or comment, not to be searchable.
+  if (pathname === "/profile" || pathname.startsWith("/profile/")) {
     return {
       title: { en: "Profile | BITE", it: "Profilo | BITE" },
       description: {
@@ -220,16 +224,6 @@ const getSeoForPathname = (rawPath: string): SeoConfig => {
         it: "Pagina profilo BITE.",
       },
       robots: "noindex, nofollow",
-    };
-  }
-
-  if (pathname.startsWith("/profile/")) {
-    return {
-      title: { en: "Profile | BITE", it: "Profilo | BITE" },
-      description: {
-        en: "Public BITE profile page.",
-        it: "Profilo pubblico BITE.",
-      },
     };
   }
 

@@ -16,6 +16,15 @@ export const PROFILE_COPY = {
     changePhoto: "Cambia foto",
     photoHint: "PNG o JPG. Puoi ritagliare l'immagine prima di salvarla.",
     viewPublicProfile: "Apri profilo pubblico",
+    tabs: {
+      identity: "Identità",
+      preferences: "Preferenze",
+      notifications: "Notifiche",
+      security: "Sicurezza",
+      crew: "Crew Pass",
+      admin: "Admin",
+      previewBadge: "Anteprima",
+    },
     stats: {
       primaryLanguage: "Lingua principale",
       storySubscriptions: "Storie seguite",
@@ -32,6 +41,12 @@ export const PROFILE_COPY = {
       socialsEyebrow: "Dove ti si trova",
       socialsTitle: "Social e link esterni",
       socialsText: "Aggiungi solo i riferimenti che vuoi mostrare davvero nella scheda pubblica.",
+      notificationsEyebrow: "Notifiche",
+      notificationsTitle: "Cosa ricevi e come",
+      notificationsText: "Email, notifiche nel sito e push: scegli cosa vuoi sapere e con che frequenza.",
+      securityEyebrow: "Sicurezza",
+      securityTitle: "Accesso all'account",
+      securityText: "Gestisci le passkey per accedere senza codice email.",
       subscriptionsEyebrow: "Follow",
       subscriptionsTitle: "Storie che stai seguendo",
       subscriptionsText: "Qui trovi le iscrizioni attive ai thread narrativi del progetto.",
@@ -153,9 +168,6 @@ export const PROFILE_COPY = {
       title: "Hai modifiche non salvate",
       text: "Se lasci questa pagina adesso perdi le modifiche al profilo. Puoi uscire senza salvare oppure salvare prima di continuare.",
     },
-    misc: {
-      noSecondaryLanguage: "Nessuna",
-    },
   },
   en: {
     loading: "Loading...",
@@ -169,6 +181,15 @@ export const PROFILE_COPY = {
     changePhoto: "Change photo",
     photoHint: "PNG or JPG. You can crop the image before saving.",
     viewPublicProfile: "Open public profile",
+    tabs: {
+      identity: "Identity",
+      preferences: "Preferences",
+      notifications: "Notifications",
+      security: "Security",
+      crew: "Crew Pass",
+      admin: "Admin",
+      previewBadge: "Preview",
+    },
     stats: {
       primaryLanguage: "Primary language",
       storySubscriptions: "Followed stories",
@@ -185,6 +206,12 @@ export const PROFILE_COPY = {
       socialsEyebrow: "Where to find you",
       socialsTitle: "Social and external links",
       socialsText: "Add only the references you actually want to expose on your public card.",
+      notificationsEyebrow: "Notifications",
+      notificationsTitle: "What you get and how",
+      notificationsText: "Email, in-app notifications, and push: choose what you want to know and how often.",
+      securityEyebrow: "Security",
+      securityTitle: "Account access",
+      securityText: "Manage passkeys to sign in without an email code.",
       subscriptionsEyebrow: "Following",
       subscriptionsTitle: "Stories you are following",
       subscriptionsText: "Your active subscriptions to the narrative threads of the project live here.",
@@ -305,9 +332,6 @@ export const PROFILE_COPY = {
     prompt: {
       title: "You have unsaved changes",
       text: "If you leave this page now you will lose your profile edits. You can leave without saving or save before continuing.",
-    },
-    misc: {
-      noSecondaryLanguage: "None",
     },
   },
 } as const;

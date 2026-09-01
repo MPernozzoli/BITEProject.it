@@ -102,7 +102,7 @@ Deno.serve(async () => {
 
   const supabase = createClient<any>(supabaseUrl, serviceRoleKey)
 
-  const [articlesRes, storiesRes, voyagesRes, profilesRes] = await Promise.all([
+  const [articlesRes, storiesRes, voyagesRes, profilesRes, adminRolesRes] = await Promise.all([
     supabase
       .from('logbook_articles')
       .select('slug, slug_it, slug_en, published_at, updated_at')
@@ -120,17 +120,26 @@ Deno.serve(async () => {
     supabase
       .from('public_profiles')
       .select('id, created_at'),
+    // Solo i profili admin sono indicizzabili (privacy: gli utenti normali si
+    // registrano per prenotare o commentare, non per finire su Google).
+    supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'admin'),
   ])
 
-  if (articlesRes.error || storiesRes.error || voyagesRes.error || profilesRes.error) {
+  if (articlesRes.error || storiesRes.error || voyagesRes.error || profilesRes.error || adminRolesRes.error) {
     console.error('public-sitemap fetch error', {
       articles: articlesRes.error,
       stories: storiesRes.error,
       voyages: voyagesRes.error,
       profiles: profilesRes.error,
+      adminRoles: adminRolesRes.error,
     })
     return new Response('Unable to build sitemap', { status: 500 })
   }
+
+  const adminProfileIds = new Set((adminRolesRes.data || []).map((row) => row.user_id))
 
   const staticEntries: SitemapEntry[] = LOCALIZED_ROUTES.map((path) => ({
     path,
@@ -185,7 +194,7 @@ Deno.serve(async () => {
     }))
 
   const profileEntries: SitemapEntry[] = (profilesRes.data || [])
-    .filter((p) => p.id)
+    .filter((p) => p.id && adminProfileIds.has(p.id))
     .map((p) => ({
       path: `/profile/${p.id}`,
       lastmod: toIsoDate(p.created_at),

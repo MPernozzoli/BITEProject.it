@@ -29,7 +29,13 @@ const BOT_UA_RE =
 
 /** Paths that must never be prerendered (private/system areas). */
 const PRERENDER_EXCLUDE_RE =
-  /^\/(api|admin|login|signup|bookings|profile|unsubscribe|newsletter|mcp|\.well-known)(\/|$)/i;
+  /^\/(api|admin|login|signup|bookings|unsubscribe|newsletter|mcp|\.well-known)(\/|$)/i;
+/**
+ * `/profile` (own account, private) stays excluded — but `/profile/:id`
+ * (public profile pages) must reach /api/prerender, which decides per-profile
+ * whether the page is indexable (admins only, see buildProfilePage).
+ */
+const OWN_PROFILE_RE = /^\/profile\/?$/i;
 const LANG_PREFIX_RE = /^\/(it|en)(\/|$)/i;
 const LEGACY_PUBLIC_PATH_RE =
   /^\/(crew|manifesto|logbook|voyages|links|linktree|route|collaborations|contact)(\/|$)/i;
@@ -126,7 +132,8 @@ export default function middleware(request: Request) {
       request.method === "GET" &&
       BOT_UA_RE.test(userAgent) &&
       !PUBLIC_FILE_RE.test(url.pathname) &&
-      !PRERENDER_EXCLUDE_RE.test(url.pathname)
+      !PRERENDER_EXCLUDE_RE.test(url.pathname) &&
+      !OWN_PROFILE_RE.test(url.pathname)
     ) {
       const target = new URL(url);
       target.pathname = "/api/prerender";

@@ -156,6 +156,28 @@ const supabaseFetch = async (pathAndQuery: string): Promise<any[] | null> => {
   }
 };
 
+/**
+ * Solo il profilo cerca `is_admin_profile`: RPC pubblica a superficie minima
+ * (vedi migrazione 20260901120000) che risponde true/false per un singolo id
+ * senza esporre `user_roles`, non leggibile da `anon`.
+ */
+const isAdminProfile = async (profileId: string): Promise<boolean> => {
+  const baseUrl = process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  const apikey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
+  if (!baseUrl || !apikey) return false;
+  try {
+    const response = await fetch(`${baseUrl}/rest/v1/rpc/is_admin_profile`, {
+      method: "POST",
+      headers: { apikey, Authorization: `Bearer ${apikey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_id: profileId }),
+    });
+    if (!response.ok) return false;
+    return (await response.json()) === true;
+  } catch {
+    return false;
+  }
+};
+
 interface PageData {
   title: string;
   description: string;
@@ -628,6 +650,78 @@ const buildStoryPage = async (lang: Lang, slug: string): Promise<PageData> => {
   };
 };
 
+/**
+ * Pagina profilo pubblica: indicizzabile SOLO per gli admin. Un utente normale
+ * si è registrato per prenotare o commentare, non per finire nei risultati di
+ * Google con nome, bio e social — la pagina resta raggiungibile (200, contenuto
+ * vero) ma con `noindex`. Vedi migrazione 20260901120000 per `is_admin_profile`.
+ */
+const buildProfilePage = async (lang: Lang, id: string): Promise<PageData> => {
+  const rows = await supabaseFetch(
+    `public_profiles?select=id,name,bio,avatar_url,created_at&id=eq.${encodeURIComponent(id)}&limit=1`
+  );
+  const profile = rows?.[0];
+  if (!profile) return notFoundPage(lang);
+
+  const isAdmin = await isAdminProfile(profile.id);
+  const path = `/profile/${profile.id}`;
+  const canonicalUrl = absoluteUrl(path);
+  const name = (typeof profile.name === "string" && profile.name.trim()) || "BITE";
+  const bio = typeof profile.bio === "string" ? profile.bio.trim() : "";
+  const description = bio || DEFAULT_DESCRIPTION[lang];
+
+  const authorLinks = await supabaseFetch(
+    `article_authors?select=article_id&profile_id=eq.${encodeURIComponent(profile.id)}`
+  );
+  const articleIds = [...new Set((authorLinks ?? []).map((row) => row.article_id).filter(Boolean))];
+  const articleRows = articleIds.length
+    ? await supabaseFetch(
+        `logbook_articles?select=id,slug,slug_it,slug_en,title_en,title_it,excerpt_en,excerpt_it,published_at,updated_at&status=eq.published&id=in.(${articleIds.map((articleId) => `"${String(articleId).replaceAll('"', '\\"')}"`).join(",")})&order=published_at.desc.nullslast`
+      )
+    : [];
+  const articleLinks: HtmlLink[] = (articleRows ?? []).map((article) => ({
+    href: withLang(lang, articlePath(article, lang)),
+    label: articleTitle(article, lang),
+    description: articleDescription(article, lang),
+    date: publishedAt(article),
+  }));
+
+  return {
+    title: `${name} | BITE`,
+    description,
+    paths: { it: path, en: path },
+    image: profile.avatar_url || null,
+    ogType: "website",
+    paragraphs: bio ? [bio] : [],
+    status: 200,
+    robots: isAdmin ? "index, follow" : "noindex, nofollow",
+    links: articleLinks,
+    sections: articleLinks.length
+      ? [{ heading: lang === "it" ? "Articoli pubblicati" : "Published articles", links: articleLinks }]
+      : [],
+    jsonLd: isAdmin
+      ? {
+          "@context": "https://schema.org",
+          "@type": "ProfilePage",
+          name,
+          description,
+          url: canonicalUrl,
+          mainEntityOfPage: canonicalUrl,
+          image: profile.avatar_url || undefined,
+          inLanguage: lang,
+          isPartOf: { "@id": `${SITE_URL}/#website` },
+          mainEntity: {
+            "@type": "Person",
+            name,
+            description: bio || undefined,
+            image: profile.avatar_url || undefined,
+            url: canonicalUrl,
+          },
+        }
+      : undefined,
+  };
+};
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const buildVoyagePage = async (lang: Lang, ref: string): Promise<PageData> => {
@@ -851,6 +945,9 @@ const buildPage = async (lang: Lang, path: string): Promise<PageData> => {
 
   const voyageMatch = path.match(/^\/voyages\/([^/]+)$/);
   if (voyageMatch) return buildVoyagePage(lang, decodeURIComponent(voyageMatch[1]));
+
+  const profileMatch = path.match(/^\/profile\/([^/]+)$/);
+  if (profileMatch) return buildProfilePage(lang, decodeURIComponent(profileMatch[1]));
 
   return notFoundPage(lang);
 };

@@ -2,9 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
+  Bell,
   BookOpen,
+  Bot,
   Camera,
   Facebook,
+  Fingerprint,
   Globe,
   Instagram,
   Languages,
@@ -12,8 +15,11 @@ import {
   Link as LinkIcon,
   Mail,
   Save,
+  UserRound,
+  UsersRound,
   X,
   Youtube,
+  type LucideIcon,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -57,7 +63,10 @@ import {
 } from "@/lib/email-notification-preferences";
 import { supabase } from "@/integrations/supabase/client";
 import { PROFILE_COPY } from "@/lib/profile-copy";
+import { CREW_PASS_LAUNCHED } from "@/lib/feature-flags";
 import ProfilePreferencesPanel from "@/components/admin/ProfilePreferencesPanel";
+import ProfileNotificationsPanel from "@/components/admin/ProfileNotificationsPanel";
+import ProfileSecurityPanel from "@/components/admin/ProfileSecurityPanel";
 import { toast } from "sonner";
 
 const TikTokIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
@@ -91,6 +100,8 @@ type SocialFieldKey =
   | "social_linkedin"
   | "social_website"
   | "social_seapeople";
+
+type ProfileTabKey = "identity" | "preferences" | "notifications" | "security" | "crew" | "admin";
 
 type StorySubscriptionRow = {
   id: string;
@@ -139,6 +150,7 @@ const AdminProfile = () => {
   const ignoreNextPopRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>("identity");
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
@@ -219,9 +231,6 @@ const AdminProfile = () => {
   const activeSocialCount = Object.values(socials).filter((value) => value.trim()).length;
   const preferredLanguageLabel =
     ALL_LANGUAGES.find((language) => language.code === preferredLanguage)?.label ?? preferredLanguage;
-  const secondaryLanguageLabel = secondaryLanguage
-    ? ALL_LANGUAGES.find((language) => language.code === secondaryLanguage)?.label ?? secondaryLanguage
-    : copy.misc.noSecondaryLanguage;
   const currentSnapshot = createProfileSnapshot({
     name,
     bio,
@@ -271,6 +280,26 @@ const AdminProfile = () => {
     value,
     label: copy.notificationFrequency[value],
   }));
+
+  /** Il tab non compare affatto per chi non è admin finché il flag non è attivo. */
+  const crewTabVisible = CREW_PASS_LAUNCHED || isAdmin;
+  const profileTabs: { key: ProfileTabKey; label: string; icon: LucideIcon; badge?: string }[] = [
+    { key: "identity", label: copy.tabs.identity, icon: UserRound },
+    { key: "preferences", label: copy.tabs.preferences, icon: Languages },
+    { key: "notifications", label: copy.tabs.notifications, icon: Bell },
+    { key: "security", label: copy.tabs.security, icon: Fingerprint },
+    ...(crewTabVisible
+      ? [
+          {
+            key: "crew" as const,
+            label: copy.tabs.crew,
+            icon: UsersRound,
+            badge: CREW_PASS_LAUNCHED ? undefined : copy.tabs.previewBadge,
+          },
+        ]
+      : []),
+    ...(isAdmin ? [{ key: "admin" as const, label: copy.tabs.admin, icon: Bot }] : []),
+  ];
 
   const loadNewsletterState = useCallback(
     async (userId: string, currentEmail: string) => {
@@ -1413,8 +1442,36 @@ const AdminProfile = () => {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[1.08fr_0.92fr] gap-6">
-          <div className="space-y-6">
+        <nav className="glass-panel flex gap-1.5 overflow-x-auto rounded-[26px] p-1.5 [&::-webkit-scrollbar]:hidden">
+          {profileTabs.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative inline-flex shrink-0 items-center justify-center gap-2 rounded-[20px] px-4 py-2.5 text-sm font-medium transition-colors ${
+                  active ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <tab.icon size={16} />
+                <span className="whitespace-nowrap">{tab.label}</span>
+                {tab.badge && (
+                  <span
+                    className={`ml-0.5 inline-flex h-5 items-center whitespace-nowrap rounded-full px-1.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      active ? "bg-background/25 text-background" : "bg-accent/15 text-accent"
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {activeTab === "identity" && (
+          <section className="space-y-6">
             <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
                 {copy.sections.identityEyebrow}
@@ -1505,20 +1562,28 @@ const AdminProfile = () => {
                 ))}
               </div>
             </div>
-          </div>
+          </section>
+        )}
 
-          <div className="space-y-6">
+        {activeTab === "preferences" && (
+          <section className="space-y-6">
             <ProfilePreferencesPanel
               copy={copy}
               preferredLanguage={preferredLanguage}
-              preferredLanguageLabel={preferredLanguageLabel}
               secondaryLanguage={secondaryLanguage}
-              secondaryLanguageLabel={secondaryLanguageLabel}
               isSiteNative={isSiteNative}
               handleLanguageChange={handleLanguageChange}
               setSecondaryLanguage={setSecondaryLanguage}
               newsletterSubscribed={newsletterSubscribed}
               setNewsletterSubscribed={setNewsletterSubscribed}
+            />
+          </section>
+        )}
+
+        {activeTab === "notifications" && (
+          <section className="space-y-6">
+            <ProfileNotificationsPanel
+              copy={copy}
               articleNotificationsEnabled={articleNotificationsEnabled}
               setArticleNotificationsEnabled={setArticleNotificationsEnabled}
               storyNotificationsEnabled={storyNotificationsEnabled}
@@ -1539,30 +1604,7 @@ const AdminProfile = () => {
               handlePushPreferenceChange={handlePushPreferenceChange}
               isInstalledApp={isInstalledApp}
               shouldShowMobileAppCard={shouldShowMobileAppCard}
-              passkeys={passkeys}
-              passkeysLoading={passkeysLoading}
-              registeringPasskey={registeringPasskey}
-              removingPasskeyId={removingPasskeyId}
-              passkeyUnavailableMessage={passkeyUnavailableMessage}
-              handleRegisterPasskey={handleRegisterPasskey}
-              handleRemovePasskey={handleRemovePasskey}
-              formatPasskeyDate={formatPasskeyDate}
             />
-
-            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
-              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
-                {lang === "en" ? "Membership" : "Community"}
-              </p>
-              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">Crew Pass</h2>
-              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
-                {lang === "en"
-                  ? "Manage your BITE Crew access from the same profile used for comments, bookings, and public identity."
-                  : "Gestisci l'accesso a BITE Crew dallo stesso profilo usato per commenti, booking e identita pubblica."}
-              </p>
-              <ProfileCrewPassPanel />
-            </div>
-
-            {isAdmin && <AdminMcpTokens lang={lang === "en" ? "en" : "it"} />}
 
             <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
               <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
@@ -1608,8 +1650,54 @@ const AdminProfile = () => {
                 </div>
               )}
             </div>
-          </div>
-        </section>
+          </section>
+        )}
+
+        {activeTab === "security" && (
+          <section className="space-y-6">
+            <ProfileSecurityPanel
+              copy={copy}
+              passkeys={passkeys}
+              passkeysLoading={passkeysLoading}
+              registeringPasskey={registeringPasskey}
+              removingPasskeyId={removingPasskeyId}
+              passkeyUnavailableMessage={passkeyUnavailableMessage}
+              handleRegisterPasskey={handleRegisterPasskey}
+              handleRemovePasskey={handleRemovePasskey}
+              formatPasskeyDate={formatPasskeyDate}
+            />
+          </section>
+        )}
+
+        {activeTab === "crew" && crewTabVisible && (
+          <section className="space-y-6">
+            <div className="rounded-[34px] border border-border/85 bg-glass/60 p-6 md:p-8 shadow-[0_20px_48px_rgba(15,23,42,0.06)]">
+              <p className="text-[11px] font-sans uppercase tracking-[0.28em] text-muted-foreground mb-2">
+                {lang === "en" ? "Membership" : "Community"}
+              </p>
+              <h2 className="editorial-heading text-2xl md:text-3xl mb-3">Crew Pass</h2>
+              {!CREW_PASS_LAUNCHED && (
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-3 py-1.5 text-xs font-sans font-medium text-accent">
+                  {lang === "en"
+                    ? "Internal preview — not visible to members yet."
+                    : "Anteprima interna — non ancora visibile ai membri."}
+                </div>
+              )}
+              <p className="text-sm font-sans text-muted-foreground leading-relaxed mb-6">
+                {lang === "en"
+                  ? "Manage your BITE Crew access from the same profile used for comments, bookings, and public identity."
+                  : "Gestisci l'accesso a BITE Crew dallo stesso profilo usato per commenti, booking e identita pubblica."}
+              </p>
+              <ProfileCrewPassPanel />
+            </div>
+          </section>
+        )}
+
+        {activeTab === "admin" && isAdmin && (
+          <section className="space-y-6">
+            <AdminMcpTokens lang={lang === "en" ? "en" : "it"} />
+          </section>
+        )}
 
       </div>
 
