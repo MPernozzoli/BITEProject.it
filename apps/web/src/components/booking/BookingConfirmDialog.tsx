@@ -13,7 +13,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { depositTargetEur, formatDepositEur, getContributionExplanation } from "@/lib/booking-deposit";
+import {
+  depositSplitSentence,
+  formatDepositEur,
+  getContributionExplanation,
+} from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import ContributionProposalForm from "@/components/booking/ContributionProposalForm";
@@ -471,9 +475,7 @@ const BookingConfirmDialog = ({
                   ? lang === "it"
                     ? `Da versare ora: ${formatDepositEur(depositTotalEur, "it")} (quota fissa). L'eventuale saldo verra richiesto solo dopo la revisione della tua proposta.`
                     : `Due now: ${formatDepositEur(depositTotalEur, "en")} (fixed share). Any remaining balance will only be requested after your proposal is reviewed.`
-                  : lang === "it"
-                    ? `Acconto da versare ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza della tua tratta: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
-                    : `Deposit due now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance due within 15 days of your leg's departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
+                  : depositSplitSentence(depositTotalEur, lang === "it" ? "it" : "en")}
               </p>
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-300 dark:text-amber-100/80">
                 {lang === "it"

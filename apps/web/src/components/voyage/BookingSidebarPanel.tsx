@@ -17,7 +17,7 @@ import ComplexityIndicator from "@/components/booking/ComplexityIndicator";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
-import { depositTargetEur, formatDepositEur } from "@/lib/booking-deposit";
+import { depositSplitSentence, formatDepositEur } from "@/lib/booking-deposit";
 
 interface BookingSidebarPanelProps {
   voyage: Voyage | null;
@@ -192,9 +192,7 @@ const BookingSidebarPanel = ({
                     </p>
                   )}
                   <p className="mt-2 text-[11px] font-medium text-amber-900 dark:text-amber-300">
-                    {lang === "it"
-                      ? `Acconto ora: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")} · Saldo entro 15gg dalla partenza: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}`
-                      : `Deposit now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")} · Balance within 15 days of departure: ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}`}
+                    {depositSplitSentence(depositTotalEur, lang === "it" ? "it" : "en")}
                   </p>
                   <p className="mt-2 text-[11px] leading-relaxed text-amber-950/85 dark:text-amber-300">
                     {lang === "it"

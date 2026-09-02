@@ -133,7 +133,7 @@ const COPY = {
       if (eventType === 'payment_pending' && phase === 'balance') return `${prefix}abbiamo registrato il pagamento del saldo in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata: oltre quel termine la prenotazione decade e l'acconto gia versato non e rimborsabile.`
       if (eventType === 'payment_pending') return `${prefix}abbiamo registrato un pagamento dell'acconto in sospeso per ${voyageName}. Completa il versamento entro la scadenza indicata per mantenere la prenotazione.`
       if (eventType === 'payment_received' && phase === 'balance') return `${prefix}abbiamo ricevuto il saldo per ${voyageName}: la tua prenotazione e a posto con i pagamenti.`
-      if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto l'acconto per ${voyageName}. Ricorda che il saldo va versato entro 15 giorni dalla partenza della tua tratta di imbarco.`
+      if (eventType === 'payment_received') return `${prefix}abbiamo ricevuto l'acconto per ${voyageName}. Ricorda che il saldo va versato almeno 15 giorni prima della partenza della tua tratta di imbarco.`
       if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
       if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
       if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Qui sotto trovi di nuovo tutti i dati: ricorda di indicare la causale esatta, senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
@@ -270,7 +270,7 @@ const COPY = {
       if (eventType === 'payment_pending' && phase === 'balance') return `${prefix}we recorded a pending balance payment for ${voyageName}. Complete it before the deadline: after that the booking lapses and the deposit already paid is not refundable.`
       if (eventType === 'payment_pending') return `${prefix}we recorded a pending deposit payment for ${voyageName}. Complete it before the deadline to keep your booking.`
       if (eventType === 'payment_received' && phase === 'balance') return `${prefix}we received the balance for ${voyageName}: your booking is fully settled.`
-      if (eventType === 'payment_received') return `${prefix}we received your deposit for ${voyageName}. Remember the balance is due within 15 days of the departure of your own embarkation leg.`
+      if (eventType === 'payment_received') return `${prefix}we received your deposit for ${voyageName}. Remember the balance is due at least 15 days before your own embarkation leg departs.`
       if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
       if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
       if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. All the details are below again: remember to use the exact reference, without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`

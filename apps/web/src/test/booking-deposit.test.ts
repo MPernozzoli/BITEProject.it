@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { type BookableLeg } from "@/lib/booking-utils";
 import {
+  balanceAfterDepositEur,
+  balanceDeadlinePhrase,
+  balanceFollowUpSentence,
   CONTRIBUTION_FIXED_MINIMUM_EUR,
   DEFAULT_CONTRIBUTION_PER_NM_EUR,
   DEPOSIT_CAP_EUR,
   depositForPayerEur,
+  depositSplitSentence,
   depositTargetEur,
   legDepositEur,
   perPersonDepositEur,
@@ -161,5 +165,35 @@ describe("deposit target (acconto)", () => {
   it("caps the deposit at €499 even for a large lead_pays_all party", () => {
     expect(resolvePhase(1200, 0)).toEqual({ phase: "deposit", amountEur: 499 });
     expect(resolvePhase(1200, 499)).toEqual({ phase: "balance", amountEur: 701 });
+  });
+});
+
+describe("acconto/saldo wording", () => {
+  it("splits a contribution into deposit and balance that add back up to the total", () => {
+    expect(balanceAfterDepositEur(100)).toBe(50);
+    // Above the cap the balance is the whole remainder, not the other half.
+    expect(depositTargetEur(1200) + balanceAfterDepositEur(1200)).toBe(1200);
+    expect(balanceAfterDepositEur(1200)).toBe(701);
+  });
+
+  it("states the balance deadline as a date before departure, never after it", () => {
+    // public.voyage_booking_balance_due_at is min(leg start) - 15 days, and the Terms page says
+    // the same: copy that reads "entro 15 giorni dalla partenza" would promise the opposite.
+    expect(balanceDeadlinePhrase("it")).toContain("prima della partenza");
+    expect(balanceDeadlinePhrase("it")).not.toContain("dalla partenza");
+    expect(balanceDeadlinePhrase("en")).toContain("before");
+  });
+
+  it("names both figures in the one sentence every booking flow shows", () => {
+    const sentence = depositSplitSentence(100, "it");
+    expect(sentence).toContain("50,00");
+    expect(sentence).toContain(balanceDeadlinePhrase("it"));
+  });
+
+  it("reports the balance left after a deposit the server already priced", () => {
+    // A part-paid deposit target still leaves the same balance: the follow-up line is driven by
+    // the server's totalDue/depositTarget, not by re-deriving 50% here.
+    expect(balanceFollowUpSentence(200, 100, "it")).toContain("100,00");
+    expect(balanceFollowUpSentence(1200, 499, "en")).toContain("701.00");
   });
 });

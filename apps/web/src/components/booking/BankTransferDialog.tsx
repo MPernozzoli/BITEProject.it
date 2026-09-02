@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import { balanceFollowUpSentence, formatDepositEur } from "@/lib/booking-deposit";
 import ContributionTrustNote from "@/components/booking/ContributionTrustNote";
 import {
   checkDepositStatus,
@@ -184,6 +184,11 @@ const BankTransferDialog = ({
                     : "Deposit to transfer"}
               </p>
               <p className="text-2xl font-semibold">{formatDepositEur(state.details.amountEur, lang)}</p>
+              {state.details.phase === "deposit" && state.details.totalDueEur > state.details.depositTargetEur && (
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  {balanceFollowUpSentence(state.details.totalDueEur, state.details.depositTargetEur, lang)}
+                </p>
+              )}
             </div>
             <CopyRow label="IBAN" value={state.details.iban} />
             <CopyRow label="BIC / SWIFT" value={state.details.bic} />

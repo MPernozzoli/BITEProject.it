@@ -7,10 +7,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import { getLocalizedBookingVoyageName, type BookingVoyage } from "@/lib/booking-utils";
 import {
+  balanceDeadlinePhrase,
   CONTRIBUTION_FIXED_MINIMUM_ACTIVE_BOOKING_STATUSES,
   contributionFixedMinimumEur,
+  DEPOSIT_CAP_EUR,
   depositForPayerEur,
-  depositTargetEur,
+  depositSplitSentence,
   formatDepositEur,
   perPersonDepositEur,
   shouldApplyContributionFixedMinimum,
@@ -420,8 +422,8 @@ const ManageBookingParticipants = () => {
           ) : (
             <p className="text-xs text-muted-foreground">
               {lang === "it"
-                ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a €499) ora e il saldo entro 15gg dalla partenza della propria tratta.`
-                : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to €499) is due now and the balance within 15 days of your leg's departure.`}
+                ? `Quota equa di contributo alle spese vive del viaggio: ${formatDepositEur(perPerson, "it")} a persona. Si versa un acconto (50%, fino a ${formatDepositEur(DEPOSIT_CAP_EUR, "it")}) ora e il saldo ${balanceDeadlinePhrase("it")}.`
+                : `Fair-share contribution to voyage out-of-pocket costs: ${formatDepositEur(perPerson, "en")} per person. A deposit (50%, up to ${formatDepositEur(DEPOSIT_CAP_EUR, "en")}) is due now and the balance ${balanceDeadlinePhrase("en")}.`}
             </p>
           )}
           {alreadyPaid && (
@@ -452,8 +454,8 @@ const ManageBookingParticipants = () => {
                     ? `Paghi ora ${formatDepositEur(leadPaysAllTotal, "it")}, la quota fissa per tutto il gruppo. Gli altri dovranno solo iscriversi e accettare le condizioni.`
                     : `Pay ${formatDepositEur(leadPaysAllTotal, "en")} now, the fixed share for the whole group. The others only need to register and accept the terms.`
                   : lang === "it"
-                    ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "it")} per l'intero gruppo (saldo di ${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "it")} entro 15gg dalla partenza). Gli altri dovranno solo iscriversi e accettare le condizioni.`
-                    : `Pay the ${formatDepositEur(depositTargetEur(leadPaysAllTotal), "en")} deposit now for the whole group (${formatDepositEur(leadPaysAllTotal - depositTargetEur(leadPaysAllTotal), "en")} balance due within 15 days of departure). The others only need to register and accept the terms.`}
+                    ? `Per l'intero gruppo — ${depositSplitSentence(leadPaysAllTotal, "it")} Gli altri dovranno solo iscriversi e accettare le condizioni.`
+                    : `For the whole group — ${depositSplitSentence(leadPaysAllTotal, "en")} The others only need to register and accept the terms.`}
               </span>
             </span>
           </label>
@@ -478,8 +480,8 @@ const ManageBookingParticipants = () => {
                     ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")}, la tua quota fissa. Ogni altro partecipante verserà la propria accettando l'invito, e poi l'importo che hai concordato tu: la cifra non è rinegoziabile dai singoli.`
                     : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} now, your own fixed share. Each other participant pays theirs when accepting, then the amount you agreed: individuals cannot renegotiate it.`
                   : lang === "it"
-                    ? `Paghi ora l'acconto di ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "it")} per te (saldo di ${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "it")} entro 15gg dalla partenza). Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
-                    : `Pay the ${formatDepositEur(depositTargetEur(leadPaysMeTotal), "en")} deposit now for yourself (${formatDepositEur(leadPaysMeTotal - depositTargetEur(leadPaysMeTotal), "en")} balance due within 15 days of departure). Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
+                    ? `Solo per te — ${depositSplitSentence(leadPaysMeTotal, "it")} Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
+                    : `Just for you — ${depositSplitSentence(leadPaysMeTotal, "en")} Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
               </span>
             </span>
           </label>
@@ -506,6 +508,7 @@ const ManageBookingParticipants = () => {
         open={paymentChoiceOpen}
         onOpenChange={setPaymentChoiceOpen}
         loading={paymentStarting}
+        bookingRequestId={id}
         onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
         onBankTransfer={() => {
           setPaymentChoiceOpen(false);

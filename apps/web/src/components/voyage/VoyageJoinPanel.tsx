@@ -131,7 +131,7 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
   const [proposal, setProposal] = useState<ContributionProposal>(emptyContributionProposal);
   const [proposalCvFile, setProposalCvFile] = useState<File | null>(null);
   const [proposalPortfolioFile, setProposalPortfolioFile] = useState<File | null>(null);
-  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string; amountEur?: number } | null>(null);
+  const [paymentChoice, setPaymentChoice] = useState<{ bookingRequestId: string } | null>(null);
   const [bankTransfer, setBankTransfer] = useState<{ bookingRequestId: string } | null>(null);
   const [workawayRoles, setWorkawayRoles] = useState<WorkawayRole[]>([]);
 
@@ -531,7 +531,6 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
       bookingRequestId = result?.booking_request_id;
     }
 
-    const soloAmountEur = fixedOnlyAmountEur ?? depositTotalEur;
     setSubmitting(false);
     setConfirmOpen(false);
     clearLocalBookingApplicationDraft(voyage.id);
@@ -574,7 +573,7 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
           ? "Ultimo passo: versa il contributo, altrimenti la candidatura non parte."
           : "One last step: pay the contribution, otherwise the application is not sent."
       );
-      setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
+      setPaymentChoice({ bookingRequestId });
     }
     resetAfterSubmit();
     await refetchOwnRequests();
@@ -878,7 +877,7 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
           if (!open) setPaymentChoice(null);
         }}
         loading={submitting}
-        amountEur={paymentChoice?.amountEur}
+        bookingRequestId={paymentChoice?.bookingRequestId}
         phase="deposit"
         onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
         onBankTransfer={() => {

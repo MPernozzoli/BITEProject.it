@@ -3,6 +3,72 @@ import { supabase } from "@/integrations/supabase/client";
 /** "deposit" collects the upfront acconto; "balance" collects the remaining saldo. */
 export type PaymentPhase = "deposit" | "balance";
 
+/**
+ * What the next payment on a booking will actually collect, straight from the server's own
+ * pricing (POST /api/payments/bunq/quote). Every screen that shows a traveller an amount before
+ * they pay it reads it from here: the acconto/saldo split, a partially settled deposit, or the
+ * difference owed after a route change are all decided in one place instead of being guessed
+ * from the leg formula by each caller.
+ */
+export type PaymentQuote = {
+  amountEur: number;
+  perPersonEur: number;
+  coveredPersons: number;
+  phase: PaymentPhase;
+  totalDueEur: number;
+  depositTargetEur: number;
+  maxSingleTransactionEur: number;
+};
+
+export type PaymentQuoteResult =
+  | { ok: true; quote: PaymentQuote }
+  | { ok: true; nothingDue: true }
+  | { ok: false; error: string };
+
+export async function fetchPaymentQuote(
+  bookingRequestId: string,
+  participantId?: string | null,
+): Promise<PaymentQuoteResult> {
+  const token = await authToken();
+  if (!token) return { ok: false, error: "unauthenticated" };
+
+  let response: Response;
+  try {
+    response = await fetch("/api/payments/bunq/quote", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ bookingRequestId, participantId: participantId ?? null }),
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    /* ignore malformed body */
+  }
+
+  if (!response.ok) return { ok: false, error: String(payload.error ?? `http_${response.status}`) };
+  if (payload.nothingDue === true) return { ok: true, nothingDue: true };
+  return {
+    ok: true,
+    quote: {
+      amountEur: Number(payload.amountEur ?? 0),
+      perPersonEur: Number(payload.perPersonEur ?? 0),
+      coveredPersons: Number(payload.coveredPersons ?? 1),
+      phase: payload.phase === "balance" ? "balance" : "deposit",
+      totalDueEur: Number(payload.totalDueEur ?? 0),
+      depositTargetEur: Number(payload.depositTargetEur ?? 0),
+      maxSingleTransactionEur: Number(payload.maxSingleTransactionEur ?? 500),
+    },
+  };
+}
+
 export type StartDepositResult =
   | {
       ok: true;

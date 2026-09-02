@@ -5,7 +5,7 @@ import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
 import type { CandidateInfo } from "@/lib/booking-candidate-info";
 import type { BookingApplicationBlocker } from "@/lib/booking-application-gate";
-import { depositTargetEur, formatDepositEur } from "@/lib/booking-deposit";
+import { depositSplitSentence, formatDepositEur } from "@/lib/booking-deposit";
 
 type WizardStep = "party" | "about";
 
@@ -230,9 +230,7 @@ const VoyageJoinDialog = ({
                   </p>
                 )}
                 <p className="mt-2 text-[12.5px] font-medium leading-relaxed text-amber-900 dark:text-amber-300 dark:text-amber-100/90">
-                  {it
-                    ? `Adesso versi l'acconto: ${formatDepositEur(depositTargetEur(depositTotalEur), "it")}. Il resto, ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "it")}, entro 15 giorni dalla partenza.`
-                    : `You pay the deposit now: ${formatDepositEur(depositTargetEur(depositTotalEur), "en")}. The rest, ${formatDepositEur(depositTotalEur - depositTargetEur(depositTotalEur), "en")}, within 15 days of departure.`}
+                  {depositSplitSentence(depositTotalEur, lang)}
                 </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-amber-950/85 dark:text-amber-300 dark:text-amber-100/80">
                   {it

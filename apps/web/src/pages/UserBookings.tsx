@@ -37,6 +37,8 @@ import {
   saveLocalBookingApplicationDraft,
 } from "@/lib/booking-application-draft";
 import {
+  BALANCE_DUE_DAYS_BEFORE_DEPARTURE,
+  balanceDeadlinePhrase,
   contributionFixedMinimumEur,
   formatDepositEur,
   legDepositEur,
@@ -200,10 +202,12 @@ const UserBookings = () => {
   const [acceptTarget, setAcceptTarget] = useState<MyParticipation | null>(null);
   const [acceptCandidateInfo, setAcceptCandidateInfo] = useState<CandidateInfo>(emptyCandidateInfo);
   const [acceptSubmitting, setAcceptSubmitting] = useState(false);
+  // Only *who* is paying for *what* booking: the amount is priced by the server when the
+  // payment dialog opens (fetchPaymentQuote), so no screen can announce a figure the payment
+  // endpoints would then contradict.
   const [paymentChoice, setPaymentChoice] = useState<{
     bookingRequestId: string;
     participantId?: string;
-    amountEur?: number;
     phase?: "deposit" | "balance";
   } | null>(null);
   const [paymentStarting, setPaymentStarting] = useState(false);
@@ -618,7 +622,7 @@ const UserBookings = () => {
       .map((value) => new Date(value).getTime())
       .filter((time) => Number.isFinite(time));
     const deadline = departureTimes.length
-      ? new Date(Math.min(...departureTimes) - 15 * 24 * 60 * 60 * 1000).toISOString()
+      ? new Date(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000).toISOString()
       : null;
     return { outstandingEur, deadline };
   }, [ownRequestForSelectedVoyage, ownRequestLegIdsForSelectedVoyage, legsById, selectedContributionOptions, paidEurByRequestId]);
@@ -787,7 +791,7 @@ const UserBookings = () => {
       .map((value) => new Date(value).getTime())
       .filter((time) => Number.isFinite(time));
     const deadline = departureTimes.length
-      ? new Date(Math.min(...departureTimes) - 15 * 24 * 60 * 60 * 1000).toISOString()
+      ? new Date(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000).toISOString()
       : null;
     return { outstandingEur, deadline };
   })();
@@ -1189,11 +1193,6 @@ const UserBookings = () => {
       return;
     }
 
-    // Capture the contribution before the selection is cleared below, so the payment dialog can
-    // show the amount and pick card-vs-transfer (bank transfer only above the €500 card cap).
-    const soloAmountEur =
-      fixedOnlyAmountEur ?? totalDepositEur(selectedLegsForRequest, 1, selectedContributionOptions);
-
     setSaving(false);
     setConfirmOpen(false);
     resetBookingApplicationForm();
@@ -1227,7 +1226,7 @@ const UserBookings = () => {
     // Solo applications must complete the contribution payment now: the request stays
     // unreviewable until it's paid, and a refund is issued automatically if later rejected.
     if (bookingRequestId) {
-      setPaymentChoice({ bookingRequestId, amountEur: soloAmountEur });
+      setPaymentChoice({ bookingRequestId });
     }
     await loadData();
   };
@@ -1266,17 +1265,12 @@ const UserBookings = () => {
       }
       return;
     }
-    const legsForRequest = requestLegs
-      .filter((link) => link.booking_request_id === request.id)
-      .map((link) => legsById[link.bookable_leg_id])
-      .filter(Boolean);
-    const amountEur = totalDepositEur(legsForRequest, request.party_size, selectedContributionOptions);
     toast.info(
       lang === "it"
         ? "Candidatura riproposta: completa il pagamento del contributo per inviarla."
         : "Application re-proposed: complete the contribution payment to submit it."
     );
-    setPaymentChoice({ bookingRequestId: request.id, amountEur });
+    setPaymentChoice({ bookingRequestId: request.id });
     await loadData();
   };
 
@@ -1432,7 +1426,6 @@ const UserBookings = () => {
     // Accepting a chargeable route change sends the traveller straight to pay the difference
     // (captured before loadData() recomputes the details view).
     const goToPaymentAfterAccept = action === "accept_proposed_change" && detailsRequiresSettlement;
-    const settlementAmountEur = detailsProposedAmountEur;
 
     setSaving(true);
     const { error } = await typedSupabase.rpc("respond_voyage_booking_plan_change", {
@@ -1458,7 +1451,10 @@ const UserBookings = () => {
           : "Change accepted: complete the contribution payment to confirm it."
       );
       setDetailsRequestId(null);
-      setPaymentChoice({ bookingRequestId: requestId, amountEur: settlementAmountEur });
+      // A settlement collects the *difference* between the new route's acconto/saldo target and
+      // what this payer already settled — the payment dialog prices it from the server like every
+      // other payment, so nothing has to be worked out here.
+      setPaymentChoice({ bookingRequestId: requestId });
       await loadData();
       return;
     }
@@ -1713,6 +1709,11 @@ const UserBookings = () => {
                             </span>
                           )}
                         </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                          {lang === "it"
+                            ? `Entro quella data ti basta versare l'acconto: il saldo si versa ${balanceDeadlinePhrase("it")}. L'importo esatto te lo mostriamo al momento del pagamento.`
+                            : `By that date only the deposit is required: the balance is paid ${balanceDeadlinePhrase("en")}. We show you the exact amount when you pay.`}
+                        </p>
                         {overdue && (
                           <p className="mt-1 text-xs leading-relaxed text-orange-800 dark:text-orange-300/90">
                             {lang === "it"
@@ -1815,7 +1816,8 @@ const UserBookings = () => {
             if (!open) setPaymentChoice(null);
           }}
           loading={paymentStarting}
-          amountEur={paymentChoice?.amountEur}
+          bookingRequestId={paymentChoice?.bookingRequestId}
+          participantId={paymentChoice?.participantId}
           phase={paymentChoice?.phase}
           onPayNow={(reservedWindow) => void startOnlinePayment(reservedWindow)}
           onBankTransfer={() => {
@@ -2350,8 +2352,8 @@ const UserBookings = () => {
                           <div className="mt-3 rounded-2xl border border-amber-300/70 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-300">
                             <p className="font-semibold">
                               {lang === "it"
-                                ? `Accettando dovrai versare il contributo del nuovo percorso: ${formatDepositEur(detailsProposedAmountEur, "it")}.`
-                                : `By accepting you will need to pay the new route's contribution: ${formatDepositEur(detailsProposedAmountEur, "en")}.`}
+                                ? `Accettando, il contributo del nuovo percorso diventa ${formatDepositEur(detailsProposedAmountEur, "it")} in totale (acconto e saldo restano metà e metà): ora ti verrà chiesta solo la differenza rispetto a quanto hai già versato.`
+                                : `By accepting, the new route's contribution becomes ${formatDepositEur(detailsProposedAmountEur, "en")} in total (still half deposit, half balance): you will now only be asked for the difference from what you have already paid.`}
                             </p>
                             <p className="mt-1">
                               {lang === "it"

@@ -1,4 +1,5 @@
 import type { Language } from "@/lib/language";
+import { balanceDeadlinePhrase, DEPOSIT_CAP_EUR, formatDepositEur } from "@/lib/booking-deposit";
 
 interface ContributionTrustNoteProps {
   lang: Language | "it" | "en";
@@ -18,8 +19,8 @@ const ContributionTrustNote = ({ lang, variant = "box" }: ContributionTrustNoteP
     <>
       <p>
         {it
-          ? "Ti chiediamo di versare subito un acconto (50% del contributo, fino a un massimo di €499) come dimostrazione di serietà e impegno a intraprendere il viaggio. Il saldo va versato entro 15 giorni dalla partenza della tua tratta di imbarco."
-          : "We ask you to pay a deposit right away (50% of the contribution, up to €499) as proof of seriousness and commitment to undertake the voyage. The balance is due within 15 days of the departure of your own embarkation leg."}
+          ? `Ti chiediamo di versare subito un acconto (50% del contributo, fino a un massimo di ${formatDepositEur(DEPOSIT_CAP_EUR, "it")}) come dimostrazione di serietà e impegno a intraprendere il viaggio. Il saldo va versato ${balanceDeadlinePhrase("it")}.`
+          : `We ask you to pay a deposit right away (50% of the contribution, up to ${formatDepositEur(DEPOSIT_CAP_EUR, "en")}) as proof of seriousness and commitment to undertake the voyage. The balance is due ${balanceDeadlinePhrase("en")}.`}
       </p>
       <p className="mt-1">
         {it

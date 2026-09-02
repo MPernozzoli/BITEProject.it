@@ -11,7 +11,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import {
+  balanceAfterDepositEur,
+  balanceDeadlinePhrase,
+  depositTargetEur,
+  formatDepositEur,
+} from "@/lib/booking-deposit";
 import type { VoyageBookingStatus } from "@/lib/booking-utils";
 
 export type ManualPayment = {
@@ -99,8 +104,9 @@ const ManualPaymentDialog = ({
             />
             {dueEur != null && (
               <p className="text-xs text-muted-foreground">
-                Contributo totale calcolato sulle tratte attuali: {formatDepositEur(dueEur)} (acconto 50%, max
-                €499, più saldo entro 15gg dalla partenza)
+                Contributo totale calcolato sulle tratte attuali: {formatDepositEur(dueEur)} (acconto{" "}
+                {formatDepositEur(depositTargetEur(dueEur))}, saldo {formatDepositEur(balanceAfterDepositEur(dueEur))}{" "}
+                {balanceDeadlinePhrase("it")})
                 {alreadyPaidEur > 0 && ` · già versati ${formatDepositEur(alreadyPaidEur)}`}
                 {outstandingEur != null && outstandingEur > 0 && ` · residuo ${formatDepositEur(outstandingEur)}`}
               </p>

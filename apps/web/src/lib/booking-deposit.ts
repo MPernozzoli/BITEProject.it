@@ -149,6 +149,59 @@ export function depositTargetEur(totalDueEur: number): number {
   return Math.min(roundCurrency(totalDueEur * DEPOSIT_PERCENT), DEPOSIT_CAP_EUR);
 }
 
+/** The balance left to pay once the upfront deposit is settled. */
+export function balanceAfterDepositEur(totalDueEur: number): number {
+  return roundCurrency(Math.max(0, totalDueEur - depositTargetEur(totalDueEur)));
+}
+
+/**
+ * How many days BEFORE the departure of the payer's own embarkation leg the balance must have
+ * arrived. Mirrors public.voyage_booking_balance_due_at, which computes
+ * min(leg.starts_at_window_start) - interval '15 days' — keep both in sync.
+ */
+export const BALANCE_DUE_DAYS_BEFORE_DEPARTURE = 15;
+
+/**
+ * The single wording for the balance deadline, used by every screen and email that mentions it.
+ * It is a deadline *before* departure, not a window after it: saying "entro 15 giorni dalla
+ * partenza" reads as the opposite of what public.voyage_booking_balance_due_at enforces, and of
+ * what the Terms page states.
+ */
+export function balanceDeadlinePhrase(lang: "it" | "en" = "it"): string {
+  return lang === "it"
+    ? `almeno ${BALANCE_DUE_DAYS_BEFORE_DEPARTURE} giorni prima della partenza della tua tratta di imbarco`
+    : `at least ${BALANCE_DUE_DAYS_BEFORE_DEPARTURE} days before your own embarkation leg departs`;
+}
+
+/**
+ * The one sentence that states how a contribution is split, wherever a traveller is shown a
+ * figure before paying it. Every booking flow says it the same way because they all say it
+ * from here.
+ */
+export function depositSplitSentence(totalDueEur: number, lang: "it" | "en" = "it"): string {
+  const deposit = formatDepositEur(depositTargetEur(totalDueEur), lang);
+  const balance = formatDepositEur(balanceAfterDepositEur(totalDueEur), lang);
+  return lang === "it"
+    ? `Acconto ora: ${deposit} · Saldo: ${balance} ${balanceDeadlinePhrase("it")}.`
+    : `Deposit now: ${deposit} · Balance: ${balance} ${balanceDeadlinePhrase("en")}.`;
+}
+
+/**
+ * The follow-up line shown while a deposit is actually being paid: what is left after this
+ * payment, and by when. Takes the server's own figures so it stays true even when a route
+ * change means this payment collects only part of the deposit target.
+ */
+export function balanceFollowUpSentence(
+  totalDueEur: number,
+  depositEur: number,
+  lang: "it" | "en" = "it",
+): string {
+  const balance = formatDepositEur(roundCurrency(Math.max(0, totalDueEur - depositEur)), lang);
+  return lang === "it"
+    ? `Poi il saldo: ${balance} ${balanceDeadlinePhrase("it")}.`
+    : `Then the balance: ${balance} ${balanceDeadlinePhrase("en")}.`;
+}
+
 export function getContributionExplanation(
   legs: DepositLeg[],
   opts: ContributionOptions & { lang?: "it" | "en" } = {},
