@@ -11,6 +11,8 @@ import ArticleSidebar from "@/components/ArticleSidebar";
 import ArticleRelatedSection from "@/components/ArticleRelatedSection";
 import ArticleVoyageMediaWidget from "@/components/ArticleVoyageMediaWidget";
 import { useArticleDwellTracking, useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
+import { useArticleScrollTracking } from "@/hooks/useArticleScrollTracking";
+import { useArticleClickTracking } from "@/hooks/useArticleClickTracking";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import LiveReadCounter from "@/components/LiveReadCounter";
@@ -113,6 +115,8 @@ const ArticlePage = () => {
   useQualifiedArticleRead(article?.id ?? null, slug, lang);
   useSyncArticleViewCount(article?.id ?? null, slug);
   useArticleDwellTracking(article?.id ?? null);
+  useArticleScrollTracking({ articleId: article?.id ?? null });
+  useArticleClickTracking({ articleId: article?.id ?? null });
 
   // If the user landed on a slug that doesn't match the current language's
   // preferred slug, redirect (replace) to the canonical lang-correct URL.

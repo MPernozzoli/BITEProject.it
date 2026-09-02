@@ -56,6 +56,8 @@ type ArticleScoreRow = {
     comment_count: number;
     share_count: number;
     click_count: number;
+    returning_readers: number;
+    retain_pct: number;
     unique_readers: number;
   };
 };
@@ -64,13 +66,22 @@ type MergedArticle = ArticleScoreRow & {
   insight: ArticleViewInsightRow | null;
 };
 
+/**
+ * I cinque assi, tutti sulla stessa finestra di 30 giorni. React e Retain sono
+ * tassi: sotto i 10 lettori si fermano a 1, perché su una base piccola una
+ * percentuale non distingue il merito dal caso.
+ */
 const AXIS_CONFIG = [
-  { key: "reach", label: "Reach", icon: Eye, description: "Lettori unici (30gg)" },
-  { key: "read", label: "Read", icon: BookOpen, description: "Dwell time + scroll" },
-  { key: "react", label: "React", icon: Heart, description: "(Like + commenti + share) / 100 lettori unici (30gg)" },
-  { key: "retain", label: "Retain", icon: MessageCircle, description: "Lettori unici totali (all-time)" },
-  { key: "revenue", label: "Lead", icon: MousePointerClick, description: "Click su link/CTA (30gg)" },
+  { key: "reach", label: "Reach", icon: Eye, description: "Lettori unici (30gg)", scale: "50+ vale 2, 15+ vale 1" },
+  { key: "read", label: "Read", icon: BookOpen, description: "Tempo di lettura e scroll (30gg)", scale: "90s e 50% di scroll valgono 2" },
+  { key: "react", label: "React", icon: Heart, description: "Like, commenti e share per 100 lettori (30gg)", scale: "10+ vale 2, 3+ vale 1" },
+  { key: "retain", label: "Retain", icon: MessageCircle, description: "Quota di lettori che ha letto anche un altro articolo (30gg)", scale: "60%+ vale 2, 30%+ vale 1" },
+  { key: "revenue", label: "Lead", icon: MousePointerClick, description: "Click su link e CTA nell'articolo (30gg)", scale: "10+ vale 2, 3+ vale 1" },
 ] as const;
+
+/** Nel tooltip sta tutto: cosa misura l'asse e a quanto ammontano le soglie. */
+const axisTooltip = (axis?: { description: string; scale: string }) =>
+  axis ? `${axis.description} — ${axis.scale}` : "";
 
 const scoreColor = (score: number, max: number) => {
   const ratio = max > 0 ? score / max : 0;
@@ -169,8 +180,8 @@ const AdminPerformanceDashboard = () => {
               <h1 className="editorial-heading text-4xl md:text-6xl mb-4">Content Scores</h1>
               <p className="max-w-2xl text-sm md:text-base font-sans text-foreground/72 leading-relaxed">
                 {scope === "articles"
-                  ? "punteggio 5 punti per ogni articolo pubblicato: Reach (visite), Read (tempo + scroll), React (engagement), Retain (ritorno), Lead (click CTA). Ogni asse vale 0-2, totale /10."
-                  : "punteggio 5 punti per ogni viaggio pubblicato: Reach (visite), Read (permanenza + scroll), React (watchlist e bozze), Retain (pubblico totale), Lead (richieste di imbarco). Ogni asse vale 0-2, totale /10."}
+                  ? "cinque assi per ogni articolo pubblicato, tutti sugli ultimi 30 giorni: Reach (lettori unici), Read (tempo e scroll), React (like, commenti e share per 100 lettori), Retain (quota di lettori arrivata anche a un altro articolo), Lead (click su link e CTA). Ogni asse vale 0-2, totale /10."
+                  : "cinque assi per ogni viaggio pubblicato, tutti sugli ultimi 30 giorni: Reach (visitatori unici), Read (permanenza e scroll), React (watchlist e bozze ogni 100 visitatori), Retain (quota di visitatori tornata in una giornata diversa), Lead (richieste di imbarco). Ogni asse vale 0-2, totale /10."}
               </p>
               <div className="mt-6 flex items-center gap-2">
                 {([
@@ -210,14 +221,16 @@ const AdminPerformanceDashboard = () => {
               </div>
             </div>
   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {AXIS_CONFIG.map(({ key, label, description }) => (
+                {AXIS_CONFIG.map((axis) => {
+                  const { key, label, description } = axis;
+                  return (
                   <div key={key} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground mb-1 cursor-help">{label}</p>
                       </TooltipTrigger>
-                      <TooltipContent side="top" align="center" className="text-xs">
-                        {description}
+                      <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                        {axisTooltip(axis)}
                       </TooltipContent>
                     </Tooltip>
                     <p className={`text-xl font-sans font-semibold tabular-nums ${scoreColor(totals[key], totals.count * 2)}`}>
@@ -226,7 +239,8 @@ const AdminPerformanceDashboard = () => {
                     <p className="text-[10px] text-muted-foreground mt-0.5">/ {totals.count * 2}</p>
                     <p className="text-[10px] text-muted-foreground mt-1">{description}</p>
                   </div>
-                ))}
+                  );
+                })}
               </div>
           </section>
 
@@ -248,8 +262,8 @@ const AdminPerformanceDashboard = () => {
                         {key === "total" ? "Total" : axis?.label ?? key}
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" align="center" className="text-xs">
-                      {axis?.description ?? ""}
+                    <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                      {axisTooltip(axis)}
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -300,7 +314,9 @@ const AdminPerformanceDashboard = () => {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        {AXIS_CONFIG.map(({ key, icon: Icon, description }) => (
+                        {AXIS_CONFIG.map((axis) => {
+                          const { key, icon: Icon } = axis;
+                          return (
                           <Tooltip key={key}>
                             <TooltipTrigger asChild>
                               <div
@@ -313,14 +329,15 @@ const AdminPerformanceDashboard = () => {
                                 }`}
                               >
                                 <Icon size={10} />
-                                <span>{row.score[key]}</span>
+                                <span>{row.score[key]}/2</span>
                               </div>
                             </TooltipTrigger>
-                            <TooltipContent side="top" align="center" className="text-xs">
-                              {description}
+                            <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                              {axisTooltip(axis)}
                             </TooltipContent>
                           </Tooltip>
-                        ))}
+                          );
+                        })}
                         <span className="text-sm font-sans font-semibold tabular-nums text-foreground ml-1">
                           {row.score.total}/10
                         </span>
@@ -330,6 +347,7 @@ const AdminPerformanceDashboard = () => {
                         <span>{row.score.reach_count} lettori</span>
                         <span>{formatDwell(row.score.avg_dwell_ms)} avg</span>
                         <span>{row.score.scroll_pct}% scroll</span>
+                        <span>{row.score.retain_pct}% ritorno</span>
                         <span>{row.score.share_count} share</span>
                       </div>
 

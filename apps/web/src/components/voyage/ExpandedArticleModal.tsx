@@ -13,6 +13,8 @@ import StickyEngagementBar from "@/components/StickyEngagementBar";
 import { useArticleLike } from "@/hooks/useArticleLike";
 import LiveReadCounter from "@/components/LiveReadCounter";
 import { useArticleDwellTracking, useQualifiedArticleRead, useSyncArticleViewCount } from "@/hooks/useArticleReads";
+import { useArticleScrollTracking } from "@/hooks/useArticleScrollTracking";
+import { useArticleClickTracking } from "@/hooks/useArticleClickTracking";
 import { articleContentExtensions } from "@/lib/article-content";
 import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { getArticleInstagramStoryImage } from "@/lib/article-instagram-story";
@@ -108,6 +110,8 @@ const ExpandedArticleModal = ({ slug, lang, originRect, phase, previewAuthors = 
   useQualifiedArticleRead(article?.id ?? null, slug ?? undefined, lang);
   useSyncArticleViewCount(article?.id ?? null, slug ?? undefined);
   useArticleDwellTracking(article?.id ?? null);
+  useArticleScrollTracking({ articleId: article?.id ?? null, containerRef: scrollContainerRef });
+  useArticleClickTracking({ articleId: article?.id ?? null, rootRef: scrollContainerRef });
 
   const { liked, likeCount, busy: likeBusy, toggleLike } = useArticleLike(article?.id ?? "");
 

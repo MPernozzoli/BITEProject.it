@@ -514,6 +514,7 @@ const ArticleMapAside = ({
               {bookingCta && (
                 <Link
                   to={bookingCta.href}
+                  data-article-cta="booking"
                   className="mt-3 flex items-center justify-between gap-3 rounded-[20px] border border-emerald-300/70 dark:border-emerald-500/30 bg-emerald-50/85 dark:bg-emerald-500/10 px-3 py-3 text-left transition-colors hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10"
                 >
                   <span className="min-w-0">

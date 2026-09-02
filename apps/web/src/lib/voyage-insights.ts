@@ -44,6 +44,8 @@ export type VoyageScore = {
   draft_count: number;
   request_count: number;
   confirmed_count: number;
+  returning_visitors: number;
+  retain_pct: number;
   unique_visitors: number;
 };
 

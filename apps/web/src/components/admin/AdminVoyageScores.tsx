@@ -53,18 +53,52 @@ type SupabaseRpcClient = {
 
 const rpcClient = supabase as unknown as SupabaseRpcClient;
 
+/**
+ * I cinque assi, tutti sulla stessa finestra di 30 giorni. React e Retain sono
+ * tassi: sotto i 10 visitatori si fermano a 1, perché su una base piccola una
+ * percentuale non distingue il merito dal caso.
+ */
 const AXIS_CONFIG = [
-  { key: "reach", label: "Reach", icon: Eye, description: "Visitatori unici della pagina viaggio (30gg)" },
-  { key: "read", label: "Read", icon: BookOpen, description: "Permanenza + scroll sulla pagina (30gg)" },
+  {
+    key: "reach",
+    label: "Reach",
+    icon: Eye,
+    description: "Visitatori unici della pagina viaggio (30gg)",
+    scale: "200+ vale 2, 20+ vale 1",
+  },
+  {
+    key: "read",
+    label: "Read",
+    icon: BookOpen,
+    description: "Permanenza e scroll sulla pagina (30gg)",
+    scale: "60s e 50% di scroll valgono 2",
+  },
   {
     key: "react",
     label: "React",
     icon: Heart,
-    description: "Segnali di intenzione (watchlist + bozze di prenotazione) ogni 100 visitatori",
+    description: "Watchlist e bozze di prenotazione ogni 100 visitatori (30gg)",
+    scale: "5+ vale 2, 1+ vale 1",
   },
-  { key: "retain", label: "Retain", icon: Users, description: "Visitatori unici totali (all-time)" },
-  { key: "revenue", label: "Lead", icon: MousePointerClick, description: "Richieste di imbarco (30gg)" },
+  {
+    key: "retain",
+    label: "Retain",
+    icon: Users,
+    description: "Quota di visitatori tornati in una giornata diversa (30gg)",
+    scale: "15%+ vale 2, 5%+ vale 1",
+  },
+  {
+    key: "revenue",
+    label: "Lead",
+    icon: MousePointerClick,
+    description: "Richieste di imbarco (30gg)",
+    scale: "3+ vale 2, 1+ vale 1",
+  },
 ] as const;
+
+/** Nel tooltip sta tutto: cosa misura l'asse e a quanto ammontano le soglie. */
+const axisTooltip = (axis?: { description: string; scale: string }) =>
+  axis ? `${axis.description} — ${axis.scale}` : "";
 
 const scoreColor = (score: number, max: number) => {
   const ratio = max > 0 ? score / max : 0;
@@ -160,7 +194,9 @@ const AdminVoyageScores = () => {
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {AXIS_CONFIG.map(({ key, label, description }) => (
+          {AXIS_CONFIG.map((axis) => {
+            const { key, label, description } = axis;
+            return (
             <div key={key} className="rounded-[16px] border border-border/70 bg-background/60 p-3">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -168,8 +204,8 @@ const AdminVoyageScores = () => {
                     {label}
                   </p>
                 </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="text-xs">
-                  {description}
+                <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                  {axisTooltip(axis)}
                 </TooltipContent>
               </Tooltip>
               <p
@@ -183,7 +219,8 @@ const AdminVoyageScores = () => {
               <p className="text-[10px] text-muted-foreground mt-0.5">/ {totals.count * 2}</p>
               <p className="text-[10px] text-muted-foreground mt-1">{description}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -207,8 +244,8 @@ const AdminVoyageScores = () => {
                     {key === "total" ? "Total" : axis?.label ?? key}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" align="center" className="text-xs">
-                  {axis?.description ?? ""}
+                <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                  {axisTooltip(axis)}
                 </TooltipContent>
               </Tooltip>
             );
@@ -266,7 +303,9 @@ const AdminVoyageScores = () => {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {AXIS_CONFIG.map(({ key, icon: Icon, description }) => (
+                    {AXIS_CONFIG.map((axis) => {
+                      const { key, icon: Icon } = axis;
+                      return (
                       <Tooltip key={key}>
                         <TooltipTrigger asChild>
                           <div
@@ -279,14 +318,15 @@ const AdminVoyageScores = () => {
                             }`}
                           >
                             <Icon size={10} />
-                            <span>{row.score[key]}</span>
+                            <span>{row.score[key]}/2</span>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="top" align="center" className="text-xs">
-                          {description}
+                        <TooltipContent side="top" align="center" className="text-xs max-w-[260px]">
+                          {axisTooltip(axis)}
                         </TooltipContent>
                       </Tooltip>
-                    ))}
+                      );
+                    })}
                     <span className="text-sm font-sans font-semibold tabular-nums text-foreground ml-1">
                       {row.score.total}/10
                     </span>
@@ -296,6 +336,7 @@ const AdminVoyageScores = () => {
                     <span>{row.score.reach_count} visitatori</span>
                     <span>{formatDwell(row.score.avg_dwell_ms)} avg</span>
                     <span>{row.score.scroll_pct}% scroll</span>
+                    <span>{row.score.retain_pct}% ritorno</span>
                     <span>{row.score.confirmed_count} a bordo</span>
                   </div>
 
@@ -426,11 +467,16 @@ const AdminVoyageScores = () => {
                     )}
 
                     {/* Funnel: dalla visita all'imbarco */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                       {[
                         {
                           label: "Visitatori unici",
                           value: formatCount(row.score.unique_visitors),
+                          icon: Users,
+                        },
+                        {
+                          label: "Tornati un altro giorno",
+                          value: `${formatCount(row.score.returning_visitors)} (${row.score.retain_pct}%)`,
                           icon: Users,
                         },
                         {
