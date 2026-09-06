@@ -108,6 +108,21 @@ export function isPaidStatus(status: string): boolean {
   return status.toUpperCase() === "ACCEPTED";
 }
 
+/**
+ * Cancels a still-unpaid Bunq request-inquiry so its bunq.me link can no longer be paid.
+ * Bunq itself never expires a request-inquiry on its own — without this, a link we consider
+ * dead (our own payment deadline has passed) stays live and payable indefinitely, so a payer
+ * who pays late still gets Bunq's "accepted" screen while our side has already moved on.
+ * Only meaningful while the request is still PENDING on Bunq's side; an already-ACCEPTED
+ * request cannot be revoked (the money has moved) — callers must check status first.
+ */
+export async function revokeBunqPaymentRequest(requestId: number): Promise<void> {
+  await bunqRequest(`${accountPath()}/request-inquiry/${requestId}`, {
+    method: "PUT",
+    body: { status: "REVOKED" },
+  });
+}
+
 type BunqPayment = {
   id: number;
   description: string;
