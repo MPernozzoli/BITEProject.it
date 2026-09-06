@@ -213,6 +213,8 @@ const ADMIN_EVENT_TYPES = new Set([
   'admin_balance_deadline_missed',
   'admin_contribution_proposal_received',
   'admin_contribution_proposal_resolved',
+  'admin_contribution_settlement_deadline_missed',
+  'admin_late_payment_after_cancellation',
 ])
 
 function buildAdminPushMessage(params: {
@@ -287,6 +289,18 @@ function buildAdminPushMessage(params: {
         body: `${traveler} responded to your counter-proposal for ${voyageName}${legs}.`,
       }
     }
+    if (params.eventType === 'admin_contribution_settlement_deadline_missed') {
+      return {
+        title: 'Negotiated application lapsed',
+        body: `${traveler} missed the 24h deposit deadline for ${voyageName}${legs}: the application was cancelled.`,
+      }
+    }
+    if (params.eventType === 'admin_late_payment_after_cancellation') {
+      return {
+        title: 'Payment on an invalid booking',
+        body: `A late payment arrived for ${traveler}'s lapsed request on ${voyageName}${legs}.`,
+      }
+    }
     return {
       title: 'New berth request',
       body: `${traveler} requested to join ${voyageName}${legs}.`,
@@ -345,6 +359,18 @@ function buildAdminPushMessage(params: {
     return {
       title: 'Risposta del candidato',
       body: `${traveler} ha risposto alla tua contro-proposta per ${voyageName}${legs}.`,
+    }
+  }
+  if (params.eventType === 'admin_contribution_settlement_deadline_missed') {
+    return {
+      title: 'Candidatura negoziata decaduta',
+      body: `${traveler} non ha versato l'acconto entro 24h per ${voyageName}${legs}: candidatura annullata.`,
+    }
+  }
+  if (params.eventType === 'admin_late_payment_after_cancellation') {
+    return {
+      title: 'Pagamento su prenotazione non valida',
+      body: `Arrivato un pagamento in ritardo per la richiesta decaduta di ${traveler} su ${voyageName}${legs}.`,
     }
   }
   return {
@@ -425,6 +451,12 @@ function buildUserPushMessage(params: {
     if (params.eventType === 'contribution_proposal_rejected') {
       return { title: 'Proposal not accepted', body: `Your proposal for ${voyageName}${legs} was not accepted.` }
     }
+    if (params.eventType === 'contribution_settlement_deadline_missed') {
+      return { title: 'Request lapsed', body: `The deposit deadline for ${voyageName}${legs} passed: the request was cancelled.` }
+    }
+    if (params.eventType === 'late_payment_after_cancellation') {
+      return { title: 'Late payment received', body: `A payment for ${voyageName}${legs} arrived after its deadline: see how we're handling it.` }
+    }
     if (params.eventType === 'guest_share_due') {
       return { title: 'Your share is due', body: `The amount for ${voyageName}${legs} is agreed: pay your own share within two days.` }
     }
@@ -496,6 +528,12 @@ function buildUserPushMessage(params: {
   }
   if (params.eventType === 'contribution_proposal_rejected') {
     return { title: 'Proposta non accettata', body: `La tua proposta per ${voyageName}${legs} non e stata accettata.` }
+  }
+  if (params.eventType === 'contribution_settlement_deadline_missed') {
+    return { title: 'Richiesta decaduta', body: `La scadenza per l'acconto su ${voyageName}${legs} e passata: la richiesta e stata annullata.` }
+  }
+  if (params.eventType === 'late_payment_after_cancellation') {
+    return { title: 'Pagamento in ritardo ricevuto', body: `Un pagamento per ${voyageName}${legs} e arrivato dopo la scadenza: guarda come lo stiamo gestendo.` }
   }
   if (params.eventType === 'guest_share_due') {
     return { title: 'La tua quota e da versare', body: `L'importo per ${voyageName}${legs} e concordato: versa la tua quota entro due giorni.` }

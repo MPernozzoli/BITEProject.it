@@ -205,8 +205,18 @@ const Terms = () => {
         </p>
         <p>
           {isIt
-            ? "Se la tua proposta, o la controproposta che decidi di rifiutare, non porta a un accordo, la quota fissa già versata ti viene rimborsata automaticamente per intero. Se invece si raggiunge un accordo, l'eventuale importo residuo concordato ti viene richiesto in un'unica soluzione, e la candidatura può essere approvata solo dopo il suo versamento."
-            : "If your proposal, or a counter-proposal you decide to decline, does not lead to an agreement, the fixed share already paid is automatically refunded in full. If an agreement is reached instead, any remaining agreed amount is requested from you in a single payment, and the application can only be approved once it has been paid."}
+            ? "Se la tua proposta, o la controproposta che decidi di rifiutare, non porta a un accordo, la quota fissa già versata ti viene rimborsata automaticamente per intero."
+            : "If your proposal, or a counter-proposal you decide to decline, does not lead to an agreement, the fixed share already paid is automatically refunded in full."}
+        </p>
+        <p>
+          {isIt
+            ? "Se invece si raggiunge un accordo (perché accetti la nostra controproposta, o perché accettiamo la tua proposta così com'è), il totale concordato (quota fissa più importo negoziato) segue la stessa regola dell'acconto descritta più sopra: devi versare l'acconto — il 50% del totale, con lo stesso tetto di € 499,00 — entro 24 ore da quando l'accordo si è formato, indipendentemente dal metodo di pagamento scelto. La candidatura viene ammessa in revisione non appena l'acconto è versato; il saldo resta dovuto entro 15 giorni prima della partenza, come per chiunque altro."
+            : "If an agreement is reached instead (because you accept our counter-proposal, or because we accept your proposal as it is), the agreed total (fixed share plus negotiated amount) follows the same deposit rule described above: you must pay the deposit — 50% of the total, with the same €499.00 cap — within 24 hours of the agreement being reached, regardless of the payment method chosen. The application is admitted for review as soon as the deposit is paid; the balance remains due within 15 days before departure, same as for anyone else."}
+        </p>
+        <p>
+          {isIt
+            ? "Se non versi l'acconto entro queste 24 ore, la candidatura decade automaticamente e la quota fissa già versata resta a noi: a differenza del caso di mancato accordo descritto sopra, qui non è dovuto alcun rimborso, perché un accordo sul totale era già stato raggiunto e il termine per confermarlo con il pagamento non è stato rispettato. Allo scadere del termine disattiviamo anche il link di pagamento, che quindi smette di essere utilizzabile. Se nonostante questo dovesse comunque arrivarci un pagamento riferito a una candidatura ormai decaduta, non lo tratteniamo: ti scriviamo per informarti che il termine era scaduto e che quella prenotazione non è più valida, e disponiamo il rimborso di quell'importo, in automatico quando possibile o chiedendoti l'IBAN quando non lo è."
+            : "If you do not pay the deposit within these 24 hours, the application automatically lapses and the fixed share already paid stays with us: unlike the no-agreement case described above, no refund is due here, because an agreement on the total had already been reached and the deadline to confirm it with payment was missed. Once the deadline passes we also deactivate the payment link, which then stops working. If, despite this, a payment referring to an already-lapsed application still reaches us, we do not keep it: we write to tell you the deadline had passed and that booking is no longer valid, and we arrange a refund of that amount — automatically when we can, or by asking for your IBAN when we cannot."}
         </p>
       </LegalSection>
 

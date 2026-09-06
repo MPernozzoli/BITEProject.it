@@ -44,7 +44,7 @@ type BookingRefundContext = {
   contribution_proposal_status?: string | null;
 };
 
-type DepositRefundRow = {
+export type DepositRefundRow = {
   id: string;
   booking_request_id: string;
   participant_id: string | null;
@@ -292,7 +292,7 @@ export async function resolveRefundPercent(
   return Math.max(policyPercent, Math.min(100, Math.round(overridePercent)));
 }
 
-async function resolvePayerAlias(db: SupabaseClient, deposit: DepositRefundRow): Promise<BunqCounterpartyAlias | null> {
+export async function resolvePayerAlias(db: SupabaseClient, deposit: DepositRefundRow): Promise<BunqCounterpartyAlias | null> {
   // A stored alias is only trustworthy if it can actually receive a payment.
   if (isRefundableAlias(deposit.payer_alias)) return deposit.payer_alias;
   if (!bunqConfigured()) return null;
@@ -428,6 +428,101 @@ export async function refundBookingDeposits(
     pendingRefundCents,
     pendingDepositIds,
   };
+}
+
+export type LateCancelledDepositOutcome = {
+  refunded: boolean;
+  pending: boolean;
+  amountCents: number;
+};
+
+/**
+ * Refunds a payment that landed on a deposit we had already cancelled and given up on — the
+ * contribution-settlement 24h deadline passed, or (legacy path) the traveller paid late and we
+ * chose not to reactivate. Unlike {@link refundBookingDeposits} this never touches the booking
+ * itself: the booking is not coming back, only the money that arrived for it is going back.
+ *
+ * `actualAmountCents` is Bunq's own confirmed figure (amountRespondedValue for a bunq_link,
+ * the matched incoming payment for a bank transfer) — never the amount we originally requested,
+ * which the payer may not have matched exactly.
+ */
+export async function refundLateCancelledDeposit(
+  db: SupabaseClient,
+  deposit: DepositRefundRow,
+  actualAmountCents: number,
+  reason: string,
+): Promise<LateCancelledDepositOutcome> {
+  const payerAlias = await resolvePayerAlias(db, { ...deposit, amount_cents: actualAmountCents });
+  const nowIso = new Date().toISOString();
+
+  if (!payerAlias) {
+    await db
+      .from("voyage_booking_deposits")
+      .update({
+        status: "paid",
+        paid_at: nowIso,
+        amount_cents: actualAmountCents,
+        refund_pending: true,
+        refund_pending_amount_cents: actualAmountCents,
+        refund_pending_reason: reason,
+        refund_policy: "contribution_settlement_deadline_missed",
+        expiry_kind: "contribution_settlement",
+        bunq_request_closed_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", deposit.id);
+    return { refunded: false, pending: true, amountCents: actualAmountCents };
+  }
+
+  const reference = `LATE-${deposit.booking_request_id.slice(0, 8)}-${randomUUID().slice(0, 4)}`.toUpperCase();
+  let payment: { id: number };
+  try {
+    payment = await createBunqOutgoingPayment({
+      amountEur: centsToEur(actualAmountCents),
+      counterpartyAlias: payerAlias,
+      description: `Rimborso BITE (scadenza superata) ${reference}`,
+    });
+  } catch (error) {
+    if (isUnroutableRefundError(error)) {
+      await db
+        .from("voyage_booking_deposits")
+        .update({
+          status: "paid",
+          paid_at: nowIso,
+          amount_cents: actualAmountCents,
+          refund_pending: true,
+          refund_pending_amount_cents: actualAmountCents,
+          refund_pending_reason: "no_monetary_account",
+          refund_policy: "contribution_settlement_deadline_missed",
+          expiry_kind: "contribution_settlement",
+          bunq_request_closed_at: nowIso,
+          updated_at: nowIso,
+        })
+        .eq("id", deposit.id);
+      return { refunded: false, pending: true, amountCents: actualAmountCents };
+    }
+    throw error;
+  }
+
+  await db
+    .from("voyage_booking_deposits")
+    .update({
+      status: "refunded",
+      paid_at: nowIso,
+      amount_cents: actualAmountCents,
+      refunded_at: nowIso,
+      refund_amount_cents: actualAmountCents,
+      refund_policy: "contribution_settlement_deadline_missed",
+      refund_reference: reference,
+      refund_payment_id: payment.id,
+      payer_alias: payerAlias,
+      expiry_kind: "contribution_settlement",
+      bunq_request_closed_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", deposit.id);
+
+  return { refunded: true, pending: false, amountCents: actualAmountCents };
 }
 
 type ManualRefundInput = {

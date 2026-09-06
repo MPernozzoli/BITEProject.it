@@ -90,7 +90,9 @@ type BookingNotificationEvent =
   | "payment_failed"
   | "payment_expired"
   | "admin_payment_pending"
-  | "admin_payment_received";
+  | "admin_payment_received"
+  | "late_payment_after_cancellation"
+  | "admin_late_payment_after_cancellation";
 
 function paymentDeadlineHours(paymentMethod: PaymentMethod): number {
   return PAYMENT_DEADLINE_HOURS[paymentMethod] ?? PAYMENT_DEADLINE_HOURS.bunq_link;
@@ -337,14 +339,16 @@ export async function resolveDepositPayer(
     dueEur = Math.round((perPersonEur * coveredPersons + Number.EPSILON) * 100) / 100;
     depositTarget = dueEur; // 100% up front — always far under the €499 Bunq cap.
   } else if (contributionProposalStatus === "accepted") {
-    // Negotiation resolved: the agreed variable amount (0 for a pure workaway trade) is
-    // requested alongside the fixed minimum, as a single balance payment — no further
-    // acconto/saldo split. alreadyPaidEur below (the €20 already settled) is what turns this
-    // into "just the delta", exactly like a route-change settlement does.
+    // Negotiation resolved: the agreed variable amount (0 for a pure workaway trade) is added
+    // to the fixed minimum to form the new total due — then split exactly like any other
+    // payer's contribution (50% deposit capped at €499, balance due 15 days before departure
+    // via expire_unpaid_voyage_booking_balance). alreadyPaidEur below (the €20 fixed already
+    // settled while negotiating) is what turns the deposit leg into "just the delta", exactly
+    // like a route-change settlement does.
     const resolvedVariableEur = Math.max(0, contributionResolvedVariableCents ?? 0) / 100;
     perPersonEur = contributionFixedMinimumEur(contributionOpts.fixedMinimumEur) + resolvedVariableEur;
     dueEur = Math.round((perPersonEur * coveredPersons + Number.EPSILON) * 100) / 100;
-    depositTarget = dueEur;
+    depositTarget = depositTargetEur(dueEur);
   } else {
     perPersonEur = perPersonDepositEur(legs, contributionOpts);
     dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
@@ -518,9 +522,12 @@ export async function clearBookingPaymentDeadlineIfSettled(
   if (countError) throw new Error(countError.message);
   if ((count ?? 0) > 0) return;
 
+  // Also clears contribution_settlement_deadline: once every pending deposit is gone, either the
+  // negotiated deposit just settled (the 24h window no longer applies) or there was never one to
+  // begin with — null-to-null is a harmless no-op either way.
   const { error } = await db
     .from("voyage_booking_requests")
-    .update({ expires_at: null, updated_at: new Date().toISOString() })
+    .update({ expires_at: null, contribution_settlement_deadline: null, updated_at: new Date().toISOString() })
     .eq("id", bookingRequestId);
   if (error) throw new Error(error.message);
 

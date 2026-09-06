@@ -96,7 +96,42 @@ refund of the €20 already paid) — there is no further back-and-forth.
 
 `admin_set_voyage_booking_status` additionally refuses `admin_approved`/`user_confirmed` while
 `voyage_booking_requests.contribution_proposal_status` is unresolved, or once accepted, while
-the negotiated variable balance (`voyage_booking_negotiated_balance_paid`) is still unpaid.
+the upfront deposit on the negotiated total (`voyage_booking_negotiated_balance_paid`) is still
+unpaid — the balance is governed separately, exactly like any other payer (see next paragraph).
+
+**24h settlement deadline once accepted (2026-09-06).** Either resolution — admin accepting the
+candidate's own proposal, or the candidate accepting admin's counter — stamps
+`voyage_booking_requests.contribution_settlement_deadline = now() + 24h` and enriches the
+`contribution_proposal_accepted` notification with the amount actually due now and that
+deadline. The agreed total is split exactly like a standard payer's (`depositTargetEur`: 50%
+capped at €499 upfront, balance due the usual 15 days before departure) — **not** collected as
+one lump sum as an earlier iteration did. `expire_unpaid_voyage_booking_contribution_settlement()`
+(pg_cron, every 10 min) cancels the booking if the deposit is not paid by the deadline: the fixed
+€20 already paid is forfeited (`refund_policy = 'contribution_settlement_deadline_missed'`), not
+refunded — unlike an explicit rejection, which always refunds 100%. The deadline is cleared
+(`clearBookingPaymentDeadlineIfSettled` / `admin_confirm_voyage_booking_payment`) the moment the
+deposit settles by any path.
+
+pg_cron cannot call the Bunq REST API, so `api/cron/reconcile-expired-bunq-links.ts` (same
+10-minute cadence) does the Node-side half: for every deposit the settlement sweep cancelled
+(tagged `voyage_booking_deposits.expiry_kind = 'contribution_settlement'`), it revokes the
+still-unpaid Bunq request-inquiry (so the link stops being payable — see the same endpoint's
+handling of the unrelated first-payment-gate case below), or, if a payment landed anyway (a race,
+or a bank transfer that has no Bunq object to revoke), refunds it automatically via
+`refundLateCancelledDeposit` (`src/server/bunq/refunds.ts`) and sends
+`late_payment_after_cancellation` telling the payer that booking is no longer valid. This is the
+opposite policy from the same endpoint's *legacy* branch (a late payment on a fresh application's
+very first, pre-review deposit): there, the booking is reactivated instead (see "Known gap" below
+for a related bug that surfaced while building this).
+
+**Known gap, not yet fixed:** `admin_confirm_voyage_booking_payment` only reuses a deposit whose
+status is still `pending` — for one the settlement sweep (or the legacy expiry sweep) already
+cancelled, it falls through to inserting a new row with the same reference and hits the unique
+constraint on `voyage_booking_deposits.reference`. `reconcile_stale_bunq_deposit` (added
+2026-09-06) works around this for the automated cron path by reusing the cancelled row directly,
+but the admin's own "Registra un pagamento ricevuto" button in `VoyageCandidatesPanel.tsx` would
+still fail on exactly this case. Worth generalizing that RPC to reuse any of the booking's own
+cancelled deposits, not only a pending one.
 
 **Zero-due edge case.** If the candidate already holds another active application on the same
 voyage, `shouldApplyContributionFixedMinimum` waives the €20 fixed to €0 for the new one — but

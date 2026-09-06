@@ -24,7 +24,7 @@ import {
   getLocalizedBookingVoyageName,
 } from "@/lib/booking-utils";
 import { experienceOptions, getCandidateLanguageLabel, languageLevelOptions, normalizeCandidateInfo, type CandidateInfo } from "@/lib/booking-candidate-info";
-import { formatDepositEur } from "@/lib/booking-deposit";
+import { CONTRIBUTION_FIXED_MINIMUM_EUR, depositTargetEur, formatDepositEur } from "@/lib/booking-deposit";
 import { getWorkawayFileSignedUrl } from "@/lib/booking-proposal-apply";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import ProfileAvatar from "@/components/ProfileAvatar";
@@ -650,10 +650,17 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
             const negotiatedBalancePaidCents = requestDeposits
               .filter((deposit) => deposit.status === "paid")
               .reduce((sum, deposit) => sum + deposit.amount_cents, 0);
+            // Only the upfront deposit (50% of the negotiated total, capped like any other
+            // payer's) gates approval — the rest is the balance, due 15 days before departure
+            // like everyone else's, not a second thing to chase before review can proceed.
+            const negotiatedTotalCents =
+              CONTRIBUTION_FIXED_MINIMUM_EUR * 100 * Math.max(1, request.party_size) +
+              (request.contribution_resolved_variable_cents ?? 0);
+            const negotiatedDepositTargetCents = Math.round(depositTargetEur(negotiatedTotalCents / 100) * 100);
             const negotiatedBalanceDue =
               request.contribution_proposal_status === "accepted" &&
               (request.contribution_resolved_variable_cents ?? 0) > 0 &&
-              negotiatedBalancePaidCents < 2000 * Math.max(1, request.party_size) + (request.contribution_resolved_variable_cents ?? 0);
+              negotiatedBalancePaidCents < negotiatedDepositTargetCents;
             const counterRange = counterAmountRangeCents(contributionProposal, request.voyage_id);
             const counterSkipAmount = contributionCounterSkipAmount[request.id] ?? false;
             const counterTotalCents = contributionCounterEur[request.id] != null
@@ -1115,7 +1122,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
                             ? "Approvazione bloccata: pagamento contributo in attesa di conferma Bunq."
                             : hasUnresolvedContributionProposal
                               ? "Approvazione bloccata: proposta di contributo/workaway non ancora risolta."
-                              : "Approvazione bloccata: la proposta e stata accettata ma il saldo negoziato non risulta ancora pagato."}
+                              : "Approvazione bloccata: la proposta e stata accettata ma l'acconto sull'importo negoziato non risulta ancora pagato (il saldo resta dovuto 15 giorni prima della partenza, come per chiunque altro)."}
                         </p>
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">

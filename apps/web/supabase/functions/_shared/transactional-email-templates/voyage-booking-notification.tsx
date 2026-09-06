@@ -37,6 +37,8 @@ type BookingEvent =
   | 'contribution_proposal_accepted'
   | 'contribution_proposal_countered'
   | 'contribution_proposal_rejected'
+  | 'contribution_settlement_deadline_missed'
+  | 'late_payment_after_cancellation'
   | 'guest_share_due'
   | 'guest_share_overdue'
   | 'guest_share_dropped'
@@ -116,6 +118,8 @@ const COPY = {
       contribution_proposal_accepted: 'Proposta accettata.',
       contribution_proposal_countered: 'Contro-proposta ricevuta.',
       contribution_proposal_rejected: 'Proposta non accettata.',
+      contribution_settlement_deadline_missed: 'Richiesta decaduta.',
+      late_payment_after_cancellation: 'Pagamento ricevuto in ritardo.',
       guest_share_due: 'La tua quota e da versare.',
       guest_share_overdue: 'Una quota del gruppo non e stata versata.',
       guest_share_dropped: 'Partecipazione annullata.',
@@ -144,9 +148,11 @@ const COPY = {
       if (eventType === 'plan_change_pending') return `${prefix}la pianificazione di ${voyageName} e cambiata. Ti proponiamo le nuove tratte: puoi accettare, annullare con rimborso completo o chiedere una variazione.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}la pianificazione di ${voyageName} e stata aggiornata e la tua prenotazione e stata adeguata automaticamente.`
       if (eventType === 'contribution_proposal_received') return `${prefix}abbiamo ricevuto la tua proposta di contributo/workaway per ${voyageName}. La esamineremo e ti risponderemo a breve.`
-      if (eventType === 'contribution_proposal_accepted') return `${prefix}la tua proposta per ${voyageName} e stata accettata. Se resta un saldo da versare, apri la tua area booking per completare il pagamento.`
+      if (eventType === 'contribution_proposal_accepted') return `${prefix}la tua proposta per ${voyageName} e stata accettata. Versa l'acconto indicato qui sotto entro la scadenza: se non arriva in tempo la richiesta decade e quanto gia versato non viene restituito.`
       if (eventType === 'contribution_proposal_countered') return `${prefix}per ${voyageName} ti proponiamo una contro-proposta sul contributo. Apri la tua area booking per accettarla o rifiutarla.`
       if (eventType === 'contribution_proposal_rejected') return `${prefix}la tua proposta per ${voyageName} non e stata accettata. Se avevi gia versato il contributo fisso, il rimborso e automatico.`
+      if (eventType === 'contribution_settlement_deadline_missed') return `${prefix}non abbiamo ricevuto in tempo l'acconto concordato per ${voyageName}: la richiesta e decaduta. Il contributo fisso gia versato resta a copertura dei costi sostenuti per la trattativa e non viene restituito.`
+      if (eventType === 'late_payment_after_cancellation') return `${prefix}abbiamo ricevuto un pagamento riferito a una tua richiesta per ${voyageName} che pero era gia scaduta: la prenotazione non e piu valida. Non tratteniamo un pagamento arrivato dopo la scadenza: se possiamo, il rimborso e gia stato avviato in automatico; altrimenti trovi qui sotto come comunicarci l'IBAN.`
       if (eventType === 'guest_share_due') return `${prefix}l'importo del contributo per ${voyageName} e stato concordato con chi ha organizzato la prenotazione: ora tocca a te versare la tua quota${balanceDueAtLabel ? `, entro il ${balanceDueAtLabel}` : ''}. Trovi l'importo qui sotto e il pulsante per pagare nella tua area booking. Se non arriva entro quel termine, chi ha prenotato dovra decidere se proseguire senza di te o annullare per tutti.`
       if (eventType === 'guest_share_overdue') return `${prefix}una persona della tua prenotazione per ${voyageName} non ha versato la propria quota entro il termine. Apri la tua area booking e scegli come procedere: puoi proseguire senza di lei, oppure annullare la prenotazione per tutto il gruppo.`
       if (eventType === 'guest_share_dropped') return `${prefix}la tua partecipazione a ${voyageName} e stata annullata perche la quota non e stata versata entro il termine. Se avevi gia versato qualcosa, te lo restituiamo.`
@@ -221,6 +227,8 @@ const COPY = {
       contribution_proposal_accepted: 'Proposta accettata',
       contribution_proposal_countered: 'Contro-proposta ricevuta',
       contribution_proposal_rejected: 'Proposta non accettata',
+      contribution_settlement_deadline_missed: 'Richiesta decaduta',
+      late_payment_after_cancellation: 'Pagamento in ritardo',
       guest_share_due: 'Quota da versare',
       guest_share_overdue: 'Quota non versata',
       guest_share_dropped: 'Partecipazione annullata',
@@ -253,6 +261,8 @@ const COPY = {
       contribution_proposal_accepted: 'Proposal accepted.',
       contribution_proposal_countered: 'Counter-proposal received.',
       contribution_proposal_rejected: 'Proposal not accepted.',
+      contribution_settlement_deadline_missed: 'Request lapsed.',
+      late_payment_after_cancellation: 'Late payment received.',
       guest_share_due: 'Your share is due.',
       guest_share_overdue: 'A share in your party was not paid.',
       guest_share_dropped: 'Participation cancelled.',
@@ -281,9 +291,11 @@ const COPY = {
       if (eventType === 'plan_change_pending') return `${prefix}the plan for ${voyageName} changed. We propose updated legs: you can accept, cancel with a full refund, or request a different route.`
       if (eventType === 'plan_change_auto_accepted') return `${prefix}the plan for ${voyageName} was updated and your booking was adjusted automatically.`
       if (eventType === 'contribution_proposal_received') return `${prefix}we received your contribution/workaway proposal for ${voyageName}. We will review it and get back to you soon.`
-      if (eventType === 'contribution_proposal_accepted') return `${prefix}your proposal for ${voyageName} was accepted. If a balance remains, open your booking area to complete the payment.`
+      if (eventType === 'contribution_proposal_accepted') return `${prefix}your proposal for ${voyageName} was accepted. Pay the deposit shown below by the deadline: if it does not arrive in time the request lapses and what you already paid is not refunded.`
       if (eventType === 'contribution_proposal_countered') return `${prefix}we have a counter-proposal on the contribution for ${voyageName}. Open your booking area to accept or reject it.`
       if (eventType === 'contribution_proposal_rejected') return `${prefix}your proposal for ${voyageName} was not accepted. If you had already paid the fixed contribution, the refund is automatic.`
+      if (eventType === 'contribution_settlement_deadline_missed') return `${prefix}we did not receive the agreed deposit in time for ${voyageName}: the request has lapsed. The fixed contribution already paid covers the cost of the negotiation and is not refunded.`
+      if (eventType === 'late_payment_after_cancellation') return `${prefix}we received a payment referring to a request for ${voyageName} that had already lapsed: that booking is no longer valid. We do not keep a payment that arrives after its deadline — where we can, the refund has already started automatically; otherwise you will find below how to send us an IBAN.`
       if (eventType === 'guest_share_due') return `${prefix}the contribution for ${voyageName} has been agreed with whoever organised the booking, and your own share is now due${balanceDueAtLabel ? ` by ${balanceDueAtLabel}` : ''}. The amount is below, and the payment button is in your booking area. If it does not arrive by then, the booker will have to decide whether to go on without you or cancel for everybody.`
       if (eventType === 'guest_share_overdue') return `${prefix}someone on your booking for ${voyageName} did not pay their share by the deadline. Open your booking area and choose how to go on: you can continue without them, or cancel the booking for the whole party.`
       if (eventType === 'guest_share_dropped') return `${prefix}your participation in ${voyageName} was cancelled because the share was not paid by the deadline. Anything you had already paid is refunded to you.`
@@ -358,6 +370,8 @@ const COPY = {
       contribution_proposal_accepted: 'Proposal accepted',
       contribution_proposal_countered: 'Counter-proposal received',
       contribution_proposal_rejected: 'Proposal not accepted',
+      contribution_settlement_deadline_missed: 'Lapsed',
+      late_payment_after_cancellation: 'Late payment',
       guest_share_due: 'Share due',
       guest_share_overdue: 'Share unpaid',
       guest_share_dropped: 'Participation cancelled',
@@ -389,6 +403,8 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'contribution_proposal_accepted',
     'contribution_proposal_countered',
     'contribution_proposal_rejected',
+    'contribution_settlement_deadline_missed',
+    'late_payment_after_cancellation',
     'guest_share_due',
     'guest_share_overdue',
     'guest_share_dropped',
