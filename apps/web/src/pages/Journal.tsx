@@ -100,7 +100,6 @@ function isMissingMapPresenceRelationError(error: { code?: string; message?: str
 }
 
 const Journal = () => {
-  const EXPANDED_READER_MS = 480;
   const MOBILE_SIDEBAR_PEEK = 220;
   const MOBILE_SIDEBAR_OPEN = 0.78;
   const MOBILE_SIDEBAR_HANDLE = 34;
@@ -115,8 +114,6 @@ const Journal = () => {
   const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
   const [panelArticle, setPanelArticle] = useState<GeoArticle | null>(null);
   const [panelProfileId, setPanelProfileId] = useState<string | null>(null);
-  const [expandedArticle, setExpandedArticle] = useState<{ slug: string; originRect: ExpandedArticleOrigin } | null>(null);
-  const [expandedArticlePhase, setExpandedArticlePhase] = useState<"opening" | "open" | "closing" | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [mapFallbackActive, setMapFallbackActive] = useState(false);
   const [focusedVoyageId, setFocusedVoyageId] = useState<string | null>(null);
@@ -254,48 +251,6 @@ const Journal = () => {
     () => buildMapPresenceMarkers(mapPresenceRows, lang),
     [lang, mapPresenceRows]
   );
-
-  const buildFallbackPanelRect = useCallback((): ExpandedArticleOrigin => {
-    const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
-    const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
-    const top = 96;
-    const bottomInset = 16;
-
-    if (viewportWidth >= 640) {
-      const width = viewportWidth >= 1280 ? 460 : 440;
-      return {
-        top,
-        left: Math.max(16, viewportWidth - 16 - width),
-        width,
-        height: Math.max(320, viewportHeight - top - bottomInset),
-        borderRadius: 32,
-      };
-    }
-
-    return {
-      top,
-      left: 12,
-      width: Math.max(320, viewportWidth - 24),
-      height: Math.max(320, viewportHeight - top - bottomInset),
-      borderRadius: 32,
-    };
-  }, []);
-
-  const capturePanelOrigin = useCallback((): ExpandedArticleOrigin => {
-    const rect = articlePanelRef.current?.getBoundingClientRect();
-
-    if (!rect || rect.width <= 0 || rect.height <= 0) {
-      return buildFallbackPanelRect();
-    }
-
-    return {
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      borderRadius: 32,
-    };
-  }, [buildFallbackPanelRect]);
 
   // Fetch articles with geo data
   const { data: liveArticles = [], isLoading: isLiveArticlesLoading } = useQuery({
@@ -1035,19 +990,8 @@ const Journal = () => {
   }, []);
 
   const handleOpenExpandedArticle = useCallback((article: GeoArticle) => {
-    setPanelArticle(article);
-    setPanelProfileId(null);
-    setExpandedArticle({
-      slug: article.slug,
-      originRect: capturePanelOrigin(),
-    });
-    setExpandedArticlePhase("opening");
-    if (isMobile) {
-      setMobileSidebarMode("collapsed");
-    } else {
-      setSidebarOpen(false);
-    }
-  }, [capturePanelOrigin, isMobile]);
+    navigate(`/logbook/${article.slug}`);
+  }, [navigate]);
 
   const handleCollapseExpandedArticle = useCallback(() => {
     if (!expandedArticle) return;
