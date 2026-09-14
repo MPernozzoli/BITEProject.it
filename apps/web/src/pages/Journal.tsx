@@ -1234,8 +1234,7 @@ const Journal = () => {
       : Math.max(0, mobileSidebarBaseOffset - mobileSidebarDragOffset);
   const isMapInteractionLocked =
     viewMode === "map" &&
-    (articleReaderActive ||
-      Boolean(panelProfileId) ||
+    (Boolean(panelProfileId) ||
       (isMobile && mobileSidebarVisible && !previewAllowsMapInteraction));
 
   const handleMapUnavailable = useCallback(() => {
@@ -1715,7 +1714,7 @@ const Journal = () => {
         </>
       )}
 
-      {!articleReaderActive && panelProfileId ? (
+      {panelProfileId ? (
         <ProfileSlidePanel
           profileId={panelProfileId}
           article={panelArticle}
