@@ -858,6 +858,12 @@ const UserBookings = () => {
     ["pending_admin_review", "pending_user_approval"].includes(detailsContributionProposal?.status ?? "") &&
     !detailsContributionProposal?.workaway_cv_storage_path &&
     !detailsContributionProposal?.workaway_portfolio_storage_path;
+  // The negotiation is resolved but not yet paid: contribution_settlement_deadline is cleared
+  // server-side (clearBookingPaymentDeadlineIfSettled / admin_confirm_voyage_booking_payment)
+  // the moment the deposit on the agreed total settles, so its mere presence here means payment
+  // is still outstanding and the 24h clock is running.
+  const detailsContributionSettlementDue =
+    detailsRequest?.contribution_proposal_status === "accepted" && Boolean(detailsRequest?.contribution_settlement_deadline);
 
   const respondToContributionCounter = async (action: "accept" | "reject") => {
     if (!detailsRequest) return;
@@ -879,9 +885,13 @@ const UserBookings = () => {
       }
       toast.success(
         lang === "it"
-          ? "Contro-proposta accettata. Se resta un saldo da versare, ti verra chiesto a breve."
-          : "Counter-proposal accepted. If a balance remains, you'll be asked to pay it shortly."
+          ? "Contro-proposta accettata. Versa l'acconto entro 24 ore per completare la prenotazione: te lo chiediamo subito qui sotto."
+          : "Counter-proposal accepted. Pay the deposit within 24 hours to complete your booking: we're asking for it right below."
       );
+      // The accord is not the booking: it only becomes one once the deposit on the agreed
+      // total is paid, within 24h — so ask for it immediately instead of leaving the traveller
+      // to find their own way back to a "pay" button.
+      setPaymentChoice({ bookingRequestId: detailsRequest.id });
     } else {
       const result = await updateBookingStatusWithRefund({
         bookingRequestId: detailsRequest.id,
@@ -2463,6 +2473,25 @@ const UserBookings = () => {
                         {lang === "it"
                           ? "Controproposta inviata: il team la sta revisionando."
                           : "Counterproposal sent: the team is reviewing it."}
+                      </div>
+                    )}
+                    {detailsContributionSettlementDue && (
+                      <div className="mt-4 rounded-[18px] border border-orange-300/60 dark:border-orange-500/30 bg-orange-50/70 dark:bg-orange-500/10 p-3 text-sm text-orange-950 dark:text-orange-300">
+                        <p className="font-semibold">
+                          {lang === "it" ? "Acconto da versare per completare la prenotazione" : "Deposit due to complete your booking"}
+                        </p>
+                        <p className="mt-1">
+                          {lang === "it"
+                            ? `L'accordo sul contributo non basta da solo: la prenotazione si completa solo versando l'acconto. Hai tempo fino al ${formatBookingDate(detailsRequest?.contribution_settlement_deadline, locale)}: oltre quel termine la richiesta decade e il contributo fisso già versato non viene restituito.`
+                            : `The agreement alone does not complete the booking: it is only final once the deposit is paid. You have until ${formatBookingDate(detailsRequest?.contribution_settlement_deadline, locale)}: after that the request lapses and the fixed contribution already paid is not refunded.`}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => detailsRequest && setPaymentChoice({ bookingRequestId: detailsRequest.id })}
+                          className="mt-3 rounded-full border border-orange-400/70 dark:border-orange-500/40 bg-orange-100 dark:bg-orange-500/20 px-4 py-2 text-xs font-semibold text-orange-950 dark:text-orange-200"
+                        >
+                          {lang === "it" ? "Paga ora" : "Pay now"}
+                        </button>
                       </div>
                     )}
                     {detailsContributionAwaitingReview && (

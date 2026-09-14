@@ -15,7 +15,6 @@ import ArticleListCard from "@/components/voyage/ArticleListCard";
 import ArticleSlidePanel from "@/components/voyage/ArticleSlidePanel";
 import BookingSidebarPanel from "@/components/voyage/BookingSidebarPanel";
 import ProfileSlidePanel from "@/components/voyage/ProfileSlidePanel";
-import ExpandedArticleModal, { type ExpandedArticleOrigin } from "@/components/voyage/ExpandedArticleModal";
 import VoyageLegend from "@/components/voyage/VoyageLegend";
 import BookingConfirmDialog from "@/components/booking/BookingConfirmDialog";
 import BankTransferDialog from "@/components/booking/BankTransferDialog";
@@ -993,16 +992,6 @@ const Journal = () => {
     navigate(`/logbook/${article.slug}`);
   }, [navigate]);
 
-  const handleCollapseExpandedArticle = useCallback(() => {
-    if (!expandedArticle) return;
-    setExpandedArticlePhase("closing");
-    if (isMobile) {
-      setMobileSidebarMode("expanded");
-    } else {
-      setSidebarOpen(true);
-    }
-  }, [expandedArticle, isMobile]);
-
   const toggleSidebar = useCallback(() => {
     if (isMobile) {
       setMobileSidebarMode((current) => (current === "expanded" ? "collapsed" : "expanded"));
@@ -1068,31 +1057,6 @@ const Journal = () => {
       setPanelArticle(nextPanelArticle);
     }
   }, [articles, panelArticle]);
-
-  useEffect(() => {
-    if (expandedArticlePhase !== "opening") return;
-
-    const frameId = window.requestAnimationFrame(() => {
-      setExpandedArticlePhase("open");
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [expandedArticlePhase]);
-
-  useEffect(() => {
-    if (expandedArticlePhase !== "closing") return;
-
-    const timeoutId = window.setTimeout(() => {
-      setExpandedArticle(null);
-      setExpandedArticlePhase(null);
-    }, EXPANDED_READER_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [expandedArticlePhase]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1246,15 +1210,14 @@ const Journal = () => {
     return list;
   }, [voyageTypeFilter, voyages]);
 
-  const articleReaderActive = Boolean(expandedArticle);
-  const showPreviewPanel = Boolean(panelArticle) && (!articleReaderActive || expandedArticlePhase === "closing");
+  const showPreviewPanel = Boolean(panelArticle);
   const sidePanelVisible = showPreviewPanel || Boolean(panelProfileId);
   const isSidebarAutoHidden = !isMobile && hideMapChromeOnScroll && sidebarOpen;
   const isDetailPanelAutoHidden = hideMapChromeOnScroll && sidePanelVisible;
   const shouldOffsetControlsForDetail = sidePanelVisible && !isDetailPanelAutoHidden;
   const mobileSidebarVisible = mobileSidebarMode !== "collapsed";
   const previewAllowsMapInteraction =
-    Boolean(panelArticle) && !articleReaderActive && !panelProfileId;
+    Boolean(panelArticle) && !panelProfileId;
   const mobileSidebarHeight = typeof window === "undefined"
     ? 560
     : Math.max(360, Math.round(window.innerHeight * MOBILE_SIDEBAR_OPEN));
@@ -1774,9 +1737,7 @@ const Journal = () => {
             panelArticle ? getArticleDisplayLocationLabel(panelArticle, waypointsMap, lang) : undefined
           }
           panelRef={articlePanelRef}
-          isSoftHidden={articleReaderActive && expandedArticlePhase !== "closing"}
           isAutoHidden={isDetailPanelAutoHidden}
-          disableEntranceAnimation={expandedArticlePhase === "closing"}
           onClose={() => {
             setPanelProfileId(null);
             setPanelArticle(null);
@@ -1787,17 +1748,6 @@ const Journal = () => {
           lang={lang}
         />
       ) : null}
-
-      {expandedArticle && expandedArticlePhase && (
-        <ExpandedArticleModal
-          slug={expandedArticle.slug}
-          originRect={expandedArticle.originRect}
-          phase={expandedArticlePhase}
-          previewAuthors={panelArticle?.authors || []}
-          lang={lang}
-          onClose={handleCollapseExpandedArticle}
-        />
-      )}
     </div>
   );
 };

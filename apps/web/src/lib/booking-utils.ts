@@ -118,6 +118,9 @@ export interface BookingRequest {
   contribution_fixed_only_payment?: boolean;
   /** The variable contribution actually agreed after negotiation (0 for a pure workaway trade). */
   contribution_resolved_variable_cents?: number | null;
+  /** Set once a negotiation resolves to accepted: the deposit on the agreed total is due within
+   * 24h of this being set, or the booking is cancelled and the fixed contribution forfeited. */
+  contribution_settlement_deadline?: string | null;
 }
 
 export interface BookingRequestLeg {
