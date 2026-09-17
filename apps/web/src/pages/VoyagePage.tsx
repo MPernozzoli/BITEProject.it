@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,8 @@ import {
   formatWaypointCoordinateLabel,
   formatIsoDate,
   formatWaypointStopDuration,
+  formatWaypointActualStopDuration,
+  formatWaypointOngoingStopDuration,
   getAssociatedArticleForWaypoint,
   getLegacyVoyageIdFromRouteParam,
   getLocalizedVoyageDescription,
@@ -20,6 +22,7 @@ import {
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  getVoyageTravelledWaypointIndex,
   normalizeWaypointActivities,
   slugForLang,
   normalizeWaypointAirports,
@@ -48,6 +51,7 @@ import {
   ChevronLeft,
   Clock,
   ChevronRight,
+  Compass,
   Images,
   Landmark,
   MapPin,
@@ -245,10 +249,37 @@ const VoyagePage = () => {
       }),
     [articles, publicWaypoints, voyageId, waypoints]
   );
-  const departureEntry = publicWaypointEntries[0];
-  const arrivalEntry = publicWaypointEntries[publicWaypointEntries.length - 1];
+  // Tappe previste/effettive: partenza e arrivo del viaggio seguono la sequenza
+  // davvero toccata — se la prima/ultima tappa pianificata è stata saltata, qui
+  // scala correttamente sulla prima/ultima tappa raggiunta per davvero.
+  const actualWaypointEntries = useMemo(
+    () => publicWaypointEntries.filter(({ waypoint }) => waypoint.actual_status !== "skipped"),
+    [publicWaypointEntries]
+  );
+  const departureEntry = actualWaypointEntries[0];
+  const arrivalEntry = actualWaypointEntries[actualWaypointEntries.length - 1];
   const departure = departureEntry?.waypoint;
   const arrival = arrivalEntry?.waypoint;
+  /**
+   * Fin dove il viaggio è stato davvero percorso: solo un viaggio "active" può
+   * averne percorsa solo una parte (vedi VoyageMap, stessa logica). Un viaggio
+   * "completed" è concluso per intero, uno "planned" non è partito: in
+   * entrambi i casi non c'è un punto di rottura da mostrare in elenco.
+   */
+  const travelledWaypointIndex = useMemo(() => {
+    if (!voyage || waypoints.length === 0) return -1;
+    if (voyage.status === "completed") return waypoints.length - 1;
+    if (voyage.status !== "active") return -1;
+    return getVoyageTravelledWaypointIndex(waypoints);
+  }, [voyage, waypoints]);
+  // Indice (nell'elenco pubblico, non nell'array completo) della prima tappa
+  // non ancora raggiunta: qui va lo stacco unico che separa il già vissuto dal
+  // non ancora vissuto, invece di un badge su ogni singola tappa.
+  const notYetReachedEntryIndex = useMemo(() => {
+    if (travelledWaypointIndex < 0 || travelledWaypointIndex >= waypoints.length - 1) return null;
+    const index = publicWaypointEntries.findIndex((entry) => entry.originalIndex > travelledWaypointIndex);
+    return index > 0 ? index : null;
+  }, [publicWaypointEntries, travelledWaypointIndex, waypoints.length]);
   const routeDistance = useMemo(() => {
     if (!voyage || waypoints.length < 2) return null;
     if (voyage.type === "land") {
@@ -622,8 +653,10 @@ const VoyagePage = () => {
                 const poiItems = normalizeWaypointPoi(waypoint.poi);
                 const activityItems = normalizeWaypointActivities(waypoint.activities);
                 const airportItems = normalizeWaypointAirports(waypoint.nearby_airports);
-                const isDeparture = index === 0;
-                const isArrival = index === publicWaypointEntries.length - 1;
+                const isSkipped = waypoint.actual_status === "skipped";
+                const isAdded = waypoint.actual_status === "added";
+                const isDeparture = waypoint.id === departureEntry?.waypoint.id;
+                const isArrival = waypoint.id === arrivalEntry?.waypoint.id;
                 const isBookend = isDeparture || isArrival;
                 const stopNumber = index;
                 const stopLabel = isDeparture
@@ -632,6 +665,11 @@ const VoyagePage = () => {
                     ? (lang === "it" ? "Arrivo" : "Arrival")
                     : `${lang === "it" ? "Sosta" : "Stop"} ${stopNumber}`;
                 const BookendIcon = isDeparture ? Navigation : MapPinned;
+                const statusBadge = isSkipped
+                  ? { label: lang === "it" ? "Saltata" : "Skipped", className: "bg-muted text-muted-foreground" }
+                  : isAdded
+                    ? { label: lang === "it" ? "Tappa aggiunta" : "Added stop", className: "bg-accent/15 text-accent" }
+                    : null;
 
                 const stopLegs = stopLegsByWaypointId[waypoint.id];
                 const arrivalWindowLabel = formatBookingWindow(
@@ -644,34 +682,83 @@ const VoyagePage = () => {
                   stopLegs?.outbound?.starts_at_window_end,
                   bookingWindowLocale
                 );
-                // La finestra pianificata è più informativa della data secca: quando c'è, la sostituisce.
-                const arrivalRow = arrivalWindowLabel
-                  ? { label: lang === "it" ? "Finestra di arrivo" : "Arrival window", value: arrivalWindowLabel }
-                  : (() => {
-                      const arrivalLabel = formatIsoDate(waypoint.date_end, locale);
-                      return arrivalLabel
-                        ? { label: lang === "it" ? "Arrivo previsto" : "Expected arrival", value: arrivalLabel }
-                        : null;
-                    })();
-                const departureRow = departureWindowLabel
-                  ? { label: lang === "it" ? "Finestra di partenza" : "Departure window", value: departureWindowLabel }
-                  : (() => {
-                      const departureLabel = formatIsoDate(waypoint.date_start, locale);
-                      return departureLabel
-                        ? { label: lang === "it" ? "Ripartenza prevista" : "Expected departure", value: departureLabel }
-                        : null;
-                    })();
-                const stopDurationLabel = formatWaypointStopDuration(waypoint, lang);
+                // L'orario effettivo (registrato dall'equipaggio) batte sempre la finestra
+                // pianificata, che a sua volta batte la data secca inserita a mano.
+                const actualArrivalLabel = formatBookingWindow(
+                  waypoint.actual_arrival_at,
+                  waypoint.actual_arrival_at,
+                  bookingWindowLocale
+                );
+                const actualDepartureLabel = formatBookingWindow(
+                  waypoint.actual_departure_at,
+                  waypoint.actual_departure_at,
+                  bookingWindowLocale
+                );
+                const plannedArrivalLabel = formatIsoDate(waypoint.date_end, locale);
+                const plannedDepartureLabel = formatIsoDate(waypoint.date_start, locale);
+                // Una tappa già raggiunta/lasciata per davvero non ha più nulla di
+                // ipotetico: anche senza un actual registrato, la migliore data
+                // disponibile va mostrata come fatto ("Arrivo"/"Partenza"), non come
+                // una finestra di prenotazione o una previsione che non ha più senso
+                // per qualcosa già successo.
+                const arrivalAlreadyHappened = originalIndex <= travelledWaypointIndex;
+                const departureAlreadyHappened = originalIndex < travelledWaypointIndex;
+                const arrivalValue = actualArrivalLabel || arrivalWindowLabel || plannedArrivalLabel;
+                const departureValue = actualDepartureLabel || departureWindowLabel || plannedDepartureLabel;
+                const arrivalRow = arrivalValue
+                  ? {
+                      label: actualArrivalLabel
+                        ? (lang === "it" ? "Arrivo effettivo" : "Actual arrival")
+                        : arrivalAlreadyHappened
+                          ? (lang === "it" ? "Arrivo" : "Arrival")
+                          : arrivalWindowLabel
+                            ? (lang === "it" ? "Finestra di arrivo" : "Arrival window")
+                            : (lang === "it" ? "Arrivo previsto" : "Expected arrival"),
+                      value: arrivalValue,
+                    }
+                  : null;
+                const departureRow = departureValue
+                  ? {
+                      label: actualDepartureLabel
+                        ? (lang === "it" ? "Partenza effettiva" : "Actual departure")
+                        : departureAlreadyHappened
+                          ? (lang === "it" ? "Partenza" : "Departure")
+                          : departureWindowLabel
+                            ? (lang === "it" ? "Finestra di partenza" : "Departure window")
+                            : (lang === "it" ? "Ripartenza prevista" : "Expected departure"),
+                      value: departureValue,
+                    }
+                  : null;
+                // Una tappa saltata (passaggio senza sosta reale) non ha una durata da mostrare.
+                const stopDurationLabel = isSkipped
+                  ? null
+                  : formatWaypointActualStopDuration(waypoint, lang) ??
+                    formatWaypointOngoingStopDuration(
+                      waypoint.actual_arrival_at,
+                      stopLegs?.outbound?.starts_at_window_start ?? waypoint.date_start,
+                      lang
+                    ) ??
+                    formatWaypointStopDuration(waypoint, lang);
                 const hasStayInfo = Boolean(arrivalRow || departureRow || stopDurationLabel);
 
                 const heroMedia = mediaItems.find((item) => item.kind === "image") ?? mediaItems[0];
                 const extraMedia = heroMedia ? mediaItems.filter((item) => item !== heroMedia) : [];
 
                 return (
+                  <Fragment key={waypoint.id}>
+                    {index === notYetReachedEntryIndex && (
+                      <div className="flex items-center gap-3 px-1" role="separator">
+                        <span className="h-px flex-1 bg-border/70" />
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-[11px] font-sans uppercase tracking-[0.22em] text-accent">
+                          <Compass size={12} />
+                          {lang === "it" ? "Da qui, ancora da percorrere" : "From here, still ahead"}
+                        </span>
+                        <span className="h-px flex-1 bg-border/70" />
+                      </div>
+                    )}
                   <article
-                    key={waypoint.id}
                     id={`tappa-${waypoint.id}`}
-                    className={`scroll-mt-24 overflow-hidden rounded-[28px] ${isBookend ? "glass-panel" : "glass-panel-soft"}`}
+                    className={`scroll-mt-24 overflow-hidden rounded-[28px] ${isBookend ? "glass-panel" : "glass-panel-soft"} ${isSkipped ? "opacity-55 grayscale" : ""}`}
                   >
                     {heroMedia && heroMedia.kind === "image" ? (
                       <div className="relative aspect-[16/8] w-full overflow-hidden sm:aspect-[16/7]">
@@ -698,7 +785,14 @@ const VoyagePage = () => {
                           </span>
                         )}
                         <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
-                          <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/80">{stopLabel}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-white/80">{stopLabel}</p>
+                            {statusBadge && (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.18em] ${statusBadge.className}`}>
+                                {statusBadge.label}
+                              </span>
+                            )}
+                          </div>
                           <h3 className="editorial-heading mt-1 text-2xl text-white sm:text-3xl">{waypointName}</h3>
                           <p className="mt-1.5 flex items-center gap-1.5 text-xs text-white/75">
                             <MapPin size={13} /> {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
@@ -715,7 +809,14 @@ const VoyagePage = () => {
                           {isBookend ? <BookendIcon size={14} /> : stopNumber}
                         </span>
                         <div>
-                          <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent">{stopLabel}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-accent">{stopLabel}</p>
+                            {statusBadge && (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-sans uppercase tracking-[0.18em] ${statusBadge.className}`}>
+                                {statusBadge.label}
+                              </span>
+                            )}
+                          </div>
                           <h3 className="editorial-heading mt-1 text-xl sm:text-2xl">{waypointName}</h3>
                           <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
                             <MapPin size={13} /> {formatWaypointCoordinateLabel(waypoint.lat, waypoint.lng)}
@@ -884,6 +985,7 @@ const VoyagePage = () => {
                       </div>
                     </div>
                   </article>
+                  </Fragment>
                 );
               })}
               {publicWaypoints.length === 0 && (

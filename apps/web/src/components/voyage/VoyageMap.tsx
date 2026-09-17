@@ -5,12 +5,15 @@ import Supercluster from "supercluster";
 import {
   buildVoyagePath,
   buildVoyageSegmentGeometry,
+  getActualVoyageWaypoints,
   getArticleVoyageFocus,
   getAssociatedArticleForWaypoint,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  getStraightVoyageGeometry,
   getVisibleStopsLegendHeading,
   getVoyageMapLineStringCoordinates,
+  getVoyageTravelledWaypointIndex,
   normalizeWaypointMedia,
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
@@ -219,9 +222,12 @@ const getVoyageStrokeColor = (voyage: Voyage, variant: "base" | "focus" = "base"
   return "hsl(30, 78%, 50%)";
 };
 
+const getNotYetTravelledDashArray = (type: Voyage["type"]): number[] =>
+  type === "water" ? [2.2, 2.8] : [1.6, 2.2];
+
 const getVoyageStatusDashArray = (voyage: Voyage): number[] | undefined => {
   if (voyage.status === "planned") {
-    return voyage.type === "water" ? [2.2, 2.8] : [1.6, 2.2];
+    return getNotYetTravelledDashArray(voyage.type);
   }
 
   return undefined;
@@ -296,6 +302,27 @@ const getArticleSegmentGeometry = (
   cachedGeometry?: [number, number][] | null
 ) => {
   return buildVoyageSegmentGeometry(waypoints, type, startIndex, endIndex, cachedGeometry);
+};
+
+/**
+ * Same as {@link getArticleSegmentGeometry}, but never returns an empty route:
+ * a land segment with no cached road geometry falls back to a straight line
+ * between its waypoints, so the travelled/remaining split never makes the
+ * whole route disappear for voyages without cached geometry.
+ */
+const getVoyageSegmentGeometryWithFallback = (
+  waypoints: VoyageWaypoint[],
+  type: Voyage["type"],
+  startIndex: number,
+  endIndex: number,
+  cachedGeometry?: [number, number][] | null
+): [number, number][] => {
+  const geometry = getArticleSegmentGeometry(waypoints, type, startIndex, endIndex, cachedGeometry);
+  if (geometry.length >= 2) return geometry;
+
+  const safeStart = clampWaypointIndex(Math.min(startIndex, endIndex), waypoints.length - 1);
+  const safeEnd = clampWaypointIndex(Math.max(startIndex, endIndex), waypoints.length - 1);
+  return getStraightVoyageGeometry(waypoints.slice(safeStart, safeEnd + 1));
 };
 
 const VoyageMap = ({
@@ -409,7 +436,10 @@ const VoyageMap = ({
     for (const voyage of publishedVoyages) {
       const wps = waypointsMap[voyage.id] || [];
       if (!wps.length) continue;
-      const visible = getPublicVoyageWaypoints(wps, articlesForMap, voyage.id);
+      // Tappe previste/effettive: in mappa mostriamo solo le tappe davvero toccate, tra
+      // quelle pubbliche. Il filtro va dopo getPublicVoyageWaypoints così gli indici usati
+      // per l'associazione articoli restano quelli del percorso pianificato completo.
+      const visible = getActualVoyageWaypoints(getPublicVoyageWaypoints(wps, articlesForMap, voyage.id));
       const isActive = voyage.status === "active";
       for (let vi = 0; vi < visible.length; vi++) {
         const w = visible[vi]!;
@@ -805,7 +835,14 @@ const VoyageMap = ({
           ? new Map(wps.map((waypoint, index) => [waypoint.id, index]))
           : null;
 
-        const routeCoordinates = getVoyageMapLineStringCoordinates(voyage, wps, articlesForMap);
+        // Tappe previste/effettive: la linea del percorso segue le tappe davvero toccate.
+        // cached_geometry rappresenta il piano, quindi va ignorata (si ricalcola come nel
+        // percorso di fallback normale) solo per i viaggi che hanno una correzione registrata;
+        // per tutti gli altri il comportamento resta identico a oggi.
+        const actualWps = getActualVoyageWaypoints(wps);
+        const hasRouteCorrections = actualWps.length !== wps.length || wps.some((w) => w.actual_status === "added");
+        const geometrySourceVoyage = hasRouteCorrections ? { ...voyage, cached_geometry: null } : voyage;
+        const routeCoordinates = getVoyageMapLineStringCoordinates(geometrySourceVoyage, actualWps, articlesForMap);
 
         const lineId = `voyage-line-${voyage.id}`;
         const lineCasingId = `voyage-line-casing-${voyage.id}`;
@@ -846,21 +883,90 @@ const VoyageMap = ({
             },
           });
 
-          map.addLayer({
-            id: lineId,
-            type: "line",
-            source: lineId,
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-            paint: {
-              "line-color": baseColor,
-              "line-width": lineMetrics.width,
-              "line-opacity": lineMetrics.opacity,
-              ...(getVoyageStatusDashArray(voyage) ? { "line-dasharray": getVoyageStatusDashArray(voyage) } : {}),
-            },
-          });
+          // Un viaggio "active" può avere solo una parte di tratte davvero
+          // percorse (vedi admin: "parti ora" / "arriva ora"). Solo quel
+          // tratto iniziale va disegnato come linea continua; il resto resta
+          // tratteggiato come un viaggio pianificato, anche se lo stato del
+          // viaggio è già "active".
+          const travelledIndex = isActive ? getVoyageTravelledWaypointIndex(actualWps) : actualWps.length - 1;
+          const hasPartialProgress = isActive && travelledIndex < actualWps.length - 1;
+
+          if (hasPartialProgress) {
+            const cachedGeometryForSplit = hasRouteCorrections ? null : getCachedGeometryCoordinates(voyage);
+            const travelledCoordinates = travelledIndex > 0
+              ? getVoyageSegmentGeometryWithFallback(actualWps, voyage.type, 0, travelledIndex, cachedGeometryForSplit)
+              : [];
+            const notYetTravelledCoordinates = getVoyageSegmentGeometryWithFallback(
+              actualWps,
+              voyage.type,
+              travelledIndex,
+              actualWps.length - 1,
+              cachedGeometryForSplit
+            );
+
+            if (travelledCoordinates.length >= 2) {
+              const travelledLineId = `${lineId}-travelled`;
+              map.addSource(travelledLineId, {
+                type: "geojson",
+                data: {
+                  type: "Feature",
+                  geometry: { type: "LineString", coordinates: travelledCoordinates },
+                  properties: {},
+                },
+              });
+              map.addLayer({
+                id: travelledLineId,
+                type: "line",
+                source: travelledLineId,
+                layout: { "line-cap": "round", "line-join": "round" },
+                paint: {
+                  "line-color": baseColor,
+                  "line-width": lineMetrics.width,
+                  "line-opacity": lineMetrics.opacity,
+                },
+              });
+            }
+
+            if (notYetTravelledCoordinates.length >= 2) {
+              const remainingLineId = `${lineId}-remaining`;
+              map.addSource(remainingLineId, {
+                type: "geojson",
+                data: {
+                  type: "Feature",
+                  geometry: { type: "LineString", coordinates: notYetTravelledCoordinates },
+                  properties: {},
+                },
+              });
+              map.addLayer({
+                id: remainingLineId,
+                type: "line",
+                source: remainingLineId,
+                layout: { "line-cap": "round", "line-join": "round" },
+                paint: {
+                  "line-color": baseColor,
+                  "line-width": lineMetrics.width,
+                  "line-opacity": lineMetrics.opacity,
+                  "line-dasharray": getNotYetTravelledDashArray(voyage.type),
+                },
+              });
+            }
+          } else {
+            map.addLayer({
+              id: lineId,
+              type: "line",
+              source: lineId,
+              layout: {
+                "line-cap": "round",
+                "line-join": "round",
+              },
+              paint: {
+                "line-color": baseColor,
+                "line-width": lineMetrics.width,
+                "line-opacity": lineMetrics.opacity,
+                ...(getVoyageStatusDashArray(voyage) ? { "line-dasharray": getVoyageStatusDashArray(voyage) } : {}),
+              },
+            });
+          }
 
           map.addLayer({
             id: lineHitId,

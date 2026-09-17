@@ -42,6 +42,7 @@ type BookingEvent =
   | 'guest_share_due'
   | 'guest_share_overdue'
   | 'guest_share_dropped'
+  | 'voyage_ticket_ready'
 
 /**
  * A delay arrives as plan_change_pending, but reads nothing like one: the legs are
@@ -123,6 +124,7 @@ const COPY = {
       guest_share_due: 'La tua quota e da versare.',
       guest_share_overdue: 'Una quota del gruppo non e stata versata.',
       guest_share_dropped: 'Partecipazione annullata.',
+      voyage_ticket_ready: 'Il tuo biglietto ricordo e pronto.',
     },
     intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -156,6 +158,7 @@ const COPY = {
       if (eventType === 'guest_share_due') return `${prefix}l'importo del contributo per ${voyageName} e stato concordato con chi ha organizzato la prenotazione: ora tocca a te versare la tua quota${balanceDueAtLabel ? `, entro il ${balanceDueAtLabel}` : ''}. Trovi l'importo qui sotto e il pulsante per pagare nella tua area booking. Se non arriva entro quel termine, chi ha prenotato dovra decidere se proseguire senza di te o annullare per tutti.`
       if (eventType === 'guest_share_overdue') return `${prefix}una persona della tua prenotazione per ${voyageName} non ha versato la propria quota entro il termine. Apri la tua area booking e scegli come procedere: puoi proseguire senza di lei, oppure annullare la prenotazione per tutto il gruppo.`
       if (eventType === 'guest_share_dropped') return `${prefix}la tua partecipazione a ${voyageName} e stata annullata perche la quota non e stata versata entro il termine. Se avevi gia versato qualcosa, te lo restituiamo.`
+      if (eventType === 'voyage_ticket_ready') return `${prefix}la tappa dove sei sceso da ${voyageName} e stata lasciata: il tuo viaggio e ufficialmente concluso. Qui sotto trovi il tuo biglietto ricordo, con le miglia e le tappe che hai percorso davvero.`
       return `${prefix}abbiamo ricevuto la tua richiesta di imbarco per ${voyageName}.`
     },
     cta: 'Apri booking',
@@ -232,6 +235,7 @@ const COPY = {
       guest_share_due: 'Quota da versare',
       guest_share_overdue: 'Quota non versata',
       guest_share_dropped: 'Partecipazione annullata',
+      voyage_ticket_ready: 'Viaggio concluso',
     },
     footerReason: 'Ricevi questa email perche hai una richiesta di imbarco su BITE.',
   },
@@ -266,6 +270,7 @@ const COPY = {
       guest_share_due: 'Your share is due.',
       guest_share_overdue: 'A share in your party was not paid.',
       guest_share_dropped: 'Participation cancelled.',
+      voyage_ticket_ready: 'Your voyage ticket is ready.',
     },
     intro: (name: string, eventType: TemplateVariant, voyageName: string, phase?: string | null, scope?: string | null, balanceDueAtLabel?: string | null) => {
       const prefix = name ? `${name}, ` : ''
@@ -299,6 +304,7 @@ const COPY = {
       if (eventType === 'guest_share_due') return `${prefix}the contribution for ${voyageName} has been agreed with whoever organised the booking, and your own share is now due${balanceDueAtLabel ? ` by ${balanceDueAtLabel}` : ''}. The amount is below, and the payment button is in your booking area. If it does not arrive by then, the booker will have to decide whether to go on without you or cancel for everybody.`
       if (eventType === 'guest_share_overdue') return `${prefix}someone on your booking for ${voyageName} did not pay their share by the deadline. Open your booking area and choose how to go on: you can continue without them, or cancel the booking for the whole party.`
       if (eventType === 'guest_share_dropped') return `${prefix}your participation in ${voyageName} was cancelled because the share was not paid by the deadline. Anything you had already paid is refunded to you.`
+      if (eventType === 'voyage_ticket_ready') return `${prefix}the boat has left the stop where you got off ${voyageName}: your voyage is officially over. Below is your voyage ticket, with the miles and stops you actually covered.`
       return `${prefix}we received your berth request for ${voyageName}.`
     },
     cta: 'Open bookings',
@@ -375,6 +381,7 @@ const COPY = {
       guest_share_due: 'Share due',
       guest_share_overdue: 'Share unpaid',
       guest_share_dropped: 'Participation cancelled',
+      voyage_ticket_ready: 'Voyage completed',
     },
     footerReason: 'You are receiving this email because you have a voyage booking request on BITE.',
   },
@@ -408,6 +415,7 @@ function normalizeEventType(value?: string | null): BookingEvent {
     'guest_share_due',
     'guest_share_overdue',
     'guest_share_dropped',
+    'voyage_ticket_ready',
   ]
   return allowed.includes(value as BookingEvent) ? (value as BookingEvent) : 'requested'
 }

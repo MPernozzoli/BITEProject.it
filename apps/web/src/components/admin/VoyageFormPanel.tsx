@@ -216,23 +216,23 @@ const VoyageFormPanel = ({
         {voyageForm.type === "water" && (
           <div className="rounded-[20px] border border-border px-4 py-3">
             <span className="block text-xs font-sans uppercase tracking-[0.2em] text-foreground">
-              Tipo di navigazione
+              Instradamento tratte
             </span>
             <div
               role="radiogroup"
-              aria-label="Tipo di navigazione"
+              aria-label="Instradamento tratte"
               className="mt-3 grid grid-cols-2 gap-1 rounded-[14px] border border-border bg-muted/30 p-1"
             >
               {([
                 {
-                  value: false,
-                  label: "Mare",
-                  hint: "Rotta in alto mare: la linea segue i waypoint in linea retta.",
+                  value: true,
+                  label: "Auto",
+                  hint: "Ogni tratta viene classificata da sola: fiume/canale (BRouter) dove c’è una via navigabile, mare aperto altrove — in mare la linea resta retta ma aggira la terra se la incrocia.",
                 },
                 {
-                  value: true,
-                  label: "Canali · fiumi",
-                  hint: "Autoroute su vie navigabili (OpenStreetMap via BRouter): la linea segue canali e fiumi tra i waypoint.",
+                  value: false,
+                  label: "Manuale · linea retta",
+                  hint: "Nessun instradamento: la rotta collega i waypoint in linea retta, anche se attraversa terra. Usalo solo se l’instradamento automatico sbaglia su questo viaggio.",
                 },
               ] as const).map((option) => {
                 const active = voyageForm.waterway_autoroute === option.value;
@@ -258,8 +258,8 @@ const VoyageFormPanel = ({
             </div>
             <span className="mt-2 block text-[11px] font-sans text-muted-foreground">
               {voyageForm.waterway_autoroute
-                ? "Autoroute su vie navigabili: i waypoint devono essere vicini all’asse del canale/fiume; dove non c’è grafo utile quel tratto resta in linea retta. Sul sito resta un voyage acqua come gli altri."
-                : "Alto mare: nessun instradamento, la rotta collega i waypoint in linea retta."}
+                ? "Automatico: fiumi/canali seguono il grafo OSM, il mare aperto resta in linea retta salvo aggirare la terra quando serve. Sul sito resta un voyage acqua come gli altri."
+                : "Override manuale: nessun instradamento, la rotta collega i waypoint in linea retta anche sopra la terra."}
             </span>
           </div>
         )}

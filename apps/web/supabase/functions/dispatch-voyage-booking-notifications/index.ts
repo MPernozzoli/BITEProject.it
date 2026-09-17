@@ -860,7 +860,12 @@ Deno.serve(async (req) => {
                 voyageName: localizedName(voyage, language),
                 legs: legLabels,
                 partySize: booking.party_size,
-                bookingUrl: `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
+                // The ticket email needs to open straight on the traveller's own booking,
+                // not just the voyage's booking page — every other event ignores the extra param.
+                bookingUrl:
+                  notification.event_type === 'voyage_ticket_ready'
+                    ? `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}&ticket=${notification.booking_request_id}`
+                    : `${PUBLIC_SITE_URL}/bookings?voyage=${booking.voyage_id}`,
                 message: adminMessage ?? booking.message,
                 amountEur,
                 paymentMethod,

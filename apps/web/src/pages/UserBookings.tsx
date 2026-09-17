@@ -71,6 +71,8 @@ import {
   type BookingPartyMember,
 } from "@/lib/booking-participants";
 import BookingPartyPanel from "@/components/booking/BookingPartyPanel";
+import VoyageTicketCard from "@/components/booking/VoyageTicketCard";
+import { buildParticipantVoyageTicket, isVoyageTicketReady } from "@/lib/voyage-tickets";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -227,6 +229,7 @@ const UserBookings = () => {
   const candidateInfoTouchedRef = useRef(false);
   const draftHydratedRef = useRef(false);
   const selectedVoyageIdRef = useRef("");
+  const ticketDeepLinkHandledRef = useRef(false);
 
   useEffect(() => {
     selectedVoyageIdRef.current = selectedVoyageId;
@@ -414,6 +417,19 @@ const UserBookings = () => {
   useEffect(() => {
     if (!loading) void loadData();
   }, [loadData, loading, session?.user.id]);
+
+  /** The "your ticket is ready" email links straight here with `?ticket=<request id>`, so the
+   * traveller lands directly on their ticket instead of having to find it in the matrix. */
+  useEffect(() => {
+    if (busy || ticketDeepLinkHandledRef.current) return;
+    const ticketRequestId = searchParams.get("ticket");
+    if (!ticketRequestId) return;
+    const target = requests.find((request) => request.id === ticketRequestId);
+    if (!target) return;
+    ticketDeepLinkHandledRef.current = true;
+    setSelectedVoyageId(target.voyage_id);
+    setDetailsRequestId(target.id);
+  }, [busy, requests, searchParams]);
 
   useEffect(() => {
     draftHydratedRef.current = false;
@@ -763,7 +779,23 @@ const UserBookings = () => {
         .filter((link) => link.booking_request_id === detailsRequest.id)
         .map((link) => legsById[link.bookable_leg_id])
         .filter(Boolean)
+        .sort((a, b) => a.sort_order - b.sort_order)
     : [];
+  /** The voyage ticket only exists once the boat has actually left the traveller's own
+   * disembarkation stop — arriving there is not enough, see lib/voyage-tickets.ts. Before that
+   * moment it must not render at all, not just show disabled. */
+  const detailsVoyageTicket =
+    detailsRequest?.status === "user_confirmed" &&
+    detailsVoyage &&
+    isVoyageTicketReady(detailsOwnLegs, waypointsById)
+      ? buildParticipantVoyageTicket({
+          bookingRequestId: detailsRequest.id,
+          voyage: detailsVoyage,
+          ownLegsSortedByOrder: detailsOwnLegs,
+          waypointsById,
+          lang,
+        })
+      : null;
   /** Outstanding balance for the booking currently open in the details panel — see
    * ownRequestBalance above for the same best-effort, display-only computation. */
   const detailsRequestBalanceDue = (() => {
@@ -2735,6 +2767,14 @@ const UserBookings = () => {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {detailsVoyageTicket && (
+                      <div className="mt-4">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                          {lang === "it" ? "Biglietto ricordo" : "Voyage ticket"}
+                        </p>
+                        <VoyageTicketCard ticket={detailsVoyageTicket} />
                       </div>
                     )}
                     <div className="mt-4 flex flex-wrap gap-2">

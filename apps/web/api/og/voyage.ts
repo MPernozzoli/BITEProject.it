@@ -96,18 +96,27 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
   const voyage = await fetchVoyage(ref);
   if (!voyage) return redirectToFallback(res);
 
-  const waypoints =
+  const allWaypoints =
     (await supabaseFetch(
-      `voyage_waypoints?select=lat,lng,sort_order,visibility_mode,waypoint_type,planned_stop_duration_minutes,stop_mode,stop_hours,stop_nights&voyage_id=eq.${encodeURIComponent(voyage.id)}&order=sort_order.asc`,
+      `voyage_waypoints?select=lat,lng,sort_order,visibility_mode,waypoint_type,planned_stop_duration_minutes,stop_mode,stop_hours,stop_nights,actual_status&voyage_id=eq.${encodeURIComponent(voyage.id)}&order=sort_order.asc`,
     )) ?? [];
+
+  // Tappe previste/effettive: l'immagine di anteprima segue solo le tappe davvero
+  // toccate, come la mappa del sito (VoyageMap.tsx). Una tappa saltata (skipped)
+  // resta nel piano ma sparisce da qui.
+  const hasRouteCorrections = allWaypoints.some((waypoint) => waypoint.actual_status && waypoint.actual_status !== "planned");
+  const waypoints = allWaypoints.filter((waypoint) => waypoint.actual_status !== "skipped");
 
   const waypointCoordinates: Coordinate[] = waypoints
     .map((waypoint) => [Number(waypoint.lng), Number(waypoint.lat)] as Coordinate)
     .filter(isValidCoordinate);
 
   // Stessa priorità della pagina viaggio: la geometria calcolata se c'è,
-  // altrimenti i waypoint uniti in linea retta.
-  const geometry = (voyage.cached_geometry as { coordinates?: unknown } | null)?.coordinates;
+  // altrimenti i waypoint uniti in linea retta. cached_geometry rappresenta il
+  // piano, quindi va ignorata quando ci sono correzioni registrate.
+  const geometry = hasRouteCorrections
+    ? undefined
+    : (voyage.cached_geometry as { coordinates?: unknown } | null)?.coordinates;
   const routeCoordinates: Coordinate[] =
     Array.isArray(geometry) && geometry.filter(isValidCoordinate).length >= 2
       ? (geometry.filter(isValidCoordinate) as Coordinate[])

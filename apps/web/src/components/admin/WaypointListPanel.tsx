@@ -132,6 +132,23 @@ const WaypointListPanel = ({
                   <Eye size={10} className="text-accent shrink-0" />
                 )}
               </button>
+              {/* Tappe previste/effettive: sola lettura qui, si segnano dal widget "viaggio in corso". */}
+              {waypoint.actual_status === "skipped" && (
+                <span
+                  className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-sans text-[8px] font-bold uppercase tracking-wide text-muted-foreground"
+                  title="Marked as skipped from the live voyage widget"
+                >
+                  Skip
+                </span>
+              )}
+              {waypoint.actual_status === "added" && (
+                <span
+                  className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 font-sans text-[8px] font-bold uppercase tracking-wide text-accent"
+                  title="Added from the live voyage widget as an actual (unplanned) stop"
+                >
+                  Added
+                </span>
+              )}
               <div className="flex-1 min-w-0">
                 {editingWaypointNameId === waypoint.id ? (
                   <input

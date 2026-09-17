@@ -352,15 +352,28 @@ const WaypointEditorPanel = ({
           <p className="m-0 mb-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{heading}</p>
           <p className="m-0 text-xs text-muted-foreground">{coords}</p>
         </div>
-        <span
-          className={`text-[11px] px-1.5 py-1 ${
-            effectiveType === "technical"
-              ? "bg-muted-foreground/10 text-muted-foreground"
-              : "bg-teal-500/10 text-teal-700 dark:text-teal-300"
-          }`}
-        >
-          {statusLabel}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`text-[11px] px-1.5 py-1 ${
+              effectiveType === "technical"
+                ? "bg-muted-foreground/10 text-muted-foreground"
+                : "bg-teal-500/10 text-teal-700 dark:text-teal-300"
+            }`}
+          >
+            {statusLabel}
+          </span>
+          {/* Tappe previste/effettive: sola lettura, si segna dal widget "viaggio in corso" in dashboard. */}
+          {waypoint.actual_status === "skipped" && (
+            <span className="text-[11px] px-1.5 py-1 bg-muted-foreground/10 text-muted-foreground" title="Segnata come saltata dal widget viaggio in corso">
+              Saltata
+            </span>
+          )}
+          {waypoint.actual_status === "added" && (
+            <span className="text-[11px] px-1.5 py-1 bg-accent/15 text-accent" title="Aggiunta dal widget viaggio in corso come tappa effettiva">
+              Aggiunta
+            </span>
+          )}
+        </div>
       </div>
 
       <section className={sectionClass}>

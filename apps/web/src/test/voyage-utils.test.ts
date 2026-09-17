@@ -4,6 +4,8 @@ import {
   buildVoyageGeometry,
   buildVoyageSegmentGeometry,
   buildWaypointDefaultLocalizedNames,
+  getActualVoyageWaypoints,
+  getVoyageTravelledWaypointIndex,
   isWaypointCoordinateLabel,
   reverseGeocodePlaceLocalized,
   totalCoordinateDistanceKm,
@@ -180,15 +182,88 @@ describe("buildVoyageGeometry", () => {
       { waterwayAutoroute: true }
     );
 
-    // First leg follows the waterway; only the un-navigable second leg is a straight chord.
+    // First leg follows the waterway; the un-navigable second leg falls back to open-sea routing,
+    // which (no coastline data mocked here) resolves to a straight chord.
     expect(geometry).toEqual([
       [7.95, 48.57],
       [7.955, 48.575],
       [7.96, 48.58],
       [7.97, 48.59],
     ]);
-    // 1 full-chain attempt + 2 per-segment requests.
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // 1 full-chain attempt + 2 per-segment BRouter requests + 1 Overpass coastline lookup for the
+    // un-navigable second leg.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("bulges an open-sea tratta around land it would otherwise cross", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const href = String(url);
+      if (href.includes("brouter.de")) {
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }
+      if (href.includes("overpass")) {
+        return createJsonResponse({
+          elements: [
+            {
+              type: "way",
+              geometry: [
+                { lat: -1, lon: 1 },
+                { lat: 1, lon: 1 },
+              ],
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected fetch ${href}`));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const geometry = await buildVoyageGeometry(
+      [
+        { lat: 0, lng: 0 },
+        { lat: 0, lng: 2 },
+      ],
+      "water",
+      { waterwayAutoroute: true }
+    );
+
+    // The straight chord (lat 0, lng 0→2) crosses the mocked coastline at lng=1: expect a detour
+    // that still starts/ends exactly on the waypoints.
+    expect(geometry[0]).toEqual([0, 0]);
+    expect(geometry[geometry.length - 1]).toEqual([2, 0]);
+    expect(geometry.length).toBeGreaterThan(2);
+    const midLats = geometry.slice(1, -1).map(([, lat]) => lat);
+    expect(midLats.some((lat) => Math.abs(lat) > 0.01)).toBe(true);
+  });
+
+  it("keeps a straight open-sea chord when no coastline is nearby", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const href = String(url);
+      if (href.includes("brouter.de")) {
+        return Promise.resolve({ ok: false, json: async () => ({}) } as Response);
+      }
+      if (href.includes("overpass")) {
+        return createJsonResponse({ elements: [] });
+      }
+      return Promise.reject(new Error(`unexpected fetch ${href}`));
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const geometry = await buildVoyageGeometry(
+      [
+        { lat: 40, lng: 10 },
+        { lat: 40.2, lng: 10.3 },
+      ],
+      "water",
+      { waterwayAutoroute: true }
+    );
+
+    expect(geometry).toEqual([
+      [10, 40],
+      [10.3, 40.2],
+    ]);
   });
 });
 
@@ -246,6 +321,123 @@ describe("buildVoyageSegmentGeometry", () => {
     expect(geometry[0]).toEqual([7.95, 48.57]);
     expect(geometry[geometry.length - 1]).toEqual([7.97, 48.59]);
     expect(geometry.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("getVoyageTravelledWaypointIndex", () => {
+  const makeWaypoint = (id: string, actualArrivalAt: string | null): VoyageWaypoint => ({
+    id,
+    voyage_id: "voyage-1",
+    lat: 0,
+    lng: 0,
+    name: "",
+    name_en: null,
+    name_it: null,
+    sort_order: 0,
+    waypoint_type: "narrative",
+    visibility_mode: "auto",
+    description_en: null,
+    description_it: null,
+    event_date: null,
+    event_time: null,
+    media: [],
+    date_start: null,
+    date_end: null,
+    actual_arrival_at: actualArrivalAt,
+    created_at: "",
+    updated_at: "",
+  });
+
+  it("is 0 when the voyage just started and nothing has been reached yet", () => {
+    const waypoints = [makeWaypoint("wp-1", null), makeWaypoint("wp-2", null), makeWaypoint("wp-3", null)];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(0);
+  });
+
+  it("stops at the first waypoint without a recorded arrival", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      makeWaypoint("wp-2", "2026-01-01T10:00:00Z"),
+      makeWaypoint("wp-3", null),
+      makeWaypoint("wp-4", "2026-01-03T10:00:00Z"),
+    ];
+    // wp-3 has no actual arrival, so the chain from the start breaks there
+    // even though a later waypoint (wp-4) does have one recorded.
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(1);
+  });
+
+  it("reaches the last waypoint once every leg has an actual arrival", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      makeWaypoint("wp-2", "2026-01-01T10:00:00Z"),
+      makeWaypoint("wp-3", "2026-01-02T10:00:00Z"),
+    ];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(2);
+  });
+
+  it("does not let a skipped stop block progress past it (tappe previste/effettive)", () => {
+    // wp-2 was the planned stop but got marked skipped, so it never gets an actual
+    // arrival — the chain must not stop there once wp-3 (the real next stop) has one.
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      { ...makeWaypoint("wp-2", null), actual_status: "skipped" as const },
+      makeWaypoint("wp-3", "2026-01-02T10:00:00Z"),
+    ];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(2);
+  });
+
+  it("does not let an added stop (never wired to set_voyage_waypoint_actual) block progress", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      { ...makeWaypoint("wp-2", null), actual_status: "added" as const },
+      makeWaypoint("wp-3", "2026-01-02T10:00:00Z"),
+    ];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(2);
+  });
+
+  it("still stops at an unreached planned stop, even counting a skipped one just before it as passed", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      { ...makeWaypoint("wp-2", null), actual_status: "skipped" as const },
+      makeWaypoint("wp-3", null),
+    ];
+    // wp-2 is transparent (skipped never gets its own arrival), so the index
+    // advances through it; it only stops at wp-3, the first unreached *planned* stop.
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(1);
+  });
+});
+
+describe("getActualVoyageWaypoints", () => {
+  const makeWaypoint = (id: string, actualStatus?: VoyageWaypoint["actual_status"]): VoyageWaypoint => ({
+    id,
+    voyage_id: "voyage-1",
+    lat: 0,
+    lng: 0,
+    name: "",
+    name_en: null,
+    name_it: null,
+    sort_order: 0,
+    waypoint_type: "narrative",
+    visibility_mode: "auto",
+    description_en: null,
+    description_it: null,
+    event_date: null,
+    event_time: null,
+    media: [],
+    date_start: null,
+    date_end: null,
+    actual_status: actualStatus,
+    created_at: "",
+    updated_at: "",
+  });
+
+  it("keeps planned and added stops, drops skipped ones", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", "planned"),
+      makeWaypoint("wp-2", "skipped"),
+      makeWaypoint("wp-3", "added"),
+      makeWaypoint("wp-4"),
+    ];
+    expect(getActualVoyageWaypoints(waypoints).map((w) => w.id)).toEqual(["wp-1", "wp-3", "wp-4"]);
   });
 });
 

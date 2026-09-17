@@ -5841,6 +5841,7 @@ export type Database = {
           activities: Json
           actual_arrival_at: string | null
           actual_departure_at: string | null
+          actual_status: string
           created_at: string
           date_end: string | null
           date_start: string | null
@@ -5872,6 +5873,7 @@ export type Database = {
           activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
+          actual_status?: string
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -5903,6 +5905,7 @@ export type Database = {
           activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
+          actual_status?: string
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -7128,6 +7131,14 @@ export type Database = {
         Args: { _at: string; _kind: string; _waypoint_id: string }
         Returns: string
       }
+      set_voyage_waypoint_actual_status: {
+        Args: { _status: string; _waypoint_id: string }
+        Returns: undefined
+      }
+      insert_voyage_leg_correction_stops: {
+        Args: { _anchor_sort_order: number; _stops: Json; _voyage_id: string }
+        Returns: undefined
+      }
       settle_voyage_booking_payment: {
         Args: { _booking_request_id: string }
         Returns: Database["public"]["Enums"]["voyage_booking_status"]
@@ -7226,6 +7237,15 @@ export type Database = {
           _profile_id: string
         }
         Returns: boolean
+      }
+      voyage_leg_candidate_waypoints: {
+        Args: { _voyage_id: string }
+        Returns: {
+          id: string
+          voyage_id: string
+          sort_order: number
+          public_rank: number
+        }[]
       }
       voyage_leg_is_bookable_now: {
         Args: {

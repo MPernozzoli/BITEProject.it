@@ -1,0 +1,18 @@
+-- Cascade the waypoint actuals from 20260917200000 into voyage_bookable_legs.
+--
+-- 20260917200000 wrote actual_departure_at / actual_arrival_at straight onto
+-- voyage_waypoints for "Atlantic Bound!" (Bari, Santa Maria di Leuca) with a
+-- raw UPDATE, bypassing set_voyage_waypoint_actual() / apply_voyage_schedule().
+-- The live widget and getLegPhase() read the *leg*-level actual columns on
+-- voyage_bookable_legs, not the waypoint ones, and those were never
+-- recomputed: the Bari -> Santa Maria di Leuca leg still had no actuals at
+-- all, and the Santa Maria di Leuca -> Crotone leg still carried a stale
+-- actual_departure_at (2026-09-15 11:53) left over from an earlier, mis-timed
+-- "parti ora" click made while the widget was still showing the wrong leg —
+-- the exact bug this ticket reported, just one leg further down the chain.
+--
+-- apply_voyage_schedule() is the normal cascade path: compute_voyage_schedule
+-- folds each waypoint's actuals into its adjacent legs. _notify = false
+-- because this recomputes already-known history, not a new delay to announce
+-- (and both affected legs land on 'completed' anyway, which never notifies).
+select public.apply_voyage_schedule('c421e207-86d0-42e9-be1c-6b7abb3e6c89', false);

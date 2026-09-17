@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ChevronDown, Clock, Anchor, Navigation, AlertTriangle, X } from "lucide-react";
+import { ChevronDown, Clock, Anchor, Navigation, AlertTriangle, MapPinPlus, X } from "lucide-react";
 import { formatBookingWindow } from "@/lib/booking-utils";
 import {
   getCurrentLegIndex,
@@ -14,6 +14,7 @@ import {
   type ScheduledLeg,
 } from "@/lib/voyage-schedule";
 import type { Language } from "@/lib/language";
+import VoyageLegCorrectionModal from "@/components/voyage/VoyageLegCorrectionModal";
 
 interface WidgetVoyage {
   id: string;
@@ -30,6 +31,7 @@ interface WidgetWaypoint {
   name: string | null;
   name_it: string | null;
   name_en: string | null;
+  sort_order: number;
   actual_arrival_at: string | null;
   actual_departure_at: string | null;
 }
@@ -75,6 +77,7 @@ const copy = {
     allDone: "Tutte le tratte sono concluse.",
     saving: "Salvo...",
     close: "Chiudi",
+    correctLeg: "Correggi tappa successiva",
   },
   en: {
     eyebrow: "Voyage in progress",
@@ -96,6 +99,7 @@ const copy = {
     allDone: "Every leg is complete.",
     saving: "Saving...",
     close: "Dismiss",
+    correctLeg: "Correct next stop",
   },
 } as const;
 
@@ -178,6 +182,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   const [saving, setSaving] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualValue, setManualValue] = useState("");
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const [dismissedLegId, setDismissedLegId] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(DISMISSED_LEG_STORAGE_KEY);
@@ -200,7 +205,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
         .order("sort_order", { ascending: true }),
       supabase
         .from("voyage_waypoints")
-        .select("id,name,name_it,name_en,actual_arrival_at,actual_departure_at"),
+        .select("id,name,name_it,name_en,sort_order,actual_arrival_at,actual_departure_at"),
     ]);
 
     const error = voyagesRes.error || legsRes.error || waypointsRes.error;
@@ -284,6 +289,12 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
 
   const pendingKind = pending.kind;
   const delayed = isLegDelayed(currentLeg);
+  const correctionFromWaypoint = fromWaypoint
+    ? { id: currentLeg.from_waypoint_id, name: nameOf(fromWaypoint), sortOrder: fromWaypoint.sort_order }
+    : null;
+  const correctionToWaypoint = toWaypoint
+    ? { id: currentLeg.to_waypoint_id, name: nameOf(toWaypoint), sortOrder: toWaypoint.sort_order }
+    : null;
 
   const phaseLabel = phase === "active" ? t.active : phase === "completed" ? t.completed : t.planned;
 
@@ -393,7 +404,33 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
               </div>
             </div>
           )}
+
+          {correctionFromWaypoint && correctionToWaypoint && (
+            <button
+              type="button"
+              onClick={() => setCorrectionOpen(true)}
+              className="glass-chip mt-3 inline-flex items-center gap-2 px-3.5 py-2 text-xs font-sans text-foreground transition-opacity hover:opacity-80"
+            >
+              <MapPinPlus size={14} />
+              {t.correctLeg}
+            </button>
+          )}
         </div>
+      )}
+
+      {!readOnly && correctionFromWaypoint && correctionToWaypoint && (
+        <VoyageLegCorrectionModal
+          open={correctionOpen}
+          onClose={() => setCorrectionOpen(false)}
+          onSaved={() => {
+            setCorrectionOpen(false);
+            void load();
+          }}
+          voyageId={active.voyage.id}
+          fromWaypoint={correctionFromWaypoint}
+          toWaypoint={correctionToWaypoint}
+          lang={locale}
+        />
       )}
     </section>
   );

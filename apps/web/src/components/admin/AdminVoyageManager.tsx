@@ -127,7 +127,7 @@ const emptyVoyageForm: VoyageFormState = {
   description_it: "",
   description_en: "",
   type: "water",
-  waterway_autoroute: false,
+  waterway_autoroute: true,
   status: "planned",
   status_override: "",
   is_published: true,
@@ -2838,7 +2838,7 @@ const AdminVoyageManager = ({
       toast.error(
         isLand
           ? "Salva prima i waypoint della rotta, poi rigenera la geometria stradale."
-          : "Salva prima i waypoint della rotta, poi rigenera la geometria sulle vie d'acqua."
+          : "Salva prima i waypoint della rotta, poi rigenera la geometria acqua."
       );
       return;
     }
@@ -2846,7 +2846,7 @@ const AdminVoyageManager = ({
       toast.error(
         isLand
           ? "Servono almeno due waypoint salvati per generare la geometria stradale."
-          : "Servono almeno due waypoint salvati per il routing sulle vie d'acqua."
+          : "Servono almeno due waypoint salvati per il routing acqua."
       );
       return;
     }
@@ -2855,7 +2855,7 @@ const AdminVoyageManager = ({
     try {
       const geoOk = await syncVoyageGeometry(selectedVoyageId, persistedSelectedWaypoints);
       if (geoOk) {
-        toast.success(isLand ? "Geometria stradale rigenerata e salvata" : "Geometria vie navigabili rigenerata e salvata");
+        toast.success(isLand ? "Geometria stradale rigenerata e salvata" : "Geometria acqua rigenerata e salvata");
       }
     } finally {
       setIsRegeneratingGeometry(false);
@@ -3240,7 +3240,7 @@ const AdminVoyageManager = ({
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-sans text-foreground">
-                          {selectedVoyageHasCachedGeometry ? "Geometria vie navigabili salvata" : "Geometria vie navigabili mancante"}
+                          {selectedVoyageHasCachedGeometry ? "Geometria auto (mare + vie navigabili) salvata" : "Geometria auto (mare + vie navigabili) mancante"}
                         </p>
                         {distance?.unit === "NM" && selectedVoyage.waterway_autoroute ? (
                           <p className="mt-1 text-xs font-sans text-foreground/80">
@@ -3249,8 +3249,8 @@ const AdminVoyageManager = ({
                         ) : null}
                         <p className="mt-1 text-[11px] font-sans text-muted-foreground">
                           {selectedVoyageHasCachedGeometry
-                            ? "Rigenera se hai spostato i waypoint o vuoi riallinearti al grafo OSM aggiornato."
-                            : "Genera e salva la linea sui canali/fiumi per la mappa pubblica (stesso tipo voyage: acqua)."}
+                            ? "Rigenera se hai spostato i waypoint: ogni tratta viene riclassificata (fiume/canale o mare aperto che aggira la terra)."
+                            : "Genera e salva la rotta per la mappa pubblica: fiumi/canali seguono il grafo OSM, il mare aggira la terra quando serve (stesso tipo voyage: acqua)."}
                         </p>
                         {isRouteDraftDirty ? (
                           <p className="mt-2 text-[11px] font-sans text-amber-700 dark:text-amber-300">
@@ -3282,7 +3282,7 @@ const AdminVoyageManager = ({
                         : voyageDates || (selectedVoyage?.type === "land"
                           ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
                           : selectedVoyage?.waterway_autoroute
-                            ? "Per l’autoroute acqua, avvicina i waypoint al canale; altrimenti il segmento resta retto."
+                            ? "Instradamento auto: per un fiume/canale avvicina i waypoint al suo asse, altrimenti la tratta resta mare aperto."
                             : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                     </p>
                     {isRouteDraftDirty && (

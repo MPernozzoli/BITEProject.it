@@ -1,5 +1,6 @@
 import type { Language } from "@/lib/i18n";
 import { bilingualSlugOrFilter, slugForLang, type WithBilingualSlugs } from "@/lib/article-slug";
+import { getActualStopHours } from "@/lib/voyage-schedule";
 
 const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
 const OSRM_BASE_URL = "https://router.project-osrm.org";
@@ -126,6 +127,225 @@ export async function fetchBRouterWaterwaySegment(
   end: { lat: number; lng: number }
 ): Promise<{ coordinates: [number, number][]; distanceKm: number } | null> {
   return fetchBRouterWaterwayRoute([start, end]);
+}
+
+// --- Open-sea land avoidance -------------------------------------------------
+// A tratta counts as "river/canal" when BRouter finds a navigable waterway between its two
+// waypoints (see buildVoyageGeometry). Everywhere else it's open sea: by default that's a
+// straight chord, but a straight chord can cross a headland or an island. This section fetches
+// the nearby coastline from Overpass and, only when the chord actually crosses land, bulges it
+// out just enough to clear the obstacle — a cheap heuristic, not a real navigation graph.
+type LatLng = { lat: number; lng: number };
+
+const MIN_LAND_CHECK_KM = 0.3;
+const MAX_LAND_CHECK_KM = 800;
+const LAND_AVOIDANCE_MAX_DEPTH = 6;
+const LAND_AVOIDANCE_BULGE_STEPS = [0.15, 0.3, 0.5, 0.8, 1.2, 1.8];
+const KM_PER_DEGREE_LAT = 111.32;
+
+const kmPerDegreeLngAt = (lat: number) => KM_PER_DEGREE_LAT * Math.max(0.05, Math.cos((lat * Math.PI) / 180));
+
+// Signed-area based segment intersection (proper crossings only; touching endpoints don't count,
+// which is fine here — coastline data is dense enough that a true land crossing always shows up
+// as a proper intersection somewhere along the chord).
+const segmentsIntersect = (a: LatLng, b: LatLng, c: LatLng, d: LatLng): boolean => {
+  const cross = (o: LatLng, p: LatLng, q: LatLng) =>
+    (p.lng - o.lng) * (q.lat - o.lat) - (p.lat - o.lat) * (q.lng - o.lng);
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+};
+
+const countLandCrossings = (a: LatLng, b: LatLng, coastlineWays: LatLng[][]): number => {
+  let count = 0;
+  for (const way of coastlineWays) {
+    for (let i = 1; i < way.length; i += 1) {
+      if (segmentsIntersect(a, b, way[i - 1], way[i])) count += 1;
+    }
+  }
+  return count;
+};
+
+const coastlineWaysCache = new Map<string, LatLng[][]>();
+const COASTLINE_CACHE_MAX_ENTRIES = 200;
+
+/** Coastline ways (OSM `natural=coastline`) within a padded bbox around the a–b chord. */
+async function fetchCoastlineWays(a: LatLng, b: LatLng): Promise<LatLng[][]> {
+  const cacheKey = `${a.lat.toFixed(3)},${a.lng.toFixed(3)}|${b.lat.toFixed(3)},${b.lng.toFixed(3)}`;
+  const cached = coastlineWaysCache.get(cacheKey);
+  if (cached) return cached;
+
+  const midLat = (a.lat + b.lat) / 2;
+  const straightDistanceKm = haversineNM(a.lat, a.lng, b.lat, b.lng) * 1.852;
+  // Padding must comfortably exceed the widest bulge the routing step below can try, or a
+  // legitimate detour could be "cleared" only because its far end fell outside the fetched data.
+  const padKm = Math.max(15, straightDistanceKm * 0.6);
+  const padLat = padKm / KM_PER_DEGREE_LAT;
+  const padLng = padKm / kmPerDegreeLngAt(midLat);
+  const south = Math.min(a.lat, b.lat) - padLat;
+  const north = Math.max(a.lat, b.lat) + padLat;
+  const west = Math.min(a.lng, b.lng) - padLng;
+  const east = Math.max(a.lng, b.lng) + padLng;
+
+  const query = `[out:json][timeout:20];way["natural"="coastline"](${south},${west},${north},${east});out geom;`;
+
+  let ways: LatLng[][] = [];
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeout = controller ? globalThis.setTimeout(() => controller.abort(), 18000) : null;
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: controller?.signal,
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as {
+        elements?: { type?: string; geometry?: { lat: number; lon: number }[] }[];
+      };
+      ways = (data.elements || [])
+        .filter(
+          (el): el is { type: string; geometry: { lat: number; lon: number }[] } =>
+            el.type === "way" && Array.isArray(el.geometry) && el.geometry.length >= 2
+        )
+        .map((el) => el.geometry.map((point) => ({ lat: point.lat, lng: point.lon })));
+      break;
+    } catch {
+      // Try the next public Overpass endpoint.
+    } finally {
+      if (timeout) globalThis.clearTimeout(timeout);
+    }
+  }
+
+  if (coastlineWaysCache.size >= COASTLINE_CACHE_MAX_ENTRIES) {
+    const oldestKey = coastlineWaysCache.keys().next().value;
+    if (oldestKey !== undefined) coastlineWaysCache.delete(oldestKey);
+  }
+  coastlineWaysCache.set(cacheKey, ways);
+  return ways;
+}
+
+/** Point offset from the a–b midpoint, perpendicular to a–b, by offsetKm (planar approximation). */
+const offsetPerpendicular = (a: LatLng, b: LatLng, offsetKm: number): LatLng => {
+  const midLat = (a.lat + b.lat) / 2;
+  const kmPerDegLng = kmPerDegreeLngAt(midLat);
+  const ax = a.lng * kmPerDegLng;
+  const ay = a.lat * KM_PER_DEGREE_LAT;
+  const bx = b.lng * kmPerDegLng;
+  const by = b.lat * KM_PER_DEGREE_LAT;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = -dy / length;
+  const uy = dx / length;
+  const offsetX = (ax + bx) / 2 + ux * offsetKm;
+  const offsetY = (ay + by) / 2 + uy * offsetKm;
+  return { lat: offsetY / KM_PER_DEGREE_LAT, lng: offsetX / kmPerDegLng };
+};
+
+/**
+ * Detours the a–b chord around land: tries bulging it out (growing steps, either side) until a
+ * two-segment path clears every coastline crossing, subdividing recursively when a single bulge
+ * isn't enough (e.g. a long chord grazing several islands). Depth-bounded, so a pathological case
+ * just keeps the smallest-crossing-count path found rather than looping forever.
+ */
+function routeAroundLand(a: LatLng, b: LatLng, coastlineWays: LatLng[][], depth: number): LatLng[] {
+  if (!coastlineWays.length || countLandCrossings(a, b, coastlineWays) === 0) return [a, b];
+  if (depth >= LAND_AVOIDANCE_MAX_DEPTH) return [a, b];
+
+  const straightKm = haversineNM(a.lat, a.lng, b.lat, b.lng) * 1.852;
+  let best: { via: LatLng; crossings: number } | null = null;
+
+  for (const side of [1, -1]) {
+    for (const step of LAND_AVOIDANCE_BULGE_STEPS) {
+      const via = offsetPerpendicular(a, b, side * step * straightKm);
+      const crossings = countLandCrossings(a, via, coastlineWays) + countLandCrossings(via, b, coastlineWays);
+      if (crossings === 0) return [a, via, b];
+      if (!best || crossings < best.crossings) best = { via, crossings };
+    }
+  }
+
+  const pivot =
+    best?.via ??
+    offsetPerpendicular(a, b, LAND_AVOIDANCE_BULGE_STEPS[LAND_AVOIDANCE_BULGE_STEPS.length - 1] * straightKm);
+  const firstHalf = routeAroundLand(a, pivot, coastlineWays, depth + 1);
+  const secondHalf = routeAroundLand(pivot, b, coastlineWays, depth + 1);
+  return [...firstHalf.slice(0, -1), ...secondHalf];
+}
+
+const quadraticBezierPoint = (p0: LatLng, p1: LatLng, p2: LatLng, t: number): LatLng => {
+  const mt = 1 - t;
+  return {
+    lat: mt * mt * p0.lat + 2 * mt * t * p1.lat + t * t * p2.lat,
+    lng: mt * mt * p0.lng + 2 * mt * t * p1.lng + t * t * p2.lng,
+  };
+};
+
+/**
+ * Bonus polish on top of a land-avoidance path: rounds each via-point corner into a short bezier
+ * arc instead of a sharp bend. Only ever touches the small neighbourhood around a corner, and
+ * falls back to the sharp corner there if the arc would newly graze land — smoothing is never
+ * allowed to undo what routeAroundLand already guaranteed.
+ */
+function smoothLandAvoidanceCorners(points: LatLng[], coastlineWays: LatLng[][]): LatLng[] {
+  if (points.length < 3) return points;
+
+  const result: LatLng[] = [points[0]];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const prev = result[result.length - 1];
+    const corner = points[i];
+    const next = points[i + 1];
+    const trimRatio = 0.3;
+    const arcStart: LatLng = {
+      lat: corner.lat + (prev.lat - corner.lat) * trimRatio,
+      lng: corner.lng + (prev.lng - corner.lng) * trimRatio,
+    };
+    const arcEnd: LatLng = {
+      lat: corner.lat + (next.lat - corner.lat) * trimRatio,
+      lng: corner.lng + (next.lng - corner.lng) * trimRatio,
+    };
+
+    const arcSamples = 6;
+    const arcPoints: LatLng[] = [];
+    for (let step = 0; step <= arcSamples; step += 1) {
+      arcPoints.push(quadraticBezierPoint(arcStart, corner, arcEnd, step / arcSamples));
+    }
+    const arcIsSafe = arcPoints.every(
+      (point, index) => index === 0 || countLandCrossings(arcPoints[index - 1], point, coastlineWays) === 0
+    );
+
+    if (!arcIsSafe) {
+      result.push(corner);
+      continue;
+    }
+    result.push(arcStart, ...arcPoints.slice(1, -1), arcEnd);
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+/** Open-sea tratta geometry: a straight chord, bulged around any land it would otherwise cross. */
+export async function buildSeaSegmentGeometry(start: LatLng, end: LatLng): Promise<[number, number][]> {
+  const straight: [number, number][] = [
+    [start.lng, start.lat],
+    [end.lng, end.lat],
+  ];
+  const straightDistanceKm = haversineNM(start.lat, start.lng, end.lat, end.lng) * 1.852;
+  if (straightDistanceKm < MIN_LAND_CHECK_KM || straightDistanceKm > MAX_LAND_CHECK_KM) {
+    return straight;
+  }
+
+  const coastlineWays = await fetchCoastlineWays(start, end);
+  if (!coastlineWays.length) return straight;
+
+  const avoided = routeAroundLand(start, end, coastlineWays, 0);
+  if (avoided.length < 2) return straight;
+
+  const smoothed = smoothLandAvoidanceCorners(avoided, coastlineWays);
+  return smoothed.map((point) => [point.lng, point.lat] as [number, number]);
 }
 
 export interface GeocodedPlace {
@@ -843,11 +1063,23 @@ export function formatWaypointMoment(
   return start || end;
 }
 
+function formatStopDurationHours(hours: number, lang: Language): string {
+  const italian = lang === "it";
+  if (hours >= 20) {
+    const days = Math.max(1, Math.round(hours / 24));
+    return italian ? `${days} ${days === 1 ? "giorno" : "giorni"}` : `${days} ${days === 1 ? "day" : "days"}`;
+  }
+  const roundedHours = Math.max(1, Math.round(hours));
+  return italian ? `${roundedHours} ${roundedHours === 1 ? "ora" : "ore"}` : `${roundedHours} ${roundedHours === 1 ? "hour" : "hours"}`;
+}
+
 /**
  * Durata prevista della sosta a un waypoint, per la pagina pubblica della rotta.
  * Preferisce la differenza reale tra `date_end` (arrivo) e `date_start` (ripartenza,
  * nomenclatura storica invertita: vedi AdminVoyageManager); in assenza di date esplicite
- * ripiega su stop_mode/stop_nights/stop_hours.
+ * ripiega su stop_mode/stop_nights/stop_hours. Usare solo quando manca un actual: vedi
+ * `formatWaypointActualStopDuration`, che ha sempre la precedenza quando l'equipaggio
+ * ha registrato sia l'arrivo che la ripartenza.
  */
 export function formatWaypointStopDuration(
   waypoint: Pick<VoyageWaypoint, "date_start" | "date_end" | "stop_mode" | "stop_hours" | "stop_nights">,
@@ -858,13 +1090,7 @@ export function formatWaypointStopDuration(
   const departureMs = waypoint.date_start ? Date.parse(waypoint.date_start) : NaN;
 
   if (Number.isFinite(arrivalMs) && Number.isFinite(departureMs) && departureMs > arrivalMs) {
-    const hours = (departureMs - arrivalMs) / 3_600_000;
-    if (hours >= 20) {
-      const days = Math.max(1, Math.round(hours / 24));
-      return italian ? `${days} ${days === 1 ? "giorno" : "giorni"}` : `${days} ${days === 1 ? "day" : "days"}`;
-    }
-    const roundedHours = Math.max(1, Math.round(hours));
-    return italian ? `${roundedHours} ${roundedHours === 1 ? "ora" : "ore"}` : `${roundedHours} ${roundedHours === 1 ? "hour" : "hours"}`;
+    return formatStopDurationHours((departureMs - arrivalMs) / 3_600_000, lang);
   }
 
   if (waypoint.stop_mode === "nights" && waypoint.stop_nights) {
@@ -876,6 +1102,37 @@ export function formatWaypointStopDuration(
     return italian ? `${hours} ${hours === 1 ? "ora" : "ore"}` : `${hours} ${hours === 1 ? "hour" : "hours"}`;
   }
   return null;
+}
+
+/**
+ * Durata REALE della sosta, quando l'equipaggio ha registrato sia l'arrivo che la
+ * ripartenza (`actual_arrival_at`/`actual_departure_at`, vedi lib/voyage-schedule.ts).
+ * Quello che è successo davvero batte sempre la stima pianificata.
+ */
+export function formatWaypointActualStopDuration(
+  waypoint: Pick<VoyageWaypoint, "actual_arrival_at" | "actual_departure_at">,
+  lang: Language
+): string | null {
+  const hours = getActualStopHours(waypoint);
+  return hours == null ? null : formatStopDurationHours(hours, lang);
+}
+
+/**
+ * Durata sosta finora, quando l'arrivo è stato registrato ma non ancora la
+ * ripartenza: usa la finestra di partenza pianificata (piano o tratta) come
+ * stima migliore disponibile, finché un actual_departure_at reale non chiude
+ * la sosta per davvero (a quel punto vince `formatWaypointActualStopDuration`).
+ */
+export function formatWaypointOngoingStopDuration(
+  actualArrivalAt: string | null | undefined,
+  plannedDepartureAt: string | null | undefined,
+  lang: Language
+): string | null {
+  if (!actualArrivalAt || !plannedDepartureAt) return null;
+  const arrivalMs = Date.parse(actualArrivalAt);
+  const departureMs = Date.parse(plannedDepartureAt);
+  if (!Number.isFinite(arrivalMs) || !Number.isFinite(departureMs) || departureMs <= arrivalMs) return null;
+  return formatStopDurationHours((departureMs - arrivalMs) / 3_600_000, lang);
 }
 
 export function buildWaypointDefaultLocalizedNames(
@@ -1176,6 +1433,17 @@ export function getPublicVoyageWaypoints(
     (waypoint, index) =>
       getWaypointEffectiveType(waypoint, index, waypoints.length) === "narrative" || articleLinkedIndexes.has(index)
   );
+}
+
+/**
+ * Tappe effettive: quelle davvero toccate. Esclude le "skipped" (previste ma
+ * saltate); include le "added" (non previste, aggiunte a posteriori) oltre a
+ * quelle "planned" invariate. È il filtro che alimenta mappa e geometria del
+ * percorso reale — ortogonale a {@link getPublicVoyageWaypoints}, che filtra
+ * per visibilità pubblica/tecnica.
+ */
+export function getActualVoyageWaypoints(waypoints: VoyageWaypoint[]): VoyageWaypoint[] {
+  return waypoints.filter((waypoint) => waypoint.actual_status !== "skipped");
 }
 
 export function getAssociatedArticleForWaypoint<
@@ -1546,8 +1814,34 @@ export function buildVoyageSegmentGeometry(
   return buildPublicVoyageGeometry(segmentWaypoints, type, []);
 }
 
+/**
+ * Index of the last waypoint reached by an unbroken chain of recorded arrivals
+ * counting from the start (0 if none). Only the route up to this waypoint has
+ * actually been travelled — admin actuals (`actual_arrival_at`, see
+ * lib/voyage-schedule.ts) are the source of truth, not the voyage's own status,
+ * so an "active" voyage that just started must not render as fully travelled.
+ */
+export function getVoyageTravelledWaypointIndex(waypoints: VoyageWaypoint[]): number {
+  let index = 0;
+  for (let i = 1; i < waypoints.length; i++) {
+    const waypoint = waypoints[i];
+    // A skipped/added stop never gets its own actual_arrival_at (it isn't a booking-leg
+    // endpoint, see set_voyage_waypoint_actual_status), so it must not block the chain —
+    // only an unreached *planned* stop does.
+    const isCorrection = waypoint?.actual_status === "skipped" || waypoint?.actual_status === "added";
+    if (!isCorrection && !waypoint?.actual_arrival_at) break;
+    index = i;
+  }
+  return index;
+}
+
 export type VoyageGeometryBuildOptions = {
-  /** When true with type water, use BRouter river profile between consecutive waypoints. */
+  /**
+   * When true with type water, auto-route each tratta: BRouter's river profile where a
+   * navigable waterway connects the two waypoints, otherwise a straight sea chord bulged around
+   * any land it would cross. When false/omitted, water geometry is a straight chord throughout
+   * (manual override for when the heuristic gets a voyage wrong).
+   */
   waterwayAutoroute?: boolean;
 };
 
@@ -1583,21 +1877,19 @@ export async function buildVoyageGeometry(
     }
 
     // Se la catena intera non è instradabile (un via è fuori dal grafo idrico, BRouter risponde 400
-    // "no track found"), NON buttiamo via tutta la rotta: instradiamo tratto per tratto, così solo i
-    // segmenti senza via navigabile restano in linea retta — gli altri seguono comunque il canale/fiume.
+    // "no track found"), classifichiamo tratta per tratta: dove BRouter trova una via navigabile è
+    // fiume/canale, altrove è mare aperto — e in quel caso la corda retta viene aggirata solo se
+    // attraversa davvero della terra (vedi buildSeaSegmentGeometry).
     const waterwayRoute: [number, number][] = [];
     for (let index = 1; index < waypoints.length; index += 1) {
       const start = waypoints[index - 1];
       const end = waypoints[index];
       const segment = await fetchBRouterWaterwaySegment(start, end);
-      if (segment?.coordinates && segment.coordinates.length >= 2) {
-        appendRouteCoordinates(waterwayRoute, segment.coordinates);
-      } else {
-        appendRouteCoordinates(waterwayRoute, [
-          [start.lng, start.lat],
-          [end.lng, end.lat],
-        ]);
-      }
+      const segmentCoordinates =
+        segment?.coordinates && segment.coordinates.length >= 2
+          ? segment.coordinates
+          : await buildSeaSegmentGeometry(start, end);
+      appendRouteCoordinates(waterwayRoute, segmentCoordinates);
     }
 
     return waterwayRoute.length >= 2 ? waterwayRoute : getStraightVoyageGeometry(waypoints);
@@ -1656,7 +1948,12 @@ export interface Voyage {
   description_en: string | null;
   description_it: string | null;
   type: VoyageType;
-  /** When true with type water, geometry follows inland waterways (BRouter); still shown everywhere as a normal water voyage. Omitted = false. */
+  /**
+   * When true (the default for water voyages) each tratta is auto-routed: river/canal via
+   * BRouter or open sea bulged around land, whichever fits. False forces a plain straight chord
+   * throughout — the manual override for when the heuristic misreads a voyage. Always shown as a
+   * normal water voyage either way.
+   */
   waterway_autoroute?: boolean;
   booking_enabled?: boolean;
   booking_max_guests?: number;
@@ -1707,6 +2004,17 @@ export interface VoyageWaypoint {
   stop_departure_time?: string | null;
   date_start: string | null;
   date_end: string | null;
+  /** Recorded "arriva ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_arrival_at?: string | null;
+  /** Recorded "parti ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_departure_at?: string | null;
+  /**
+   * Tappe previste vs tappe effettive. "planned" (default): no correction. "skipped": planned
+   * but not actually reached. "added": not part of the original plan, recorded only to show
+   * what actually happened. Set via the live widget's route-correction modal; see
+   * lib/waypoint-form.ts and the set_voyage_waypoint_actual_status RPC.
+   */
+  actual_status?: "planned" | "skipped" | "added";
   created_at: string;
   updated_at: string;
 }
