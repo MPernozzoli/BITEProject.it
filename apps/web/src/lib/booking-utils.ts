@@ -47,6 +47,10 @@ export interface BookingWaypoint {
   stop_departure_time?: string | null;
   date_start: string | null;
   date_end: string | null;
+  /** Recorded "arriva ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_arrival_at?: string | null;
+  /** Recorded "parti ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_departure_at?: string | null;
 }
 
 export type StopMode = "legacy" | "hours" | "nights";
@@ -87,6 +91,10 @@ export interface BookableLeg {
   open_sea?: boolean | null;
   /** Manual complexity override, 1 … 5; null means use the auto value. */
   complexity_override?: number | null;
+  /** Recorded "arriva ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_arrival_at?: string | null;
+  /** Recorded "parti ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
+  actual_departure_at?: string | null;
 }
 
 export interface BookingRequest {
@@ -383,7 +391,7 @@ export function isLegCurrentOrFuture(leg: BookableLeg) {
 }
 
 export function isLegSelectable(leg: BookableLeg) {
-  return leg.is_bookable && isLegCurrentOrFuture(leg);
+  return leg.is_bookable;
 }
 
 export function isVoyageBookableNow(

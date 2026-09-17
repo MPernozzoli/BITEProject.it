@@ -2,10 +2,15 @@
  * The single source of truth for "where is this voyage right now".
  *
  * Mirrors the SQL in 20260715130000_voyage_schedule_phases_and_actuals.sql
- * (`voyage_leg_phase`, `voyage_derived_status`, `voyage_leg_is_bookable_now`).
+ * (`voyage_leg_phase`, `voyage_derived_status`).
  * The database keeps `voyages.status` as a cache refreshed by trigger and cron;
  * the UI calls these functions instead, so a phase that turns over by the clock
  * is correct on screen without waiting for the next cron run.
+ *
+ * `isLegBookableNow` is separate from `getLegPhase`: a leg can be "active" for
+ * status-tracking purposes while still open for bookings, as long as the admin
+ * has not recorded an explicit departure.  See
+ * 20260917190000_leg_bookable_only_after_departure.sql.
  *
  * Keep both sides in step: any change here needs the same change in that
  * migration, and vice versa. `src/test/voyage-schedule.test.ts` pins the rules.
@@ -67,8 +72,12 @@ function plainDayNumber(value: string | null | undefined): number | null {
 }
 
 /**
- * Phase of a single leg. A recorded actual always beats the clock: once someone
- * pressed "arriva ora" the leg is done, whatever the plan said.
+ * Phase of a single leg. Only a recorded arrival closes a leg — the plan
+ * missing its window is not the same as the leg being sailed. Legs are
+ * travelled in order (the voyage is cancelled or it is done end to end), so
+ * a leg the crew never logged an arrival for stays "active" however far past
+ * its window the clock has gone, keeping it (and not a downstream leg) the
+ * one the widget shows as current.
  */
 export function getLegPhase(leg: PhaseLeg, now: Date = new Date()): SchedulePhase {
   if (leg.actual_arrival_at) return "completed";
@@ -78,15 +87,13 @@ export function getLegPhase(leg: PhaseLeg, now: Date = new Date()): SchedulePhas
   const start = romeDayNumber(leg.starts_at_window_start);
   if (start == null || today == null) return "planned";
 
-  const end = romeDayNumber(leg.ends_at_window_end);
-  if (end != null && end < today) return "completed";
   if (start <= today) return "active";
   return "planned";
 }
 
-/** Only a leg that has not started can be booked. */
-export function isLegBookableNow(leg: PhaseLeg, now: Date = new Date()): boolean {
-  return getLegPhase(leg, now) === "planned";
+/** A leg is bookable until the admin records an explicit departure. */
+export function isLegBookableNow(leg: PhaseLeg): boolean {
+  return !leg.actual_departure_at;
 }
 
 /**

@@ -65,7 +65,7 @@ Non più manuali. La regola sta in un posto solo, mirrorata su due lati:
 `voyages.status` resta come **cache**, aggiornata da `refresh_voyage_status()` e dal cron `refresh-voyage-statuses` (ogni 15 min). La UI però ricalcola dal vivo con la lib TS, così una fase che gira per orologio è giusta a schermo senza aspettare il cron.
 
 ## Effetto sulle prenotazioni
-`voyage_leg_is_bookable_now()` sostituisce `booking_leg_is_current_or_future()`: prenotabile **solo** una tratta `planned`. È più stretto di prima, che lasciava prenotare una tratta nel giorno stesso della partenza, e ora rifiuta anche una tratta effettivamente partita. → [[13 - Booking Voyage]]
+`voyage_leg_is_bookable_now()` apre la prenotabilità: una tratta resta prenotabile finché l'admin non registra `actual_departure_at`. La fase della tratta (`getLegPhase`) resta data-aware per il widget e lo status del viaggio, ma la prenotabilità dipende solo dalla partenza esplicita — non dalla data. Questo permette a chi vuole unirsi da una tappa intermedia di farlo anche se la data prevista è già passata, finché non siamo salpati da quel porto. → [[13 - Booking Voyage]]
 
 ## Widget
 `VoyageLiveWidget.tsx` → [[06 - Frontend - Componenti]]. Nessuna pagina dedicata:

@@ -44,12 +44,15 @@ describe("getLegPhase", () => {
 
   it("falls back to the clock when no actual was recorded", () => {
     expect(getLegPhase(leg(), NOW)).toBe("planned");
+    // Window fully in the past and still nobody logged an arrival: legs are sailed
+    // in order, so this stays "active" rather than silently completing itself and
+    // letting a downstream leg look current instead.
     expect(
       getLegPhase(
         leg({ starts_at_window_start: "2026-09-10T05:30:00Z", ends_at_window_end: "2026-09-12T05:30:00Z" }),
         NOW
       )
-    ).toBe("completed");
+    ).toBe("active");
     expect(
       getLegPhase(
         leg({ starts_at_window_start: "2026-09-13T05:30:00Z", ends_at_window_end: "2026-09-16T05:30:00Z" }),
@@ -76,14 +79,14 @@ describe("isLegBookableNow", () => {
     expect(isLegBookableNow(leg({ actual_departure_at: "2026-09-14T05:30:00Z" }), NOW)).toBe(false);
   });
 
-  it("refuses a leg in progress and a leg already over", () => {
-    expect(isLegBookableNow(leg({ starts_at_window_start: "2026-09-13T05:30:00Z" }), NOW)).toBe(false);
+  it("allows a leg whose scheduled date passed but departure was not recorded", () => {
+    expect(isLegBookableNow(leg({ starts_at_window_start: "2026-09-13T05:30:00Z" }), NOW)).toBe(true);
     expect(
       isLegBookableNow(
         leg({ starts_at_window_start: "2026-09-10T05:30:00Z", ends_at_window_end: "2026-09-12T05:30:00Z" }),
         NOW
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("allows a leg still in the future", () => {
@@ -222,10 +225,11 @@ describe("leg window display", () => {
     expect(pinned).toBeTruthy();
   });
 
-  it("still uses the late arrival bound to decide the phase", () => {
+  it("stays active past the arrival bound until an actual is recorded", () => {
     // Mid-window: the early bound has passed but the leg may not be over yet.
     expect(getLegPhase(real, at("2026-09-12"))).toBe("active");
-    expect(getLegPhase(real, at("2026-09-15"))).toBe("completed");
+    // Window fully elapsed but nobody pressed "arriva ora" yet: still active, not completed.
+    expect(getLegPhase(real, at("2026-09-15"))).toBe("active");
   });
 });
 
