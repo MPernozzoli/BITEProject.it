@@ -261,25 +261,28 @@ const VoyagePage = () => {
   const departure = departureEntry?.waypoint;
   const arrival = arrivalEntry?.waypoint;
   /**
-   * Fin dove il viaggio è stato davvero percorso: solo un viaggio "active" può
-   * averne percorsa solo una parte (vedi VoyageMap, stessa logica). Un viaggio
-   * "completed" è concluso per intero, uno "planned" non è partito: in
-   * entrambi i casi non c'è un punto di rottura da mostrare in elenco.
+   * Fin dove il viaggio è stato davvero percorso, ma contato sulle sole tappe
+   * pubbliche (le uniche che appaiono in questo elenco): i via tecnici che
+   * disegnano la rotta sulla mappa non hanno mai un loro actual_arrival_at, e
+   * la stessa catena calcolata sull'array completo (vedi VoyageMap) si
+   * fermerebbe al primo via tecnico dopo la partenza anche quando tappe reali
+   * più avanti — comprese quelle "saltata"/"aggiunta" — sono già state
+   * toccate per davvero. Solo un viaggio "active" può averne percorsa solo
+   * una parte; "completed" è concluso per intero, "planned" non è partito.
    */
-  const travelledWaypointIndex = useMemo(() => {
-    if (!voyage || waypoints.length === 0) return -1;
-    if (voyage.status === "completed") return waypoints.length - 1;
+  const travelledEntryIndex = useMemo(() => {
+    if (!voyage || publicWaypointEntries.length === 0) return -1;
+    if (voyage.status === "completed") return publicWaypointEntries.length - 1;
     if (voyage.status !== "active") return -1;
-    return getVoyageTravelledWaypointIndex(waypoints);
-  }, [voyage, waypoints]);
-  // Indice (nell'elenco pubblico, non nell'array completo) della prima tappa
-  // non ancora raggiunta: qui va lo stacco unico che separa il già vissuto dal
-  // non ancora vissuto, invece di un badge su ogni singola tappa.
+    return getVoyageTravelledWaypointIndex(publicWaypointEntries.map((entry) => entry.waypoint));
+  }, [voyage, publicWaypointEntries]);
+  // Indice (nell'elenco pubblico) della prima tappa non ancora raggiunta: qui
+  // va lo stacco unico che separa il già vissuto dal non ancora vissuto,
+  // invece di un badge su ogni singola tappa.
   const notYetReachedEntryIndex = useMemo(() => {
-    if (travelledWaypointIndex < 0 || travelledWaypointIndex >= waypoints.length - 1) return null;
-    const index = publicWaypointEntries.findIndex((entry) => entry.originalIndex > travelledWaypointIndex);
-    return index > 0 ? index : null;
-  }, [publicWaypointEntries, travelledWaypointIndex, waypoints.length]);
+    if (travelledEntryIndex < 0 || travelledEntryIndex >= publicWaypointEntries.length - 1) return null;
+    return travelledEntryIndex + 1;
+  }, [travelledEntryIndex, publicWaypointEntries.length]);
   const routeDistance = useMemo(() => {
     if (!voyage || waypoints.length < 2) return null;
     if (voyage.type === "land") {
@@ -701,8 +704,8 @@ const VoyagePage = () => {
                 // disponibile va mostrata come fatto ("Arrivo"/"Partenza"), non come
                 // una finestra di prenotazione o una previsione che non ha più senso
                 // per qualcosa già successo.
-                const arrivalAlreadyHappened = originalIndex <= travelledWaypointIndex;
-                const departureAlreadyHappened = originalIndex < travelledWaypointIndex;
+                const arrivalAlreadyHappened = index <= travelledEntryIndex;
+                const departureAlreadyHappened = index < travelledEntryIndex;
                 const arrivalValue = actualArrivalLabel || arrivalWindowLabel || plannedArrivalLabel;
                 const departureValue = actualDepartureLabel || departureWindowLabel || plannedDepartureLabel;
                 const arrivalRow = arrivalValue
