@@ -144,14 +144,19 @@ export function depositForPayerEur(
  * The upfront deposit owed on a total contribution: half of it, capped so the deposit always
  * stays payable through the Bunq single-transaction link. The remaining balance is due later,
  * before departure — see docs/booking payment flow.
+ *
+ * When `fullPaymentRequired` is set (departure is already inside the balance window, see
+ * `isWithinFullPaymentWindow` below), there is no later moment left for a balance to fall due,
+ * so the whole contribution is requested now instead of being split.
  */
-export function depositTargetEur(totalDueEur: number): number {
+export function depositTargetEur(totalDueEur: number, opts: { fullPaymentRequired?: boolean } = {}): number {
+  if (opts.fullPaymentRequired) return roundCurrency(totalDueEur);
   return Math.min(roundCurrency(totalDueEur * DEPOSIT_PERCENT), DEPOSIT_CAP_EUR);
 }
 
 /** The balance left to pay once the upfront deposit is settled. */
-export function balanceAfterDepositEur(totalDueEur: number): number {
-  return roundCurrency(Math.max(0, totalDueEur - depositTargetEur(totalDueEur)));
+export function balanceAfterDepositEur(totalDueEur: number, opts: { fullPaymentRequired?: boolean } = {}): number {
+  return roundCurrency(Math.max(0, totalDueEur - depositTargetEur(totalDueEur, opts)));
 }
 
 /**
@@ -160,6 +165,35 @@ export function balanceAfterDepositEur(totalDueEur: number): number {
  * min(leg.starts_at_window_start) - interval '15 days' — keep both in sync.
  */
 export const BALANCE_DUE_DAYS_BEFORE_DEPARTURE = 15;
+
+/**
+ * Earliest departure (ms since epoch) among the given legs' embarkation windows, or null when
+ * none carry a start time yet. Mirrors the "own embarkation leg" used by the balance deadline
+ * (public.voyage_booking_balance_due_at / BALANCE_DUE_DAYS_BEFORE_DEPARTURE above).
+ */
+export function earliestDepartureMs(legs: Pick<DepositLeg, "starts_at_window_start">[]): number | null {
+  const times = legs
+    .map((leg) => (leg.starts_at_window_start ? new Date(leg.starts_at_window_start).getTime() : NaN))
+    .filter((time) => Number.isFinite(time));
+  return times.length ? Math.min(...times) : null;
+}
+
+/**
+ * Whether departure is already inside the standard balance window: less than
+ * BALANCE_DUE_DAYS_BEFORE_DEPARTURE days away. Splitting acconto/saldo in that case would set a
+ * balance deadline that is already in the past, so the whole contribution is due now instead —
+ * see depositTargetEur's `fullPaymentRequired`. Legs with no departure time yet never trigger
+ * this (nothing to compare against).
+ */
+export function isWithinFullPaymentWindow(
+  legs: Pick<DepositLeg, "starts_at_window_start">[],
+  now: Date = new Date(),
+): boolean {
+  const departureMs = earliestDepartureMs(legs);
+  if (departureMs === null) return false;
+  const daysUntilDeparture = (departureMs - now.getTime()) / (24 * 60 * 60 * 1000);
+  return daysUntilDeparture < BALANCE_DUE_DAYS_BEFORE_DEPARTURE;
+}
 
 /**
  * The single wording for the balance deadline, used by every screen and email that mentions it.
@@ -176,9 +210,20 @@ export function balanceDeadlinePhrase(lang: "it" | "en" = "it"): string {
 /**
  * The one sentence that states how a contribution is split, wherever a traveller is shown a
  * figure before paying it. Every booking flow says it the same way because they all say it
- * from here.
+ * from here. Pass `fullPaymentRequired: true` (see isWithinFullPaymentWindow) when departure is
+ * too close for a later balance deadline to make sense: the whole amount is due now instead.
  */
-export function depositSplitSentence(totalDueEur: number, lang: "it" | "en" = "it"): string {
+export function depositSplitSentence(
+  totalDueEur: number,
+  lang: "it" | "en" = "it",
+  opts: { fullPaymentRequired?: boolean } = {},
+): string {
+  if (opts.fullPaymentRequired) {
+    const total = formatDepositEur(roundCurrency(totalDueEur), lang);
+    return lang === "it"
+      ? `Partenza a meno di ${BALANCE_DUE_DAYS_BEFORE_DEPARTURE} giorni: niente acconto frazionato, va versato subito l'intero importo di ${total}.`
+      : `Departure is less than ${BALANCE_DUE_DAYS_BEFORE_DEPARTURE} days away: no split deposit — the full amount of ${total} is due now.`;
+  }
   const deposit = formatDepositEur(depositTargetEur(totalDueEur), lang);
   const balance = formatDepositEur(balanceAfterDepositEur(totalDueEur), lang);
   return lang === "it"

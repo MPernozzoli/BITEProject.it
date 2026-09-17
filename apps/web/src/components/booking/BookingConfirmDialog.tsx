@@ -17,6 +17,7 @@ import {
   depositSplitSentence,
   formatDepositEur,
   getContributionExplanation,
+  isWithinFullPaymentWindow,
 } from "@/lib/booking-deposit";
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import ContributionEstimateNote from "@/components/booking/ContributionEstimateNote";
@@ -244,6 +245,9 @@ const BookingConfirmDialog = ({
     if (maxComplexity < CHALLENGING_COMPLEXITY_THRESHOLD && maxDanger === 0) return null;
     return { maxComplexity, maxDanger, reasonKeys: Array.from(reasonKeys) };
   }, [legs]);
+  // Departure inside the 15-day balance window: no acconto/saldo split, the whole contribution
+  // is due now (see isWithinFullPaymentWindow / depositTargetEur's fullPaymentRequired).
+  const fullPaymentRequired = useMemo(() => isWithinFullPaymentWindow(legs), [legs]);
   const contributionExplanation = useMemo(
     () => getContributionExplanation(legs, { contributionPerNmEur, lang: lang === "en" ? "en" : "it" }),
     [contributionPerNmEur, lang, legs]
@@ -475,7 +479,7 @@ const BookingConfirmDialog = ({
                   ? lang === "it"
                     ? `Da versare ora: ${formatDepositEur(depositTotalEur, "it")} (quota fissa). L'eventuale saldo verra richiesto solo dopo la revisione della tua proposta.`
                     : `Due now: ${formatDepositEur(depositTotalEur, "en")} (fixed share). Any remaining balance will only be requested after your proposal is reviewed.`
-                  : depositSplitSentence(depositTotalEur, lang === "it" ? "it" : "en")}
+                  : depositSplitSentence(depositTotalEur, lang === "it" ? "it" : "en", { fullPaymentRequired })}
               </p>
               <p className="mt-3 text-xs leading-relaxed text-amber-900/90 dark:text-amber-300 dark:text-amber-100/80">
                 {lang === "it"

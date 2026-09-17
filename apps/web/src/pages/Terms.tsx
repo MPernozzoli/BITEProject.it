@@ -172,6 +172,11 @@ const Terms = () => {
         </p>
         <p>
           {isIt
+            ? "Se al momento della richiesta la partenza della tua tratta di imbarco è già a meno di 15 giorni, non c'è acconto frazionato: va versato subito l'intero importo del contributo, perché non resterebbe un termine utile per un saldo successivo."
+            : "If, at the time of the request, the departure of your own embarkation leg is already less than 15 days away, there is no split deposit: the whole contribution is due immediately, since no meaningful time would be left for a later balance."}
+        </p>
+        <p>
+          {isIt
             ? "Se il saldo non viene versato entro questo termine, la prenotazione decade automaticamente (o, per i gruppi con pagamento individuale, decade la singola partecipazione di chi non ha versato, mentre il resto del gruppo resta confermato) e l'acconto versato non viene rimborsato, salvo una diversa valutazione discrezionale da parte nostra. Questa decadenza per mancato pagamento è distinta dalla rinuncia volontaria e dalle relative percentuali di rimborso indicate nella sezione «Cancellazioni e rimborsi»."
             : "If the balance is not paid by this deadline, the booking automatically lapses (or, for groups with individual payment, only the participation of whoever did not pay lapses, while the rest of the group stays confirmed) and the deposit paid is not refunded, unless we decide otherwise at our discretion. This lapse for non-payment is distinct from voluntary withdrawal and the related refund percentages set out in the “Cancellations and Refunds” section."}
         </p>

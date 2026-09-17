@@ -314,7 +314,7 @@ const UserBookings = () => {
       voyageIds.length
         ? typedSupabase
             .from("voyage_waypoints")
-            .select("id,voyage_id,name,name_it,name_en,sort_order,date_start,date_end")
+            .select("id,voyage_id,name,name_it,name_en,sort_order,date_start,date_end,actual_arrival_at,actual_departure_at")
             .in("voyage_id", voyageIds)
             .order("sort_order", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
@@ -2047,15 +2047,22 @@ const UserBookings = () => {
                           {lang === "it"
                             ? `Hai versato l'acconto: manca il saldo di ${formatDepositEur(ownRequestBalanceDue.outstandingEur, "it")}.`
                             : `You've paid the deposit: the ${formatDepositEur(ownRequestBalanceDue.outstandingEur, "en")} balance is still due.`}
-                          {ownRequestBalanceDue.deadline && (
-                            <span className="mt-1 block font-semibold">
-                              {lang === "it" ? "Da versare entro il " : "Due by "}
-                              {formatBookingDate(ownRequestBalanceDue.deadline, locale)}
-                              {lang === "it"
-                                ? " (15 giorni prima della partenza della tua tratta di imbarco)."
-                                : " (15 days before your own embarkation leg departs)."}
-                            </span>
-                          )}
+                          {ownRequestBalanceDue.deadline &&
+                            (new Date(ownRequestBalanceDue.deadline).getTime() > Date.now() ? (
+                              <span className="mt-1 block font-semibold">
+                                {lang === "it" ? "Da versare entro il " : "Due by "}
+                                {formatBookingDate(ownRequestBalanceDue.deadline, locale)}
+                                {lang === "it"
+                                  ? " (15 giorni prima della partenza della tua tratta di imbarco)."
+                                  : " (15 days before your own embarkation leg departs)."}
+                              </span>
+                            ) : (
+                              <span className="mt-1 block font-semibold">
+                                {lang === "it"
+                                  ? "Partenza tra meno di 15 giorni: versalo il prima possibile."
+                                  : "Departure is less than 15 days away: pay it as soon as possible."}
+                              </span>
+                            ))}
                         </p>
                         <p className="mt-1 text-[11px] leading-relaxed opacity-70">
                           {lang === "it"

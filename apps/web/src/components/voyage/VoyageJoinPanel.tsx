@@ -41,6 +41,7 @@ import {
 import {
   contributionFixedMinimumEur,
   formatDepositEur,
+  isWithinFullPaymentWindow,
   legDepositEur,
   perPersonDepositEur,
   shouldApplyContributionFixedMinimum,
@@ -818,6 +819,7 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
         }}
         depositPerPersonEur={depositPerPersonEur}
         depositTotalEur={depositTotalEur}
+        fullPaymentRequired={isWithinFullPaymentWindow(selectedLegs)}
         workawayEnabled={bookingSettings?.workaway_enabled}
         blocker={blocker}
         isSignedIn={Boolean(userId)}

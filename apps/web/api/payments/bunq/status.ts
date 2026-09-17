@@ -17,6 +17,7 @@ import {
 import {
   clearBookingPaymentDeadlineIfSettled,
   enqueuePaymentReceivedNotifications,
+  isFullPaymentSettlement,
   paymentPhaseFromReference,
 } from "../../../src/server/bunq/deposit-resolver.js";
 import {
@@ -148,13 +149,17 @@ export default async function handler(req: NodeRequest, res: NodeResponse): Prom
           // resulting booking status into this same row, so the traveller gets one email
           // saying both that the contribution arrived and what became of their application.
           try {
+            const inferredPhase = paymentPhaseFromReference(row.reference);
+            const fullPayment =
+              inferredPhase === "deposit" &&
+              (await isFullPaymentSettlement(db, bookingRequestId, participantId || null).catch(() => false));
             await enqueuePaymentReceivedNotifications(db, {
               bookingRequestId,
               recipientProfileId: user.id,
               amountEur: row.amount_cents / 100,
               paymentMethod: row.payment_method,
               reference: row.reference,
-              phase: paymentPhaseFromReference(row.reference),
+              phase: fullPayment ? "balance" : inferredPhase,
             });
           } catch (error) {
             console.error("[bunq/status] payment notification enqueue failed", error);

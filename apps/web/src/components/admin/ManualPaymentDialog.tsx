@@ -38,6 +38,9 @@ interface ManualPaymentDialogProps {
   dueEur?: number | null;
   /** Already settled on this booking, so the admin can see what is still outstanding. */
   alreadyPaidEur?: number;
+  /** Departure inside the 15-day balance window: no acconto/saldo split, the whole contribution
+   * is due at once — see isWithinFullPaymentWindow in booking-deposit.ts. */
+  fullPaymentRequired?: boolean;
 }
 
 /**
@@ -58,6 +61,7 @@ const ManualPaymentDialog = ({
   bookingStatus,
   dueEur,
   alreadyPaidEur = 0,
+  fullPaymentRequired = false,
 }: ManualPaymentDialogProps) => {
   const [amount, setAmount] = useState("");
   const [reference, setReference] = useState("");
@@ -104,9 +108,12 @@ const ManualPaymentDialog = ({
             />
             {dueEur != null && (
               <p className="text-xs text-muted-foreground">
-                Contributo totale calcolato sulle tratte attuali: {formatDepositEur(dueEur)} (acconto{" "}
-                {formatDepositEur(depositTargetEur(dueEur))}, saldo {formatDepositEur(balanceAfterDepositEur(dueEur))}{" "}
-                {balanceDeadlinePhrase("it")})
+                Contributo totale calcolato sulle tratte attuali: {formatDepositEur(dueEur)}{" "}
+                {fullPaymentRequired
+                  ? "(partenza a meno di 15 giorni: nessun acconto frazionato, dovuto per intero)"
+                  : `(acconto ${formatDepositEur(depositTargetEur(dueEur))}, saldo ${formatDepositEur(
+                      balanceAfterDepositEur(dueEur)
+                    )} ${balanceDeadlinePhrase("it")})`}
                 {alreadyPaidEur > 0 && ` · già versati ${formatDepositEur(alreadyPaidEur)}`}
                 {outstandingEur != null && outstandingEur > 0 && ` · residuo ${formatDepositEur(outstandingEur)}`}
               </p>

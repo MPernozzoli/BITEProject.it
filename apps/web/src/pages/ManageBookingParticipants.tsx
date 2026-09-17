@@ -14,6 +14,7 @@ import {
   depositForPayerEur,
   depositSplitSentence,
   formatDepositEur,
+  isWithinFullPaymentWindow,
   perPersonDepositEur,
   shouldApplyContributionFixedMinimum,
   type DepositLeg,
@@ -207,6 +208,9 @@ const ManageBookingParticipants = () => {
         : depositForPayerEur(legs, { isLead: true, paymentMode: "each_pays_own", partySize }, contributionOptions),
     [contributionOptions, fixedMinimumEur, legs, negotiationPending, partySize]
   );
+  // Departure inside the 15-day balance window: no acconto/saldo split, the whole contribution
+  // is due now for every payer on this booking (see isWithinFullPaymentWindow).
+  const fullPaymentRequired = useMemo(() => isWithinFullPaymentWindow(legs), [legs]);
 
   const updateGuest = (index: number, field: keyof ParticipantInput, value: string) => {
     setGuests((current) => current.map((g, i) => (i === index ? { ...g, [field]: value } : g)));
@@ -454,8 +458,8 @@ const ManageBookingParticipants = () => {
                     ? `Paghi ora ${formatDepositEur(leadPaysAllTotal, "it")}, la quota fissa per tutto il gruppo. Gli altri dovranno solo iscriversi e accettare le condizioni.`
                     : `Pay ${formatDepositEur(leadPaysAllTotal, "en")} now, the fixed share for the whole group. The others only need to register and accept the terms.`
                   : lang === "it"
-                    ? `Per l'intero gruppo — ${depositSplitSentence(leadPaysAllTotal, "it")} Gli altri dovranno solo iscriversi e accettare le condizioni.`
-                    : `For the whole group — ${depositSplitSentence(leadPaysAllTotal, "en")} The others only need to register and accept the terms.`}
+                    ? `Per l'intero gruppo — ${depositSplitSentence(leadPaysAllTotal, "it", { fullPaymentRequired })} Gli altri dovranno solo iscriversi e accettare le condizioni.`
+                    : `For the whole group — ${depositSplitSentence(leadPaysAllTotal, "en", { fullPaymentRequired })} The others only need to register and accept the terms.`}
               </span>
             </span>
           </label>
@@ -480,8 +484,8 @@ const ManageBookingParticipants = () => {
                     ? `Paghi ora ${formatDepositEur(leadPaysMeTotal, "it")}, la tua quota fissa. Ogni altro partecipante verserà la propria accettando l'invito, e poi l'importo che hai concordato tu: la cifra non è rinegoziabile dai singoli.`
                     : `Pay ${formatDepositEur(leadPaysMeTotal, "en")} now, your own fixed share. Each other participant pays theirs when accepting, then the amount you agreed: individuals cannot renegotiate it.`
                   : lang === "it"
-                    ? `Solo per te — ${depositSplitSentence(leadPaysMeTotal, "it")} Ogni altro partecipante verserà il proprio contributo, con lo stesso acconto/saldo, accettando l'invito.`
-                    : `Just for you — ${depositSplitSentence(leadPaysMeTotal, "en")} Each other participant pays their own contribution, with the same deposit/balance split, when accepting.`}
+                    ? `Solo per te — ${depositSplitSentence(leadPaysMeTotal, "it", { fullPaymentRequired })} Ogni altro partecipante verserà il proprio contributo${fullPaymentRequired ? ", per intero," : ", con lo stesso acconto/saldo,"} accettando l'invito.`
+                    : `Just for you — ${depositSplitSentence(leadPaysMeTotal, "en", { fullPaymentRequired })} Each other participant pays their own contribution${fullPaymentRequired ? " in full" : ", with the same deposit/balance split,"} when accepting.`}
               </span>
             </span>
           </label>

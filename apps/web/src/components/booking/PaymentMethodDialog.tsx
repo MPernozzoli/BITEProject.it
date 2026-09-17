@@ -82,6 +82,11 @@ const PaymentMethodDialog = ({
   const isBalance = resolvedPhase === "balance";
   const nothingDue = quoteState.status === "nothing_due";
 
+  // Departure inside the 15-day balance window: resolveDepositPayer collapses acconto/saldo into
+  // one payment, so the "deposit" phase already asks for the whole contribution.
+  const fullPaymentRequired =
+    quote != null && !isBalance && quote.totalDueEur <= quote.depositTargetEur + 0.005;
+
   // A bunq.me link is capped at €500; above that only a bank transfer can collect the amount.
   const singleTransactionLimit = quote?.maxSingleTransactionEur ?? BUNQ_SINGLE_TRANSACTION_LIMIT_EUR;
   const cardTooHigh = quote != null && quote.amountEur > singleTransactionLimit;
@@ -103,24 +108,42 @@ const PaymentMethodDialog = ({
               ? it
                 ? "Completa il pagamento del saldo"
                 : "Complete the balance payment"
-              : it
-                ? "Completa il pagamento dell'acconto"
-                : "Complete the deposit payment"}
+              : fullPaymentRequired
+                ? it
+                  ? "Completa il pagamento dell'intero importo"
+                  : "Complete the full payment"
+                : it
+                  ? "Completa il pagamento dell'acconto"
+                  : "Complete the deposit payment"}
           </DialogTitle>
           <DialogDescription>
             {isBalance
               ? it
                 ? "Per mantenere la prenotazione devi versare il saldo entro la scadenza indicata: oltre quel termine la prenotazione decade e l'acconto versato non è rimborsabile."
                 : "To keep your booking you must pay the balance by the indicated deadline: after that the booking lapses and the deposit already paid is not refundable."
-              : it
-                ? `Per concludere la candidatura devi versare l'acconto: il 50% del contributo, fino a un massimo di ${formatDepositEur(DEPOSIT_CAP_EUR, "it")}. Il saldo andrà versato più avanti, ${balanceDeadlinePhrase("it")}.`
-                : `To complete your application you must pay the deposit: 50% of the contribution, up to ${formatDepositEur(DEPOSIT_CAP_EUR, "en")}. The balance is due later, ${balanceDeadlinePhrase("en")}.`}
+              : fullPaymentRequired
+                ? it
+                  ? "La partenza della tua tratta di imbarco è a meno di 15 giorni: niente acconto frazionato, per concludere la candidatura devi versare subito l'intero importo del contributo."
+                  : "Your embarkation leg departs in less than 15 days: no split deposit — to complete your application you must pay the full contribution now."
+                : it
+                  ? `Per concludere la candidatura devi versare l'acconto: il 50% del contributo, fino a un massimo di ${formatDepositEur(DEPOSIT_CAP_EUR, "it")}. Il saldo andrà versato più avanti, ${balanceDeadlinePhrase("it")}.`
+                  : `To complete your application you must pay the deposit: 50% of the contribution, up to ${formatDepositEur(DEPOSIT_CAP_EUR, "en")}. The balance is due later, ${balanceDeadlinePhrase("en")}.`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {isBalance ? (it ? "Saldo da versare" : "Balance to pay") : it ? "Acconto da versare" : "Deposit to pay"}
+            {isBalance
+              ? it
+                ? "Saldo da versare"
+                : "Balance to pay"
+              : fullPaymentRequired
+                ? it
+                  ? "Importo intero da versare"
+                  : "Full amount to pay"
+                : it
+                  ? "Acconto da versare"
+                  : "Deposit to pay"}
           </p>
           {quoteState.status === "loading" && (
             <p className="flex items-center justify-center gap-2 py-1 text-sm text-muted-foreground">

@@ -14,6 +14,7 @@ import { bunqConfigured, environment, accountPath, bunqRequest } from "../../../
 import {
   clearBookingPaymentDeadlineIfSettled,
   enqueuePaymentReceivedNotifications,
+  isFullPaymentSettlement,
   paymentPhaseFromReference,
 } from "../../../src/server/bunq/deposit-resolver.js";
 import { getBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
@@ -193,13 +194,18 @@ async function enqueuePaymentReceivedForDeposit(
     (request as { profile_id?: string | null } | null)?.profile_id;
   if (!recipientProfileId) return;
 
+  const inferredPhase = paymentPhaseFromReference(row.reference);
+  const fullPayment =
+    inferredPhase === "deposit" &&
+    (await isFullPaymentSettlement(db, row.booking_request_id, row.participant_id).catch(() => false));
+
   await enqueuePaymentReceivedNotifications(db, {
     bookingRequestId: row.booking_request_id,
     recipientProfileId,
     amountEur: row.amount_cents / 100,
     paymentMethod: row.payment_method,
     reference: row.reference,
-    phase: paymentPhaseFromReference(row.reference),
+    phase: fullPayment ? "balance" : inferredPhase,
   });
 }
 

@@ -26,6 +26,9 @@ interface VoyageJoinDialogProps {
   onCandidateInfoChange: (candidateInfo: CandidateInfo) => void;
   depositPerPersonEur: number;
   depositTotalEur: number;
+  /** Departure inside the 15-day balance window: no acconto/saldo split, the whole contribution
+   * is due now (see isWithinFullPaymentWindow in booking-deposit.ts). */
+  fullPaymentRequired?: boolean;
   workawayEnabled?: boolean | null;
   /** What still blocks the application, so the last button explains itself instead of dying. */
   blocker: BookingApplicationBlocker | null;
@@ -65,6 +68,7 @@ const VoyageJoinDialog = ({
   onCandidateInfoChange,
   depositPerPersonEur,
   depositTotalEur,
+  fullPaymentRequired,
   workawayEnabled,
   blocker,
   isSignedIn,
@@ -230,7 +234,7 @@ const VoyageJoinDialog = ({
                   </p>
                 )}
                 <p className="mt-2 text-[12.5px] font-medium leading-relaxed text-amber-900 dark:text-amber-300 dark:text-amber-100/90">
-                  {depositSplitSentence(depositTotalEur, lang)}
+                  {depositSplitSentence(depositTotalEur, lang, { fullPaymentRequired })}
                 </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-amber-950/85 dark:text-amber-300 dark:text-amber-100/80">
                   {it

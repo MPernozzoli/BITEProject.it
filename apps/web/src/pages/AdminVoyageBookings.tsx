@@ -66,6 +66,7 @@ import {
   contributionPerNmEur,
   depositForPayerEur,
   formatDepositEur,
+  isWithinFullPaymentWindow,
   perPersonDepositEur,
 } from "@/lib/booking-deposit";
 import {
@@ -905,6 +906,15 @@ const AdminVoyageBookings = () => {
       },
       { contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur }
     );
+  };
+
+  /** Whether this booking's own legs depart inside the 15-day balance window — see
+   * isWithinFullPaymentWindow. Drives the acconto/saldo note in the manual-payment dialog. */
+  const fullPaymentRequiredForRequest = (requestId: string): boolean => {
+    const legIds = new Set(
+      requestLegs.filter((link) => link.booking_request_id === requestId).map((link) => link.bookable_leg_id)
+    );
+    return isWithinFullPaymentWindow(legs.filter((leg) => legIds.has(leg.id)));
   };
 
   /**
@@ -1959,6 +1969,7 @@ const AdminVoyageBookings = () => {
             : null
         }
         dueEur={paymentDialogRequestId ? dueEurForRequest(paymentDialogRequestId) : null}
+        fullPaymentRequired={paymentDialogRequestId ? fullPaymentRequiredForRequest(paymentDialogRequestId) : false}
       />
     </div>
   );

@@ -11,6 +11,7 @@ import {
   depositForPayerEur,
   depositTargetEur,
   contributionFixedMinimumEur,
+  isWithinFullPaymentWindow,
   type DepositLeg,
   type PaymentMode,
 } from "../../lib/booking-deposit.js";
@@ -63,6 +64,29 @@ export function paymentPhaseFromReference(reference: string | null | undefined):
   if (reference.startsWith("ACC-")) return "deposit";
   if (reference.startsWith("SAL-")) return "balance";
   return null;
+}
+
+/**
+ * Whether the payer's stamped deposit target already covers their full obligation — i.e.
+ * resolveDepositPayer collapsed acconto/saldo into a single payment because departure was
+ * already inside the 15-day balance window (fullPaymentRequired). A payment tagged "deposit" by
+ * its ACC- reference is, in that case, actually the whole contribution: the "payment received"
+ * notification should say so instead of pointing at a balance that was never set.
+ */
+export async function isFullPaymentSettlement(
+  db: SupabaseClient,
+  bookingRequestId: string,
+  participantId: string | null,
+): Promise<boolean> {
+  const { data, error } = await db
+    .from(participantId ? "voyage_booking_participants" : "voyage_booking_requests")
+    .select("contribution_due_cents, contribution_deposit_cents")
+    .eq("id", participantId ?? bookingRequestId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = data as { contribution_due_cents: number | null; contribution_deposit_cents: number | null } | null;
+  if (!row || row.contribution_due_cents == null || row.contribution_deposit_cents == null) return false;
+  return row.contribution_deposit_cents >= row.contribution_due_cents;
 }
 
 export type ResolvedDeposit = {
@@ -325,6 +349,11 @@ export async function resolveDepositPayer(
   const contributionResolvedVariableCents =
     (request as { contribution_resolved_variable_cents?: number | null }).contribution_resolved_variable_cents ?? null;
 
+  // Below the 15-day balance window, splitting acconto/saldo would set a balance deadline that
+  // is already in the past — so the whole contribution is requested up front instead. Based on
+  // the same legs (the payer's own embarkation leg) that drive the mileage formula above.
+  const fullPaymentRequired = isWithinFullPaymentWindow(legs);
+
   let perPersonEur: number;
   let dueEur: number;
   let depositTarget: number;
@@ -348,11 +377,11 @@ export async function resolveDepositPayer(
     const resolvedVariableEur = Math.max(0, contributionResolvedVariableCents ?? 0) / 100;
     perPersonEur = contributionFixedMinimumEur(contributionOpts.fixedMinimumEur) + resolvedVariableEur;
     dueEur = Math.round((perPersonEur * coveredPersons + Number.EPSILON) * 100) / 100;
-    depositTarget = depositTargetEur(dueEur);
+    depositTarget = depositTargetEur(dueEur, { fullPaymentRequired });
   } else {
     perPersonEur = perPersonDepositEur(legs, contributionOpts);
     dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
-    depositTarget = depositTargetEur(dueEur);
+    depositTarget = depositTargetEur(dueEur, { fullPaymentRequired });
   }
 
   // Charge only what is still outstanding, and only up to the deposit target until it is fully
