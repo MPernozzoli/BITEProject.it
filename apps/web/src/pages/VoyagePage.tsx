@@ -654,10 +654,15 @@ const VoyagePage = () => {
                   : null;
                 const waypointMoment = formatWaypointMoment(waypoint, locale);
                 const poiItems = normalizeWaypointPoi(waypoint.poi);
-                const activityItems = normalizeWaypointActivities(waypoint.activities);
                 const airportItems = normalizeWaypointAirports(waypoint.nearby_airports);
                 const isSkipped = waypoint.actual_status === "skipped";
                 const isAdded = waypoint.actual_status === "added";
+                const activityItems = normalizeWaypointActivities(waypoint.activities);
+                // Una tappa aggiunta è una deviazione fuori programma: quel che c'è
+                // nell'elenco non era previsto, è quel che si è fatto per davvero.
+                const activitiesLabel = isAdded
+                  ? (lang === "it" ? "Attività svolte" : "Activities done")
+                  : (lang === "it" ? "Attività previste" : "Planned activities");
                 const isDeparture = waypoint.id === departureEntry?.waypoint.id;
                 const isArrival = waypoint.id === arrivalEntry?.waypoint.id;
                 const isBookend = isDeparture || isArrival;
@@ -947,7 +952,7 @@ const VoyagePage = () => {
                         {activityItems.length > 0 && (
                           <div className="mt-6">
                             <p className="mb-3 flex items-center gap-1.5 text-[11px] font-sans uppercase tracking-[0.18em] text-muted-foreground">
-                              <Activity size={13} className="text-accent" /> {lang === "it" ? "Attività previste" : "Planned activities"}
+                              <Activity size={13} className="text-accent" /> {activitiesLabel}
                             </p>
                             <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-proximity">
                               {activityItems.map((item, itemIndex) => (
