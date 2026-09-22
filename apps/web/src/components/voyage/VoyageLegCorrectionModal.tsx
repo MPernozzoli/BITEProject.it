@@ -1,14 +1,56 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, MapPin, Search, X } from "lucide-react";
+import { Loader2, MapPin, MapPinPlus, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { geocodePlaces, type GeocodedPlace } from "@/lib/voyage-utils";
+import { buildVoyageGeometry, geocodePlaces, reverseGeocodePlaceLocalized, type GeocodedPlace } from "@/lib/voyage-utils";
+import type { TablesUpdate } from "@/integrations/supabase/types";
+import VoyageLegCorrectionMap, {
+  type VoyageLegCorrectionMapPlacementTarget,
+} from "@/components/voyage/VoyageLegCorrectionMap";
+
+/**
+ * A correction (skip/add) changes which waypoints make up the actually-travelled route, so the
+ * voyage's cached_geometry — otherwise still shaped for the original plan — must be recomputed
+ * against the corrected sequence to keep automatic land-avoidance (see buildVoyageGeometry)
+ * accurate for the new stretch. Mirrors AdminVoyageManager's syncVoyageGeometry, scoped to just
+ * this voyage since the modal has no access to the admin editor's in-memory waypoint state.
+ */
+async function recomputeVoyageGeometryAfterCorrection(voyageId: string): Promise<boolean> {
+  const { data: voyage, error: voyageError } = await supabase
+    .from("voyages")
+    .select("type, waterway_autoroute")
+    .eq("id", voyageId)
+    .single();
+  if (voyageError || !voyage) return false;
+
+  const { data: waypoints, error: waypointsError } = await supabase
+    .from("voyage_waypoints")
+    .select("lat, lng, actual_status")
+    .eq("voyage_id", voyageId)
+    .order("sort_order", { ascending: true });
+  if (waypointsError || !waypoints) return false;
+
+  const actualWaypoints = waypoints.filter((waypoint) => waypoint.actual_status !== "skipped");
+  if (actualWaypoints.length < 2) return false;
+
+  const voyageType = voyage.type as "water" | "land";
+  const coordinates = await buildVoyageGeometry(actualWaypoints, voyageType, {
+    waterwayAutoroute: voyageType === "water" && Boolean(voyage.waterway_autoroute),
+  });
+  if (coordinates.length < 2) return false;
+
+  const payload: TablesUpdate<"voyages"> = { cached_geometry: { type: "LineString", coordinates } };
+  const { error: updateError } = await supabase.from("voyages").update(payload).eq("id", voyageId);
+  return !updateError;
+}
 
 export interface VoyageLegCorrectionWaypoint {
   id: string;
   name: string;
   sortOrder: number;
+  lat: number;
+  lng: number;
 }
 
 export interface VoyageLegCorrectionModalProps {
@@ -42,6 +84,10 @@ const copy = {
     cancel: "Annulla",
     selected: "Selezionata",
     noResults: "Nessun risultato",
+    placeOnMap: "Posiziona sulla mappa",
+    placingOnMap: "Clicca sulla mappa...",
+    cancelPlacing: "Annulla posizionamento",
+    locating: "Individuo il punto...",
   },
   en: {
     title: "Correct next stop",
@@ -60,6 +106,10 @@ const copy = {
     cancel: "Cancel",
     selected: "Selected",
     noResults: "No results",
+    placeOnMap: "Place on the map",
+    placingOnMap: "Click the map...",
+    cancelPlacing: "Cancel placing",
+    locating: "Locating the point...",
   },
 } as const;
 
@@ -85,6 +135,9 @@ const VoyageLegCorrectionModal = ({
   const [technicalSearching, setTechnicalSearching] = useState(false);
   const [technicalStops, setTechnicalStops] = useState<GeocodedPlace[]>([]);
 
+  const [placementTarget, setPlacementTarget] = useState<VoyageLegCorrectionMapPlacementTarget>(null);
+  const [placingLoading, setPlacingLoading] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   const reset = () => {
@@ -95,6 +148,39 @@ const VoyageLegCorrectionModal = ({
     setTechnicalQuery("");
     setTechnicalResults([]);
     setTechnicalStops([]);
+    setPlacementTarget(null);
+    setPlacingLoading(false);
+  };
+
+  const handlePlaceAt = async (lat: number, lng: number) => {
+    const target = placementTarget;
+    if (!target) return;
+    setPlacementTarget(null);
+    setPlacingLoading(true);
+    try {
+      const localized = await reverseGeocodePlaceLocalized(lat, lng);
+      const name =
+        (lang === "it" ? localized.it || localized.en : localized.en || localized.it) ||
+        (lang === "it" ? "Punto selezionato" : "Selected point");
+      const place: GeocodedPlace = { lat, lng, name };
+      if (target === "narrative") {
+        setNarrativeSelected(place);
+      } else {
+        setTechnicalStops((current) => [...current, place]);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Reverse geocoding failed");
+    } finally {
+      setPlacingLoading(false);
+    }
+  };
+
+  const handleNarrativeMove = (lat: number, lng: number) => {
+    setNarrativeSelected((current) => (current ? { ...current, lat, lng } : current));
+  };
+
+  const handleTechnicalMove = (index: number, lat: number, lng: number) => {
+    setTechnicalStops((current) => current.map((place, i) => (i === index ? { ...place, lat, lng } : place)));
   };
 
   const handleClose = () => {
@@ -158,7 +244,16 @@ const VoyageLegCorrectionModal = ({
         if (error) throw error;
       }
 
-      toast.success(lang === "it" ? "Correzione salvata" : "Correction saved");
+      const geometryOk = await recomputeVoyageGeometryAfterCorrection(voyageId);
+      if (geometryOk) {
+        toast.success(lang === "it" ? "Correzione salvata" : "Correction saved");
+      } else {
+        toast.error(
+          lang === "it"
+            ? "Correzione salvata, ma la geometria del percorso non è stata ricalcolata: la linea sulla mappa potrebbe non seguire il tratto corretto."
+            : "Correction saved, but the route geometry wasn't recomputed: the map line may not follow the corrected leg."
+        );
+      }
       reset();
       onSaved();
     } catch (error) {
@@ -184,6 +279,18 @@ const VoyageLegCorrectionModal = ({
           <span>{t.skipLabel(toWaypoint.name)}</span>
         </label>
 
+        <VoyageLegCorrectionMap
+          fromAnchor={fromWaypoint}
+          toAnchor={toWaypoint}
+          narrativePlace={narrativeSelected}
+          technicalPlaces={technicalStops}
+          placementTarget={placementTarget}
+          onPlaceAt={(lat, lng) => void handlePlaceAt(lat, lng)}
+          onNarrativeMove={handleNarrativeMove}
+          onTechnicalMove={handleTechnicalMove}
+          lang={lang}
+        />
+
         <section className="grid gap-2">
           <div>
             <p className="text-xs font-sans font-semibold uppercase tracking-[0.1em] text-foreground">{t.narrativeTitle}</p>
@@ -204,6 +311,23 @@ const VoyageLegCorrectionModal = ({
             </div>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={() => setPlacementTarget((current) => (current === "narrative" ? null : "narrative"))}
+                disabled={placingLoading}
+                className={`inline-flex items-center justify-center gap-1.5 self-start rounded-full border px-3 py-1.5 text-xs font-sans disabled:opacity-60 ${
+                  placementTarget === "narrative"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {placingLoading && placementTarget !== "narrative" ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <MapPinPlus size={12} />
+                )}
+                {placementTarget === "narrative" ? t.cancelPlacing : t.placeOnMap}
+              </button>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -274,6 +398,23 @@ const VoyageLegCorrectionModal = ({
               ))}
             </ul>
           )}
+          <button
+            type="button"
+            onClick={() => setPlacementTarget((current) => (current === "technical" ? null : "technical"))}
+            disabled={placingLoading}
+            className={`inline-flex items-center justify-center gap-1.5 self-start rounded-full border px-3 py-1.5 text-xs font-sans disabled:opacity-60 ${
+              placementTarget === "technical"
+                ? "border-accent bg-accent/10 text-accent"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {placingLoading && placementTarget !== "technical" ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <MapPinPlus size={12} />
+            )}
+            {placementTarget === "technical" ? t.cancelPlacing : t.placeOnMap}
+          </button>
           <div className="flex gap-2">
             <input
               type="text"

@@ -32,6 +32,8 @@ interface WidgetWaypoint {
   name_it: string | null;
   name_en: string | null;
   sort_order: number;
+  lat: number;
+  lng: number;
   actual_arrival_at: string | null;
   actual_departure_at: string | null;
 }
@@ -205,7 +207,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
         .order("sort_order", { ascending: true }),
       supabase
         .from("voyage_waypoints")
-        .select("id,name,name_it,name_en,sort_order,actual_arrival_at,actual_departure_at"),
+        .select("id,name,name_it,name_en,sort_order,lat,lng,actual_arrival_at,actual_departure_at"),
     ]);
 
     const error = voyagesRes.error || legsRes.error || waypointsRes.error;
@@ -290,10 +292,22 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   const pendingKind = pending.kind;
   const delayed = isLegDelayed(currentLeg);
   const correctionFromWaypoint = fromWaypoint
-    ? { id: currentLeg.from_waypoint_id, name: nameOf(fromWaypoint), sortOrder: fromWaypoint.sort_order }
+    ? {
+        id: currentLeg.from_waypoint_id,
+        name: nameOf(fromWaypoint),
+        sortOrder: fromWaypoint.sort_order,
+        lat: fromWaypoint.lat,
+        lng: fromWaypoint.lng,
+      }
     : null;
   const correctionToWaypoint = toWaypoint
-    ? { id: currentLeg.to_waypoint_id, name: nameOf(toWaypoint), sortOrder: toWaypoint.sort_order }
+    ? {
+        id: currentLeg.to_waypoint_id,
+        name: nameOf(toWaypoint),
+        sortOrder: toWaypoint.sort_order,
+        lat: toWaypoint.lat,
+        lng: toWaypoint.lng,
+      }
     : null;
 
   const phaseLabel = phase === "active" ? t.active : phase === "completed" ? t.completed : t.planned;

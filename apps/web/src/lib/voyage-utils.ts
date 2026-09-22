@@ -1741,18 +1741,19 @@ export function getVoyageMapLineStringCoordinates(
 
 const getNearestGeometryCoordinateIndex = (
   geometry: [number, number][],
-  target: [number, number]
+  target: [number, number],
+  fromIndex = 0
 ) => {
-  let nearestIndex = 0;
+  let nearestIndex = fromIndex;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
-  geometry.forEach((coordinate, index) => {
-    const distance = getCoordinateDistance(coordinate, target);
+  for (let index = fromIndex; index < geometry.length; index += 1) {
+    const distance = getCoordinateDistance(geometry[index], target);
     if (distance < nearestDistance) {
       nearestDistance = distance;
       nearestIndex = index;
     }
-  });
+  }
 
   return nearestIndex;
 };
@@ -1827,9 +1828,12 @@ export function getVoyageTravelledWaypointIndex(waypoints: VoyageWaypoint[]): nu
     const waypoint = waypoints[i];
     // A skipped/added stop never gets its own actual_arrival_at (it isn't a booking-leg
     // endpoint, see set_voyage_waypoint_actual_status), so it must not block the chain —
-    // only an unreached *planned* stop does.
+    // nor does a "technical" waypoint (route shape only, no public stop): it is never a
+    // booking-leg endpoint either, so it never receives its own actual_arrival_at. Only an
+    // unreached *narrative* (real, public) stop blocks progress.
     const isCorrection = waypoint?.actual_status === "skipped" || waypoint?.actual_status === "added";
-    if (!isCorrection && !waypoint?.actual_arrival_at) break;
+    const isTechnical = getWaypointEffectiveType(waypoint, i, waypoints.length) === "technical";
+    if (!isCorrection && !isTechnical && !waypoint?.actual_arrival_at) break;
     index = i;
   }
   return index;
@@ -1844,6 +1848,48 @@ export type VoyageGeometryBuildOptions = {
    */
   waterwayAutoroute?: boolean;
 };
+
+/**
+ * The single-request full-chain reply from fetchBRouterWaterwayRoute can silently beeline
+ * straight across land for a via pair its river-profile graph can't actually connect, instead
+ * of failing the whole request the way a single out-of-graph point normally would. Each gap
+ * shows up as zero routing detail between two consecutive input waypoints (BRouter gives every
+ * real river/coastal stretch several intermediate points); those gaps are patched with the same
+ * open-sea land-avoidance the per-segment fallback below already uses — it only ever changes a
+ * straight chord that actually crosses land, so a genuinely fine open-sea gap is left untouched.
+ */
+async function patchWaterwayBeelines(
+  coordinates: [number, number][],
+  waypoints: { lat: number; lng: number }[]
+): Promise<[number, number][]> {
+  const patched: [number, number][] = [];
+  let searchFrom = 0;
+
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const startWaypoint = waypoints[index - 1];
+    const endWaypoint = waypoints[index];
+    const startIndex = getNearestGeometryCoordinateIndex(
+      coordinates,
+      [startWaypoint.lng, startWaypoint.lat],
+      searchFrom
+    );
+    const endIndex = getNearestGeometryCoordinateIndex(
+      coordinates,
+      [endWaypoint.lng, endWaypoint.lat],
+      startIndex
+    );
+
+    const straightDistanceKm = haversineNM(startWaypoint.lat, startWaypoint.lng, endWaypoint.lat, endWaypoint.lng) * 1.852;
+    if (endIndex - startIndex <= 1 && straightDistanceKm >= MIN_LAND_CHECK_KM) {
+      appendRouteCoordinates(patched, await buildSeaSegmentGeometry(startWaypoint, endWaypoint));
+    } else {
+      appendRouteCoordinates(patched, coordinates.slice(startIndex, endIndex + 1));
+    }
+    searchFrom = endIndex;
+  }
+
+  return patched.length >= 2 ? patched : coordinates;
+}
 
 export async function buildVoyageGeometry(
   waypoints: { lat: number; lng: number }[],
@@ -1873,7 +1919,7 @@ export async function buildVoyageGeometry(
     // Primo tentativo: un'unica richiesta per tutta la catena (geometria migliore, 1 sola chiamata).
     const fullChain = await fetchBRouterWaterwayRoute(waypoints);
     if (fullChain?.coordinates?.length && fullChain.coordinates.length >= 2) {
-      return fullChain.coordinates;
+      return await patchWaterwayBeelines(fullChain.coordinates, waypoints);
     }
 
     // Se la catena intera non è instradabile (un via è fuori dal grafo idrico, BRouter risponde 400

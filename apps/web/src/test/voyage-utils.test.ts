@@ -103,23 +103,29 @@ describe("buildVoyageGeometry", () => {
   });
 
   it("builds water geometry from BRouter river segments when waterwayAutoroute is enabled", async () => {
-    const fetchMock = vi.fn().mockImplementation(() =>
-      createJsonResponse({
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [7.95, 48.57],
-                [7.96, 48.58],
-              ],
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("brouter.de")) {
+        return createJsonResponse({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [7.95, 48.57],
+                  [7.96, 48.58],
+                ],
+              },
             },
-          },
-        ],
-      })
-    );
+          ],
+        });
+      }
+      // The full-chain reply has zero detail between these two vias (see patchWaterwayBeelines),
+      // so it gets double-checked against coastline data; no coastline nearby here means the
+      // straight chord is kept as-is.
+      return createJsonResponse({ elements: [] });
+    });
 
     vi.stubGlobal("fetch", fetchMock);
 
@@ -136,9 +142,73 @@ describe("buildVoyageGeometry", () => {
       [7.95, 48.57],
       [7.96, 48.58],
     ]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("brouter.de/brouter");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("profile=river");
+  });
+
+  it("patches a full-chain via pair that beelines across land instead of failing outright", async () => {
+    // Simulates the real bug: BRouter's full-chain reply "succeeds" but has no detail at all
+    // between two vias it couldn't actually connect via its river-profile graph, drawing a
+    // straight line across land instead of erroring like an out-of-graph single point would.
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const href = String(url);
+      if (href.includes("brouter.de")) {
+        return createJsonResponse({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                // Rich detail for leg 1 (a-b), then a bare, undetailed jump straight to c (leg 2).
+                coordinates: [
+                  [10, 40],
+                  [10.05, 40.05],
+                  [10.1, 40.1],
+                  [10.4, 40.4],
+                ],
+              },
+            },
+          ],
+        });
+      }
+      // Overpass coastline lookup for the suspect a→b beeline segment: one coastline way that the
+      // straight chord from (10.1,40.1) to (10.4,40.4) crosses, forcing a detour around it.
+      return createJsonResponse({
+        elements: [
+          {
+            type: "way",
+            geometry: [
+              { lat: 40.3, lon: 10.15 },
+              { lat: 40.15, lon: 10.3 },
+            ],
+          },
+        ],
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const geometry = await buildVoyageGeometry(
+      [
+        { lat: 40, lng: 10 },
+        { lat: 40.1, lng: 10.1 },
+        { lat: 40.4, lng: 10.4 },
+      ],
+      "water",
+      { waterwayAutoroute: true }
+    );
+
+    // The well-detailed first leg is kept verbatim; the beelined second leg is replaced with a
+    // detour (more than the original 2 bare points) instead of the land-crossing straight chord.
+    expect(geometry.slice(0, 3)).toEqual([
+      [10, 40],
+      [10.05, 40.05],
+      [10.1, 40.1],
+    ]);
+    expect(geometry.length).toBeGreaterThan(4);
+    expect(geometry.at(-1)).toEqual([10.4, 40.4]);
   });
 
   it("routes waterway segment-by-segment when the full chain is not navigable in one request", async () => {
@@ -325,6 +395,10 @@ describe("buildVoyageSegmentGeometry", () => {
 });
 
 describe("getVoyageTravelledWaypointIndex", () => {
+  // visibility_mode "manual" + waypoint_type "narrative" is how a real, public stop is always
+  // marked (see insert_voyage_leg_correction_stops / VoyageFormPanel), regardless of its position
+  // in the array — unlike "auto" mode, whose effective type depends on position/stop-duration
+  // (see getWaypointEffectiveType). These tests model a voyage made entirely of real stops.
   const makeWaypoint = (id: string, actualArrivalAt: string | null): VoyageWaypoint => ({
     id,
     voyage_id: "voyage-1",
@@ -335,7 +409,7 @@ describe("getVoyageTravelledWaypointIndex", () => {
     name_it: null,
     sort_order: 0,
     waypoint_type: "narrative",
-    visibility_mode: "auto",
+    visibility_mode: "manual",
     description_en: null,
     description_it: null,
     event_date: null,
@@ -346,6 +420,12 @@ describe("getVoyageTravelledWaypointIndex", () => {
     actual_arrival_at: actualArrivalAt,
     created_at: "",
     updated_at: "",
+  });
+
+  const makeTechnicalWaypoint = (id: string): VoyageWaypoint => ({
+    ...makeWaypoint(id, null),
+    waypoint_type: "technical",
+    visibility_mode: "auto",
   });
 
   it("is 0 when the voyage just started and nothing has been reached yet", () => {
@@ -403,6 +483,47 @@ describe("getVoyageTravelledWaypointIndex", () => {
     // wp-2 is transparent (skipped never gets its own arrival), so the index
     // advances through it; it only stops at wp-3, the first unreached *planned* stop.
     expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(1);
+  });
+
+  it("does not let a technical (route-shape-only) waypoint block progress", () => {
+    // wp-2/wp-3 are technical via points (no public stop, e.g. "Borgagne" on the Otranto
+    // approach): they never get their own actual_arrival_at, so they must not block the
+    // chain even though they carry none — only the next real (narrative) stop can.
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      makeTechnicalWaypoint("wp-2"),
+      makeTechnicalWaypoint("wp-3"),
+      makeWaypoint("wp-4", "2026-01-02T10:00:00Z"),
+    ];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(3);
+  });
+
+  it("still stops at an unreached real stop that follows technical waypoints", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", null),
+      makeTechnicalWaypoint("wp-2"),
+      makeWaypoint("wp-3", null),
+      makeWaypoint("wp-4", "2026-01-02T10:00:00Z"),
+    ];
+    // wp-2 (technical) never blocks, but wp-3 is a real, unreached stop — the chain
+    // stops there, at wp-2's index, even though wp-4 later does have an arrival.
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(1);
+  });
+
+  it("reaches a real stop reached via an added stop and technical via-points (Otranto/Crotone case)", () => {
+    // Mirrors a real correction: an added narrative stop (Otranto) reached mid-route,
+    // surrounded by technical via-points, with the originally planned stop skipped —
+    // the whole stretch up to the next real, reached stop (Crotone) must count as travelled.
+    const waypoints = [
+      makeWaypoint("wp-departure", null),
+      makeTechnicalWaypoint("wp-via-1"),
+      { ...makeWaypoint("wp-added-stop", "2026-01-01T11:30:00Z"), actual_status: "added" as const },
+      makeTechnicalWaypoint("wp-via-2"),
+      { ...makeWaypoint("wp-skipped-stop", null), actual_status: "skipped" as const },
+      makeTechnicalWaypoint("wp-via-3"),
+      makeWaypoint("wp-crotone", "2026-01-02T12:30:00Z"),
+    ];
+    expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(6);
   });
 });
 

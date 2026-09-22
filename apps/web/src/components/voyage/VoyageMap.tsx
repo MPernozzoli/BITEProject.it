@@ -836,13 +836,13 @@ const VoyageMap = ({
           : null;
 
         // Tappe previste/effettive: la linea del percorso segue le tappe davvero toccate.
-        // cached_geometry rappresenta il piano, quindi va ignorata (si ricalcola come nel
-        // percorso di fallback normale) solo per i viaggi che hanno una correzione registrata;
-        // per tutti gli altri il comportamento resta identico a oggi.
+        // cached_geometry resta la miglior geometria disponibile (instradata/anti-costa) anche
+        // per i viaggi con una correzione registrata: le funzioni di slicing sotto agganciano
+        // ogni tappa effettiva al punto più vicino lungo quella linea, quindi non serve scartarla
+        // e ricadere su segmenti dritti (che tagliano la costa) solo perché una tappa è stata
+        // saltata o aggiunta.
         const actualWps = getActualVoyageWaypoints(wps);
-        const hasRouteCorrections = actualWps.length !== wps.length || wps.some((w) => w.actual_status === "added");
-        const geometrySourceVoyage = hasRouteCorrections ? { ...voyage, cached_geometry: null } : voyage;
-        const routeCoordinates = getVoyageMapLineStringCoordinates(geometrySourceVoyage, actualWps, articlesForMap);
+        const routeCoordinates = getVoyageMapLineStringCoordinates(voyage, actualWps, articlesForMap);
 
         const lineId = `voyage-line-${voyage.id}`;
         const lineCasingId = `voyage-line-casing-${voyage.id}`;
@@ -892,7 +892,7 @@ const VoyageMap = ({
           const hasPartialProgress = isActive && travelledIndex < actualWps.length - 1;
 
           if (hasPartialProgress) {
-            const cachedGeometryForSplit = hasRouteCorrections ? null : getCachedGeometryCoordinates(voyage);
+            const cachedGeometryForSplit = getCachedGeometryCoordinates(voyage);
             const travelledCoordinates = travelledIndex > 0
               ? getVoyageSegmentGeometryWithFallback(actualWps, voyage.type, 0, travelledIndex, cachedGeometryForSplit)
               : [];
