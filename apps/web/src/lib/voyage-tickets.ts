@@ -2,9 +2,14 @@
  * "Biglietto ricordo": a per-participant recap of the leg(s) of a voyage a
  * traveller actually booked, comparing planned distance/stops against what
  * was actually logged (`actual_arrival_at` on the leg — see
- * lib/voyage-schedule.ts). There is no recorded GPS track, so "actual
- * nautical miles" is the sum of `planned_nautical_miles` for legs an admin
- * has marked arrived; it is a proxy, not a measured distance.
+ * lib/voyage-schedule.ts).
+ *
+ * "Actual nautical miles" come from the recorded GPX track when an admin has
+ * confirmed one for the leg (lib/voyage-track-summary.ts): measured distance,
+ * plus the unrecorded ends as straight lines when the recording started late
+ * or stopped early. Completed legs without a track fall back to their planned
+ * miles, and `milesSource` says which mix the number is, so the card never
+ * passes a proxy off as a measurement.
  *
  * The ticket only exists once the traveller's journey is truly over: not when
  * they arrive at their disembarkation stop, but the day the voyage actually
@@ -15,12 +20,30 @@
 import type { Language } from "@/lib/i18n";
 import { getLegPhase } from "@/lib/voyage-schedule";
 import type { BookableLeg, BookingWaypoint } from "@/lib/booking-utils";
+import { geometryRuns, summariesForLegs, type LegTrackSummary } from "@/lib/voyage-track-summary";
 
 export interface VoyageTicketStop {
   waypointId: string;
   name: string;
   /** True once the traveller's arrival here has been logged as actual. */
   reached: boolean;
+}
+
+/** What the confirmed GPX tracks add to the ticket; null when none of the traveller's legs has one. */
+export interface VoyageTicketTrack {
+  /** Traveller's legs with a confirmed track, out of `totalLegs`. */
+  trackedLegs: number;
+  /** True when a tracked leg misses a start or an end (recording started late / stopped early). */
+  partial: boolean;
+  movingSeconds: number | null;
+  avgSogKn: number | null;
+  maxSogKn: number | null;
+  /** Stops found on the track that match no stop of the voyage. */
+  unplannedStops: number;
+  /** [lng, lat] runs of the real route, split at recording breaks. */
+  actualRuns: [number, number][][];
+  /** [lng, lat] of the planned route over the traveller's legs. */
+  plannedRoute: [number, number][];
 }
 
 export interface ParticipantVoyageTicket {
@@ -34,6 +57,9 @@ export interface ParticipantVoyageTicket {
   stops: VoyageTicketStop[];
   plannedNauticalMiles: number;
   actualNauticalMiles: number;
+  /** "track": every completed leg measured; "planned": none; "mixed": some measured, some planned proxy. */
+  milesSource: "track" | "planned" | "mixed";
+  track: VoyageTicketTrack | null;
   completedLegs: number;
   totalLegs: number;
   isFullyTravelled: boolean;
@@ -81,8 +107,10 @@ export function buildParticipantVoyageTicket(params: {
   ownLegsSortedByOrder: BookableLeg[];
   waypointsById: Record<string, BookingWaypoint>;
   lang: Language;
+  /** Confirmed track summaries of the voyage, keyed as in `summarizeTrackSegments`. */
+  trackSummaries?: Map<string, LegTrackSummary>;
 }): ParticipantVoyageTicket | null {
-  const { bookingRequestId, voyage, ownLegsSortedByOrder, waypointsById, lang } = params;
+  const { bookingRequestId, voyage, ownLegsSortedByOrder, waypointsById, lang, trackSummaries } = params;
   if (!ownLegsSortedByOrder.length) return null;
 
   const stops: VoyageTicketStop[] = [];
@@ -98,11 +126,20 @@ export function buildParticipantVoyageTicket(params: {
   let plannedNauticalMiles = 0;
   let actualNauticalMiles = 0;
   let completedLegs = 0;
+  let measuredLegs = 0;
+  let proxyLegs = 0;
   for (const leg of ownLegsSortedByOrder) {
     plannedNauticalMiles += leg.planned_nautical_miles || 0;
     const reached = getLegPhase(leg) === "completed";
+    const recorded = trackSummaries ? summariesForLegs(trackSummaries, [leg])[0] : undefined;
     if (reached) {
-      actualNauticalMiles += leg.planned_nautical_miles || 0;
+      if (recorded) {
+        actualNauticalMiles += recorded.estimatedNm;
+        measuredLegs += 1;
+      } else {
+        actualNauticalMiles += leg.planned_nautical_miles || 0;
+        proxyLegs += 1;
+      }
       completedLegs += 1;
     }
     const toWaypoint = waypointsById[leg.to_waypoint_id];
@@ -124,8 +161,57 @@ export function buildParticipantVoyageTicket(params: {
     stops,
     plannedNauticalMiles,
     actualNauticalMiles,
+    milesSource: measuredLegs === 0 ? "planned" : proxyLegs === 0 ? "track" : "mixed",
+    track: buildTicketTrack(ownLegsSortedByOrder, waypointsById, trackSummaries),
     completedLegs,
     totalLegs: ownLegsSortedByOrder.length,
     isFullyTravelled: completedLegs === ownLegsSortedByOrder.length,
+  };
+}
+
+const sumOrNull = (values: (number | null)[]) => {
+  const present = values.filter((v): v is number => v !== null);
+  return present.length ? present.reduce((a, b) => a + b, 0) : null;
+};
+
+/** Planned line over the traveller's legs: every non-"added" waypoint between first departure and last arrival. */
+function plannedRouteFor(ownLegs: BookableLeg[], waypointsById: Record<string, BookingWaypoint>): [number, number][] {
+  const first = waypointsById[ownLegs[0].from_waypoint_id];
+  const last = waypointsById[ownLegs[ownLegs.length - 1].to_waypoint_id];
+  if (!first || !last) return [];
+  return Object.values(waypointsById)
+    .filter(
+      (w) =>
+        w.voyage_id === first.voyage_id &&
+        w.sort_order >= first.sort_order &&
+        w.sort_order <= last.sort_order &&
+        w.actual_status !== "added" &&
+        typeof w.lat === "number" &&
+        typeof w.lng === "number"
+    )
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((w) => [w.lng as number, w.lat as number]);
+}
+
+function buildTicketTrack(
+  ownLegs: BookableLeg[],
+  waypointsById: Record<string, BookingWaypoint>,
+  trackSummaries: Map<string, LegTrackSummary> | undefined
+): VoyageTicketTrack | null {
+  if (!trackSummaries?.size) return null;
+  const tracked = summariesForLegs(trackSummaries, ownLegs);
+  if (!tracked.length) return null;
+  const movingSeconds = sumOrNull(tracked.map((s) => s.movingSec));
+  const recordedNm = tracked.reduce((sum, s) => sum + s.recordedNm, 0);
+  const maxValues = tracked.map((s) => s.maxSogKn).filter((v): v is number => v !== null);
+  return {
+    trackedLegs: tracked.length,
+    partial: tracked.some((s) => s.coverage === "partial"),
+    movingSeconds,
+    avgSogKn: movingSeconds ? recordedNm / (movingSeconds / 3600) : null,
+    maxSogKn: maxValues.length ? Math.max(...maxValues) : null,
+    unplannedStops: tracked.reduce((n, s) => n + s.stops.filter((stop) => !stop.waypointId).length, 0),
+    actualRuns: geometryRuns(tracked.flatMap((s) => s.geometries)),
+    plannedRoute: plannedRouteFor(ownLegs, waypointsById),
   };
 }

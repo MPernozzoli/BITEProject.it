@@ -5,6 +5,7 @@ import {
   buildVoyageSegmentGeometry,
   buildWaypointDefaultLocalizedNames,
   getActualVoyageWaypoints,
+  getVoyageBoatPosition,
   getVoyageTravelledWaypointIndex,
   isWaypointCoordinateLabel,
   reverseGeocodePlaceLocalized,
@@ -524,6 +525,121 @@ describe("getVoyageTravelledWaypointIndex", () => {
       makeWaypoint("wp-crotone", "2026-01-02T12:30:00Z"),
     ];
     expect(getVoyageTravelledWaypointIndex(waypoints)).toBe(6);
+  });
+});
+
+describe("getVoyageBoatPosition", () => {
+  const makeWaypoint = (id: string, lat: number, lng: number, overrides: Partial<VoyageWaypoint> = {}): VoyageWaypoint => ({
+    id,
+    voyage_id: "voyage-1",
+    lat,
+    lng,
+    name: "",
+    name_en: null,
+    name_it: null,
+    sort_order: 0,
+    waypoint_type: "narrative",
+    visibility_mode: "manual",
+    description_en: null,
+    description_it: null,
+    event_date: null,
+    event_time: null,
+    media: [],
+    date_start: null,
+    date_end: null,
+    actual_arrival_at: null,
+    actual_departure_at: null,
+    created_at: "",
+    updated_at: "",
+    ...overrides,
+  });
+
+  const makeTechnicalWaypoint = (id: string, lat: number, lng: number): VoyageWaypoint => ({
+    ...makeWaypoint(id, lat, lng),
+    waypoint_type: "technical",
+    visibility_mode: "auto",
+  });
+
+  const activeVoyage = { type: "water" as const, cached_geometry: null, status: "active" as const };
+
+  it("is null for a voyage that isn't active — planned hasn't left, completed is done travelling", () => {
+    const waypoints = [makeWaypoint("wp-1", 40, 15), makeWaypoint("wp-2", 41, 16)];
+    expect(getVoyageBoatPosition({ ...activeVoyage, status: "planned" }, waypoints)).toBeNull();
+    expect(getVoyageBoatPosition({ ...activeVoyage, status: "completed" }, waypoints)).toBeNull();
+  });
+
+  it("is docked at the origin before it has departed", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", 40, 15, { actual_arrival_at: "2026-01-01T09:00:00Z" }),
+      makeWaypoint("wp-2", 41, 16),
+    ];
+    expect(getVoyageBoatPosition(activeVoyage, waypoints)).toEqual({
+      status: "docked",
+      lat: 40,
+      lng: 15,
+      waypointId: "wp-1",
+    });
+  });
+
+  it("interpolates along the leg proportional to elapsed time vs. the planned ETA", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", 40, 10, {
+        actual_arrival_at: "2026-01-01T08:00:00Z",
+        actual_departure_at: "2026-01-01T10:00:00Z",
+      }),
+      makeWaypoint("wp-2", 40, 14, { date_end: "2026-01-01T14:00:00Z" }), // 4h planned leg
+    ];
+    // 1h elapsed of a 4h leg => 25% of the way there.
+    const position = getVoyageBoatPosition(activeVoyage, waypoints, new Date("2026-01-01T11:00:00Z"));
+    expect(position?.status).toBe("in-transit");
+    if (position?.status !== "in-transit") throw new Error("expected in-transit");
+    expect(position.fromWaypointId).toBe("wp-1");
+    expect(position.toWaypointId).toBe("wp-2");
+    expect(position.fraction).toBeCloseTo(0.25, 5);
+    expect(position.lat).toBeCloseTo(40, 5);
+    expect(position.lng).toBeCloseTo(11, 5);
+  });
+
+  it("falls back to the midpoint when there's no usable ETA", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", 40, 10, { actual_departure_at: "2026-01-01T10:00:00Z" }),
+      makeWaypoint("wp-2", 40, 14), // no date_end
+    ];
+    const position = getVoyageBoatPosition(activeVoyage, waypoints, new Date("2026-01-01T11:00:00Z"));
+    if (position?.status !== "in-transit") throw new Error("expected in-transit");
+    expect(position.fraction).toBe(0.5);
+    expect(position.lng).toBeCloseTo(12, 5);
+  });
+
+  it("stays docked at the final stop once every leg is closed", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", 40, 10, {
+        actual_arrival_at: "2026-01-01T08:00:00Z",
+        actual_departure_at: "2026-01-01T10:00:00Z",
+      }),
+      makeWaypoint("wp-2", 41, 12, { actual_arrival_at: "2026-01-01T14:00:00Z" }),
+    ];
+    expect(getVoyageBoatPosition(activeVoyage, waypoints)).toEqual({
+      status: "docked",
+      lat: 41,
+      lng: 12,
+      waypointId: "wp-2",
+    });
+  });
+
+  it("does not let a technical waypoint become the current leg's origin/destination", () => {
+    const waypoints = [
+      makeWaypoint("wp-1", 40, 10, {
+        actual_arrival_at: "2026-01-01T08:00:00Z",
+        actual_departure_at: "2026-01-01T10:00:00Z",
+      }),
+      makeTechnicalWaypoint("wp-via", 40, 12),
+      makeWaypoint("wp-2", 40, 14, { date_end: "2026-01-01T14:00:00Z" }),
+    ];
+    const position = getVoyageBoatPosition(activeVoyage, waypoints, new Date("2026-01-01T12:00:00Z"));
+    if (position?.status !== "in-transit") throw new Error("expected in-transit");
+    expect(position.fromWaypointId).toBe("wp-1");
+    expect(position.toWaypointId).toBe("wp-2");
   });
 });
 

@@ -36,6 +36,7 @@ interface WidgetWaypoint {
   lng: number;
   actual_arrival_at: string | null;
   actual_departure_at: string | null;
+  alias_of_waypoint_id: string | null;
 }
 
 interface WidgetLeg extends ScheduledLeg {
@@ -80,6 +81,7 @@ const copy = {
     saving: "Salvo...",
     close: "Chiudi",
     correctLeg: "Correggi tappa successiva",
+    aliasName: (actual: string, planned: string) => `${actual} (ex ${planned})`,
   },
   en: {
     eyebrow: "Voyage in progress",
@@ -102,6 +104,7 @@ const copy = {
     saving: "Saving...",
     close: "Dismiss",
     correctLeg: "Correct next stop",
+    aliasName: (actual: string, planned: string) => `${actual} (was ${planned})`,
   },
 } as const;
 
@@ -207,7 +210,7 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
         .order("sort_order", { ascending: true }),
       supabase
         .from("voyage_waypoints")
-        .select("id,name,name_it,name_en,sort_order,lat,lng,actual_arrival_at,actual_departure_at"),
+        .select("id,name,name_it,name_en,sort_order,lat,lng,actual_arrival_at,actual_departure_at,alias_of_waypoint_id"),
     ]);
 
     const error = voyagesRes.error || legsRes.error || waypointsRes.error;
@@ -284,8 +287,20 @@ export default function VoyageLiveWidget({ readOnly = false, voyageIds = null, l
   const phase = getVoyagePhase(active.voyage, active.voyageLegs);
   const fromWaypoint = waypoints[currentLeg.from_waypoint_id];
   const toWaypoint = waypoints[currentLeg.to_waypoint_id];
-  const nameOf = (wp: WidgetWaypoint | undefined) =>
+  const plainNameOf = (wp: WidgetWaypoint | undefined) =>
     (locale === "it" ? wp?.name_it : wp?.name_en) || wp?.name || "—";
+  /**
+   * A waypoint the crew skipped in favour of a different real stop (e.g. Messina
+   * skipped for Reggio Calabria) is displayed as that real stop, with the
+   * planned name kept alongside so the booking-leg identity underneath (still
+   * Messina, for pricing) stays legible. See alias_of_waypoint_id.
+   */
+  const nameOf = (wp: WidgetWaypoint | undefined) => {
+    if (!wp) return "—";
+    const target = wp.alias_of_waypoint_id ? waypoints[wp.alias_of_waypoint_id] : undefined;
+    if (!target) return plainNameOf(wp);
+    return t.aliasName(plainNameOf(target), plainNameOf(wp));
+  };
   const voyageName =
     (locale === "it" ? active.voyage.name_it : active.voyage.name_en) || active.voyage.name;
 

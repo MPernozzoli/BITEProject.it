@@ -5,6 +5,8 @@ import { toPng } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import type { ParticipantVoyageTicket } from "@/lib/voyage-tickets";
+import { formatTrackDuration } from "@/lib/voyage-track-summary";
+import TrackRouteSketch from "@/components/voyage/TrackRouteSketch";
 
 interface VoyageTicketCardProps {
   ticket: ParticipantVoyageTicket;
@@ -22,6 +24,31 @@ const VoyageTicketCard = ({ ticket, participantName }: VoyageTicketCardProps) =>
 
   const milesLabel = lang === "it" ? "mn" : "nm";
   const reachedStops = ticket.stops.filter((s) => s.reached).length;
+  const track = ticket.track;
+  const knLabel = lang === "it" ? "nodi" : "kn";
+  const milesTitle =
+    ticket.milesSource === "track"
+      ? lang === "it"
+        ? "Miglia percorse"
+        : "Miles sailed"
+      : lang === "it"
+        ? "Miglia effettive"
+        : "Actual miles";
+  /** Honest about what the number is: measured, partly estimated, or planned proxy. */
+  const milesNote =
+    ticket.milesSource === "track"
+      ? track?.partial
+        ? lang === "it"
+          ? "dal tracciato GPS, estremi stimati"
+          : "from the GPS track, ends estimated"
+        : lang === "it"
+          ? "misurate dal tracciato GPS"
+          : "measured on the GPS track"
+      : ticket.milesSource === "mixed"
+        ? lang === "it"
+          ? "in parte dal tracciato GPS"
+          : "partly from the GPS track"
+        : null;
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
@@ -79,9 +106,7 @@ const VoyageTicketCard = ({ ticket, participantName }: VoyageTicketCardProps) =>
         <div className="relative p-6 md:p-7 pt-5 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-[18px] border border-border/80 bg-glass/70 p-4">
-              <p className="text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground mb-1.5">
-                {lang === "it" ? "Miglia effettive" : "Actual miles"}
-              </p>
+              <p className="text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground mb-1.5">{milesTitle}</p>
               <p className="editorial-heading text-2xl leading-none">
                 {Math.round(ticket.actualNauticalMiles)}
                 <span className="text-sm text-muted-foreground font-sans ml-1">{milesLabel}</span>
@@ -90,6 +115,7 @@ const VoyageTicketCard = ({ ticket, participantName }: VoyageTicketCardProps) =>
                 {lang === "it" ? "su" : "of"} {Math.round(ticket.plannedNauticalMiles)} {milesLabel}{" "}
                 {lang === "it" ? "previste" : "planned"}
               </p>
+              {milesNote && <p className="text-[10px] font-sans text-muted-foreground/80 mt-0.5">{milesNote}</p>}
             </div>
             <div className="rounded-[18px] border border-border/80 bg-glass/70 p-4">
               <p className="text-[10px] font-sans uppercase tracking-[0.2em] text-muted-foreground mb-1.5">
@@ -110,6 +136,49 @@ const VoyageTicketCard = ({ ticket, participantName }: VoyageTicketCardProps) =>
               </p>
             </div>
           </div>
+
+          {track && (
+            <div className="rounded-[18px] border border-border/80 bg-glass/70 p-4 space-y-3">
+              {track.actualRuns.length > 0 && (
+                <TrackRouteSketch
+                  planned={track.plannedRoute}
+                  actual={track.actualRuns}
+                  className="w-full h-auto text-foreground"
+                  title={lang === "it" ? "Rotta prevista (tratteggio) e rotta reale" : "Planned route (dashed) and actual route"}
+                />
+              )}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-[10px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
+                    {lang === "it" ? "In navigazione" : "Under way"}
+                  </p>
+                  <p className="editorial-heading text-lg leading-tight mt-1">{formatTrackDuration(track.movingSeconds, lang)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
+                    {lang === "it" ? "Media / max" : "Avg / max"}
+                  </p>
+                  <p className="editorial-heading text-lg leading-tight mt-1">
+                    {track.avgSogKn?.toFixed(1) ?? "—"} / {track.maxSogKn?.toFixed(1) ?? "—"}
+                    <span className="text-xs text-muted-foreground font-sans ml-1">{knLabel}</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-sans uppercase tracking-[0.16em] text-muted-foreground">
+                    {lang === "it" ? "Soste fuori programma" : "Unplanned stops"}
+                  </p>
+                  <p className="editorial-heading text-lg leading-tight mt-1">{track.unplannedStops}</p>
+                </div>
+              </div>
+              {track.trackedLegs < ticket.totalLegs && (
+                <p className="text-[11px] font-sans text-muted-foreground text-center">
+                  {lang === "it"
+                    ? `Tracciato GPS disponibile per ${track.trackedLegs} tratte su ${ticket.totalLegs}.`
+                    : `GPS track available for ${track.trackedLegs} of ${ticket.totalLegs} legs.`}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             {ticket.stops.map((stop, index) => (

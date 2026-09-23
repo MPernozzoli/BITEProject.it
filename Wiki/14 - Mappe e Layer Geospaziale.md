@@ -11,9 +11,11 @@ tags: [mappe, geo, maplibre, funzionalita]
 - Wrapper: `apps/web/src/lib/maplibre.ts`
 
 ## Componenti
-- `LazyVoyageMap.tsx` — mappa rotta viaggio (lazy) → usata da `VoyagePage.tsx`
+- `LazyVoyageMap.tsx` — lazy wrapper di `VoyageMap.tsx` → montato da `Journal.tsx` (logbook, tutti i viaggi) e `Index.tsx` (teaser home); **non** da `VoyagePage.tsx`, che usa invece `VoyageRouteHeroMap.tsx` (sotto).
 - `VoyageMap.tsx` — mappa MapLibre del logbook; durante il booking riceve le tratte selezionate e disegna un overlay verde sopra i segmenti interessati.
   - Nei tooltip waypoint dei voyage prenotabili mostra anche le date della sosta (`Arrivo` dalla leg in ingresso, `Ripartenza` dalla leg in uscita); i voyage senza booking attivo non espongono queste date nel tooltip.
+  - Marker barca (waypoint ormeggio con alone, o marker in navigazione sulla linea), derivato dagli actual e non da un pin manuale → [[21 - Tracking Real-Time Viaggi]].
+- `VoyageRouteHeroMap.tsx` — mappa hero decorativa e non interattiva (`interactive: false`, `aria-hidden`) di `VoyagePage.tsx`: solo la linea di rotta e i due pallini di inizio/fine, più lo stesso marker barca derivato di `VoyageMap.tsx` (ricolora il pallino se l'ormeggio coincide con un capolinea, altrimenti aggiunge il marker) → [[21 - Tracking Real-Time Viaggi]].
 - `ArticleMapAside.tsx` / `LazyArticleMapAside.tsx` — mappa laterale in articolo. Quando l'articolo è collegato a un viaggio prenotabile, `ArticleReader.tsx` carica `get_public_voyage_leg_availability` e mostra sulla minimappa la CTA **Partecipa** solo se esiste almeno un tratto ancora disponibile; per articoli agganciati a un segmento considera solo le tratte comprese nel segmento.
 - `MapLoadingPlaceholder.tsx` — placeholder di caricamento
 - `AdminMapPresenceManager.tsx`, `ArticleMiniMapEditor.tsx`, `AdminVoyageManager.tsx` — editing lato admin → [[16 - Admin]]
@@ -21,7 +23,7 @@ tags: [mappe, geo, maplibre, funzionalita]
 
 ## Dati geo
 - Coordinate degli articoli: `apps/web/src/lib/article-map.ts`, `article-map-anchor.ts`
-- Presenza sulla mappa (tracker): `apps/web/src/lib/map-presence.ts`, pagina `AdminMapPresence.tsx` (`/admin/trackers`)
+- Presenza sulla mappa (tracker): `apps/web/src/lib/map-presence.ts`, pagina `AdminMapPresence.tsx` (`/admin/trackers`). Solo la **crew** resta un pin manuale (posizionato a mano in admin); la **barca** non lo è più — la sua posizione è derivata dagli actual di viaggio → [[21 - Tracking Real-Time Viaggi]].
 - Naming waypoint admin: `apps/web/src/lib/voyage-utils.ts` usa Nominatim per il reverse geocoding e, se il risultato è troppo generico per coordinate in mare, cerca con Overpass toponimi vicini usando endpoint fallback e un raggio più ampio per città/paesi. Se il marker sembra una fermata costiera/portuale usa il nome città secco; se è più al largo preferisce il nome reale di baia/cala/località/capo/isola. Le coordinate non vengono più salvate come nome default: il fallback è `WPT NN`, e i vecchi nomi in formato coordinate sono considerati provvisori. Nell'inspector WPT delle rotte acqua c'è anche il controllo manuale `Auto / Città / Baia o toponimo`.
 
 ## Principi (da doc architettura)
@@ -72,4 +74,4 @@ I controlli di zoom di serie sono 29px, sotto la soglia di tocco. La regola che 
 CARTO serve `light_all` e `dark_all` allo stesso indirizzo (attenzione: la base scura si *chiama* Dark Matter ma il percorso delle tile è `dark_all`; `dark_matter` dà 404): `createCartoRasterStyle(variant)` in `shared/maps/carto.ts` accetta la variante, con default `"light"` per non cambiare comportamento a chi non conosce i temi. In `apps/web`, `createThemedCartoStyle()` sceglie la variante alla creazione e `bindMapToTheme(map)` la tiene allineata a mappa viva **scambiando le tile** (`setTiles`) invece di rifare lo stile — `setStyle` ricostruirebbe la mappa e porterebbe via rotte, tappe e layer aggiunti dopo. Si stacca da sé sull'evento `remove` di MapLibre → [[27 - Tema Chiaro e Scuro]]
 
 ## Collegamenti
-- [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[22 - Citizen Science e Osservazioni]] · [[28 - Mobile e Performance]]
+- [[10 - API Vercel]] · [[15 - Semantic Layer (AI Agents)]] · [[17 - Content Model]] · [[13 - Booking Voyage]] · [[21 - Tracking Real-Time Viaggi]] · [[22 - Citizen Science e Osservazioni]] · [[28 - Mobile e Performance]]

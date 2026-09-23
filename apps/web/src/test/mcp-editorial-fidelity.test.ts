@@ -71,7 +71,14 @@ async function connect(fixtures: StubFixtures = baseFixtures()) {
   const client = new Client({ name: "test", version: "1.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
-  return { client, writes: stub.writes, uploads: stub.uploads };
+  return {
+    client,
+    writes: stub.writes,
+    uploads: stub.uploads,
+    storedFiles: stub.storedFiles,
+    signedUploads: stub.signedUploads,
+    removed: stub.removed,
+  };
 }
 
 function textOf(result: unknown): string {
@@ -168,8 +175,8 @@ describe("bozza articolo con tutte le impostazioni dell'editor", () => {
         body_markdown_it: '# Rotta\n\nTesto con **grassetto** e una foto:\n\n![vela](https://cdn.example/vela.jpg "In rada")',
         body_markdown_en: "# Route\n\nText.",
         cover_image: "https://stub.supabase.co/storage/v1/object/public/logbook-media/covers/1.jpg",
-        cover_focal_x: 0.3,
-        cover_focal_y: 0.7,
+        cover_focal_x: 30,
+        cover_focal_y: 70,
         cover_zoom: 1.5,
         slug_it: "bocche-di-bonifacio",
         slug_en: "strait-of-bonifacio",
@@ -182,8 +189,8 @@ describe("bozza articolo con tutte le impostazioni dell'editor", () => {
 
     const insert = writes.find((write: StubWrite) => write.table === "logbook_articles" && write.op === "insert");
     expect(insert?.values).toMatchObject({
-      cover_focal_x: 0.3,
-      cover_focal_y: 0.7,
+      cover_focal_x: 30,
+      cover_focal_y: 70,
       cover_zoom: 1.5,
       slug_it: "bocche-di-bonifacio",
       slug_en: "strait-of-bonifacio",

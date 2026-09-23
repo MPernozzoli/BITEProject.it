@@ -15,8 +15,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getArticleTranslationGaps } from "../../../lib/article-translation-gaps.js";
 import { McpToolError, type McpContext } from "../context.js";
 import { articleLinks, type BilingualSlugs } from "../links.js";
-import { countWords, markdownToTiptap, tiptapToMarkdown } from "../markdown.js";
-import { uploadImageFromUrl } from "../media.js";
+import { countWords, markdownToTiptap, tiptapToMarkdown, youtubeEmbedUrl, type JSONContent } from "../markdown.js";
+import {
+  bucketPathFromUrl,
+  createImageUploadSlot,
+  INLINE_MAX_BYTES,
+  uploadImageFromInput,
+  verifyUploadedImage,
+  type UploadedImage,
+} from "../media.js";
 import { clientRequestIdShape, confirmShape, registerTool, type ToolOutcome } from "../registry.js";
 import { assignArticleToSlot, findNextOpenSlot, todayIso } from "./plan.js";
 
@@ -205,11 +212,228 @@ const authorsShape = {
     .describe("Elenco finale degli autori collegati. Sostituisce quelli esistenti, non li somma."),
 };
 
+/**
+ * Stessa scala dell'editor (`src/lib/article-cover.ts`): il punto focale è una
+ * percentuale 0-100 (50/50 = centro) e lo zoom va da 1 a 2.5. Valori fuori
+ * scala verrebbero tagliati da `clampCoverFocal` in pagina, spostando il
+ * ritaglio in un angolo senza che nessuno se ne accorga.
+ */
 const coverShape = {
-  cover_focal_x: z.number().min(0).max(1).optional().describe("Punto focale orizzontale della cover, 0-1."),
-  cover_focal_y: z.number().min(0).max(1).optional().describe("Punto focale verticale della cover, 0-1."),
-  cover_zoom: z.number().min(1).max(4).optional().describe("Zoom della cover, 1 = nessuno."),
+  cover_focal_x: z.number().min(0).max(100).optional().describe("Punto focale orizzontale della cover in percentuale, 0-100 (50 = centro)."),
+  cover_focal_y: z.number().min(0).max(100).optional().describe("Punto focale verticale della cover in percentuale, 0-100 (50 = centro)."),
+  cover_zoom: z.number().min(1).max(2.5).optional().describe("Zoom della cover, da 1 (nessuno) a 2.5."),
 };
+
+const instagramShape = {
+  instagram_story_image_it: z.string().url().nullable().optional().describe("Immagine verticale (9:16) per la Instagram Story IT. null = nessuna."),
+  instagram_story_image_en: z.string().url().nullable().optional().describe("Immagine verticale (9:16) per la Instagram Story EN. null = nessuna."),
+  instagram_story_use_cover_it: z.boolean().optional().describe("true = la Story IT usa la cover invece di un'immagine dedicata."),
+  instagram_story_use_cover_en: z.boolean().optional().describe("true = la Story EN usa la cover invece di un'immagine dedicata."),
+};
+
+const INSTAGRAM_FIELDS = [
+  "instagram_story_image_it",
+  "instagram_story_image_en",
+  "instagram_story_use_cover_it",
+  "instagram_story_use_cover_en",
+] as const;
+
+const DEFAULT_COVER_FOCAL = { cover_focal_x: 50, cover_focal_y: 50, cover_zoom: 1 };
+
+// ============================================================================
+// Media: collegare un'immagine o un video a una delle superfici dell'articolo
+// ============================================================================
+
+const ATTACH_TARGETS = ["cover", "body", "instagram_story_it", "instagram_story_en"] as const;
+type AttachTarget = (typeof ATTACH_TARGETS)[number];
+
+/** Cartella di default per superficie: la stessa che usa l'editor manuale. */
+const FOLDER_BY_TARGET: Record<AttachTarget, string> = {
+  cover: "covers",
+  body: "articles",
+  instagram_story_it: "instagram-stories/it",
+  instagram_story_en: "instagram-stories/en",
+};
+
+const attachShape = {
+  attach_as: z
+    .enum(ATTACH_TARGETS)
+    .optional()
+    .describe(
+      'Dove collegare il media: "cover" (copertina), "body" (foto nel corpo), "instagram_story_it"/"instagram_story_en" (immagine verticale della Story). Richiede article_id.',
+    ),
+  body_language: z
+    .enum(["it", "en", "both"])
+    .optional()
+    .describe('Solo per attach_as "body": in quale corpo inserirla. Default "both", con didascalia e alt nella lingua di ciascun corpo.'),
+  position: z
+    .enum(["end", "start"])
+    .optional()
+    .describe('Solo per "body": dove inserirla se after_heading non è indicato. Default "end".'),
+  after_heading: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('Solo per "body": inserisce subito dopo il primo titolo (#, ##, ###) che contiene questo testo, in ciascuna lingua. Per l\'EN serve after_heading_en se il titolo è tradotto.'),
+  after_heading_en: z.string().max(200).optional().describe("Come after_heading, ma cercato nel corpo EN. Se assente si usa after_heading."),
+  caption_it: z.string().max(500).optional().describe("Didascalia IT sotto la foto nel corpo."),
+  caption_en: z.string().max(500).optional().describe("Didascalia EN sotto la foto nel corpo."),
+  alt_it: z.string().max(300).optional().describe("Testo alternativo IT (accessibilità/SEO)."),
+  alt_en: z.string().max(300).optional().describe("Testo alternativo EN (accessibilità/SEO)."),
+  ai_generated: z.boolean().optional().describe("Mostra l'etichetta \"AI\" sulla foto nel corpo, come il flag dell'editor."),
+  ...coverShape,
+};
+
+type AttachArgs = {
+  attach_as?: AttachTarget;
+  body_language?: "it" | "en" | "both";
+  position?: "end" | "start";
+  after_heading?: string;
+  after_heading_en?: string;
+  caption_it?: string;
+  caption_en?: string;
+  alt_it?: string;
+  alt_en?: string;
+  ai_generated?: boolean;
+  cover_focal_x?: number;
+  cover_focal_y?: number;
+  cover_zoom?: number;
+};
+
+function plainText(node: JSONContent): string {
+  if (typeof node.text === "string") return node.text;
+  return (node.content ?? []).map(plainText).join("");
+}
+
+/**
+ * Inserisce un blocco nel documento senza toccare il resto: dopo un titolo,
+ * in testa o in coda. Un documento vuoto (il solo paragrafo vuoto che crea
+ * `markdownToTiptap("")`) viene sostituito invece di lasciare una riga bianca
+ * prima della foto.
+ */
+function insertBlock(doc: unknown, block: JSONContent, placement: { position: "end" | "start"; afterHeading?: string }, language: string): JSONContent {
+  const source = doc && typeof doc === "object" && Array.isArray((doc as JSONContent).content) ? (doc as JSONContent) : { type: "doc", content: [] };
+  const content = [...(source.content ?? [])];
+  const isEmpty = content.length === 0 || (content.length === 1 && content[0].type === "paragraph" && !content[0].content?.length);
+  if (isEmpty) return { ...source, type: "doc", content: [block] };
+
+  if (placement.afterHeading) {
+    const needle = placement.afterHeading.trim().toLowerCase();
+    const index = content.findIndex((node) => node.type === "heading" && plainText(node).toLowerCase().includes(needle));
+    if (index === -1) {
+      throw new McpToolError(
+        "bad_request",
+        `Nessun titolo contenente "${placement.afterHeading}" nel corpo ${language.toUpperCase()}. Leggi i titoli con article_get, oppure usa position.`,
+      );
+    }
+    content.splice(index + 1, 0, block);
+  } else if (placement.position === "start") {
+    content.unshift(block);
+  } else {
+    content.push(block);
+  }
+  return { ...source, content };
+}
+
+/**
+ * Controlli che non richiedono il file: vanno fatti *prima* di caricarlo, così
+ * un titolo sbagliato o un video come cover non lasciano nel bucket pubblico
+ * un'immagine orfana che nessuno ripulirà.
+ */
+function assertAttachable(
+  article: ArticleRow & { content_it?: unknown; content_en?: unknown },
+  args: AttachArgs,
+  kind: "image" | "youtube",
+): void {
+  if (kind === "youtube" && args.attach_as !== "body") {
+    throw new McpToolError("bad_request", "Un video YouTube può stare solo nel corpo (attach_as \"body\"): cover e Story vogliono un'immagine.");
+  }
+  if (args.attach_as !== "body") return;
+  const probe: JSONContent = { type: "paragraph" };
+  for (const lang of bodyLanguages(args)) {
+    insertBlock(lang === "it" ? article.content_it : article.content_en, probe, placementFor(args, lang), lang);
+  }
+}
+
+function bodyLanguages(args: AttachArgs): ("it" | "en")[] {
+  return args.body_language === "it" ? ["it"] : args.body_language === "en" ? ["en"] : ["it", "en"];
+}
+
+function placementFor(args: AttachArgs, lang: "it" | "en") {
+  return {
+    position: args.position ?? "end",
+    afterHeading: lang === "en" ? args.after_heading_en ?? args.after_heading : args.after_heading,
+  } as const;
+}
+
+type MediaInput = { kind: "image"; image: UploadedImage | { url: string } } | { kind: "youtube"; src: string };
+
+/**
+ * Collega un media già nello storage (o un video YouTube) alla superficie
+ * indicata. Stessa semantica dell'editor: una nuova cover riporta il ritaglio
+ * al centro, un'immagine Story dedicata spegne "usa la cover", una foto nel
+ * corpo è un `mediaFigure` come quelle trascinate a mano.
+ */
+async function attachMediaToArticle(
+  context: McpContext,
+  article: ArticleRow & { content_it?: unknown; content_en?: unknown },
+  media: MediaInput,
+  args: AttachArgs,
+): Promise<{ fields: string[]; warnings: string[] }> {
+  const target = args.attach_as as AttachTarget;
+  const patch: Record<string, unknown> = {};
+  const warnings: string[] = [];
+
+  assertAttachable(article, args, media.kind);
+  const src = media.kind === "youtube" ? media.src : media.image.url;
+
+  if (target === "cover") {
+    patch.cover_image = src;
+    patch.cover_focal_x = args.cover_focal_x ?? DEFAULT_COVER_FOCAL.cover_focal_x;
+    patch.cover_focal_y = args.cover_focal_y ?? DEFAULT_COVER_FOCAL.cover_focal_y;
+    patch.cover_zoom = args.cover_zoom ?? DEFAULT_COVER_FOCAL.cover_zoom;
+  } else if (target === "instagram_story_it" || target === "instagram_story_en") {
+    const lang = target.slice(-2);
+    patch[`instagram_story_image_${lang}`] = src;
+    patch[`instagram_story_use_cover_${lang}`] = false;
+  } else {
+    for (const lang of bodyLanguages(args)) {
+      const caption = (lang === "it" ? args.caption_it : args.caption_en)?.trim() ?? "";
+      const alt = (lang === "it" ? args.alt_it : args.alt_en)?.trim() ?? "";
+      const otherCaption = (lang === "it" ? args.caption_en : args.caption_it)?.trim();
+      if (!caption && otherCaption) warnings.push(`didascalia ${lang.toUpperCase()} mancante`);
+      const block: JSONContent = {
+        type: "mediaFigure",
+        attrs: {
+          kind: media.kind,
+          src,
+          caption,
+          alt: media.kind === "image" ? alt || caption : "",
+          aiGenerated: media.kind === "image" && args.ai_generated === true,
+          title: "",
+        },
+      };
+      patch[`content_${lang}`] = insertBlock(lang === "it" ? article.content_it : article.content_en, block, placementFor(args, lang), lang);
+    }
+  }
+
+  patch.updated_at = new Date().toISOString();
+  const { error } = await context.service.from("logbook_articles").update(patch).eq("id", article.id);
+  if (error) throw new McpToolError("db_error", `Collegamento del media all'articolo fallito: ${error.message}`);
+  return { fields: Object.keys(patch).filter((key) => key !== "updated_at"), warnings };
+}
+
+function attachSummary(article: ArticleRow, target: AttachTarget, result: { fields: string[]; warnings: string[] }): string {
+  const where =
+    target === "cover"
+      ? "come copertina (ritaglio centrato: regolabile con cover_focal_x/y e cover_zoom)"
+      : target === "body"
+        ? `nel corpo (${result.fields.map((field) => field.replace("content_", "").toUpperCase()).join(" + ")})`
+        : `come immagine della Instagram Story ${target.slice(-2).toUpperCase()}`;
+  const live = article.status === "published" ? " L'articolo è già pubblicato: la modifica è online da subito." : "";
+  const warn = result.warnings.length > 0 ? ` Attenzione: ${result.warnings.join("; ")}.` : "";
+  return `Collegata a "${article.title_it || article.title_en}" ${where}.${warn}${live}`;
+}
 
 const tripShape = {
   voyage_id: z.string().uuid().nullable().optional().describe("Voyage a cui collegare l'articolo."),
@@ -319,7 +543,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
         context.service.from("article_authors").select("profile_id,role").eq("article_id", id),
         context.service
           .from("logbook_articles")
-          .select("cover_focal_x,cover_focal_y,cover_zoom,voyage_id,voyage_segment_start,voyage_segment_end,voyage_waypoint_start_id,voyage_waypoint_end_id,location_name,latitude,longitude")
+          .select("cover_focal_x,cover_focal_y,cover_zoom,instagram_story_image_it,instagram_story_image_en,instagram_story_use_cover_it,instagram_story_use_cover_en,voyage_id,voyage_segment_start,voyage_segment_end,voyage_waypoint_start_id,voyage_waypoint_end_id,location_name,latitude,longitude")
           .eq("id", id)
           .maybeSingle(),
       ]);
@@ -353,7 +577,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_create_draft",
     title: "Crea una bozza",
     description:
-      "Crea un nuovo articolo in stato draft, con tutte le impostazioni dell'editor: corpo in Markdown (grassetto, corsivo, titoli, liste, citazioni, codice, foto — anche con didascalia via ![alt](url \"didascalia\")), cover con punto focale e zoom, tag, autori, collegamento a un voyage/waypoint. Titolo obbligatorio in italiano e inglese: il sito è bilingue e una bozza monolingue non è programmabile.",
+      "Crea un nuovo articolo in stato draft, con tutte le impostazioni dell'editor: corpo in Markdown (grassetto, corsivo, titoli, liste, citazioni, codice, tabelle, foto — anche con didascalia via ![alt](url \"didascalia\") e flag AI via ![alt](url \"didascalia {ai}\") — e video YouTube scrivendo [video: didascalia](url YouTube) da solo in un paragrafo), cover con punto focale e zoom, immagini delle Instagram Story, tag, autori, collegamento a un voyage/waypoint. Le foto vanno prima caricate nello storage BITE con article_upload_image. Titolo obbligatorio in italiano e inglese: il sito è bilingue e una bozza monolingue non è programmabile.",
     scope: "articles:write",
     kind: "write",
     inputSchema: {
@@ -365,10 +589,11 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       body_markdown_en: z.string().max(120_000).optional(),
       category: z.string().max(120).optional().describe(`Default: "${DEFAULT_CATEGORY}".`),
       editorial_type: z.enum(EDITORIAL_TYPES).optional(),
-      cover_image: z.string().url().optional(),
+      cover_image: z.string().url().optional().describe("URL della copertina. Per caricarla direttamente usa article_upload_image con attach_as \"cover\"."),
       slug_it: z.string().max(160).optional(),
       slug_en: z.string().max(160).optional(),
       ...coverShape,
+      ...instagramShape,
       ...tripShape,
       ...tagsShape,
       ...authorsShape,
@@ -397,6 +622,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
           ...(args.cover_focal_x !== undefined ? { cover_focal_x: args.cover_focal_x } : {}),
           ...(args.cover_focal_y !== undefined ? { cover_focal_y: args.cover_focal_y } : {}),
           ...(args.cover_zoom !== undefined ? { cover_zoom: args.cover_zoom } : {}),
+          ...Object.fromEntries(INSTAGRAM_FIELDS.filter((field) => args[field] !== undefined).map((field) => [field, args[field]])),
           voyage_id: args.voyage_id ?? null,
           voyage_segment_start: args.voyage_segment_start ?? null,
           voyage_segment_end: args.voyage_segment_end ?? null,
@@ -437,20 +663,132 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_upload_image",
     title: "Carica una foto per un articolo",
     description:
-      "Scarica un'immagine da un URL https e la ripubblica nello storage BITE (stesso bucket dell'upload manuale nell'editor). Restituisce l'URL pubblico da usare come cover_image o nel corpo Markdown — con didascalia scrivendo ![alt](url \"didascalia\").",
+      `Carica un'immagine nello storage BITE (stesso bucket dell'upload manuale nell'editor) e, se indichi article_id e attach_as, la collega subito all'articolo: come copertina, come foto nel corpo IT/EN (con didascalia, alt e flag AI per lingua, in coda, in testa o dopo un titolo) o come immagine della Instagram Story. La sorgente è una fra source_url (URL https, scaricato e ripubblicato) e data_base64 (i byte dell'immagine, base64 puro o data URL, max ${Math.round(INLINE_MAX_BYTES / 1024 / 1024)}MB — per file più grandi usa article_media_upload_url). Formati: JPG, PNG, WEBP, GIF, AVIF, riconosciuti dai byte. Senza attach_as restituisce solo l'URL pubblico, da usare in cover_image o nel Markdown.`,
     scope: "articles:write",
     kind: "write",
     inputSchema: {
-      source_url: z.string().url().describe("URL https dell'immagine sorgente."),
-      folder: z.string().max(60).optional().describe('Cartella nel bucket. Default "articles". Usa "covers" per le cover.'),
+      source_url: z.string().url().optional().describe("URL https dell'immagine sorgente. Alternativo a data_base64."),
+      data_base64: z
+        .string()
+        .max(Math.ceil((INLINE_MAX_BYTES * 4) / 3) + 200)
+        .optional()
+        .describe("Byte dell'immagine in base64 (o data URL data:image/...;base64,...). Alternativo a source_url."),
+      article_id: z.string().uuid().optional().describe("Articolo a cui collegare l'immagine. Serve insieme ad attach_as."),
+      ...attachShape,
+      folder: z
+        .string()
+        .max(60)
+        .optional()
+        .describe('Cartella nel bucket. Default in base ad attach_as ("covers", "articles", "instagram-stories/it|en"), altrimenti "articles".'),
       ...clientRequestIdShape,
     },
     annotations: { destructiveHint: false, idempotentHint: false },
     handler: async (args, context) => {
-      const uploaded = await uploadImageFromUrl(context, { sourceUrl: args.source_url, folder: args.folder ?? "articles" });
+      if (Boolean(args.article_id) !== Boolean(args.attach_as)) {
+        throw new McpToolError("bad_request", "article_id e attach_as vanno passati insieme (o nessuno dei due, per caricare soltanto).");
+      }
+      // L'articolo si verifica *prima* del caricamento: un id sbagliato non
+      // deve lasciare nel bucket un file orfano.
+      const article = args.article_id ? await loadArticle(context, args.article_id, args.attach_as === "body") : null;
+      if (article) assertAttachable(article, args as AttachArgs, "image");
+      const folder = args.folder ?? (args.attach_as ? FOLDER_BY_TARGET[args.attach_as] : "articles");
+      const uploaded = await uploadImageFromInput(context, { source_url: args.source_url, data_base64: args.data_base64 }, folder);
+
+      if (!article || !args.attach_as) {
+        return {
+          text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB): ${uploaded.url}`,
+          data: uploaded,
+        } satisfies ToolOutcome;
+      }
+
+      const result = await attachMediaToArticle(context, article, { kind: "image", image: uploaded }, args as AttachArgs);
       return {
-        text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB): ${uploaded.url}`,
-        data: uploaded,
+        text: `Immagine caricata (${Math.round(uploaded.bytes / 1024)} KB). ${attachSummary(article, args.attach_as, result)}`,
+        targetId: article.id,
+        data: { ...uploaded, article_id: article.id, attached_as: args.attach_as, fields: result.fields, warnings: result.warnings },
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
+    name: "article_media_upload_url",
+    title: "Ottieni un URL per caricare un file grande",
+    description:
+      "Rilascia un URL di upload firmato (valido 2 ore) nello storage BITE, per immagini oltre il limite inline di article_upload_image o quando hai il file su disco: carica i byte con una PUT (es. curl -X PUT -H \"Content-Type: image/jpeg\" --data-binary @foto.jpg \"<upload_url>\"), poi chiama article_attach_media con uploaded_path per verificarlo e collegarlo all'articolo. Il file non è utilizzabile finché article_attach_media non lo ha verificato.",
+    scope: "articles:write",
+    kind: "write",
+    inputSchema: {
+      content_type: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]).describe("Formato del file che caricherai."),
+      attach_as: z.enum(ATTACH_TARGETS).optional().describe("Solo per scegliere la cartella di default, come in article_upload_image."),
+      folder: z.string().max(60).optional().describe("Cartella nel bucket. Default in base ad attach_as, altrimenti \"articles\"."),
+      ...clientRequestIdShape,
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+    handler: async (args, context) => {
+      const folder = args.folder ?? (args.attach_as ? FOLDER_BY_TARGET[args.attach_as] : "articles");
+      const slot = await createImageUploadSlot(context, { folder, contentType: args.content_type });
+      return {
+        text: `URL di upload pronto per ${slot.path} (scade fra ${slot.expires_in_seconds / 3600} ore). Esegui: curl -X PUT -H "Content-Type: ${args.content_type}" --data-binary @<file> "${slot.upload_url}" — poi article_attach_media con uploaded_path "${slot.path}".`,
+        data: {
+          ...slot,
+          method: "PUT",
+          headers: { "Content-Type": args.content_type },
+          curl: `curl -X PUT -H "Content-Type: ${args.content_type}" --data-binary @<file> "${slot.upload_url}"`,
+        },
+      } satisfies ToolOutcome;
+    },
+  });
+
+  registerTool(server, ctx, {
+    name: "article_attach_media",
+    title: "Collega un media a un articolo",
+    description:
+      "Collega a un articolo un media già disponibile: un file caricato con article_media_upload_url (uploaded_path, viene verificato che sia davvero un'immagine), un'immagine già nello storage BITE o su un altro sito https (media_url, ripubblicata nello storage BITE se esterna), oppure un video YouTube (media_url youtube.com/youtu.be, solo nel corpo). Superfici: copertina, corpo IT/EN (con didascalia, alt e flag AI per lingua, in coda, in testa o dopo un titolo), immagine della Instagram Story IT/EN.",
+    scope: "articles:write",
+    kind: "write",
+    inputSchema: {
+      article_id: z.string().uuid(),
+      uploaded_path: z.string().max(200).optional().describe("Percorso restituito da article_media_upload_url, dopo la PUT."),
+      media_url: z.string().url().optional().describe("URL https di un'immagine o di un video YouTube. Alternativo a uploaded_path."),
+      ...attachShape,
+      attach_as: z.enum(ATTACH_TARGETS).describe(attachShape.attach_as.description ?? ""),
+      ...clientRequestIdShape,
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+    handler: async (args, context) => {
+      if (Boolean(args.uploaded_path) === Boolean(args.media_url)) {
+        throw new McpToolError("bad_request", "Passa esattamente uno fra uploaded_path e media_url.");
+      }
+      const article = await loadArticle(context, args.article_id, args.attach_as === "body");
+
+      let media: MediaInput;
+      const youtube = args.media_url ? youtubeEmbedUrl(args.media_url) : null;
+      assertAttachable(article, args as AttachArgs, youtube ? "youtube" : "image");
+      if (youtube) {
+        media = { kind: "youtube", src: youtube };
+      } else if (args.uploaded_path) {
+        const path = args.uploaded_path.replace(/^\/+/, "");
+        if (path.includes("..")) throw new McpToolError("bad_request", "uploaded_path non valido.");
+        // Un file appena arrivato via upload firmato non è mai passato da un
+        // controllo: se non è un'immagine si rimuove dal bucket pubblico.
+        media = { kind: "image", image: await verifyUploadedImage(context, path, { removeIfInvalid: true }) };
+      } else {
+        const folder = FOLDER_BY_TARGET[args.attach_as];
+        const own = bucketPathFromUrl(args.media_url!);
+        media = {
+          kind: "image",
+          image: own
+            ? await verifyUploadedImage(context, own)
+            : await uploadImageFromInput(context, { source_url: args.media_url }, folder),
+        };
+      }
+
+      const result = await attachMediaToArticle(context, article, media, args as AttachArgs);
+      const src = media.kind === "youtube" ? media.src : media.image.url;
+      return {
+        text: `${media.kind === "youtube" ? "Video YouTube" : "Immagine"} ${attachSummary(article, args.attach_as, result).replace(/^Collegata/, "collegato/a")}`,
+        targetId: article.id,
+        data: { article_id: article.id, kind: media.kind, url: src, attached_as: args.attach_as, fields: result.fields, warnings: result.warnings },
       } satisfies ToolOutcome;
     },
   });
@@ -459,7 +797,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
     name: "article_update",
     title: "Aggiorna un articolo",
     description:
-      "Modifica i campi indicati di un articolo esistente (patch parziale: i campi non passati restano invariati). Copre tutte le impostazioni dell'editor: corpo Markdown, cover con punto focale/zoom, slug bilingui, tag, autori, collegamento voyage/waypoint. tags e authors sostituiscono l'elenco esistente, non lo sommano.",
+      "Modifica i campi indicati di un articolo esistente (patch parziale: i campi non passati restano invariati). Copre tutte le impostazioni dell'editor: corpo Markdown (stessa sintassi media di article_create_draft), cover con punto focale/zoom, immagini delle Instagram Story, slug bilingui, tag, autori, collegamento voyage/waypoint. tags e authors sostituiscono l'elenco esistente, non lo sommano.",
     scope: "articles:write",
     kind: "write",
     inputSchema: {
@@ -476,6 +814,7 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       slug_it: z.string().max(160).nullable().optional(),
       slug_en: z.string().max(160).nullable().optional(),
       ...coverShape,
+      ...instagramShape,
       ...tripShape,
       ...tagsShape,
       ...authorsShape,
@@ -498,6 +837,9 @@ export function registerArticleTools(server: McpServer, ctx: McpContext): void {
       if (args.cover_focal_x !== undefined) patch.cover_focal_x = args.cover_focal_x;
       if (args.cover_focal_y !== undefined) patch.cover_focal_y = args.cover_focal_y;
       if (args.cover_zoom !== undefined) patch.cover_zoom = args.cover_zoom;
+      for (const field of INSTAGRAM_FIELDS) {
+        if (args[field] !== undefined) patch[field] = args[field];
+      }
       if (args.slug_it !== undefined) patch.slug_it = args.slug_it?.trim() || null;
       if (args.slug_en !== undefined) patch.slug_en = args.slug_en?.trim() || null;
       if (args.voyage_id !== undefined) patch.voyage_id = args.voyage_id;

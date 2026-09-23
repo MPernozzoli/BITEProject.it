@@ -5217,6 +5217,7 @@ export type Database = {
           activities: Json
           actual_arrival_at: string | null
           actual_departure_at: string | null
+          alias_of_waypoint_id: string | null
           created_at: string
           date_end: string | null
           date_start: string | null
@@ -5248,6 +5249,7 @@ export type Database = {
           activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
+          alias_of_waypoint_id?: string | null
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -5279,6 +5281,7 @@ export type Database = {
           activities?: Json
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
+          alias_of_waypoint_id?: string | null
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -5307,6 +5310,13 @@ export type Database = {
           waypoint_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "voyage_waypoints_alias_of_waypoint_id_fkey"
+            columns: ["alias_of_waypoint_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "voyage_waypoints_voyage_id_fkey"
             columns: ["voyage_id"]

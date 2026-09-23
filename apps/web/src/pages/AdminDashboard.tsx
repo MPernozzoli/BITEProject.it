@@ -18,6 +18,7 @@ import {
   Camera,
   Image as ImageIcon,
   MapPinned,
+  Route as RouteIcon,
   UploadCloud,
   Wine,
   AlertTriangle,
@@ -293,6 +294,7 @@ const AdminDashboard = () => {
         items: [
           { to: "/admin/route", label: "Rotte", hint: "Voyage e waypoint", icon: Navigation, count: voyagesCount },
           { to: "/admin/trackers", label: "Tracker", hint: "Posizioni in mappa", icon: MapPinned, count: null },
+          { to: "/admin/tracks", label: "Tracciati GPX", hint: "Rotta reale vs prevista", icon: RouteIcon, count: null },
           { to: "/admin/logbook-points", label: "Punti foto", hint: "Foto sulla mappa", icon: Camera, count: null },
         ],
       },

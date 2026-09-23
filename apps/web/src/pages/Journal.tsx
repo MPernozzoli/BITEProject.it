@@ -54,6 +54,7 @@ import { buildMapPresenceMarkers, type MapPresenceTrackerRow } from "@/lib/map-p
 import {
   buildVoyagePath,
   getArticleVoyageFocus,
+  getFleetBoatPositions,
   getLocalizedVoyageName,
   getLocalizedWaypointName,
   getArticleDisplayLocationLabel,
@@ -364,6 +365,11 @@ const Journal = () => {
     });
     return map;
   }, [allWaypoints]);
+
+  const boatPositions = useMemo(
+    () => getFleetBoatPositions(voyages, waypointsMap),
+    [voyages, waypointsMap]
+  );
 
   const bookableVoyageIds = useMemo(
     () => voyages.filter(isVoyageBookableNow).map((voyage) => voyage.id),
@@ -1275,6 +1281,7 @@ const Journal = () => {
             onParticipate={handleParticipate}
             onViewWaypointDetail={handleViewWaypointDetail}
             presenceMarkers={mapPresenceMarkers}
+            boatPositions={boatPositions}
             photoPoints={photoPoints}
             flyToWaypointRef={flyToWaypointRef}
             lang={lang}

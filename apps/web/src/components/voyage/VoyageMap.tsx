@@ -17,7 +17,7 @@ import {
   normalizeWaypointMedia,
   resolveArticleRouteRange,
 } from "@/lib/voyage-utils";
-import type { Voyage, VoyageWaypoint, GeoArticle } from "@/lib/voyage-utils";
+import type { Voyage, VoyageWaypoint, GeoArticle, VoyageBoatPosition } from "@/lib/voyage-utils";
 import {
   getComplexityExplanation,
   getComplexityLabel,
@@ -31,7 +31,7 @@ import {
   type BookableLeg,
   type BookableLegAvailability,
 } from "@/lib/booking-utils";
-import { getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
+import { getBoatMarkerIconMarkup, getMapPresenceIconMarkup, type MapPresenceMarker } from "@/lib/map-presence";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { bindMapToContainerResize, bindMapToTheme,
   createThemedCartoStyle, requestMapResize } from "@/lib/maplibre";
@@ -48,6 +48,8 @@ interface VoyageMapProps {
   hoveredArticleId?: string | null;
   highlightedVoyageId?: string | null;
   presenceMarkers?: MapPresenceMarker[];
+  /** Where the boat currently is per active voyage, derived from actuals. See lib/voyage-utils.ts getFleetBoatPositions. */
+  boatPositions?: Record<string, VoyageBoatPosition>;
   photoPoints?: LogbookPhotoPoint[];
   onArticleClick?: (article: GeoArticle) => void;
   onVoyageSelect?: (voyageId: string | null) => void;
@@ -333,6 +335,7 @@ const VoyageMap = ({
   hoveredArticleId,
   highlightedVoyageId,
   presenceMarkers = [],
+  boatPositions = {},
   photoPoints = [],
   onArticleClick,
   onVoyageSelect,
@@ -431,6 +434,8 @@ const VoyageMap = ({
       inboundLeg: BookableLeg | null;
       /** The leg departing from this waypoint, if any (only set when that leg is still current/future). */
       outboundLeg: BookableLeg | null;
+      /** True when the boat's derived position (see lib/voyage-utils.ts) is docked right here. */
+      isBoatHere: boolean;
     };
     const items: Item[] = [];
     for (const voyage of publishedVoyages) {
@@ -486,6 +491,8 @@ const VoyageMap = ({
         const inboundLeg = voyageBookingLegs.find(
           (leg) => leg.to_waypoint_id === w.id && isLegCurrentOrFuture(leg)
         );
+        const boatPosition = boatPositions[voyage.id];
+        const isBoatHere = boatPosition?.status === "docked" && boatPosition.waypointId === w.id;
         items.push({
           key: `${voyage.id}:${w.id}`,
           lng: w.lng,
@@ -505,11 +512,12 @@ const VoyageMap = ({
           hasCurrentLegFromHere,
           inboundLeg: inboundLeg ?? null,
           outboundLeg: outboundLeg ?? null,
+          isBoatHere,
         });
       }
     }
     return items;
-  }, [publishedVoyages, waypointsMap, articlesForMap, lang, bookingLegsByVoyage]);
+  }, [publishedVoyages, waypointsMap, articlesForMap, lang, bookingLegsByVoyage, boatPositions]);
 
   const waypointClusterIndexRef = useRef<Supercluster | null>(null);
   const mapWaypointsByKeyRef = useRef<Map<string, (typeof mapWaypointClusterInputs)[0]>>(new Map());
@@ -777,10 +785,74 @@ const VoyageMap = ({
       presenceMarkersRef.current.push(markerInstance);
     });
 
+    Object.entries(boatPositions).forEach(([voyageId, position]) => {
+      if (position.status !== "in-transit") return;
+      const voyage = publishedVoyages.find((v) => v.id === voyageId);
+      if (!voyage) return;
+
+      const wps = waypointsMap[voyageId] || [];
+      const destIndex = wps.findIndex((w) => w.id === position.toWaypointId);
+      const destName = destIndex >= 0 ? getLocalizedWaypointName(wps[destIndex], lang, destIndex) : "";
+      const towardLabel = lang === "it" ? "In navigazione verso" : "Under way toward";
+
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "voyage-boat-marker";
+      element.setAttribute("aria-label", destName ? `${towardLabel} ${destName}` : towardLabel);
+      element.innerHTML = `
+        <span class="voyage-boat-marker__halo" aria-hidden="true"></span>
+        <span class="voyage-boat-marker__chip" aria-hidden="true">${getBoatMarkerIconMarkup()}</span>
+      `;
+
+      const markerInstance = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([position.lng, position.lat])
+        .addTo(map);
+
+      const routeColor = getVoyageStrokeColor(voyage, "base");
+      const showBoatPopup = () => {
+        presencePopupRef.current?.remove();
+        presencePopupRef.current = null;
+
+        const etaLabel = lang === "it" ? "circa" : "about";
+        const popupHtml = `
+          <div class="voyage-popup" style="--voyage-popup-accent:${routeColor};width:min(240px,calc(100vw - 36px));">
+            <div class="voyage-popup__header" style="padding:13px 16px;">
+              <div class="voyage-popup__title" style="font-size:13px;">${escapePopupHtml(towardLabel)} ${escapePopupHtml(destName || "—")}</div>
+              <p style="margin:0;font-size:11px;color:hsl(220,18%,42%);">${escapePopupHtml(etaLabel)} ${Math.round(position.fraction * 100)}%</p>
+            </div>
+          </div>
+        `;
+
+        const popup = new maplibregl.Popup({
+          offset: 14,
+          closeButton: false,
+          closeOnClick: true,
+          maxWidth: "260px",
+        });
+
+        popup.setLngLat([position.lng, position.lat]).setHTML(popupHtml).addTo(map);
+        presencePopupRef.current = popup;
+      };
+
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showBoatPopup();
+      });
+      element.addEventListener("mouseenter", showBoatPopup);
+      element.addEventListener("mouseleave", () => {
+        presencePopupRef.current?.remove();
+        presencePopupRef.current = null;
+      });
+      element.addEventListener("focus", showBoatPopup);
+
+      presenceMarkersRef.current.push(markerInstance);
+    });
+
     return () => {
       clearPresenceMarkers();
     };
-  }, [clearPresenceMarkers, lang, presenceMarkers]);
+  }, [boatPositions, clearPresenceMarkers, lang, presenceMarkers, publishedVoyages, waypointsMap]);
 
   // Draw voyage routes
   useEffect(() => {
@@ -1279,6 +1351,7 @@ const VoyageMap = ({
         <div class="voyage-popup" style="--voyage-popup-accent:${routeColor};">
           <div class="voyage-popup__header">
             ${meta.sequenceHeading ? `<span class="voyage-popup__badge">${escapePopupHtml(meta.sequenceHeading)}</span>` : ""}
+            ${meta.isBoatHere ? `<span class="voyage-popup__badge voyage-popup__badge--boat">${escapePopupHtml(L === "it" ? "Qui ora" : "Here now")}</span>` : ""}
             <div class="voyage-popup__title">${escapePopupHtml(meta.name || "—")}</div>
             <a class="voyage-popup__detail-link" href="${detailHref}" data-view-detail="1">${
               L === "it" ? "Vedi tappa nel viaggio" : "View stage in voyage"
@@ -1389,16 +1462,30 @@ const VoyageMap = ({
         const isBookingAnchor =
           bookingSelectionAnchorRef.current?.voyageId === meta.voyageId &&
           bookingSelectionAnchorRef.current?.waypointId === meta.waypoint.id;
+        // A stop only reads as "bookable" once every leg touching it is in the past — same rule
+        // the popup's booking module already uses (see isPastCompleted above). Without this, a
+        // stop the boat already left would keep the green bookable ring just because some other,
+        // still-future leg of the same voyage is open for booking.
+        const isPastCompleted = meta.hasAnyBookingLeg && !meta.hasCurrentLegFromHere;
+        const isBookableHere = meta.isBookableVoyage && !isPastCompleted;
         const size = 17;
         const el = document.createElement("div");
-        el.style.cssText = `cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ${MAP_MARKER_EASE};`;
+        el.style.cssText = `position:relative;cursor:pointer;z-index:4;display:flex;align-items:center;justify-content:center;opacity:${isDimmed ? "0.38" : "1"};transition:opacity 0.2s ${MAP_MARKER_EASE};`;
+
+        if (meta.isBoatHere) {
+          const boatHalo = document.createElement("span");
+          boatHalo.className = "voyage-boat-here-halo";
+          boatHalo.setAttribute("aria-hidden", "true");
+          el.appendChild(boatHalo);
+        }
 
         const dot = document.createElement("div");
         dot.style.cssText = `
+          position:relative;z-index:1;
           width:${size}px;height:${size}px;border-radius:50%;
-          border:${isBookingAnchor ? "3px" : meta.isBookableVoyage ? "2.5px" : "1.5px"} solid ${isBookingAnchor ? "hsl(142,72%,35%)" : meta.isBookableVoyage ? "hsl(152,58%,44%)" : "hsl(0,0%,100%)"};
+          border:${isBookingAnchor ? "3px" : isBookableHere ? "2.5px" : "1.5px"} solid ${isBookingAnchor ? "hsl(142,72%,35%)" : isBookableHere ? "hsl(152,58%,44%)" : "hsl(0,0%,100%)"};
           background:${meta.fillColor};
-          box-shadow:${isBookingAnchor ? "0 0 0 4px hsla(142,72%,35%,0.2),0 2px 9px rgba(15,23,42,0.18)" : meta.isBookableVoyage ? "0 0 0 4px hsla(152,58%,44%,0.16),0 2px 8px rgba(15,23,42,0.16)" : "0 1px 5px rgba(15,23,42,0.14)"};
+          box-shadow:${isBookingAnchor ? "0 0 0 4px hsla(142,72%,35%,0.2),0 2px 9px rgba(15,23,42,0.18)" : isBookableHere ? "0 0 0 4px hsla(152,58%,44%,0.16),0 2px 8px rgba(15,23,42,0.16)" : "0 1px 5px rgba(15,23,42,0.14)"};
           transition:transform 0.2s ${MAP_MARKER_EASE};
         `;
         el.appendChild(dot);

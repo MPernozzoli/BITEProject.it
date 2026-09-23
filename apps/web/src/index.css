@@ -704,22 +704,6 @@
     overflow: visible;
   }
 
-  .map-presence-marker--boat {
-    color: hsl(189 38% 34%);
-  }
-
-  .map-presence-marker--boat .map-presence-marker__chip {
-    background: linear-gradient(180deg, hsl(189 42% 45%), hsl(189 38% 30%));
-  }
-
-  .map-presence-marker--boat-aboard {
-    color: hsl(208 48% 28%);
-  }
-
-  .map-presence-marker--boat-aboard .map-presence-marker__chip {
-    background: linear-gradient(180deg, hsl(208 52% 38%), hsl(208 48% 24%));
-  }
-
   .map-presence-marker--crew {
     color: hsl(19 74% 48%);
   }
@@ -741,6 +725,62 @@
 
   .map-presence-marker--dimmed {
     opacity: 0.48;
+  }
+
+  /* Boat position derived from voyage actuals (lib/voyage-utils.ts getVoyageBoatPosition) —
+     deliberately scaled to the waypoint dots (~17-22px) rather than the larger
+     .map-presence-marker chip above, so it reads as "part of the route" and not as a second,
+     competing pin system. */
+  .voyage-boat-marker {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    color: hsl(38 88% 42%);
+    cursor: pointer;
+  }
+
+  .voyage-boat-marker__halo {
+    position: absolute;
+    inset: -0.15rem;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.22;
+    animation: map-presence-pulse 2.4s var(--ease-fluid) infinite;
+  }
+
+  .voyage-boat-marker__chip {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 9999px;
+    border: 1.5px solid rgba(255, 255, 255, 0.92);
+    background: linear-gradient(180deg, hsl(38 92% 52%), hsl(30 82% 42%));
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+    color: white;
+  }
+
+  .voyage-boat-marker__chip svg {
+    width: 0.85rem;
+    height: 0.85rem;
+  }
+
+  /* Docked state: the boat doesn't get its own marker on top of a public waypoint — the
+     waypoint's own dot (inline-styled in VoyageMap.tsx) just grows this halo behind it. */
+  .voyage-boat-here-halo {
+    position: absolute;
+    inset: -0.3rem;
+    border-radius: 9999px;
+    background: hsl(38 88% 46%);
+    opacity: 0.24;
+    animation: map-presence-pulse 2.4s var(--ease-fluid) infinite;
+    pointer-events: none;
   }
 
   .editorial-heading {
@@ -1680,6 +1720,14 @@ html {
   text-transform: uppercase;
 }
 
+/* "Qui ora"/"Here now" badge on a waypoint the boat is currently docked at — always amber,
+   independent of the route's own accent color, so it reads the same on every voyage. */
+.voyage-popup__badge--boat {
+  border-color: color-mix(in srgb, hsl(38 88% 46%) 62%, white);
+  background: color-mix(in srgb, hsl(38 88% 46%) 12%, white);
+  color: color-mix(in srgb, hsl(38 88% 46%) 82%, hsl(220 28% 14%));
+}
+
 .voyage-popup__title {
   font-size: 15px;
   font-weight: 750;
@@ -2388,6 +2436,12 @@ html {
 
 .dark .voyage-popup__detail-link {
   color: color-mix(in srgb, var(--voyage-popup-accent, hsl(206 72% 47%)) 42%, hsl(40 18% 92%));
+}
+
+.dark .voyage-popup__badge--boat {
+  border-color: color-mix(in srgb, hsl(38 88% 46%) 52%, hsl(218 28% 18%));
+  background: color-mix(in srgb, hsl(38 88% 46%) 26%, hsl(218 28% 14%));
+  color: color-mix(in srgb, hsl(38 88% 46%) 36%, hsl(40 18% 92%));
 }
 
 .dark .voyage-popup__module {

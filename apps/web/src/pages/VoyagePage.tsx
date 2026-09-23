@@ -22,6 +22,7 @@ import {
   getLocalizedWaypointDescription,
   getLocalizedWaypointName,
   getPublicVoyageWaypoints,
+  getVoyageBoatPosition,
   getVoyageTravelledWaypointIndex,
   normalizeWaypointActivities,
   slugForLang,
@@ -40,6 +41,8 @@ import { clampCoverFocal, coverImageStyle } from "@/lib/article-cover";
 import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-points";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
+import VoyagePlannedVsActual, { type PlannedVsActualLeg } from "@/components/voyage/VoyagePlannedVsActual";
+import { geometryRuns, summarizeTrackSegments, TRACK_SEGMENT_PUBLIC_COLUMNS, type TrackSegmentRow } from "@/lib/voyage-track-summary";
 import VoyageJoinPanel from "@/components/voyage/VoyageJoinPanel";
 import { storageImageResponsiveProps } from "@/lib/storage-image";
 
@@ -232,6 +235,42 @@ const VoyagePage = () => {
     staleTime: 1000 * 30,
   });
 
+  // Recorded GPX tracks (confirmed only, enforced by RLS) for the planned-vs-actual comparison.
+  const { data: trackSegments = [] } = useQuery<TrackSegmentRow[]>({
+    queryKey: ["voyage-track-segments", voyage?.id],
+    enabled: Boolean(voyage?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_track_segments")
+        .select(TRACK_SEGMENT_PUBLIC_COLUMNS)
+        .eq("voyage_id", voyage!.id)
+        .order("started_at", { ascending: true });
+      if (error) {
+        console.warn("[VoyagePage] voyage_track_segments unavailable", error);
+        return [];
+      }
+      return (data ?? []) as unknown as TrackSegmentRow[];
+    },
+  });
+  const { data: comparisonLegs = [] } = useQuery<PlannedVsActualLeg[]>({
+    queryKey: ["voyage-comparison-legs", voyage?.id],
+    enabled: Boolean(voyage?.id) && trackSegments.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("voyage_bookable_legs")
+        .select("id,from_waypoint_id,to_waypoint_id,sort_order,planned_nautical_miles,baseline_starts_at_window_start,baseline_starts_at_window_end,baseline_ends_at_window_start,baseline_ends_at_window_end")
+        .eq("voyage_id", voyage!.id)
+        .order("sort_order", { ascending: true });
+      if (error) return [];
+      return (data ?? []) as unknown as PlannedVsActualLeg[];
+    },
+  });
+  const trackSummaries = useMemo(() => summarizeTrackSegments(trackSegments), [trackSegments]);
+  const actualTrackRuns = useMemo(
+    () => geometryRuns([...trackSummaries.values()].flatMap((summary) => summary.geometries)),
+    [trackSummaries]
+  );
+
   const publicWaypoints = useMemo(
     () => getPublicVoyageWaypoints(waypoints, articles, voyageId),
     [articles, voyageId, waypoints]
@@ -320,6 +359,11 @@ const VoyagePage = () => {
       .map((waypoint): [number, number] => [waypoint.lng, waypoint.lat]);
     return waypointCoordinates.length >= 2 ? waypointCoordinates : null;
   }, [voyage, waypoints]);
+
+  const boatPosition = useMemo(
+    () => (voyage ? getVoyageBoatPosition(voyage, waypoints) : null),
+    [voyage, waypoints]
+  );
 
   const galleryItems = useMemo(() => {
     const items: { url: string; alt: string }[] = [];
@@ -501,7 +545,7 @@ const VoyagePage = () => {
       <section className="relative">
         <div className={`relative h-[38vh] md:h-[48vh] overflow-hidden ${heroRouteCoordinates || heroImage ? "" : "bg-gradient-to-br from-primary via-primary/85 to-accent/60"}`}>
           {heroRouteCoordinates ? (
-            <VoyageRouteHeroMap coordinates={heroRouteCoordinates} className="absolute inset-0" />
+            <VoyageRouteHeroMap coordinates={heroRouteCoordinates} boatPosition={boatPosition} lang={lang} actualTrack={actualTrackRuns} className="absolute inset-0" />
           ) : heroImage ? (
             <img
               {...storageImageResponsiveProps(heroImage, [640, 1024, 1600, 2000], "100vw")}
@@ -628,6 +672,8 @@ const VoyagePage = () => {
           </div>
         </section>
       )}
+
+      <VoyagePlannedVsActual lang={lang} waypoints={waypoints} legs={comparisonLegs} summaries={trackSummaries} />
 
       {/* Stops */}
       <section className="page-section pt-0">

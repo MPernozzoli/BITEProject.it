@@ -51,6 +51,8 @@ export interface BookingWaypoint {
   actual_arrival_at?: string | null;
   /** Recorded "parti ora" timestamp; see lib/voyage-schedule.ts. Null until the admin logs it. */
   actual_departure_at?: string | null;
+  /** Tappe previste vs effettive: "added" stops are not part of the planned route drawn on the ticket. */
+  actual_status?: "planned" | "skipped" | "added" | null;
 }
 
 export type StopMode = "legacy" | "hours" | "nights";

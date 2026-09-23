@@ -190,6 +190,13 @@ export function createStubSupabase(fixtures: StubFixtures = {}) {
   const writes: StubWrite[] = [];
   const rpcCalls: { name: string; args: unknown }[] = [];
   const uploads: StubUpload[] = [];
+  /**
+   * Contenuto del bucket, `bucket/percorso` → byte. Si popola con gli upload
+   * del server o, nei test, a mano per simulare la PUT su un URL firmato.
+   */
+  const storedFiles = new Map<string, Uint8Array>();
+  const signedUploads: { bucket: string; path: string }[] = [];
+  const removed: { bucket: string; path: string }[] = [];
 
   const client = {
     from(table: string) {
@@ -205,7 +212,28 @@ export function createStubSupabase(fixtures: StubFixtures = {}) {
         return {
           upload: (path: string, body: Buffer, options?: { contentType?: string }) => {
             uploads.push({ bucket, path, bytes: body.byteLength, contentType: options?.contentType });
+            storedFiles.set(`${bucket}/${path}`, new Uint8Array(body));
             return Promise.resolve({ data: { path }, error: null });
+          },
+          createSignedUploadUrl: (path: string) => {
+            signedUploads.push({ bucket, path });
+            return Promise.resolve({
+              data: { signedUrl: `https://stub.supabase.co/storage/v1/object/upload/sign/${bucket}/${path}?token=t`, token: "t", path },
+              error: null,
+            });
+          },
+          download: (path: string) => {
+            const bytes = storedFiles.get(`${bucket}/${path}`);
+            return Promise.resolve(
+              bytes ? { data: { arrayBuffer: () => Promise.resolve(bytes.slice().buffer) }, error: null } : { data: null, error: { message: "Object not found" } },
+            );
+          },
+          remove: (paths: string[]) => {
+            for (const path of paths) {
+              removed.push({ bucket, path });
+              storedFiles.delete(`${bucket}/${path}`);
+            }
+            return Promise.resolve({ data: [], error: null });
           },
           getPublicUrl: (path: string) => ({
             data: { publicUrl: `https://stub.supabase.co/storage/v1/object/public/${bucket}/${path}` },
@@ -220,5 +248,5 @@ export function createStubSupabase(fixtures: StubFixtures = {}) {
     },
   };
 
-  return { client: client as never, writes, rpcCalls, uploads };
+  return { client: client as never, writes, rpcCalls, uploads, storedFiles, signedUploads, removed };
 }

@@ -10,10 +10,12 @@
  * serverless non vogliamo. Qui si costruisce l'albero ProseMirror direttamente
  * dai token di `marked`, che è deterministico, testabile e senza DOM.
  *
- * Regola di fedeltà: la conversione **non inventa nodi**. I nodi custom che
- * Markdown non sa rappresentare (mini-mappa, media figure con didascalia) sono
- * resi in sola lettura come testo riconoscibile e non vengono ricreati in
- * scrittura: chi vuole toccarli usa l'editor.
+ * Regola di fedeltà: la conversione **non inventa nodi**. I media hanno una
+ * forma Markdown che fa andata e ritorno — foto con didascalia e flag AI
+ * (`![alt](src "Didascalia {ai}")`), video YouTube (`[video: didascalia](url)`
+ * da solo nel paragrafo). La mini-mappa invece è resa in sola lettura come
+ * testo riconoscibile e non viene ricreata in scrittura: chi vuole toccarla
+ * usa l'editor.
  */
 import { marked, type Token, type Tokens } from "marked";
 
@@ -97,6 +99,39 @@ function inlineTokensToNodes(tokens: Token[] | undefined): JSONContent[] {
 }
 
 /**
+ * Marcatore del flag "immagine generata con AI" del `mediaFigure`: Markdown
+ * non ha un posto per un booleano, quindi viaggia in coda alla didascalia,
+ * `![alt](src "Didascalia {ai}")`, e il round-trip non lo perde.
+ */
+const AI_MARKER_RE = /\s*\{ai\}\s*$/i;
+
+/**
+ * URL di embed di un video YouTube, o `null` se l'URL non è YouTube. Il nodo
+ * dell'editor mette `src` direttamente in un iframe: un link `watch?v=` lì
+ * non si caricherebbe, quindi qualunque forma venga passata si normalizza.
+ */
+export function youtubeEmbedUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^(www\.|m\.)/, "");
+  let id: string | null = null;
+  if (host === "youtu.be") id = parsed.pathname.slice(1).split("/")[0] || null;
+  else if (host === "youtube.com" || host === "youtube-nocookie.com") {
+    if (parsed.pathname === "/watch") id = parsed.searchParams.get("v");
+    else {
+      const match = parsed.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/);
+      id = match?.[1] ?? null;
+    }
+  }
+  if (!id || !/^[A-Za-z0-9_-]{6,20}$/.test(id)) return null;
+  return `https://www.youtube-nocookie.com/embed/${id}`;
+}
+
+/**
  * Separa i segnaposto immagine dagli inline veri: le immagini diventano blocchi
  * fratelli. `![alt](src "titolo")` — il "titolo" fra virgolette, sintassi
  * Markdown standard — diventa la didascalia di un `mediaFigure`, lo stesso
@@ -109,10 +144,13 @@ function splitInline(nodes: JSONContent[]): { inline: JSONContent[]; images: JSO
   for (const node of nodes) {
     if (node.type === "__image") {
       const attrs = node.attrs ?? {};
-      if (attrs.title) {
+      const rawTitle = typeof attrs.title === "string" ? attrs.title : "";
+      const aiGenerated = AI_MARKER_RE.test(rawTitle);
+      const caption = rawTitle.replace(AI_MARKER_RE, "").trim();
+      if (caption || aiGenerated) {
         images.push({
           type: "mediaFigure",
-          attrs: { kind: "image", src: attrs.src, alt: attrs.alt ?? "", caption: attrs.title },
+          attrs: { kind: "image", src: attrs.src, alt: attrs.alt ?? "", caption, aiGenerated, title: "" },
         });
       } else {
         images.push({ type: "image", attrs: { src: attrs.src, alt: attrs.alt ?? null, title: null } });
@@ -124,7 +162,26 @@ function splitInline(nodes: JSONContent[]): { inline: JSONContent[]; images: JSO
   return { inline, images };
 }
 
+/**
+ * Un paragrafo fatto solo di un link YouTube è un video incorporato:
+ * `[video: didascalia](https://youtu.be/...)` — la stessa forma che
+ * `tiptapToMarkdown` produce in lettura — diventa un `mediaFigure` di tipo
+ * youtube. Un link YouTube dentro una frase resta un link.
+ */
+function youtubeFigureFrom(tokens: Token[] | undefined): JSONContent | null {
+  const meaningful = (tokens ?? []).filter((token) => !(token.type === "text" && !(token as Tokens.Text).text.trim()));
+  if (meaningful.length !== 1 || meaningful[0].type !== "link") return null;
+  const link = meaningful[0] as Tokens.Link;
+  const src = youtubeEmbedUrl(link.href);
+  if (!src) return null;
+  const text = link.text.trim();
+  const caption = text === link.href || /^video$/i.test(text) ? "" : text.replace(/^video:\s*/i, "");
+  return { type: "mediaFigure", attrs: { kind: "youtube", src, caption, alt: "", aiGenerated: false, title: "" } };
+}
+
 function paragraphFrom(tokens: Token[] | undefined): JSONContent[] {
+  const video = youtubeFigureFrom(tokens);
+  if (video) return [video];
   const { inline, images } = splitInline(inlineTokensToNodes(tokens));
   const blocks: JSONContent[] = [];
   if (inline.length > 0) blocks.push({ type: "paragraph", content: inline });
@@ -373,10 +430,12 @@ function blockToMarkdown(node: JSONContent, depth: number): string {
       const alt = String(node.attrs?.alt ?? caption);
       const src = String(node.attrs?.src ?? "");
       const kind = String(node.attrs?.kind ?? "image");
-      if (kind === "youtube") return `[video: ${caption || src}](${src})`;
+      if (kind === "youtube") return caption ? `[video: ${caption}](${src})` : `[video](${src})`;
       // Il "titolo" fra virgolette è sintassi Markdown standard: markdownToTiptap
-      // lo rilegge come didascalia, così il round-trip non perde la caption.
-      return caption ? `![${alt}](${src} "${caption}")` : `![${alt}](${src})`;
+      // lo rilegge come didascalia (e il marcatore {ai} come flag), così il
+      // round-trip non perde né la caption né l'etichetta AI.
+      const title = [caption.replace(/"/g, "'"), node.attrs?.aiGenerated ? "{ai}" : ""].filter(Boolean).join(" ");
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
     }
     case "youtube":
       return `[video](${String(node.attrs?.src ?? "")})`;

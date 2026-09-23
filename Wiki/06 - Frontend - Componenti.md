@@ -34,7 +34,7 @@ tags: [frontend, componenti, ui]
 - `StructuredData.tsx` — JSON-LD
 
 ## Mappe
-- `LazyVoyageMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
+- `LazyVoyageMap.tsx`, `VoyageRouteHeroMap.tsx`, `MapLoadingPlaceholder.tsx` → [[14 - Mappe e Layer Geospaziale]]
   - Con `deferUntilVisible` la `import()` di maplibre (~260 KB gzip) sta **dentro** il callback dell'`IntersectionObserver`, non in un effect al mount: differire il rendering non differisce il download → [[28 - Mobile e Performance]]
 - `admin/AdminVoyageManager.tsx` — editor rotte admin con workspace mappa MapLibre; il comando `Fullscreen` usa la Fullscreen API del browser e mantiene un fallback layout `fixed` se l'API non è disponibile. L'inspector waypoint resta aperto finché non si usa `Collassa`: senza WPT selezionato mostra un invito a selezionare un punto e la stessa lista waypoint della vista sotto-mappa. Le bozze waypoint non salvate persistono in `localStorage` e vengono ripristinate dopo cambio pagina o reload; il warning `beforeunload` resta solo per il form anagrafica rotta. La cancellazione waypoint usa una conferma inline dentro il workspace e i controlli tipo/naming/sosta del WPT usano bottoni segmentati invece di picker nativi, così non interrompono il fullscreen e non forzano il teardown della mappa. Il file resta proprietario di stato, fetch e mutazioni, ma la UI è scomposta in pannelli presentazionali fratelli (sotto); `WaypointEditorPanel.tsx` era già estratto in precedenza.
   - `admin/VoyageListPanel.tsx` — filtri (base/avanzati, collassabili), ordinamento e lista viaggi selezionabili/modificabili.

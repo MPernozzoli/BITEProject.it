@@ -5,7 +5,7 @@ export const mapPresenceTrackerIds = ["boat", "crew"] as const;
 export type MapPresenceTrackerId = (typeof mapPresenceTrackerIds)[number];
 export type MapPresenceTrackerRow = Tables<"logbook_map_markers">;
 export type MapPresenceTrackerInsert = TablesInsert<"logbook_map_markers">;
-export type MapPresenceMarkerKind = "boat" | "boat-aboard" | "crew";
+export type MapPresenceMarkerKind = "crew";
 
 export interface MapPresenceMarker {
   id: MapPresenceTrackerId;
@@ -17,38 +17,22 @@ export interface MapPresenceMarker {
   updatedAt: string;
 }
 
-export const getMapPresenceIconMarkup = (kind: MapPresenceMarkerKind) => {
-  if (kind === "crew") {
-    return `
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <circle cx="24" cy="24" r="7" fill="currentColor" />
-        <circle cx="40" cy="24" r="7" fill="currentColor" opacity="0.92" />
-        <path d="M16 46c0-6 5-11 11-11h10c6 0 11 5 11 11v2H16z" fill="currentColor" />
-      </svg>
-    `;
-  }
+export const getMapPresenceIconMarkup = (_kind: MapPresenceMarkerKind) => `
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="24" cy="24" r="7" fill="currentColor" />
+    <circle cx="40" cy="24" r="7" fill="currentColor" opacity="0.92" />
+    <path d="M16 46c0-6 5-11 11-11h10c6 0 11 5 11 11v2H16z" fill="currentColor" />
+  </svg>
+`;
 
-  if (kind === "boat-aboard") {
-    return `
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M14 39h8l9-18 8 11h11l-5 7H20l-6 9-4-4z" fill="currentColor" opacity="0.96" />
-        <path d="M31 21v18" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
-        <path d="M31 23l10 9H31z" fill="currentColor" />
-        <circle cx="22" cy="28" r="3.2" fill="currentColor" />
-        <circle cx="29" cy="25.5" r="3.2" fill="currentColor" />
-        <circle cx="36" cy="28" r="3.2" fill="currentColor" />
-      </svg>
-    `;
-  }
-
-  return `
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M14 41h10l11-19 9 12h9l-6 8H19l-5 8-4-5z" fill="currentColor" opacity="0.96" />
-      <path d="M35 22v20" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
-      <path d="M35 24l11 10H35z" fill="currentColor" />
-    </svg>
-  `;
-};
+/** Small boat glyph for the derived in-transit marker (see lib/voyage-utils.ts getVoyageBoatPosition). */
+export const getBoatMarkerIconMarkup = () => `
+  <svg viewBox="0 0 64 64" aria-hidden="true">
+    <path d="M14 41h10l11-19 9 12h9l-6 8H19l-5 8-4-5z" fill="currentColor" opacity="0.96" />
+    <path d="M35 22v20" stroke="currentColor" stroke-width="4" stroke-linecap="round" />
+    <path d="M35 24l11 10H35z" fill="currentColor" />
+  </svg>
+`;
 
 export const isMissingMapPresenceRelationError = (error: { code?: string; message?: string } | null | undefined) => {
   if (!error) return false;
@@ -61,8 +45,8 @@ const trackerDefaults: Record<MapPresenceTrackerId, Omit<MapPresenceTrackerInser
     id: "boat",
     label_it: "Spritz",
     label_en: "Spritz",
-    description_it: "Posizione manuale della barca sulla mappa del logbook.",
-    description_en: "Manual boat position shown on the logbook map.",
+    description_it: "Posizione automatica, calcolata dalle partenze/arrivi registrati sui viaggi.",
+    description_en: "Automatic position, derived from recorded voyage departures/arrivals.",
     is_visible: true,
     is_onboard: false,
     latitude: null,
@@ -85,12 +69,12 @@ const trackerFallbackCopy = {
   boat: {
     it: {
       title: "Spritz",
-      description: "Posizione manuale della barca sulla mappa del logbook.",
+      description: "Posizione automatica, calcolata dalle partenze/arrivi registrati sui viaggi.",
       onboardNote: "Equipaggio a bordo.",
     },
     en: {
       title: "Spritz",
-      description: "Manual boat position shown on the logbook map.",
+      description: "Automatic position, derived from recorded voyage departures/arrivals.",
       onboardNote: "Crew onboard.",
     },
   },
@@ -163,26 +147,11 @@ export const buildMapPresenceMarkers = (
   lang: "it" | "en"
 ): MapPresenceMarker[] => {
   const trackerMap = mergeMapPresenceTrackers(rows);
-  const boat = trackerMap.boat;
   const crew = trackerMap.crew;
   const markers: MapPresenceMarker[] = [];
 
-  if (boat.is_visible && hasCoordinates(boat.latitude, boat.longitude)) {
-    const boatDescriptionParts = [localizedTrackerValue(boat, "description", lang)];
-    if (crew.is_onboard) {
-      boatDescriptionParts.push(trackerFallbackCopy.boat[lang].onboardNote);
-    }
-
-    markers.push({
-      id: "boat",
-      kind: crew.is_onboard ? "boat-aboard" : "boat",
-      latitude: boat.latitude!,
-      longitude: boat.longitude!,
-      title: localizedTrackerValue(boat, "label", lang),
-      description: boatDescriptionParts.filter(Boolean).join(" "),
-      updatedAt: boat.updated_at,
-    });
-  }
+  // The boat marker is derived from voyage actuals (see lib/voyage-utils.ts
+  // getFleetBoatPositions), not read from this manually-edited table anymore.
 
   if (crew.is_visible && !crew.is_onboard && hasCoordinates(crew.latitude, crew.longitude)) {
     markers.push({

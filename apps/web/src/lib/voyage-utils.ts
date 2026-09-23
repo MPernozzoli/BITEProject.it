@@ -1839,6 +1839,147 @@ export function getVoyageTravelledWaypointIndex(waypoints: VoyageWaypoint[]): nu
   return index;
 }
 
+export type VoyageBoatPosition =
+  | { status: "docked"; lat: number; lng: number; waypointId: string }
+  | {
+      status: "in-transit";
+      lat: number;
+      lng: number;
+      fromWaypointId: string;
+      toWaypointId: string;
+      /** 0..1, elapsed real time vs. planned duration of this leg. See getVoyageBoatPosition. */
+      fraction: number;
+    };
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+/** Distance-weighted point at `fraction` (0..1) along a coordinate path. */
+function pointAtFractionAlong(coordinates: [number, number][], fraction: number): [number, number] | null {
+  if (coordinates.length === 0) return null;
+  if (coordinates.length === 1) return coordinates[0];
+
+  const segmentLengths = coordinates.slice(1).map((coordinate, index) => {
+    const [previousLng, previousLat] = coordinates[index];
+    const [lng, lat] = coordinate;
+    return haversineNM(previousLat, previousLng, lat, lng);
+  });
+  const total = segmentLengths.reduce((sum, length) => sum + length, 0);
+  if (total === 0) return coordinates[0];
+
+  const target = clamp01(fraction) * total;
+  let travelled = 0;
+  for (let index = 0; index < segmentLengths.length; index += 1) {
+    const segmentLength = segmentLengths[index];
+    if (travelled + segmentLength >= target) {
+      const amount = segmentLength === 0 ? 0 : (target - travelled) / segmentLength;
+      return lerpCoordinate(coordinates[index], coordinates[index + 1], amount);
+    }
+    travelled += segmentLength;
+  }
+  return coordinates[coordinates.length - 1];
+}
+
+/**
+ * Where the boat is right now on an active voyage, derived from the actuals staff already
+ * record via the "parti ora"/"arriva ora" buttons (lib/voyage-schedule.ts) — no manual pin,
+ * no live-GPS source yet. Only meaningful while the voyage is "active": a planned voyage
+ * hasn't left, a completed one is done travelling.
+ *
+ * Mirrors the "does this stop block progress" rule getVoyageTravelledWaypointIndex already
+ * uses (skipped/added corrections and technical route-shape points never need their own
+ * actual_arrival_at) so the two stay consistent about which stops are real leg endpoints.
+ */
+export function getVoyageBoatPosition(
+  voyage: Pick<Voyage, "type" | "cached_geometry" | "status">,
+  waypoints: VoyageWaypoint[],
+  now: Date = new Date()
+): VoyageBoatPosition | null {
+  if (voyage.status !== "active") return null;
+
+  const actualWps = getActualVoyageWaypoints(waypoints);
+  const legEndpoints = actualWps
+    .map((waypoint, index) => ({ waypoint, index }))
+    .filter(({ waypoint, index }) => {
+      const isCorrection = waypoint.actual_status === "skipped" || waypoint.actual_status === "added";
+      const isTechnical = getWaypointEffectiveType(waypoint, index, actualWps.length) === "technical";
+      return !isCorrection && !isTechnical;
+    });
+
+  if (legEndpoints.length === 0) return null;
+  if (legEndpoints.length === 1) {
+    const only = legEndpoints[0].waypoint;
+    return { status: "docked", lat: only.lat, lng: only.lng, waypointId: only.id };
+  }
+
+  let currentLegStart = -1;
+  for (let i = 0; i < legEndpoints.length - 1; i += 1) {
+    if (!legEndpoints[i + 1].waypoint.actual_arrival_at) {
+      currentLegStart = i;
+      break;
+    }
+  }
+
+  if (currentLegStart === -1) {
+    // Every leg is closed: stay docked at the final stop.
+    const last = legEndpoints[legEndpoints.length - 1].waypoint;
+    return { status: "docked", lat: last.lat, lng: last.lng, waypointId: last.id };
+  }
+
+  const origin = legEndpoints[currentLegStart];
+  const dest = legEndpoints[currentLegStart + 1];
+
+  if (!origin.waypoint.actual_departure_at) {
+    return { status: "docked", lat: origin.waypoint.lat, lng: origin.waypoint.lng, waypointId: origin.waypoint.id };
+  }
+
+  const departureMs = Date.parse(origin.waypoint.actual_departure_at);
+  const etaMs = dest.waypoint.date_end ? Date.parse(dest.waypoint.date_end) : NaN;
+  const fraction =
+    Number.isFinite(departureMs) && Number.isFinite(etaMs) && etaMs > departureMs
+      ? clamp01((now.getTime() - departureMs) / (etaMs - departureMs))
+      : 0.5;
+
+  const cachedGeometry = voyage.cached_geometry?.coordinates ?? null;
+  let segmentCoordinates = buildVoyageSegmentGeometry(
+    actualWps,
+    voyage.type,
+    origin.index,
+    dest.index,
+    cachedGeometry
+  );
+  if (segmentCoordinates.length < 2) {
+    segmentCoordinates = [
+      [origin.waypoint.lng, origin.waypoint.lat],
+      [dest.waypoint.lng, dest.waypoint.lat],
+    ];
+  }
+
+  const point = pointAtFractionAlong(segmentCoordinates, fraction) ?? [dest.waypoint.lng, dest.waypoint.lat];
+
+  return {
+    status: "in-transit",
+    lat: point[1],
+    lng: point[0],
+    fromWaypointId: origin.waypoint.id,
+    toWaypointId: dest.waypoint.id,
+    fraction,
+  };
+}
+
+/** getVoyageBoatPosition for every active voyage, keyed by voyage id. */
+export function getFleetBoatPositions(
+  voyages: Pick<Voyage, "id" | "type" | "cached_geometry" | "status">[],
+  waypointsMap: Record<string, VoyageWaypoint[]>
+): Record<string, VoyageBoatPosition> {
+  const positions: Record<string, VoyageBoatPosition> = {};
+  for (const voyage of voyages) {
+    if (voyage.status !== "active") continue;
+    const position = getVoyageBoatPosition(voyage, waypointsMap[voyage.id] || []);
+    if (position) positions[voyage.id] = position;
+  }
+  return positions;
+}
+
 export type VoyageGeometryBuildOptions = {
   /**
    * When true with type water, auto-route each tratta: BRouter's river profile where a

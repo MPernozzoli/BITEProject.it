@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { Crosshair, EyeOff, Loader2, LocateFixed, MapPinned, Save, Ship, Users } from "lucide-react";
+import { Anchor, Crosshair, EyeOff, Loader2, LocateFixed, Navigation, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,14 +23,18 @@ import {
   buildMapPresenceUpsertPayload,
   getMapPresenceIconMarkup,
   isMissingMapPresenceRelationError,
-  mapPresenceTrackerIds,
   mergeMapPresenceTrackers,
-  type MapPresenceMarkerKind,
-  type MapPresenceTrackerId,
   type MapPresenceTrackerRow,
 } from "@/lib/map-presence";
+import {
+  getFleetBoatPositions,
+  getLocalizedWaypointName,
+  type Voyage,
+  type VoyageBoatPosition,
+  type VoyageWaypoint,
+} from "@/lib/voyage-utils";
 
-type TrackerFormState = {
+type CrewFormState = {
   label_it: string;
   label_en: string;
   description_it: string;
@@ -42,31 +46,9 @@ type TrackerFormState = {
   updated_at: string;
 };
 
-type TrackerPreview = {
-  id: MapPresenceTrackerId;
-  kind: MapPresenceMarkerKind;
-  latitude: number;
-  longitude: number;
-  isDimmed: boolean;
-  title: string;
-};
-
-const trackerCardCopy = {
-  boat: {
-    title: "Barca",
-    eyebrow: "Tracker mappa",
-    summary: "Posizione manuale di Spritz sulla mappa del logbook.",
-  },
-  crew: {
-    title: "Crew",
-    eyebrow: "Tracker mappa",
-    summary: "Posizione manuale dell'equipaggio quando non e a bordo.",
-  },
-} as const;
-
 const formatCoordinateInput = (value: number | null) => (Number.isFinite(value) ? String(value) : "");
 
-const createTrackerFormState = (row: MapPresenceTrackerRow): TrackerFormState => ({
+const createCrewFormState = (row: MapPresenceTrackerRow): CrewFormState => ({
   label_it: row.label_it ?? "",
   label_en: row.label_en ?? "",
   description_it: row.description_it ?? "",
@@ -78,13 +60,7 @@ const createTrackerFormState = (row: MapPresenceTrackerRow): TrackerFormState =>
   updated_at: row.updated_at,
 });
 
-const createDefaultTrackerForms = (): Record<MapPresenceTrackerId, TrackerFormState> => {
-  const trackerMap = mergeMapPresenceTrackers([]);
-  return {
-    boat: createTrackerFormState(trackerMap.boat),
-    crew: createTrackerFormState(trackerMap.crew),
-  };
-};
+const createDefaultCrewForm = (): CrewFormState => createCrewFormState(mergeMapPresenceTrackers([]).crew);
 
 const parseCoordinate = (value: string) => {
   const trimmed = value.trim();
@@ -93,44 +69,33 @@ const parseCoordinate = (value: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
-const hasCoordinates = (form: TrackerFormState) =>
+const hasCoordinates = (form: CrewFormState) =>
   Number.isFinite(parseCoordinate(form.latitude)) && Number.isFinite(parseCoordinate(form.longitude));
 
-const getTrackerCoordinates = (form: TrackerFormState) => {
+const getFormCoordinates = (form: CrewFormState) => {
   const latitude = parseCoordinate(form.latitude);
   const longitude = parseCoordinate(form.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
 };
 
-const createPresenceMarkerElement = (
-  kind: MapPresenceMarkerKind,
-  title: string,
-  options?: { isSelected?: boolean; isDimmed?: boolean }
-) => {
+const createCrewMarkerElement = (title: string, options?: { isDimmed?: boolean }) => {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `map-presence-marker map-presence-marker--${kind}`;
-  if (options?.isSelected) button.classList.add("map-presence-marker--selected");
+  button.className = "map-presence-marker map-presence-marker--crew map-presence-marker--selected";
   if (options?.isDimmed) button.classList.add("map-presence-marker--dimmed");
   button.setAttribute("aria-label", title);
   button.title = title;
   button.innerHTML = `
     <span class="map-presence-marker__halo" aria-hidden="true"></span>
     <span class="map-presence-marker__chip" aria-hidden="true">
-      <span class="map-presence-marker__icon">${getMapPresenceIconMarkup(kind)}</span>
+      <span class="map-presence-marker__icon">${getMapPresenceIconMarkup("crew")}</span>
     </span>
   `;
   return button;
 };
 
-const buildTrackerPayload = (
-  id: MapPresenceTrackerId,
-  form: TrackerFormState,
-  userId: string | null | undefined
-): TablesInsert<"logbook_map_markers"> => {
-  const fallbackLabelIt = id === "boat" ? "Spritz" : "Equipaggio";
-  const fallbackLabelEn = id === "boat" ? "Spritz" : "Crew";
+const buildCrewPayload = (form: CrewFormState, userId: string | null | undefined): TablesInsert<"logbook_map_markers"> => {
   const latitude = parseCoordinate(form.latitude);
   const longitude = parseCoordinate(form.longitude);
   const coordinatesAreEmpty = latitude === null && longitude === null;
@@ -147,184 +112,195 @@ const buildTrackerPayload = (
     throw new Error("La longitudine deve essere compresa tra -180 e 180.");
   }
 
-  return buildMapPresenceUpsertPayload(id, {
-    label_it: form.label_it.trim() || fallbackLabelIt,
-    label_en: form.label_en.trim() || fallbackLabelEn,
+  return buildMapPresenceUpsertPayload("crew", {
+    label_it: form.label_it.trim() || "Equipaggio",
+    label_en: form.label_en.trim() || "Crew",
     description_it: form.description_it.trim() || null,
     description_en: form.description_en.trim() || null,
     latitude: coordinatesAreEmpty ? null : latitude,
     longitude: coordinatesAreEmpty ? null : longitude,
     is_visible: form.is_visible,
-    is_onboard: id === "crew" ? form.is_onboard : false,
+    is_onboard: form.is_onboard,
     updated_at: new Date().toISOString(),
     updated_by: userId ?? null,
   });
 };
 
-const AdminMapPresenceManager = () => {
-  const { session } = useAuth();
-  const [forms, setForms] = useState<Record<MapPresenceTrackerId, TrackerFormState>>(createDefaultTrackerForms);
+type BoatVoyageStatus = {
+  voyageId: string;
+  voyageName: string;
+  position: VoyageBoatPosition;
+  fromLabel: string | null;
+  toLabel: string | null;
+};
+
+const localizedVoyageName = (voyage: Pick<Voyage, "name" | "name_it" | "name_en">) =>
+  voyage.name_it?.trim() || voyage.name?.trim() || voyage.name_en?.trim() || "Viaggio";
+
+/** Read-only: where the boat currently is, derived from voyage actuals (see lib/voyage-utils.ts). */
+const useBoatStatus = () => {
+  const [statuses, setStatuses] = useState<BoatVoyageStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<MapPresenceTrackerId | null>(null);
-  const [activeTrackerId, setActiveTrackerId] = useState<MapPresenceTrackerId>("boat");
-  const [placingTrackerId, setPlacingTrackerId] = useState<MapPresenceTrackerId | null>(null);
-  const [mapUnavailable, setMapUnavailable] = useState(false);
-  const [mapLoaded, setMapLoaded] = useState(false);
 
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const mapResizeCleanupRef = useRef<(() => void) | null>(null);
-  const previewMarkersRef = useRef<Record<MapPresenceTrackerId, maplibregl.Marker | null>>({
-    boat: null,
-    crew: null,
-  });
-  const hasPerformedInitialFitRef = useRef(false);
-  const placingTrackerIdRef = useRef<MapPresenceTrackerId | null>(null);
-
-  const loadTrackers = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
-
     try {
-      const { data, error } = await supabase
-        .from("logbook_map_markers")
-        .select("*")
-        .in("id", [...mapPresenceTrackerIds])
-        .order("id", { ascending: true });
+      const { data: voyages, error: voyagesError } = await supabase
+        .from("voyages")
+        .select("id, type, cached_geometry, status, name, name_it, name_en")
+        .eq("status", "active");
+      if (voyagesError) throw voyagesError;
 
-      if (error) {
-        if (isMissingMapPresenceRelationError(error)) {
-          setForms(createDefaultTrackerForms());
-          toast.error("La tabella dei tracker non e ancora disponibile sul database. La mappa e visibile, ma prima applica la migration.");
-          return;
-        }
-        throw error;
+      const activeVoyages = (voyages || []) as unknown as Voyage[];
+      if (activeVoyages.length === 0) {
+        setStatuses([]);
+        return;
       }
 
-      const trackerMap = mergeMapPresenceTrackers((data || []) as MapPresenceTrackerRow[]);
-      setForms({
-        boat: createTrackerFormState(trackerMap.boat),
-        crew: createTrackerFormState(trackerMap.crew),
+      const { data: waypoints, error: waypointsError } = await supabase
+        .from("voyage_waypoints")
+        .select("*")
+        .in("voyage_id", activeVoyages.map((voyage) => voyage.id))
+        .order("sort_order", { ascending: true });
+      if (waypointsError) throw waypointsError;
+
+      const waypointsMap: Record<string, VoyageWaypoint[]> = {};
+      (waypoints || []).forEach((waypoint) => {
+        const typed = waypoint as unknown as VoyageWaypoint;
+        (waypointsMap[typed.voyage_id] ||= []).push(typed);
       });
+
+      const positions = getFleetBoatPositions(activeVoyages, waypointsMap);
+      const nextStatuses: BoatVoyageStatus[] = [];
+      activeVoyages.forEach((voyage) => {
+        const position = positions[voyage.id];
+        if (!position) return;
+        const wps = waypointsMap[voyage.id] || [];
+        const findLabel = (waypointId: string | undefined) => {
+          if (!waypointId) return null;
+          const index = wps.findIndex((wp) => wp.id === waypointId);
+          const wp = index >= 0 ? wps[index] : null;
+          return wp ? getLocalizedWaypointName(wp, "it", index) : null;
+        };
+        nextStatuses.push({
+          voyageId: voyage.id,
+          voyageName: localizedVoyageName(voyage),
+          position,
+          fromLabel: position.status === "in-transit" ? findLabel(position.fromWaypointId) : findLabel(position.waypointId),
+          toLabel: position.status === "in-transit" ? findLabel(position.toWaypointId) : null,
+        });
+      });
+      setStatuses(nextStatuses);
     } catch (error) {
-      console.error("Failed to load logbook map markers", error);
-      setForms(createDefaultTrackerForms());
-      toast.error("Impossibile caricare i tracker dal database. Ho aperto comunque l'editor locale.");
+      console.error("Failed to load derived boat status", error);
+      setStatuses([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadTrackers();
-  }, [loadTrackers]);
+    void load();
+  }, [load]);
 
-  const setTrackerForm = useCallback(
-    (id: MapPresenceTrackerId, patch: Partial<TrackerFormState>) => {
-      setForms((current) => ({
-        ...current,
-        [id]: {
-          ...current[id],
-          ...patch,
-        },
-      }));
-    },
-    []
-  );
+  return { statuses, loading };
+};
 
-  const updateTrackerCoordinates = useCallback(
-    (id: MapPresenceTrackerId, latitude: number, longitude: number) => {
-      setTrackerForm(id, {
-        latitude: latitude.toFixed(6),
-        longitude: longitude.toFixed(6),
-      });
+const AdminMapPresenceManager = () => {
+  const { session } = useAuth();
+  const [form, setForm] = useState<CrewFormState>(createDefaultCrewForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const { statuses: boatStatuses, loading: boatLoading } = useBoatStatus();
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapResizeCleanupRef = useRef<(() => void) | null>(null);
+  const previewMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const hasPerformedInitialFitRef = useRef(false);
+  const placingRef = useRef(false);
+
+  const loadCrewTracker = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from("logbook_map_markers").select("*").eq("id", "crew").maybeSingle();
+
+      if (error) {
+        if (isMissingMapPresenceRelationError(error)) {
+          setForm(createDefaultCrewForm());
+          toast.error("La tabella dei tracker non e ancora disponibile sul database. La mappa e visibile, ma prima applica la migration.");
+          return;
+        }
+        throw error;
+      }
+
+      const trackerMap = mergeMapPresenceTrackers(data ? [data as MapPresenceTrackerRow] : []);
+      setForm(createCrewFormState(trackerMap.crew));
+    } catch (error) {
+      console.error("Failed to load crew map marker", error);
+      setForm(createDefaultCrewForm());
+      toast.error("Impossibile caricare il tracker crew dal database. Ho aperto comunque l'editor locale.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCrewTracker();
+  }, [loadCrewTracker]);
+
+  const patchForm = useCallback((patch: Partial<CrewFormState>) => {
+    setForm((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const updateCoordinates = useCallback(
+    (latitude: number, longitude: number) => {
+      patchForm({ latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) });
     },
-    [setTrackerForm]
+    [patchForm]
   );
 
   useEffect(() => {
-    placingTrackerIdRef.current = placingTrackerId;
-  }, [placingTrackerId]);
+    placingRef.current = placing;
+  }, [placing]);
 
-  const saveTracker = useCallback(
-    async (id: MapPresenceTrackerId) => {
-      setSavingId(id);
-      try {
-        const payload = buildTrackerPayload(id, forms[id], session?.user.id);
-        const { data, error } = await supabase
-          .from("logbook_map_markers")
-          .upsert(payload)
-          .select("*")
-          .single();
+  const saveCrewTracker = useCallback(async () => {
+    setSaving(true);
+    try {
+      const payload = buildCrewPayload(form, session?.user.id);
+      const { data, error } = await supabase.from("logbook_map_markers").upsert(payload).select("*").single();
+      if (error) throw error;
 
-        if (error) throw error;
+      setForm(createCrewFormState(data as MapPresenceTrackerRow));
+      toast.success("Tracker crew aggiornato.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Impossibile salvare il tracker.";
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  }, [form, session?.user.id]);
 
-        const row = data as MapPresenceTrackerRow;
-        setTrackerForm(id, createTrackerFormState(row));
-        toast.success(id === "boat" ? "Tracker barca aggiornato." : "Tracker crew aggiornato.");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Impossibile salvare il tracker.";
-        toast.error(message);
-      } finally {
-        setSavingId(null);
-      }
-    },
-    [forms, session?.user.id, setTrackerForm]
-  );
+  const previewCoordinates = useMemo(() => getFormCoordinates(form), [form]);
 
-  const trackerPreviews = useMemo<TrackerPreview[]>(() => {
-    return mapPresenceTrackerIds.flatMap((id): TrackerPreview[] => {
-      const form = forms[id];
-      const coordinates = getTrackerCoordinates(form);
-      if (!coordinates) return [];
-
-      if (id === "boat") {
-        return [
-          {
-            id,
-            kind: forms.crew.is_onboard ? "boat-aboard" : "boat",
-            latitude: coordinates.latitude,
-            longitude: coordinates.longitude,
-            isDimmed: !form.is_visible,
-            title: form.label_it.trim() || "Spritz",
-          },
-        ];
-      }
-
-      return [
-        {
-          id,
-          kind: "crew",
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
-          isDimmed: !form.is_visible || form.is_onboard,
-          title: form.label_it.trim() || "Equipaggio",
-        },
-      ];
-    });
-  }, [forms]);
-
-  const clearPreviewMarkers = useCallback(() => {
-    mapPresenceTrackerIds.forEach((id) => {
-      previewMarkersRef.current[id]?.remove();
-      previewMarkersRef.current[id] = null;
-    });
+  const clearPreviewMarker = useCallback(() => {
+    previewMarkerRef.current?.remove();
+    previewMarkerRef.current = null;
   }, []);
 
-  const focusTrackerOnMap = useCallback(
-    (id: MapPresenceTrackerId) => {
-      const map = mapRef.current;
-      const coordinates = getTrackerCoordinates(forms[id]);
-      if (!map || !coordinates) return;
-
-      map.easeTo({
-        center: [coordinates.longitude, coordinates.latitude],
-        zoom: Math.max(map.getZoom(), 8),
-        duration: 450,
-        essential: true,
-      });
-    },
-    [forms]
-  );
+  const focusCrewOnMap = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !previewCoordinates) return;
+    map.easeTo({
+      center: [previewCoordinates.longitude, previewCoordinates.latitude],
+      zoom: Math.max(map.getZoom(), 8),
+      duration: 450,
+      essential: true,
+    });
+  }, [previewCoordinates]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -358,14 +334,11 @@ const AdminMapPresenceManager = () => {
       map.on("click", (event) => {
         const target = event.originalEvent.target as HTMLElement | null;
         if (target?.closest(".map-presence-marker")) return;
+        if (!placingRef.current) return;
 
-        const trackerId = placingTrackerIdRef.current;
-        if (!trackerId) return;
-
-        updateTrackerCoordinates(trackerId, event.lngLat.lat, event.lngLat.lng);
-        setActiveTrackerId(trackerId);
-        setPlacingTrackerId(null);
-        toast.success(trackerId === "boat" ? "Nuova posizione barca impostata." : "Nuova posizione crew impostata.");
+        updateCoordinates(event.lngLat.lat, event.lngLat.lng);
+        setPlacing(false);
+        toast.success("Nuova posizione crew impostata.");
       });
 
       mapResizeCleanupRef.current = bindMapToContainerResize(map, mapContainerRef.current);
@@ -377,93 +350,54 @@ const AdminMapPresenceManager = () => {
     }
 
     return () => {
-      clearPreviewMarkers();
+      clearPreviewMarker();
       mapResizeCleanupRef.current?.();
       mapResizeCleanupRef.current = null;
       map?.remove();
       mapRef.current = null;
       setMapLoaded(false);
     };
-  }, [clearPreviewMarkers, mapUnavailable, updateTrackerCoordinates]);
+  }, [clearPreviewMarker, mapUnavailable, updateCoordinates]);
 
   useEffect(() => {
     const canvas = mapRef.current?.getCanvas();
     if (!canvas) return;
-    canvas.style.cursor = placingTrackerId ? "crosshair" : "";
+    canvas.style.cursor = placing ? "crosshair" : "";
     return () => {
       canvas.style.cursor = "";
     };
-  }, [placingTrackerId]);
+  }, [placing]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !forms) return;
+    if (!map) return;
 
-    clearPreviewMarkers();
+    clearPreviewMarker();
 
-    trackerPreviews.forEach((tracker) => {
-      const element = createPresenceMarkerElement(tracker.kind, tracker.title, {
-        isSelected: activeTrackerId === tracker.id,
-        isDimmed: tracker.isDimmed,
-      });
+    if (!previewCoordinates) return;
 
-      element.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        setActiveTrackerId(tracker.id);
-      });
+    const title = form.label_it.trim() || "Equipaggio";
+    const element = createCrewMarkerElement(title, { isDimmed: !form.is_visible || form.is_onboard });
 
-      const marker = new maplibregl.Marker({
-        element,
-        draggable: true,
-        anchor: "center",
-      })
-        .setLngLat([tracker.longitude, tracker.latitude])
-        .addTo(map);
+    const marker = new maplibregl.Marker({ element, draggable: true, anchor: "center" })
+      .setLngLat([previewCoordinates.longitude, previewCoordinates.latitude])
+      .addTo(map);
 
-      marker.on("dragstart", () => {
-        setActiveTrackerId(tracker.id);
-        setPlacingTrackerId(null);
-      });
-
-      marker.on("dragend", () => {
-        const position = marker.getLngLat();
-        updateTrackerCoordinates(tracker.id, position.lat, position.lng);
-      });
-
-      previewMarkersRef.current[tracker.id] = marker;
+    marker.on("dragstart", () => setPlacing(false));
+    marker.on("dragend", () => {
+      const position = marker.getLngLat();
+      updateCoordinates(position.lat, position.lng);
     });
 
-    if (!hasPerformedInitialFitRef.current && trackerPreviews.length > 0) {
-      hasPerformedInitialFitRef.current = true;
-      if (trackerPreviews.length === 1) {
-        map.jumpTo({
-          center: [trackerPreviews[0].longitude, trackerPreviews[0].latitude],
-          zoom: 8,
-        });
-      } else {
-        const bounds = trackerPreviews.reduce(
-          (accumulator, tracker) => accumulator.extend([tracker.longitude, tracker.latitude]),
-          new maplibregl.LngLatBounds(
-            [trackerPreviews[0].longitude, trackerPreviews[0].latitude],
-            [trackerPreviews[0].longitude, trackerPreviews[0].latitude]
-          )
-        );
-        map.fitBounds(bounds, { padding: 70, maxZoom: 9, duration: 0 });
-      }
-    }
-  }, [activeTrackerId, clearPreviewMarkers, forms, trackerPreviews, updateTrackerCoordinates]);
+    previewMarkerRef.current = marker;
 
-  const trackerEntries = useMemo(
-    () =>
-      mapPresenceTrackerIds.map((id) => ({
-        id,
-        icon: id === "boat" ? Ship : Users,
-        form: forms?.[id] ?? null,
-        copy: trackerCardCopy[id],
-      })),
-    [forms]
-  );
+    if (!hasPerformedInitialFitRef.current) {
+      hasPerformedInitialFitRef.current = true;
+      map.jumpTo({ center: [previewCoordinates.longitude, previewCoordinates.latitude], zoom: 8 });
+    }
+  }, [clearPreviewMarker, form.is_onboard, form.is_visible, form.label_it, previewCoordinates, updateCoordinates]);
+
+  const coordinatesReady = hasCoordinates(form);
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
@@ -471,21 +405,15 @@ const AdminMapPresenceManager = () => {
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">Tracker map</p>
-            <h2 className="editorial-heading text-3xl md:text-4xl">Posizionamento</h2>
+            <h2 className="editorial-heading text-3xl md:text-4xl">Posizione crew</h2>
             <p className="mt-2 max-w-2xl text-sm font-sans text-muted-foreground leading-relaxed">
-              Seleziona un tracker, poi usa
-              {" "}
-              <span className="text-foreground font-medium">Posiziona sulla mappa</span>
-              {" "}
-              e clicca sulla carta, oppure trascina direttamente il marker come fai con i waypoint.
+              Usa <span className="text-foreground font-medium">Posiziona sulla mappa</span> e clicca sulla carta, oppure trascina
+              direttamente il marker. La posizione della barca non si imposta piu qui: e calcolata automaticamente dalle partenze/arrivi
+              registrati sui viaggi (vedi il pannello a destra).
             </p>
           </div>
           <div className="glass-panel-soft rounded-[22px] px-4 py-3 text-sm font-sans text-muted-foreground">
-            {loading
-              ? "Caricamento tracker dal database in corso."
-              : placingTrackerId
-              ? `Click sulla mappa per aggiornare ${placingTrackerId === "boat" ? "la barca" : "la crew"}.`
-              : "Drag dei marker attivo. Nessun piazzamento in attesa."}
+            {loading ? "Caricamento tracker dal database in corso." : placing ? "Click sulla mappa per aggiornare la crew." : "Drag del marker attivo."}
           </div>
         </div>
 
@@ -497,7 +425,7 @@ const AdminMapPresenceManager = () => {
                 <p className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-3">Mappa non disponibile</p>
                 <p className="text-sm font-sans text-foreground/72 leading-relaxed">
                   Questo browser o dispositivo non riesce a inizializzare MapLibre in questa pagina admin. Puoi comunque inserire latitudine e
-                  longitudine manualmente nei pannelli a destra.
+                  longitudine manualmente nel pannello a destra.
                 </p>
               </div>
             </div>
@@ -508,162 +436,147 @@ const AdminMapPresenceManager = () => {
       </section>
 
       <div className="space-y-4">
-        {trackerEntries.map(({ id, icon: Icon, form, copy }) => {
-          const coordinatesReady = hasCoordinates(form);
-          const isActive = activeTrackerId === id;
-          const saving = savingId === id;
-
-          return (
-            <section
-              key={id}
-              className={`glass-panel-soft rounded-[30px] p-5 md:p-6 space-y-5 transition-colors ${
-                isActive ? "ring-1 ring-accent/40" : ""
-              }`}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTrackerId(id);
-                    setPlacingTrackerId(null);
-                    if (coordinatesReady) {
-                      focusTrackerOnMap(id);
-                    }
-                  }}
-                  className="text-left"
-                >
-                  <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">{copy.eyebrow}</p>
-                  <div className="flex items-center gap-3">
-                    <span className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground">
-                      <Icon size={18} />
-                    </span>
-                    <div>
-                      <h3 className="editorial-heading text-2xl">{copy.title}</h3>
-                      <p className="text-sm font-sans text-muted-foreground">{copy.summary}</p>
-                    </div>
-                  </div>
-                </button>
-                <div className="flex flex-col items-end gap-2">
-                  {!form.is_visible && (
-                    <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                      <EyeOff size={12} />
-                      Nascosto
-                    </span>
-                  )}
-                  {id === "crew" && form.is_onboard && (
-                    <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
-                      <Users size={12} />
-                      A bordo
-                    </span>
-                  )}
+        <section className="glass-panel-soft rounded-[30px] p-5 md:p-6 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-sans uppercase tracking-[0.24em] text-muted-foreground mb-2">Tracker mappa</p>
+              <div className="flex items-center gap-3">
+                <span className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground">
+                  <Users size={18} />
+                </span>
+                <div>
+                  <h3 className="editorial-heading text-2xl">Crew</h3>
+                  <p className="text-sm font-sans text-muted-foreground">Posizione manuale dell'equipaggio quando non e a bordo.</p>
                 </div>
               </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {!form.is_visible && (
+                <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  <EyeOff size={12} />
+                  Nascosto
+                </span>
+              )}
+              {form.is_onboard && (
+                <span className="glass-chip inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans uppercase tracking-[0.2em] text-muted-foreground">
+                  <Users size={12} />
+                  A bordo
+                </span>
+              )}
+            </div>
+          </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant={placingTrackerId === id ? "secondary" : "outline"}
-                  onClick={() => {
-                    setActiveTrackerId(id);
-                    setPlacingTrackerId((current) => (current === id ? null : id));
-                  }}
-                >
-                  <Crosshair />
-                  Posiziona sulla mappa
-                </Button>
-                <Button type="button" variant="outline" disabled={!coordinatesReady} onClick={() => focusTrackerOnMap(id)}>
-                  <LocateFixed />
-                  Centra
-                </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant={placing ? "secondary" : "outline"} onClick={() => setPlacing((current) => !current)}>
+              <Crosshair />
+              Posiziona sulla mappa
+            </Button>
+            <Button type="button" variant="outline" disabled={!coordinatesReady} onClick={focusCrewOnMap}>
+              <LocateFixed />
+              Centra
+            </Button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Titolo IT</label>
+              <Input value={form.label_it} onChange={(event) => patchForm({ label_it: event.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Title EN</label>
+              <Input value={form.label_en} onChange={(event) => patchForm({ label_en: event.target.value })} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Tooltip IT</label>
+              <Textarea rows={3} value={form.description_it} onChange={(event) => patchForm({ description_it: event.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Tooltip EN</label>
+              <Textarea rows={3} value={form.description_en} onChange={(event) => patchForm({ description_en: event.target.value })} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Latitudine</label>
+              <Input inputMode="decimal" placeholder="45.4408" value={form.latitude} onChange={(event) => patchForm({ latitude: event.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Longitudine</label>
+              <Input inputMode="decimal" placeholder="12.3155" value={form.longitude} onChange={(event) => patchForm({ longitude: event.target.value })} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="glass-panel rounded-[22px] px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">Visibile in mappa</p>
+                <p className="text-sm font-sans text-foreground/72">Controlla se il marker compare nel logbook pubblico.</p>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Titolo IT</label>
-                  <Input value={form.label_it} onChange={(event) => setTrackerForm(id, { label_it: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Title EN</label>
-                  <Input value={form.label_en} onChange={(event) => setTrackerForm(id, { label_en: event.target.value })} />
-                </div>
+              <Switch checked={form.is_visible} onCheckedChange={(checked) => patchForm({ is_visible: checked })} />
+            </div>
+            <div className="glass-panel rounded-[22px] px-4 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">A bordo</p>
+                <p className="text-sm font-sans text-foreground/72">Nasconde la crew nel pubblico.</p>
               </div>
+              <Switch checked={form.is_onboard} onCheckedChange={(checked) => patchForm({ is_onboard: checked })} />
+            </div>
+          </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Tooltip IT</label>
-                  <Textarea rows={3} value={form.description_it} onChange={(event) => setTrackerForm(id, { description_it: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Tooltip EN</label>
-                  <Textarea rows={3} value={form.description_en} onChange={(event) => setTrackerForm(id, { description_en: event.target.value })} />
-                </div>
-              </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-xs font-sans text-muted-foreground">
+              Ultimo aggiornamento: <span className="text-foreground">{new Date(form.updated_at).toLocaleString("it-IT")}</span>
+            </p>
+            <Button type="button" onClick={() => void saveCrewTracker()} disabled={saving}>
+              {saving ? <Loader2 className="animate-spin" /> : <Save />}
+              Salva tracker
+            </Button>
+          </div>
+        </section>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Latitudine</label>
-                  <Input inputMode="decimal" placeholder="45.4408" value={form.latitude} onChange={(event) => setTrackerForm(id, { latitude: event.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground">Longitudine</label>
-                  <Input inputMode="decimal" placeholder="12.3155" value={form.longitude} onChange={(event) => setTrackerForm(id, { longitude: event.target.value })} />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="glass-panel rounded-[22px] px-4 py-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">Visibile in mappa</p>
-                    <p className="text-sm font-sans text-foreground/72">Controlla se il marker compare nel logbook pubblico.</p>
-                  </div>
-                  <Switch checked={form.is_visible} onCheckedChange={(checked) => setTrackerForm(id, { is_visible: checked })} />
-                </div>
-
-                {id === "crew" ? (
-                  <div className="glass-panel rounded-[22px] px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground">A bordo</p>
-                      <p className="text-sm font-sans text-foreground/72">Nasconde la crew nel pubblico e attiva la barca con equipaggio.</p>
-                    </div>
-                    <Switch checked={form.is_onboard} onCheckedChange={(checked) => setTrackerForm(id, { is_onboard: checked })} />
-                  </div>
-                ) : (
-                  <div className="glass-panel rounded-[22px] px-4 py-3">
-                    <p className="text-xs font-sans uppercase tracking-[0.18em] text-muted-foreground mb-1">Variante barca</p>
-                    <p className="text-sm font-sans text-foreground/72">Segue automaticamente lo stato “a bordo” della crew.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-xs font-sans text-muted-foreground">
-                  Ultimo aggiornamento:
-                  {" "}
-                  <span className="text-foreground">{new Date(form.updated_at).toLocaleString("it-IT")}</span>
-                </p>
-                <Button type="button" onClick={() => void saveTracker(id)} disabled={saving}>
-                  {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                  Salva tracker
-                </Button>
-              </div>
-            </section>
-          );
-        })}
-
-        <div className="glass-panel-soft rounded-[26px] p-5">
-          <div className="flex items-start gap-3">
-            <span className="glass-chip inline-flex h-10 w-10 items-center justify-center text-muted-foreground">
-              <MapPinned size={16} />
+        <section className="glass-panel-soft rounded-[30px] p-5 md:p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="glass-chip inline-flex h-11 w-11 items-center justify-center text-muted-foreground">
+              <Navigation size={18} />
             </span>
             <div>
-              <p className="text-[11px] font-sans uppercase tracking-[0.22em] text-muted-foreground mb-2">Workflow</p>
-              <p className="text-sm font-sans text-foreground/72 leading-relaxed">
-                Seleziona il tracker, entra in modalita posizionamento e clicca sulla mappa. Per micro-spostamenti puoi trascinare il marker
-                direttamente come nel manager dei waypoint.
+              <h3 className="editorial-heading text-2xl">Barca</h3>
+              <p className="text-sm font-sans text-muted-foreground">
+                Posizione automatica, calcolata dalle partenze/arrivi registrati sui viaggi. Sola lettura.
               </p>
             </div>
           </div>
-        </div>
+
+          {boatLoading ? (
+            <p className="text-sm font-sans text-muted-foreground">Caricamento stato barca in corso.</p>
+          ) : boatStatuses.length === 0 ? (
+            <p className="text-sm font-sans text-muted-foreground">Nessun viaggio attivo al momento.</p>
+          ) : (
+            <div className="space-y-3">
+              {boatStatuses.map((status) => (
+                <div key={status.voyageId} className="glass-panel rounded-[22px] px-4 py-3 flex items-start gap-3">
+                  <span className="mt-0.5 text-muted-foreground">
+                    <Anchor size={16} />
+                  </span>
+                  <div>
+                    <p className="text-sm font-sans font-medium text-foreground">{status.voyageName}</p>
+                    <p className="text-sm font-sans text-foreground/72">
+                      {status.position.status === "docked"
+                        ? `Ormeggiata a ${status.fromLabel ?? "—"}.`
+                        : `In navigazione da ${status.fromLabel ?? "—"} verso ${status.toLabel ?? "—"} (~${Math.round(
+                            status.position.fraction * 100
+                          )}%).`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

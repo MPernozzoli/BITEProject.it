@@ -5836,12 +5836,233 @@ export type Database = {
           },
         ]
       }
+      voyage_track_segments: {
+        Row: {
+          avg_sog_kn: number | null
+          bridged_nm: number | null
+          created_at: string
+          distance_nm: number | null
+          elapsed_seconds: number | null
+          end_gap_nm: number | null
+          end_point_index: number | null
+          ended_at: string | null
+          extras: Json
+          from_waypoint_id: string | null
+          geometry: Json
+          id: string
+          leg_id: string | null
+          match_confidence: string
+          max_sog_kn: number | null
+          moving_seconds: number | null
+          sort_order: number
+          speed_profile: Json
+          start_gap_nm: number | null
+          start_point_index: number | null
+          started_at: string | null
+          stopped_seconds: number | null
+          stops: Json
+          to_waypoint_id: string | null
+          track_id: string
+          updated_at: string
+          voyage_id: string
+        }
+        Insert: {
+          avg_sog_kn?: number | null
+          bridged_nm?: number | null
+          created_at?: string
+          distance_nm?: number | null
+          elapsed_seconds?: number | null
+          end_gap_nm?: number | null
+          end_point_index?: number | null
+          ended_at?: string | null
+          extras?: Json
+          from_waypoint_id?: string | null
+          geometry?: Json
+          id?: string
+          leg_id?: string | null
+          match_confidence?: string
+          max_sog_kn?: number | null
+          moving_seconds?: number | null
+          sort_order?: number
+          speed_profile?: Json
+          start_gap_nm?: number | null
+          start_point_index?: number | null
+          started_at?: string | null
+          stopped_seconds?: number | null
+          stops?: Json
+          to_waypoint_id?: string | null
+          track_id: string
+          updated_at?: string
+          voyage_id: string
+        }
+        Update: {
+          avg_sog_kn?: number | null
+          bridged_nm?: number | null
+          created_at?: string
+          distance_nm?: number | null
+          elapsed_seconds?: number | null
+          end_gap_nm?: number | null
+          end_point_index?: number | null
+          ended_at?: string | null
+          extras?: Json
+          from_waypoint_id?: string | null
+          geometry?: Json
+          id?: string
+          leg_id?: string | null
+          match_confidence?: string
+          max_sog_kn?: number | null
+          moving_seconds?: number | null
+          sort_order?: number
+          speed_profile?: Json
+          start_gap_nm?: number | null
+          start_point_index?: number | null
+          started_at?: string | null
+          stopped_seconds?: number | null
+          stops?: Json
+          to_waypoint_id?: string | null
+          track_id?: string
+          updated_at?: string
+          voyage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voyage_track_segments_from_waypoint_id_fkey"
+            columns: ["from_waypoint_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_track_segments_leg_id_fkey"
+            columns: ["leg_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_bookable_legs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_track_segments_to_waypoint_id_fkey"
+            columns: ["to_waypoint_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_track_segments_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_tracks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voyage_track_segments_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "observations_export"
+            referencedColumns: ["voyage_id"]
+          },
+          {
+            foreignKeyName: "voyage_track_segments_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voyage_tracks: {
+        Row: {
+          capabilities: Json
+          confirmed_at: string | null
+          created_at: string
+          ended_at: string | null
+          file_name: string
+          file_sha256: string
+          file_size_bytes: number | null
+          geometry: Json | null
+          id: string
+          imported_by: string | null
+          notes: string | null
+          point_count: number
+          quality: Json
+          source_creator: string | null
+          source_name: string | null
+          started_at: string | null
+          stats: Json
+          status: string
+          storage_path: string
+          updated_at: string
+          voyage_id: string
+        }
+        Insert: {
+          capabilities?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          ended_at?: string | null
+          file_name: string
+          file_sha256: string
+          file_size_bytes?: number | null
+          geometry?: Json | null
+          id?: string
+          imported_by?: string | null
+          notes?: string | null
+          point_count?: number
+          quality?: Json
+          source_creator?: string | null
+          source_name?: string | null
+          started_at?: string | null
+          stats?: Json
+          status?: string
+          storage_path: string
+          updated_at?: string
+          voyage_id: string
+        }
+        Update: {
+          capabilities?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          ended_at?: string | null
+          file_name?: string
+          file_sha256?: string
+          file_size_bytes?: number | null
+          geometry?: Json | null
+          id?: string
+          imported_by?: string | null
+          notes?: string | null
+          point_count?: number
+          quality?: Json
+          source_creator?: string | null
+          source_name?: string | null
+          started_at?: string | null
+          stats?: Json
+          status?: string
+          storage_path?: string
+          updated_at?: string
+          voyage_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voyage_tracks_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "observations_export"
+            referencedColumns: ["voyage_id"]
+          },
+          {
+            foreignKeyName: "voyage_tracks_voyage_id_fkey"
+            columns: ["voyage_id"]
+            isOneToOne: false
+            referencedRelation: "voyages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voyage_waypoints: {
         Row: {
           activities: Json
           actual_arrival_at: string | null
           actual_departure_at: string | null
           actual_status: string
+          alias_of_waypoint_id: string | null
           created_at: string
           date_end: string | null
           date_start: string | null
@@ -5874,6 +6095,7 @@ export type Database = {
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
           actual_status?: string
+          alias_of_waypoint_id?: string | null
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -5906,6 +6128,7 @@ export type Database = {
           actual_arrival_at?: string | null
           actual_departure_at?: string | null
           actual_status?: string
+          alias_of_waypoint_id?: string | null
           created_at?: string
           date_end?: string | null
           date_start?: string | null
@@ -5934,6 +6157,13 @@ export type Database = {
           waypoint_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "voyage_waypoints_alias_of_waypoint_id_fkey"
+            columns: ["alias_of_waypoint_id"]
+            isOneToOne: false
+            referencedRelation: "voyage_waypoints"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "voyage_waypoints_voyage_id_fkey"
             columns: ["voyage_id"]

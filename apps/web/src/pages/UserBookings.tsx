@@ -73,6 +73,7 @@ import {
 import BookingPartyPanel from "@/components/booking/BookingPartyPanel";
 import VoyageTicketCard from "@/components/booking/VoyageTicketCard";
 import { buildParticipantVoyageTicket, isVoyageTicketReady } from "@/lib/voyage-tickets";
+import { summarizeTrackSegments, TRACK_SEGMENT_PUBLIC_COLUMNS, type TrackSegmentRow } from "@/lib/voyage-track-summary";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -159,6 +160,8 @@ const UserBookings = () => {
   const [saving, setSaving] = useState(false);
   const [voyages, setVoyages] = useState<BookingVoyage[]>([]);
   const [waypoints, setWaypoints] = useState<BookingWaypoint[]>([]);
+  /** Confirmed GPX track segments (RLS hides drafts): measured miles and real route for the ticket. */
+  const [trackSegments, setTrackSegments] = useState<TrackSegmentRow[]>([]);
   const [legs, setLegs] = useState<BookableLeg[]>([]);
   const [requests, setRequests] = useState<BookingRequest[]>([]);
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
@@ -317,7 +320,7 @@ const UserBookings = () => {
       voyageIds.length
         ? typedSupabase
             .from("voyage_waypoints")
-            .select("id,voyage_id,name,name_it,name_en,sort_order,date_start,date_end,actual_arrival_at,actual_departure_at")
+            .select("id,voyage_id,name,name_it,name_en,sort_order,lat,lng,actual_status,date_start,date_end,actual_arrival_at,actual_departure_at")
             .in("voyage_id", voyageIds)
             .order("sort_order", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
@@ -389,6 +392,17 @@ const UserBookings = () => {
     setRequests(loadedRequests);
     setLegs(((legsRes.data as BookableLeg[] | null) || []));
     setWaypoints(((waypointsRes.data as BookingWaypoint[] | null) || []));
+    // Recorded tracks are an enrichment of the ticket only: a failure here must not block the page.
+    if (voyageIds.length) {
+      void supabase
+        .from("voyage_track_segments")
+        .select(TRACK_SEGMENT_PUBLIC_COLUMNS)
+        .in("voyage_id", voyageIds)
+        .then(({ data, error }) => {
+          if (error) console.warn("[UserBookings] voyage_track_segments unavailable", error);
+          setTrackSegments(((data as unknown as TrackSegmentRow[] | null) || []));
+        });
+    }
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
     setContributionProposals(((contributionProposalsRes.data as BookingContributionProposal[] | null) || []));
     const paidDeposits = ((depositsRes.data as { booking_request_id: string; amount_cents: number }[] | null) || []);
@@ -794,6 +808,7 @@ const UserBookings = () => {
           ownLegsSortedByOrder: detailsOwnLegs,
           waypointsById,
           lang,
+          trackSummaries: summarizeTrackSegments(trackSegments.filter((segment) => segment.voyage_id === detailsVoyage.id)),
         })
       : null;
   /** Outstanding balance for the booking currently open in the details panel — see

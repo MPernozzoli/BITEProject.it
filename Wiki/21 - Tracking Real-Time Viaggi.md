@@ -82,10 +82,33 @@ Quando arriva un actual la finestra collassa (`start == end`) e `formatBookingWi
 
 Nota: `formatBookingWindow` formatta nel fuso del browser, non forzando Europe/Rome. È il comportamento della matrice e il widget lo eredita per coerenza, ma per un equipaggio che naviga all'estero le due viste mostrerebbero l'ora locale del dispositivo.
 
+## Marker barca sulla mappa
+`getVoyageBoatPosition(voyage, waypoints, now?)` e `getFleetBoatPositions(voyages, waypointsMap)` in `apps/web/src/lib/voyage-utils.ts` → [[07 - Frontend - Lib e Hooks]]. Non è un sistema di posizione live: è una **derivazione** dagli stessi actual di questa nota, senza tabelle né colonne nuove.
+
+Solo per viaggi `status === "active"`. Cammina le tappe pubbliche (non tecniche, non skipped/added — stessa regola di esclusione di `getVoyageTravelledWaypointIndex`) cercando la prima coppia consecutiva la cui destinazione non ha ancora `actual_arrival_at`:
+- se l'origine non ha ancora `actual_departure_at` → **ormeggiata** lì (`{status: "docked", waypointId}`);
+- se ce l'ha → **in navigazione**, interpolata lungo `buildVoyageSegmentGeometry` fra origine e destinazione, alla frazione `(ora − partenza_effettiva) / (date_end_destinazione − partenza_effettiva)` — cioè elenco tempo trascorso vs. ETA pianificata. Senza un `date_end` utilizzabile (assente o già superato) la frazione ricade su `0.5`, punto medio della tratta: onestà del dato, non finta precisione;
+- se tutte le tratte sono chiuse → ormeggiata all'ultima tappa.
+
+Resa su due mappe, con fedeltà diversa perché sono componenti diversi:
+- **`VoyageMap.tsx`** (Journal, tutti i viaggi): ormeggiata → il pallino del waypoint esistente prende un alone pulsante (`.voyage-boat-here-halo`) e il popup un badge "Qui ora"/"Here now" — nessun marker separato sovrapposto. In navigazione → marker piccolo (scala pallino waypoint, non il chip `.map-presence-marker` da 60px) che percorre la linea, popup a comparsa "In navigazione verso «tappa» — circa NN%".
+- **`VoyageRouteHeroMap.tsx`** (`VoyagePage.tsx`, hero decorativo): se l'ormeggio coincide con partenza/arrivo del percorso (le uniche due tappe disegnate lì) ricolora quel pallino; altrimenti aggiunge lo stesso marker piccolo. Nessun popup (la mappa hero è `interactive:false`/`aria-hidden`), solo `title` nativo, bilingue via prop `lang`.
+
+**Il pin manuale della barca è stato ritirato.** `logbook_map_markers` id `"boat"` non alimenta più nessun marker (`buildMapPresenceMarkers` in `map-presence.ts` emette solo `"crew"`); `AdminMapPresenceManager.tsx` (`/admin/trackers`) ha ora solo la crew come editabile su mappa, la barca è una card di sola lettura con lo stato derivato. `is_onboard` resta sulla riga crew, invariato (nasconde il pin crew quando l'equipaggio è a bordo) — non pilota più una variante grafica della barca.
+
+**Non implementato: posizione live da dispositivo.** Nessun `navigator.geolocation`, nessun endpoint di ingest, nessuna tabella di tracking continuo — l'interpolazione sopra resta una stima dal solo orario di partenza registrato. Due percorsi discussi e non ancora scelti: geolocalizzazione dalla webapp sul telefono di bordo (a basso costo ma inaffidabile se il tab va in background per ore), oppure una mini app iOS con background location (affidabile, richiede lavoro su nuova piattaforma). Nota: `docs/voyage-track-import-and-memento-plan.md` (§1.7) copre un problema adiacente ma diverso — l'import *post-hoc* del tracciato GPX del plotter a tratta conclusa, esplicitamente separato dalla programmazione — non va confuso con una posizione live durante la tratta.
+
+## Alias di waypoint: tappa saltata sostituita da una reale (`alias_of_waypoint_id`)
+Caso: in corso di rotta si salta una tappa pianificata (`actual_status = 'skipped'`) a favore di una tappa reale diversa, aggiunta con la correzione di rotta (`actual_status = 'added'`, § sopra). Fino al 22/09/2026 `set_voyage_waypoint_actual_status` timbrava sulla tappa saltata un actual "pass-through" sintetico (arrivo = partenza = istante della correzione) solo per non restare bloccati in attesa di un arrivo che non sarebbe mai arrivato — ma se l'equipaggio è arrivato alla tappa reale senza esserne ancora ripartito, questo diceva al sistema una partenza mai avvenuta.
+
+`voyage_waypoints.alias_of_waypoint_id` (`20260922140000`) risolve il caso: la tappa saltata punta alla tappa reale che la sostituisce, e il trigger `sync_voyage_waypoint_alias()` mantiene `actual_arrival_at`/`actual_departure_at` identici fra le due, in entrambe le direzioni (con guardia `is distinct from`, termina in due passaggi). Il widget continua a scrivere sulla tappa saltata (è quella a cui è ancorata la leg prenotabile, quindi prezzi/identità), ma l'aggiornamento si propaga alla tappa reale automaticamente. Il nome mostrato nel widget (`VoyageLiveWidget.tsx`, `nameOf`) diventa `"{tappa reale} (ex {tappa pianificata})"`.
+
+Bug collegato e ora corretto (`20260922130000`): `compute_voyage_schedule` camminava su *tutti* i waypoint narrativi indipendentemente da `actual_status`, mentre `voyage_leg_candidate_waypoints()` (che costruisce l'identità delle leg) esclude le tappe `added`. Con una correzione di rotta le due catene divergevano — niente coppia `(from, to)` in comune per la leg che copriva la correzione — e l'actual pass-through non chiudeva mai quella leg. Ora `compute_voyage_schedule` usa la stessa `voyage_leg_candidate_waypoints()`, quindi le due catene coincidono sempre.
+
 ## Funzioni SQL → [[08 - Supabase]]
 | Funzione | Ruolo |
 |---|---|
-| `compute_voyage_schedule(_voyage_id, _use_actuals)` | motore: percorre la catena dei waypoint pubblici. `false` = baseline, `true` = effettivo col pavimento |
+| `compute_voyage_schedule(_voyage_id, _use_actuals)` | motore: percorre `voyage_leg_candidate_waypoints()` (actual_status-aware, stessa catena di `sync_voyage_bookable_legs_plan`). `false` = baseline, `true` = effettivo col pavimento |
 | `apply_voyage_schedule(_voyage_id, _notify)` | ricalcola l'effettivo dagli actual, baseline intatto, apre i plan change per i ritardi nuovi |
 | `set_voyage_waypoint_actual(_waypoint_id, _kind, _at)` | RPC dietro i tasti del widget; `_at = null` cancella |
 | `sync_voyage_bookable_legs(_voyage_id)` | replan admin: ricostruisce il piano, lo congela come baseline, poi rideriva l'effettivo |
