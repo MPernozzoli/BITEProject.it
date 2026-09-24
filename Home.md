@@ -37,6 +37,7 @@ Repository: `github.com/MPernozzoli/BITEProject.it` · Stack: **Vite + React + T
 - [[13 - Booking Voyage]] — prenotazione tratte e partecipanti
 - [[23 - Community]] — BITE Crew: membership, feed, live, tier e benefit booking
 - [[21 - Tracking Real-Time Viaggi]] — date effettive, ricalcolo a cascata, stati derivati
+- [[29 - Tracciati Reali GPX]] — import GPX, riconciliazione automatica con le tratte, editor manuale, miglia reali su biglietto e pagina viaggio
 - [[14 - Mappe e Layer Geospaziale]] — MapLibre, rotte, waypoint
 - [[22 - Citizen Science e Osservazioni]] — campionamenti, catalogo parametri, mappa e export su `data.`
 - [[15 - Semantic Layer (AI Agents)]] — llms.txt, JSON/GeoJSON pubblici

@@ -138,11 +138,13 @@ const VoyageTrackMap = (props: VoyageTrackMapProps) => {
     });
     const cleanupResize = bindMapToContainerResize(map, containerRef.current);
     mapRef.current = map;
+    const pins = pinMarkers;
+    const handlesRef = handleMarkers;
     return () => {
       cleanupResize?.();
-      pinMarkers.current.forEach((m) => m.remove());
-      handleMarkers.current.start?.remove();
-      handleMarkers.current.end?.remove();
+      pins.current.forEach((m) => m.remove());
+      handlesRef.current.start?.remove();
+      handlesRef.current.end?.remove();
       map.remove();
       mapRef.current = null;
     };

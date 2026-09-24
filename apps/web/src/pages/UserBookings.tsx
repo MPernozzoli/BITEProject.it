@@ -73,7 +73,12 @@ import {
 import BookingPartyPanel from "@/components/booking/BookingPartyPanel";
 import VoyageTicketCard from "@/components/booking/VoyageTicketCard";
 import { buildParticipantVoyageTicket, isVoyageTicketReady } from "@/lib/voyage-tickets";
-import { summarizeTrackSegments, TRACK_SEGMENT_PUBLIC_COLUMNS, type TrackSegmentRow } from "@/lib/voyage-track-summary";
+import {
+  CONFIRMED_TRACK_FILTER,
+  summarizeTrackSegments,
+  TRACK_SEGMENT_CONFIRMED_SELECT,
+  type TrackSegmentRow,
+} from "@/lib/voyage-track-summary";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -396,7 +401,8 @@ const UserBookings = () => {
     if (voyageIds.length) {
       void supabase
         .from("voyage_track_segments")
-        .select(TRACK_SEGMENT_PUBLIC_COLUMNS)
+        .select(TRACK_SEGMENT_CONFIRMED_SELECT)
+        .eq(CONFIRMED_TRACK_FILTER, "confirmed")
         .in("voyage_id", voyageIds)
         .then(({ data, error }) => {
           if (error) console.warn("[UserBookings] voyage_track_segments unavailable", error);

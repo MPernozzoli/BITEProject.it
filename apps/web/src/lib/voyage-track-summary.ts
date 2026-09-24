@@ -52,6 +52,14 @@ export interface TrackSegmentRow {
 export const TRACK_SEGMENT_PUBLIC_COLUMNS =
   "id,track_id,voyage_id,leg_id,from_waypoint_id,to_waypoint_id,started_at,ended_at,distance_nm,elapsed_seconds,moving_seconds,stopped_seconds,avg_sog_kn,max_sog_kn,start_gap_nm,end_gap_nm,stops,extras,geometry,speed_profile";
 
+/**
+ * Select for user-facing reads, paired with `.eq(CONFIRMED_TRACK_FILTER, "confirmed")`.
+ * RLS already hides drafts from the public, but admins can read everything: without
+ * this join an admin would see a draft reconciliation on the voyage page and tickets.
+ */
+export const TRACK_SEGMENT_CONFIRMED_SELECT = `${TRACK_SEGMENT_PUBLIC_COLUMNS},voyage_tracks!inner(status)`;
+export const CONFIRMED_TRACK_FILTER = "voyage_tracks.status";
+
 /** Gaps below this are "the pin vs the actual berth", not missing track. */
 export const PARTIAL_COVERAGE_GAP_NM = 1.5;
 

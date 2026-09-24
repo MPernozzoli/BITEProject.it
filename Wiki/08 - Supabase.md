@@ -96,6 +96,9 @@ Esiste un utente di test creato per far autenticare gli agenti AI e verificare i
 - `..._consolidate_community_posts_rls_policies.sql` — accorpa le policy admin/member di `community_posts` per evitare policy permissive duplicate su insert/update/delete.
 - `..._fix_view_count_bumps_updated_at.sql` — corregge il bug per cui `increment_article_view_count` aggiornava `updated_at` su `logbook_articles` ogni volta che qualcuno visualizzava un articolo (il trigger `BEFORE UPDATE` scattava sull'UPDATE di `view_count`). Usa `SET LOCAL session_replication_role = 'replica'` per disabilitare temporaneamente i trigger durante l'aggiornamento del contatore.
 
+- `20260923095529_voyage_recorded_tracks.sql` — tabelle `voyage_tracks` e `voyage_track_segments`, trigger di coerenza `validate_voyage_track_segment`, bucket privato `voyage-tracks` (solo admin). Lettura pubblica solo dei segmenti di tracciati confermati di viaggi pubblicati. Documentale: nessun effetto sulla programmazione → [[29 - Tracciati Reali GPX]]
+- `20260917203938_voyage_planned_vs_actual_stops.sql` — **ricostruzione** (23/09/2026) di una versione applicata fuori banda via MCP, byte-identica al file `20260917120000` modificato dopo la prima applicazione. Nella stessa riparazione le versioni fuori banda `20260917194657/195638/202215/204146/205824` sono state marcate `reverted` e i file locali equivalenti `20260917210000…250000` `applied` (stesso SQL, verificato).
+
 > Schema di riferimento della migrazione originale: `docs/migration/SCHEMA.md`.
 
 ## RPC/tabelle chiave (dal dominio applicativo)

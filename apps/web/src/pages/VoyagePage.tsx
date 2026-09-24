@@ -42,7 +42,13 @@ import { buildPhotoPointUrl, type LogbookPhotoPoint } from "@/lib/logbook-photo-
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import VoyageRouteHeroMap from "@/components/voyage/VoyageRouteHeroMap";
 import VoyagePlannedVsActual, { type PlannedVsActualLeg } from "@/components/voyage/VoyagePlannedVsActual";
-import { geometryRuns, summarizeTrackSegments, TRACK_SEGMENT_PUBLIC_COLUMNS, type TrackSegmentRow } from "@/lib/voyage-track-summary";
+import {
+  CONFIRMED_TRACK_FILTER,
+  geometryRuns,
+  summarizeTrackSegments,
+  TRACK_SEGMENT_CONFIRMED_SELECT,
+  type TrackSegmentRow,
+} from "@/lib/voyage-track-summary";
 import VoyageJoinPanel from "@/components/voyage/VoyageJoinPanel";
 import { storageImageResponsiveProps } from "@/lib/storage-image";
 
@@ -242,7 +248,8 @@ const VoyagePage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("voyage_track_segments")
-        .select(TRACK_SEGMENT_PUBLIC_COLUMNS)
+        .select(TRACK_SEGMENT_CONFIRMED_SELECT)
+        .eq(CONFIRMED_TRACK_FILTER, "confirmed")
         .eq("voyage_id", voyage!.id)
         .order("started_at", { ascending: true });
       if (error) {

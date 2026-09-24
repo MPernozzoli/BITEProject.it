@@ -14,7 +14,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import VoyageTrackEditor, { colorForLeg, formatRomeTime, type TrackEditorSavedSegment } from "@/components/admin/VoyageTrackEditor";
+import VoyageTrackEditor, { type TrackEditorSavedSegment } from "@/components/admin/VoyageTrackEditor";
+import { colorForLeg, formatRomeTime } from "@/lib/voyage-track-format";
 import { parseGpx } from "@/lib/voyage-track-gpx";
 import { cleanTrack, computeRangeMetrics, detectStops, simplifyRange } from "@/lib/voyage-track-analysis";
 import { buildMatchChain, type ChainLegInput, type ChainWaypointInput } from "@/lib/voyage-track-matching";

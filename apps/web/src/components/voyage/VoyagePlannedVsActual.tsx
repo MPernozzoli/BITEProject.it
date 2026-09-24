@@ -45,7 +45,7 @@ const copy = {
     departure: "Partenza",
     arrival: "Arrivo",
     plannedShort: "prev.",
-    noTrack: "Nessun tracciato registrato per questa tratta.",
+    untracked: (n: number) => (n === 1 ? "Un'altra tratta non ha ancora un tracciato registrato." : `Altre ${n} tratte non hanno ancora un tracciato registrato.`),
     partial: "Registrazione parziale: gli estremi sono stimati in linea retta.",
     profile: "Velocità lungo la tratta",
     stops: "Soste",
@@ -65,7 +65,7 @@ const copy = {
     departure: "Departure",
     arrival: "Arrival",
     plannedShort: "planned",
-    noTrack: "No recorded track for this leg.",
+    untracked: (n: number) => (n === 1 ? "One more leg has no recorded track yet." : `${n} more legs have no recorded track yet.`),
     partial: "Partial recording: the ends are estimated as straight lines.",
     profile: "Speed along the leg",
     stops: "Stops",
@@ -149,7 +149,7 @@ const VoyagePlannedVsActual = ({ lang, waypoints, legs, summaries }: Props) => {
           <p className="text-xs text-muted-foreground">{t.legend}</p>
 
           <div className="space-y-2">
-            {rows.map(({ key, leg, summary }) => {
+            {tracked.map(({ key, leg, summary }) => {
               const plannedNm = num(leg?.planned_nautical_miles);
               const delta = summary && plannedNm ? ((summary.estimatedNm - plannedNm) / plannedNm) * 100 : null;
               const isSelected = selected?.key === key;
@@ -159,17 +159,16 @@ const VoyagePlannedVsActual = ({ lang, waypoints, legs, summaries }: Props) => {
                 <button
                   type="button"
                   key={key}
-                  disabled={!summary}
                   onClick={() => setSelectedKey(key)}
                   className={`w-full text-left rounded-[20px] border p-4 transition-colors ${
                     isSelected ? "border-accent/50 bg-accent/5" : "border-border/70 bg-glass/50 hover:border-border"
-                  } disabled:cursor-default disabled:opacity-60`}
+                  }`}
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="font-medium">
                       {nameOf(from)} → {nameOf(to)}
                     </p>
-                    {summary ? (
+                    {summary && (
                       <p className="text-sm">
                         <span className="font-medium">{summary.estimatedNm.toFixed(1)} nm</span>
                         {plannedNm ? (
@@ -180,8 +179,6 @@ const VoyagePlannedVsActual = ({ lang, waypoints, legs, summaries }: Props) => {
                           </span>
                         ) : null}
                       </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t.noTrack}</p>
                     )}
                   </div>
                   {summary && (
@@ -213,6 +210,7 @@ const VoyagePlannedVsActual = ({ lang, waypoints, legs, summaries }: Props) => {
                 </button>
               );
             })}
+            {rows.length > tracked.length && <p className="text-xs text-muted-foreground px-1">{t.untracked(rows.length - tracked.length)}</p>}
           </div>
 
           {selected?.summary && (profile.length > 1 || selected.summary.stops.length > 0) && (

@@ -60,6 +60,7 @@ SEO statico: `SeoManager.tsx` assegna a `/crew` title/description e JSON-LD orie
 | `AdminDashboard.tsx` | `/admin` |
 | `AdminVoyageBookings.tsx` | `/admin/bookings` |
 | `AdminVoyageCandidates.tsx` | `/admin/candidates` |
+| `AdminVoyageTracks.tsx` | `/admin/tracks` → [[29 - Tracciati Reali GPX]] |
 | `AdminMedia.tsx` | `/admin/media` |
 | `AdminMail.tsx` | `/admin/mail` |
 | `AdminMapPresence.tsx` | `/admin/trackers` |
