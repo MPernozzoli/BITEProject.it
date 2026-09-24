@@ -1483,7 +1483,6 @@ const Journal = () => {
                 legs={bookingVoyageLegs}
                 waypointsById={selectedBookingWaypointsById}
                 selectedLegIds={selectedBookingLegIds}
-                rejectedLegIds={bookingRejectedLegIds}
                 partySize={bookingPartySize}
                 message={bookingMessage}
                 candidateInfo={bookingCandidateInfo}

@@ -9,6 +9,7 @@ import {
   getLegComplexity,
   getLegDangerLevel,
   getLegLabel,
+  isLegCurrentOrFuture,
 } from "@/lib/booking-utils";
 import type { Voyage } from "@/lib/voyage-utils";
 import { getLocalizedVoyageName } from "@/lib/voyage-utils";
@@ -24,7 +25,6 @@ interface BookingSidebarPanelProps {
   legs: BookableLegAvailability[];
   waypointsById: Record<string, BookingWaypoint>;
   selectedLegIds: string[];
-  rejectedLegIds: string[];
   partySize: number;
   message: string;
   candidateInfo: CandidateInfo;
@@ -56,7 +56,6 @@ const BookingSidebarPanel = ({
   legs,
   waypointsById,
   selectedLegIds,
-  rejectedLegIds,
   partySize,
   message,
   candidateInfo,
@@ -84,7 +83,6 @@ const BookingSidebarPanel = ({
   const [step, setStep] = useState<"legs" | "about">(initialStep);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const selectedLegs = selectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
-  const rejectedLegs = rejectedLegIds.map((id) => legs.find((leg) => leg.id === id)).filter(Boolean) as BookableLegAvailability[];
 
   useEffect(() => {
     setStep(initialStep);
@@ -257,9 +255,30 @@ const BookingSidebarPanel = ({
             </div>
             {legs.map((leg) => {
               const selected = selectedLegIds.includes(leg.id);
-              const rejected = rejectedLegIds.includes(leg.id);
-              const unavailable = !leg.available || leg.remaining < partySize;
+              const past = !isLegCurrentOrFuture(leg);
+              const soldOut = !past && leg.remaining <= 0;
+              const tooTight = !past && !soldOut && leg.remaining < partySize;
+              const lastSpot = !past && !soldOut && !tooTight && leg.remaining === 1;
+              const blocked = past || soldOut || tooTight || !leg.is_bookable;
               const scheduleSummary = formatLegScheduleSummary(leg, lang);
+
+              const availabilityLabel = past
+                ? (lang === "it" ? "Già avvenuta" : "Already happened")
+                : soldOut
+                  ? (lang === "it" ? "Al completo" : "Fully booked")
+                  : tooTight
+                    ? (lang === "it" ? "Pochi posti: non bastano per il gruppo" : "Too few seats for your group")
+                    : lastSpot
+                      ? (lang === "it" ? "Ultimo posto rimasto" : "Only one spot left")
+                      : (lang === "it" ? "Disponibile" : "Available");
+              const availabilityClassName = past
+                ? "text-muted-foreground"
+                : soldOut || tooTight
+                  ? "text-red-700 dark:text-red-300"
+                  : lastSpot
+                    ? "text-amber-700 dark:text-amber-300"
+                    : "text-emerald-700 dark:text-emerald-300";
+
               return (
                 <button
                   key={leg.id}
@@ -268,9 +287,13 @@ const BookingSidebarPanel = ({
                   className={`group flex w-full items-center gap-3 rounded-[20px] border px-3 py-3 text-left text-xs transition-colors ${
                     selected
                       ? "border-emerald-300/80 dark:border-emerald-500/30 bg-emerald-50/85 dark:bg-emerald-500/10 text-foreground"
-                      : rejected || unavailable
-                        ? "border-red-200/70 dark:border-red-500/30 bg-red-50/60 dark:bg-red-500/10 text-red-950/80 dark:text-red-300"
-                        : "border-glass-edge/60 bg-glass/52 text-foreground hover:bg-glass/72"
+                      : past
+                        ? "border-glass-edge/50 bg-glass/35 text-muted-foreground"
+                        : soldOut || tooTight
+                          ? "border-red-200/70 dark:border-red-500/30 bg-red-50/60 dark:bg-red-500/10 text-red-950/80 dark:text-red-300"
+                          : lastSpot
+                            ? "border-amber-300/70 dark:border-amber-500/30 bg-amber-50/55 dark:bg-amber-500/10 text-foreground"
+                            : "border-glass-edge/60 bg-glass/52 text-foreground hover:bg-glass/72"
                   }`}
                   aria-pressed={selected}
                 >
@@ -278,12 +301,14 @@ const BookingSidebarPanel = ({
                     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                       selected
                         ? "border-emerald-600 bg-emerald-600 text-white"
-                        : rejected || unavailable
+                        : blocked
                           ? "border-red-300 dark:border-red-500/30 bg-glass/70 text-red-600 dark:text-red-300"
-                          : "border-emerald-300 dark:border-emerald-500/30 bg-glass/70 text-emerald-700 dark:text-emerald-300"
+                          : lastSpot
+                            ? "border-amber-300 dark:border-amber-500/30 bg-glass/70 text-amber-700 dark:text-amber-300"
+                            : "border-emerald-300 dark:border-emerald-500/30 bg-glass/70 text-emerald-700 dark:text-emerald-300"
                     }`}
                   >
-                    {selected ? <TicketCheck size={13} /> : rejected || unavailable ? <X size={12} /> : <span className="h-2 w-2 rounded-full bg-current" />}
+                    {selected ? <TicketCheck size={13} /> : blocked ? <X size={12} /> : <span className="h-2 w-2 rounded-full bg-current" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{getLegLabel(leg, waypointsById, lang)}</span>
@@ -297,11 +322,7 @@ const BookingSidebarPanel = ({
                         <Users size={11} />
                         {leg.remaining}/{leg.capacity}
                       </span>
-                      {unavailable ? (
-                        <span className="text-red-700 dark:text-red-300">{lang === "it" ? "Non disponibile" : "Unavailable"}</span>
-                      ) : (
-                        <span className="text-emerald-700 dark:text-emerald-300">{lang === "it" ? "Disponibile" : "Available"}</span>
-                      )}
+                      <span className={`font-medium ${availabilityClassName}`}>{availabilityLabel}</span>
                     </span>
                   </span>
                   <ComplexityIndicator
@@ -347,17 +368,6 @@ const BookingSidebarPanel = ({
             )}
           </div>
         )}
-
-        {rejectedLegs.length > 0 ? (
-          <div className="mt-3 rounded-[18px] border border-red-200/75 dark:border-red-500/30 bg-red-50/80 dark:bg-red-500/10 px-3 py-2 text-xs text-red-800 dark:text-red-300">
-            <p className="font-medium">
-              {lang === "it" ? "Tratte escluse perché non disponibili" : "Legs excluded because unavailable"}
-            </p>
-            <p className="mt-1 line-clamp-3">
-              {rejectedLegs.map((leg) => getLegLabel(leg, waypointsById, lang)).join(" · ")}
-            </p>
-          </div>
-        ) : null}
       </div>
 
       <div className="shrink-0 border-t border-glass-edge/45 bg-background/88 px-3 py-3 backdrop-blur-xl">

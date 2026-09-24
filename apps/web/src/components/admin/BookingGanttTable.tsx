@@ -40,7 +40,6 @@ import {
 
 const COLUMN_WIDTH = 170;
 const PERSON_COL_WIDTH = 220;
-const ACTIONS_COL_WIDTH = 210;
 const ROW_HEIGHT = 76;
 
 interface BookingGanttTableProps {
@@ -271,6 +270,15 @@ const BookingGanttTable = ({
     return `${getLocalizedBookingWaypointName(waypointsById[first.from_waypoint_id], "it")} → ${getLocalizedBookingWaypointName(waypointsById[last.to_waypoint_id], "it")}`;
   };
 
+  /** Booking whose command popover is open (at most one at a time). */
+  const [actionsRequestId, setActionsRequestId] = useState<string | null>(null);
+  const closeActions = () => setActionsRequestId(null);
+  // A drag only stages a draft: open that booking's popover so Annulla / Proponi are at hand.
+  const stagedRequestId = stagedResize?.requestId ?? null;
+  useEffect(() => {
+    if (stagedRequestId) setActionsRequestId(stagedRequestId);
+  }, [stagedRequestId]);
+
   useEffect(() => {
     if (!drag) return;
     const handleMove = (event: PointerEvent) => {
@@ -339,8 +347,102 @@ const BookingGanttTable = ({
     });
   };
 
+  /** The management commands of one booking, shown in the popover opened by clicking its bar. */
+  const renderBookingActions = (request: BookingRequest, isStagedRow: boolean, allIndices: number[]) => (
+    <div className="space-y-2">
+      <div>
+        <p className="text-xs font-semibold text-foreground">{describeRequestRoute(request.id)}</p>
+        <p className="text-[11px] text-muted-foreground">{getBookingStatusLabel(request.status, "it")}</p>
+      </div>
+          {isStagedRow && (() => {
+            const isPendingInvite = pendingInviteRequestIds.has(request.id);
+            return (
+              <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-500/10 p-2">
+                <p className="w-full text-[11px] font-medium text-amber-900 dark:text-amber-300">
+                  Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
+                  {allIndices.length === 1 ? "a" : "e"}.
+                  {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { closeActions(); onCancelStagedResize(); }}
+                  disabled={saving}
+                  className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
+                >
+                  <X size={12} /> Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { closeActions(); (isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog)(); }}
+                  disabled={saving}
+                  className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
+                >
+                  <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
+                </button>
+              </div>
+            );
+          })()}
+          <div className="flex flex-wrap gap-2">
+            {request.status === "requested" || request.status === "waitlisted" ? (
+              <button
+                type="button"
+                onClick={() => { closeActions(); onApprove(request.id); }}
+                disabled={saving}
+                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+              >
+                <Check size={13} /> Approva
+              </button>
+            ) : null}
+            {!["cancelled", "rejected", "expired"].includes(request.status) ? (
+              <button
+                type="button"
+                onClick={() => { closeActions(); onReject(request.id); }}
+                disabled={saving}
+                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive disabled:opacity-50"
+              >
+                <X size={13} /> Rifiuta
+              </button>
+            ) : null}
+            {!["cancelled", "rejected"].includes(request.status) ? (
+              <button
+                type="button"
+                onClick={() => { closeActions(); onConfirmPayment(request.id); }}
+                disabled={saving}
+                title="Il contributo (acconto o saldo) è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
+                className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+              >
+                <Wallet size={13} /> Registra pagamento
+              </button>
+            ) : null}
+            <select
+              value={request.status}
+              onChange={(event) => { closeActions(); onStatusChange(request.id, event.target.value as VoyageBookingStatus); }}
+              disabled={saving}
+              className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none disabled:opacity-50"
+            >
+              {/* 'pending_payment' is never an admin-settable status — it is reached by applying
+                  and left by paying — but a row can sit in it, so it needs a matching option
+                  or the select would silently render the wrong value. */}
+              {!statusOptions.includes(request.status) && (
+                <option value={request.status} disabled>
+                  {getBookingStatusLabel(request.status, "it")}
+                </option>
+              )}
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {getBookingStatusLabel(status, "it")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Richiesta: {formatBookingDate(request.requested_at, "it-IT")}
+          </p>
+    </div>
+  );
+
   const trackWidth = legs.length * COLUMN_WIDTH;
-  const gridTemplateColumns = `${PERSON_COL_WIDTH}px repeat(${legs.length}, ${COLUMN_WIDTH}px) ${ACTIONS_COL_WIDTH}px`;
+  const gridTemplateColumns = `${PERSON_COL_WIDTH}px repeat(${legs.length}, ${COLUMN_WIDTH}px)`;
   const anyPendingProposal = requests.some(
     (request) =>
       request.plan_change_status === "pending_user_approval" &&
@@ -717,7 +819,7 @@ const BookingGanttTable = ({
     </Dialog>
 
     <div className="overflow-x-auto">
-      <div style={{ minWidth: PERSON_COL_WIDTH + trackWidth + ACTIONS_COL_WIDTH }}>
+      <div style={{ minWidth: PERSON_COL_WIDTH + trackWidth }}>
         {/* Header row */}
         <div className="grid border-b border-border" style={{ gridTemplateColumns }}>
           <div className="sticky left-0 z-10 min-w-0 border-b border-border bg-background/95 p-3 text-left text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
@@ -752,9 +854,6 @@ const BookingGanttTable = ({
               </div>
             );
           })}
-          <div className="border-l border-border p-3 text-left text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
-            Azioni
-          </div>
         </div>
 
         {/* Person rows */}
@@ -837,10 +936,14 @@ const BookingGanttTable = ({
                       const isDraggingThis = drag?.requestId === request.id && drag.segStart === segment.startIdx && drag.segEnd === segment.endIdx;
                       const start = isDraggingThis ? drag!.previewStart : segment.startIdx;
                       const end = isDraggingThis ? drag!.previewEnd : segment.endIdx;
-                      return (
+                      const bar = (
                         <div
                           key={segIndex}
-                          className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${
+                          role="button"
+                          tabIndex={0}
+                          title="Clicca per gestire la prenotazione"
+                          onClick={() => setActionsRequestId(request.id)}
+                          className={`absolute flex cursor-pointer items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm hover:brightness-95 ${
                             isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300" : statusClass
                           }`}
                           style={{
@@ -852,6 +955,7 @@ const BookingGanttTable = ({
                         >
                           <span
                             onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "start")}
+                            onClick={(event) => event.stopPropagation()}
                             className="absolute left-0 top-0 h-full w-3 cursor-ew-resize"
                             title="Trascina per estendere/ridurre"
                           />
@@ -860,10 +964,25 @@ const BookingGanttTable = ({
                           </span>
                           <span
                             onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
+                            onClick={(event) => event.stopPropagation()}
                             className="absolute right-0 top-0 h-full w-3 cursor-ew-resize"
                             title="Trascina per estendere/ridurre"
                           />
                         </div>
+                      );
+                      // One popover per booking, anchored on its first bar.
+                      if (segIndex !== 0) return bar;
+                      return (
+                        <Popover
+                          key={segIndex}
+                          open={actionsRequestId === request.id && !drag}
+                          onOpenChange={(open) => setActionsRequestId(open ? request.id : null)}
+                        >
+                          <PopoverTrigger asChild>{bar}</PopoverTrigger>
+                          <PopoverContent align="start" className="w-72 p-3">
+                            {renderBookingActions(request, isStagedRow, allIndices)}
+                          </PopoverContent>
+                        </Popover>
                       );
                     })}
                     {hasProposal &&
@@ -885,99 +1004,6 @@ const BookingGanttTable = ({
                 ))}
               </div>
 
-              <div className="space-y-3 border-l border-border/60 p-3 align-top">
-                {rowRequests.map(({ request, isStagedRow, allIndices }) => (
-                  <div key={request.id} className={showRoutes ? "border-t border-border/40 pt-2 first:border-t-0 first:pt-0" : undefined}>
-                    {showRoutes && (
-                      <p className="mb-1.5 text-[11px] font-semibold text-foreground">{describeRequestRoute(request.id)}</p>
-                    )}
-                    {isStagedRow && (() => {
-                      const isPendingInvite = pendingInviteRequestIds.has(request.id);
-                      return (
-                        <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-500/10 p-2">
-                          <p className="w-full text-[11px] font-medium text-amber-900 dark:text-amber-300">
-                            Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
-                            {allIndices.length === 1 ? "a" : "e"}.
-                            {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={onCancelStagedResize}
-                            disabled={saving}
-                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
-                          >
-                            <X size={12} /> Annulla
-                          </button>
-                          <button
-                            type="button"
-                            onClick={isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog}
-                            disabled={saving}
-                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
-                          >
-                            <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
-                          </button>
-                        </div>
-                      );
-                    })()}
-                    <div className="flex flex-wrap gap-2">
-                      {request.status === "requested" || request.status === "waitlisted" ? (
-                        <button
-                          type="button"
-                          onClick={() => onApprove(request.id)}
-                          disabled={saving}
-                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
-                        >
-                          <Check size={13} /> Approva
-                        </button>
-                      ) : null}
-                      {!["cancelled", "rejected", "expired"].includes(request.status) ? (
-                        <button
-                          type="button"
-                          onClick={() => onReject(request.id)}
-                          disabled={saving}
-                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive disabled:opacity-50"
-                        >
-                          <X size={13} /> Rifiuta
-                        </button>
-                      ) : null}
-                      {!["cancelled", "rejected"].includes(request.status) ? (
-                        <button
-                          type="button"
-                          onClick={() => onConfirmPayment(request.id)}
-                          disabled={saving}
-                          title="Il contributo (acconto o saldo) è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
-                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
-                        >
-                          <Wallet size={13} /> Registra pagamento
-                        </button>
-                      ) : null}
-                      <select
-                        value={request.status}
-                        onChange={(event) => onStatusChange(request.id, event.target.value as VoyageBookingStatus)}
-                        disabled={saving}
-                        className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none disabled:opacity-50"
-                      >
-                        {/* 'pending_payment' is never an admin-settable status — it is reached by applying
-                            and left by paying — but a row can sit in it, so it needs a matching option
-                            or the select would silently render the wrong value. */}
-                        {!statusOptions.includes(request.status) && (
-                          <option value={request.status} disabled>
-                            {getBookingStatusLabel(request.status, "it")}
-                          </option>
-                        )}
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {getBookingStatusLabel(status, "it")}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      Richiesta: {formatBookingDate(request.requested_at, "it-IT")}
-                    </p>
-                  </div>
-                ))}
-              </div>
             </div>
           );
         })}
