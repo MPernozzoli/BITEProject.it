@@ -38,10 +38,12 @@ import {
 } from "@/lib/booking-workaway-proposal";
 import {
   buildCandidateInfoPrefill,
+  withPhoneFallback,
   emptyCandidateInfo,
   getCandidateInfoValidationError,
   type CandidateInfo,
 } from "@/lib/booking-candidate-info";
+import { pickProfilePhone } from "@/lib/phone";
 import {
   buildBookingApplicationDraft,
   clearCloudBookingApplicationDraft,
@@ -184,7 +186,7 @@ const Journal = () => {
       const [profileRes, latestRequestRes] = await Promise.all([
         supabase
           .from("profiles")
-          .select("preferred_language,secondary_language")
+          .select("preferred_language,secondary_language,profile_contact_details(phone_country_code,phone_number)")
           .eq("id", session!.user.id)
           .maybeSingle(),
         supabase
@@ -204,6 +206,7 @@ const Journal = () => {
         latestCandidateInfo: latestRequestRes.data?.candidate_info as Partial<CandidateInfo> | null | undefined,
         preferredLanguage: profileRes.data?.preferred_language,
         secondaryLanguage: profileRes.data?.secondary_language,
+        profilePhone: pickProfilePhone(profileRes.data?.profile_contact_details),
       });
     },
   });
@@ -246,6 +249,11 @@ const Journal = () => {
     if (!session?.user.id || bookingCandidateInfoTouched) return;
     setBookingCandidateInfo(bookingCandidateInfoPrefill);
   }, [bookingCandidateInfoPrefill, bookingCandidateInfoTouched, session?.user.id]);
+
+  const bookingHasNoPhone = !bookingCandidateInfo.phoneCountryCode && !bookingCandidateInfo.phoneNumber;
+  useEffect(() => {
+    if (bookingHasNoPhone) setBookingCandidateInfo((current) => withPhoneFallback(current, bookingCandidateInfoPrefill));
+  }, [bookingCandidateInfoPrefill, bookingHasNoPhone]);
 
   const mapPresenceMarkers = useMemo(
     () => buildMapPresenceMarkers(mapPresenceRows, lang),

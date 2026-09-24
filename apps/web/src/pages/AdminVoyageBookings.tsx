@@ -972,24 +972,28 @@ const AdminVoyageBookings = () => {
   const submitPlanChangeProposal = async ({ reason, note, requireSettlement }: PlanChangeProposal) => {
     if (!pendingProposal) return;
     const { requestId, legIds } = pendingProposal;
-    const request = requests.find((item) => item.id === requestId);
     setPendingProposal(null);
     setProposalDialogOpen(false);
     setSaving(true);
-    const { error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
+    const { data: changeId, error } = await typedSupabase.rpc("admin_propose_voyage_booking_legs", {
       _booking_request_id: requestId,
       _proposed_leg_ids: legIds,
       _admin_note: note,
       _change_reason: reason,
       _require_settlement: requireSettlement,
     });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast.error(error.message);
       await loadVoyageDetails(selectedVoyageId);
       return;
     }
-    toast.success(request?.is_crew ? "Proposta registrata." : "Proposta inviata al viaggiatore.");
+    // Bookings held by admins or crew are applied directly server-side (auto_accepted).
+    const { data: change } = changeId
+      ? await supabase.from("voyage_booking_plan_changes").select("status").eq("id", changeId as string).maybeSingle()
+      : { data: null };
+    setSaving(false);
+    toast.success(change?.status === "auto_accepted" ? "Tratte aggiornate." : "Proposta inviata al viaggiatore.");
     await loadVoyageDetails(selectedVoyageId);
   };
 

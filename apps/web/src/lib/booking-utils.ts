@@ -131,6 +131,11 @@ export interface BookingRequest {
   /** Set once a negotiation resolves to accepted: the deposit on the agreed total is due within
    * 24h of this being set, or the booking is cancelled and the fixed contribution forfeited. */
   contribution_settlement_deadline?: string | null;
+  /** Server-stamped total contribution owed (cents) — authoritative for negotiated bookings. */
+  contribution_due_cents?: number | null;
+  /** Set when an admin confirmed the seat without the full deposit: everything outstanding is
+   * collected in one balance payment by the regular balance deadline. */
+  deposit_deferred_at?: string | null;
 }
 
 export interface BookingRequestLeg {

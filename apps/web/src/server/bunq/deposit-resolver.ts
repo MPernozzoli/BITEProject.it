@@ -229,7 +229,7 @@ export async function resolveDepositPayer(
   const { data: request, error: requestError } = await db
     .from("voyage_booking_requests")
     .select(
-      "id, profile_id, voyage_id, party_size, status, payment_mode, expires_at, contribution_fixed_only_payment, contribution_proposal_status, contribution_resolved_variable_cents",
+      "id, profile_id, voyage_id, party_size, status, payment_mode, expires_at, contribution_fixed_only_payment, contribution_proposal_status, contribution_resolved_variable_cents, deposit_deferred_at",
     )
     .eq("id", bookingRequestId)
     .maybeSingle();
@@ -382,6 +382,13 @@ export async function resolveDepositPayer(
     perPersonEur = perPersonDepositEur(legs, contributionOpts);
     dueEur = depositForPayerEur(legs, { isLead, paymentMode, partySize }, contributionOpts);
     depositTarget = depositTargetEur(dueEur, { fullPaymentRequired });
+  }
+
+  // An admin confirmed the seat without the full acconto (deposit_deferred_at): nothing more is
+  // collected as "deposit" — the next payment is the whole outstanding amount, as the balance,
+  // due by the regular balance deadline.
+  if ((request as { deposit_deferred_at?: string | null }).deposit_deferred_at) {
+    depositTarget = 0;
   }
 
   // Charge only what is still outstanding, and only up to the deposit target until it is fully

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown, Mail, Plus, Wallet, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ProfileAvatar from "@/components/ProfileAvatar";
@@ -35,6 +35,7 @@ import {
   getBookingStatusLabel,
   getLegDurationHours,
   getLegLabel,
+  getLocalizedBookingWaypointName,
 } from "@/lib/booking-utils";
 
 const COLUMN_WIDTH = 170;
@@ -227,6 +228,48 @@ const BookingGanttTable = ({
     }
     return map;
   }, [requestLegs, requests]);
+
+  /**
+   * One Gantt row per traveller, not per booking: a booking always covers a contiguous run of
+   * legs, so someone sailing two separate stretches (e.g. Bari → Cagliari, then Ibiza → Lisbona)
+   * holds two bookings. Those sit on the same line as two bars; only bookings that actually
+   * overlap on a leg (an old rejected application under an active one) get a lane of their own.
+   * Row order follows the first booking of each lane in the incoming order.
+   */
+  const personRows = useMemo(() => {
+    const rows: { key: string; profileId: string; requests: BookingRequest[]; used: Set<number> }[] = [];
+    const lanesByProfile = new Map<string, typeof rows>();
+    for (const request of requests) {
+      const indices = legIndicesByRequest.get(request.id) || [];
+      const lanes = lanesByProfile.get(request.profile_id) || [];
+      let lane = indices.length > 0 ? lanes.find((row) => indices.every((idx) => !row.used.has(idx))) : undefined;
+      if (!lane) {
+        lane = { key: request.id, profileId: request.profile_id, requests: [], used: new Set<number>() };
+        lanes.push(lane);
+        lanesByProfile.set(request.profile_id, lanes);
+        rows.push(lane);
+      }
+      lane.requests.push(request);
+      for (const idx of indices) lane.used.add(idx);
+    }
+    for (const row of rows) {
+      row.requests.sort(
+        (a, b) =>
+          Math.min(...(legIndicesByRequest.get(a.id) || [Infinity])) -
+          Math.min(...(legIndicesByRequest.get(b.id) || [Infinity]))
+      );
+    }
+    return rows;
+  }, [requests, legIndicesByRequest]);
+
+  /** "Bari → Cagliari" for a booking, used to tell apart several bookings sharing one row. */
+  const describeRequestRoute = (requestId: string) => {
+    const indices = [...(legIndicesByRequest.get(requestId) || [])].sort((a, b) => a - b);
+    const first = legs[indices[0]];
+    const last = legs[indices[indices.length - 1]];
+    if (!first || !last) return "";
+    return `${getLocalizedBookingWaypointName(waypointsById[first.from_waypoint_id], "it")} → ${getLocalizedBookingWaypointName(waypointsById[last.to_waypoint_id], "it")}`;
+  };
 
   useEffect(() => {
     if (!drag) return;
@@ -715,45 +758,55 @@ const BookingGanttTable = ({
         </div>
 
         {/* Person rows */}
-        {requests.map((request) => {
-          const profile = profilesById[request.profile_id];
-          const isStagedRow = stagedResize?.requestId === request.id;
-          // While a resize is staged (not yet sent), the bar shows the draft range instead of
-          // the saved one, so a second drag on either edge keeps extending the same draft.
-          const allIndices = isStagedRow
-            ? stagedResize!.legIds
-                .map((id) => legIndexById.get(id))
-                .filter((idx): idx is number => idx != null)
-            : legIndicesByRequest.get(request.id) || [];
-          const segments = computeSegments(allIndices);
-          const statusClass = getBookingStatusClass(request.status);
-          // An outstanding (sent, not-yet-answered) route change is shown as a dashed "Proposta"
-          // bar under the current one, so it's visible here too — not only in the candidate tab.
-          const proposedIndices =
-            request.plan_change_status === "pending_user_approval"
-              ? readProposedLegIds(request.plan_change_metadata)
+        {personRows.map((row) => {
+          const profile = profilesById[row.profileId];
+          const rowRequests = row.requests.map((request) => {
+            const isStagedRow = stagedResize?.requestId === request.id;
+            // While a resize is staged (not yet sent), the bar shows the draft range instead of
+            // the saved one, so a second drag on either edge keeps extending the same draft.
+            const allIndices = isStagedRow
+              ? stagedResize!.legIds
                   .map((id) => legIndexById.get(id))
                   .filter((idx): idx is number => idx != null)
-              : [];
-          const proposedSegments = computeSegments(proposedIndices);
-          const hasProposal = proposedSegments.length > 0;
+              : legIndicesByRequest.get(request.id) || [];
+            // An outstanding (sent, not-yet-answered) route change is shown as a dashed "Proposta"
+            // bar under the current one, so it's visible here too — not only in the candidate tab.
+            const proposedIndices =
+              request.plan_change_status === "pending_user_approval"
+                ? readProposedLegIds(request.plan_change_metadata)
+                    .map((id) => legIndexById.get(id))
+                    .filter((idx): idx is number => idx != null)
+                : [];
+            const proposedSegments = computeSegments(proposedIndices);
+            return {
+              request,
+              isStagedRow,
+              allIndices,
+              segments: computeSegments(allIndices),
+              statusClass: getBookingStatusClass(request.status),
+              proposedSegments,
+              hasProposal: proposedSegments.length > 0,
+            };
+          });
+          const rowHasProposal = rowRequests.some((item) => item.hasProposal);
+          const showRoutes = rowRequests.length > 1;
           return (
-            <div key={request.id} className="grid border-b border-border/60" style={{ gridTemplateColumns }}>
+            <div key={row.key} className="grid border-b border-border/60" style={{ gridTemplateColumns }}>
               <div className="sticky left-0 z-10 min-w-0 bg-background/95 p-3 align-top">
                 <div className="flex items-center gap-1.5 font-medium">
                   <button
                     type="button"
-                    onClick={() => setProfileDialogRequestId(request.id)}
+                    onClick={() => setProfileDialogRequestId(row.requests[0].id)}
                     className="min-w-0 text-left underline-offset-4 hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
                   >
-                    <span className="block truncate">{profile?.name || profile?.email || request.profile_id}</span>
+                    <span className="block truncate">{profile?.name || profile?.email || row.profileId}</span>
                   </button>
-                  {request.is_crew && (
+                  {row.requests.some((request) => request.is_crew) && (
                     <span className="rounded-full border border-indigo-300/70 dark:border-indigo-500/30 bg-indigo-100/70 dark:bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-800 dark:text-indigo-300">
                       Equipaggio
                     </span>
                   )}
-                  {awaitingPaymentRequestIds.has(request.id) && (
+                  {row.requests.some((request) => awaitingPaymentRequestIds.has(request.id)) && (
                     <span
                       title="Il posto è riservato; diventa confermata automaticamente una volta pagato il contributo."
                       className="rounded-full border border-orange-300/70 dark:border-orange-500/30 bg-orange-100/70 dark:bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-orange-800 dark:text-orange-300"
@@ -762,11 +815,14 @@ const BookingGanttTable = ({
                     </span>
                   )}
                 </div>
+                {showRoutes && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">{row.requests.length} prenotazioni</p>
+                )}
               </div>
 
               <div
                 className="relative border-l border-border/60"
-                style={{ gridColumn: `2 / span ${legs.length}`, height: hasProposal ? ROW_HEIGHT * 2 : ROW_HEIGHT }}
+                style={{ gridColumn: `2 / span ${legs.length}`, height: rowHasProposal ? ROW_HEIGHT * 2 : ROW_HEIGHT }}
               >
                 {legs.map((_, colIndex) => (
                   <div
@@ -775,141 +831,152 @@ const BookingGanttTable = ({
                     style={{ left: colIndex * COLUMN_WIDTH, width: COLUMN_WIDTH }}
                   />
                 ))}
-                {segments.map((segment, segIndex) => {
-                  const isDraggingThis = drag?.requestId === request.id && drag.segStart === segment.startIdx && drag.segEnd === segment.endIdx;
-                  const start = isDraggingThis ? drag!.previewStart : segment.startIdx;
-                  const end = isDraggingThis ? drag!.previewEnd : segment.endIdx;
-                  return (
-                    <div
-                      key={segIndex}
-                      className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${
-                        isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300" : statusClass
-                      }`}
-                      style={{
-                        top: 8,
-                        height: ROW_HEIGHT - 16,
-                        left: start * COLUMN_WIDTH + 4,
-                        width: (end - start + 1) * COLUMN_WIDTH - 8,
-                      }}
-                    >
-                      <span
-                        onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "start")}
-                        className="absolute left-0 top-0 h-full w-3 cursor-ew-resize"
-                        title="Trascina per estendere/ridurre"
-                      />
-                      <span className="truncate">
-                        {isStagedRow ? "Bozza" : hasProposal ? "Adesso" : getBookingStatusLabel(request.status, "it")}
-                      </span>
-                      <span
-                        onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
-                        className="absolute right-0 top-0 h-full w-3 cursor-ew-resize"
-                        title="Trascina per estendere/ridurre"
-                      />
-                    </div>
-                  );
-                })}
-                {hasProposal &&
-                  proposedSegments.map((segment, segIndex) => (
-                    <div
-                      key={`proposed-${segIndex}`}
-                      className="absolute flex items-center gap-1.5 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15 px-3 text-[12px] font-semibold text-sky-900 dark:text-sky-300"
-                      style={{
-                        top: ROW_HEIGHT + 8,
-                        height: ROW_HEIGHT - 16,
-                        left: segment.startIdx * COLUMN_WIDTH + 4,
-                        width: (segment.endIdx - segment.startIdx + 1) * COLUMN_WIDTH - 8,
-                      }}
-                    >
-                      <span className="truncate">Proposta</span>
-                    </div>
-                  ))}
+                {rowRequests.map(({ request, isStagedRow, allIndices, segments, statusClass, proposedSegments, hasProposal }) => (
+                  <Fragment key={request.id}>
+                    {segments.map((segment, segIndex) => {
+                      const isDraggingThis = drag?.requestId === request.id && drag.segStart === segment.startIdx && drag.segEnd === segment.endIdx;
+                      const start = isDraggingThis ? drag!.previewStart : segment.startIdx;
+                      const end = isDraggingThis ? drag!.previewEnd : segment.endIdx;
+                      return (
+                        <div
+                          key={segIndex}
+                          className={`absolute flex items-center rounded-full border px-3 text-[12px] font-semibold shadow-sm ${
+                            isStagedRow ? "border-2 border-amber-500 bg-amber-100/80 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300" : statusClass
+                          }`}
+                          style={{
+                            top: 8,
+                            height: ROW_HEIGHT - 16,
+                            left: start * COLUMN_WIDTH + 4,
+                            width: (end - start + 1) * COLUMN_WIDTH - 8,
+                          }}
+                        >
+                          <span
+                            onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "start")}
+                            className="absolute left-0 top-0 h-full w-3 cursor-ew-resize"
+                            title="Trascina per estendere/ridurre"
+                          />
+                          <span className="truncate">
+                            {isStagedRow ? "Bozza" : hasProposal ? "Adesso" : getBookingStatusLabel(request.status, "it")}
+                          </span>
+                          <span
+                            onPointerDown={(event) => startDrag(event, request.id, segment, allIndices, "end")}
+                            className="absolute right-0 top-0 h-full w-3 cursor-ew-resize"
+                            title="Trascina per estendere/ridurre"
+                          />
+                        </div>
+                      );
+                    })}
+                    {hasProposal &&
+                      proposedSegments.map((segment, segIndex) => (
+                        <div
+                          key={`proposed-${segIndex}`}
+                          className="absolute flex items-center gap-1.5 rounded-full border-2 border-dashed border-sky-500/80 bg-sky-100/70 dark:bg-sky-500/15 px-3 text-[12px] font-semibold text-sky-900 dark:text-sky-300"
+                          style={{
+                            top: ROW_HEIGHT + 8,
+                            height: ROW_HEIGHT - 16,
+                            left: segment.startIdx * COLUMN_WIDTH + 4,
+                            width: (segment.endIdx - segment.startIdx + 1) * COLUMN_WIDTH - 8,
+                          }}
+                        >
+                          <span className="truncate">Proposta</span>
+                        </div>
+                      ))}
+                  </Fragment>
+                ))}
               </div>
 
-              <div className="border-l border-border/60 p-3 align-top">
-                {isStagedRow && (() => {
-                  const isPendingInvite = pendingInviteRequestIds.has(request.id);
-                  return (
-                    <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-500/10 p-2">
-                      <p className="w-full text-[11px] font-medium text-amber-900 dark:text-amber-300">
-                        Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
-                        {allIndices.length === 1 ? "a" : "e"}.
-                        {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={onCancelStagedResize}
-                        disabled={saving}
-                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
-                      >
-                        <X size={12} /> Annulla
-                      </button>
-                      <button
-                        type="button"
-                        onClick={isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog}
-                        disabled={saving}
-                        className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
-                      >
-                        <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
-                      </button>
-                    </div>
-                  );
-                })()}
-                <div className="flex flex-wrap gap-2">
-                  {request.status === "requested" || request.status === "waitlisted" ? (
-                    <button
-                      type="button"
-                      onClick={() => onApprove(request.id)}
-                      disabled={saving}
-                      className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
-                    >
-                      <Check size={13} /> Approva
-                    </button>
-                  ) : null}
-                  {!["cancelled", "rejected", "expired"].includes(request.status) ? (
-                    <button
-                      type="button"
-                      onClick={() => onReject(request.id)}
-                      disabled={saving}
-                      className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive disabled:opacity-50"
-                    >
-                      <X size={13} /> Rifiuta
-                    </button>
-                  ) : null}
-                  {!["cancelled", "rejected"].includes(request.status) ? (
-                    <button
-                      type="button"
-                      onClick={() => onConfirmPayment(request.id)}
-                      disabled={saving}
-                      title="Il contributo (acconto o saldo) è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
-                      className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
-                    >
-                      <Wallet size={13} /> Registra pagamento
-                    </button>
-                  ) : null}
-                  <select
-                    value={request.status}
-                    onChange={(event) => onStatusChange(request.id, event.target.value as VoyageBookingStatus)}
-                    disabled={saving}
-                    className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none disabled:opacity-50"
-                  >
-                    {/* 'pending_payment' is never an admin-settable status — it is reached by applying
-                        and left by paying — but a row can sit in it, so it needs a matching option
-                        or the select would silently render the wrong value. */}
-                    {!statusOptions.includes(request.status) && (
-                      <option value={request.status} disabled>
-                        {getBookingStatusLabel(request.status, "it")}
-                      </option>
+              <div className="space-y-3 border-l border-border/60 p-3 align-top">
+                {rowRequests.map(({ request, isStagedRow, allIndices }) => (
+                  <div key={request.id} className={showRoutes ? "border-t border-border/40 pt-2 first:border-t-0 first:pt-0" : undefined}>
+                    {showRoutes && (
+                      <p className="mb-1.5 text-[11px] font-semibold text-foreground">{describeRequestRoute(request.id)}</p>
                     )}
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {getBookingStatusLabel(status, "it")}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Richiesta: {formatBookingDate(request.requested_at, "it-IT")}
-                </p>
+                    {isStagedRow && (() => {
+                      const isPendingInvite = pendingInviteRequestIds.has(request.id);
+                      return (
+                        <div className="mb-2 flex flex-wrap gap-2 rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-500/10 p-2">
+                          <p className="w-full text-[11px] font-medium text-amber-900 dark:text-amber-300">
+                            Bozza non inviata: {allIndices.length} tratt{allIndices.length === 1 ? "a" : "e"} selezionat
+                            {allIndices.length === 1 ? "a" : "e"}.
+                            {isPendingInvite && " L'invito non è ancora stato accettato: la modifica si applica subito, senza chiedere conferma al viaggiatore."}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={onCancelStagedResize}
+                            disabled={saving}
+                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-50"
+                          >
+                            <X size={12} /> Annulla
+                          </button>
+                          <button
+                            type="button"
+                            onClick={isPendingInvite ? onApplyPendingInviteResize : onOpenProposalDialog}
+                            disabled={saving}
+                            className="glass-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 disabled:opacity-50"
+                          >
+                            <Check size={12} /> {isPendingInvite ? "Applica modifica" : "Proponi modifica"}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex flex-wrap gap-2">
+                      {request.status === "requested" || request.status === "waitlisted" ? (
+                        <button
+                          type="button"
+                          onClick={() => onApprove(request.id)}
+                          disabled={saving}
+                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+                        >
+                          <Check size={13} /> Approva
+                        </button>
+                      ) : null}
+                      {!["cancelled", "rejected", "expired"].includes(request.status) ? (
+                        <button
+                          type="button"
+                          onClick={() => onReject(request.id)}
+                          disabled={saving}
+                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-destructive disabled:opacity-50"
+                        >
+                          <X size={13} /> Rifiuta
+                        </button>
+                      ) : null}
+                      {!["cancelled", "rejected"].includes(request.status) ? (
+                        <button
+                          type="button"
+                          onClick={() => onConfirmPayment(request.id)}
+                          disabled={saving}
+                          title="Il contributo (acconto o saldo) è arrivato ma non è stato agganciato in automatico (causale sbagliata, bonifico fuori flusso…)"
+                          className="glass-chip inline-flex items-center gap-1.5 px-3 py-2 text-xs text-foreground hover:text-accent disabled:opacity-50"
+                        >
+                          <Wallet size={13} /> Registra pagamento
+                        </button>
+                      ) : null}
+                      <select
+                        value={request.status}
+                        onChange={(event) => onStatusChange(request.id, event.target.value as VoyageBookingStatus)}
+                        disabled={saving}
+                        className="border border-border bg-background/80 px-2 py-2 text-xs focus:border-accent focus:outline-none disabled:opacity-50"
+                      >
+                        {/* 'pending_payment' is never an admin-settable status — it is reached by applying
+                            and left by paying — but a row can sit in it, so it needs a matching option
+                            or the select would silently render the wrong value. */}
+                        {!statusOptions.includes(request.status) && (
+                          <option value={request.status} disabled>
+                            {getBookingStatusLabel(request.status, "it")}
+                          </option>
+                        )}
+                        {statusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {getBookingStatusLabel(status, "it")}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Richiesta: {formatBookingDate(request.requested_at, "it-IT")}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           );

@@ -57,6 +57,9 @@ export const PROFILE_COPY = {
     fields: {
       name: "Nome visibile",
       email: "Email account",
+      phone: "Telefono",
+      phoneHint: "Visibile solo a te e agli organizzatori dei viaggi. Obbligatorio per candidarti a un viaggio.",
+      phoneInvalid: "Il numero di telefono non è valido: scegli il prefisso e scrivi solo le cifre.",
       bio: "Bio",
       bioPlaceholder: "Racconta chi sei, cosa fai e cosa porti a bordo.",
       preferredLanguage: "Lingua preferita",
@@ -222,6 +225,9 @@ export const PROFILE_COPY = {
     fields: {
       name: "Display name",
       email: "Account email",
+      phone: "Phone",
+      phoneHint: "Visible only to you and the voyage organisers. Required to apply for a voyage.",
+      phoneInvalid: "The phone number is not valid: choose the prefix and type digits only.",
       bio: "Bio",
       bioPlaceholder: "Tell people who you are, what you do, and what you bring aboard.",
       preferredLanguage: "Preferred language",

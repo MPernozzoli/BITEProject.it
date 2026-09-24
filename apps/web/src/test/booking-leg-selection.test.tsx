@@ -183,7 +183,21 @@ describe("booking application gate", () => {
   it("points at the candidate form when the legs are there but the profile is not", () => {
     const blocker = getBookingApplicationBlocker(base, "it");
     expect(blocker?.step).toBe("about");
-    expect(blocker?.detail).toBe("Seleziona la tua fascia d'eta.");
+    expect(blocker?.detail).toBe("Scegli il prefisso internazionale del tuo telefono.");
+  });
+
+  it("asks for the phone number, then moves on to the rest of the questionnaire", () => {
+    const withPrefixOnly = getBookingApplicationBlocker(
+      { ...base, candidateInfo: { ...emptyCandidateInfo, phoneCountryCode: "+39" } },
+      "it"
+    );
+    expect(withPrefixOnly?.detail).toBe("Inserisci un numero di telefono valido (solo cifre, senza prefisso).");
+
+    const withPhone = getBookingApplicationBlocker(
+      { ...base, candidateInfo: { ...emptyCandidateInfo, phoneCountryCode: "+39", phoneNumber: "333 123 4567" } },
+      "it"
+    );
+    expect(withPhone?.detail).toBe("Seleziona la tua fascia d'eta.");
   });
 
   it("names the legs that cannot take the whole party", () => {
@@ -192,6 +206,8 @@ describe("booking application gate", () => {
         ...base,
         candidateInfo: {
           ...emptyCandidateInfo,
+          phoneCountryCode: "+39",
+          phoneNumber: "3331234567",
           sailingKinds: ["sail"],
           navigationRange: "coastal_only",
           ageRange: "25_34",
@@ -216,6 +232,8 @@ describe("booking application gate", () => {
         ...base,
         candidateInfo: {
           ...emptyCandidateInfo,
+          phoneCountryCode: "+39",
+          phoneNumber: "3331234567",
           sailingKinds: ["sail"],
           navigationRange: "coastal_only",
           ageRange: "25_34",

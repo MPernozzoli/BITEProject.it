@@ -68,6 +68,8 @@ import ProfilePreferencesPanel from "@/components/admin/ProfilePreferencesPanel"
 import ProfileNotificationsPanel from "@/components/admin/ProfileNotificationsPanel";
 import ProfileSecurityPanel from "@/components/admin/ProfileSecurityPanel";
 import { toast } from "sonner";
+import PhoneInput from "@/components/booking/PhoneInput";
+import { isValidPhone, normalizePhoneCountryCode, normalizePhoneNumber, pickProfilePhone } from "@/lib/phone";
 
 const TikTokIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
   <svg
@@ -131,6 +133,8 @@ type ProfileSnapshot = {
   storyNotificationsEnabled: boolean;
   socials: Record<SocialFieldKey, string>;
   notificationPreferences: typeof DEFAULT_PROFILE_NOTIFICATION_PREFERENCES;
+  phoneCountryCode: string;
+  phoneNumber: string;
 };
 
 const createProfileSnapshot = (snapshot: ProfileSnapshot) =>
@@ -154,6 +158,8 @@ const AdminProfile = () => {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneCountryCode, setPhoneCountryCode] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarCropOpen, setAvatarCropOpen] = useState(false);
   const [pendingAvatarUrl, setPendingAvatarUrl] = useState<string | null>(null);
@@ -242,6 +248,8 @@ const AdminProfile = () => {
     storyNotificationsEnabled,
     socials,
     notificationPreferences,
+    phoneCountryCode,
+    phoneNumber: normalizePhoneNumber(phoneNumber),
   });
   const isDirty = profileLoaded && currentSnapshot !== initialSnapshotRef.current;
 
@@ -766,7 +774,7 @@ const AdminProfile = () => {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople",
+          "name, bio, avatar_url, preferred_language, secondary_language, social_instagram, social_youtube, social_tiktok, social_facebook, social_x, social_linkedin, social_website, social_seapeople, profile_contact_details(phone_country_code, phone_number)",
         )
         .eq("id", userId)
         .single();
@@ -778,6 +786,12 @@ const AdminProfile = () => {
         }
         console.error("Profile load error:", error);
       }
+
+      const loadedPhone = pickProfilePhone(data?.profile_contact_details);
+      const loadedPhoneCountryCode = normalizePhoneCountryCode(loadedPhone?.phone_country_code);
+      const loadedPhoneNumber = normalizePhoneNumber(loadedPhone?.phone_number);
+      setPhoneCountryCode(loadedPhoneCountryCode);
+      setPhoneNumber(loadedPhoneNumber);
 
       if (data) {
         setName(data.name || "");
@@ -875,6 +889,8 @@ const AdminProfile = () => {
         storyNotificationsEnabled: preferenceRow?.story_notifications_enabled ?? true,
         socials: loadedSocials,
         notificationPreferences: loadedNotificationPreferences,
+        phoneCountryCode: loadedPhoneCountryCode,
+        phoneNumber: loadedPhoneNumber,
       });
 
       const { data: storySubs, error: storySubsError } = await supabase
@@ -1065,6 +1081,11 @@ const AdminProfile = () => {
 
   const saveProfile = async (options?: { showSuccessToast?: boolean }) => {
     if (!session) return false;
+    const hasPhone = Boolean(normalizePhoneNumber(phoneNumber));
+    if (hasPhone && !isValidPhone(phoneCountryCode, phoneNumber)) {
+      toast.error(copy.fields.phoneInvalid);
+      return false;
+    }
     setSaving(true);
     const userId = session.user.id;
     const currentEmail = (session.user.email || email).trim().toLowerCase();
@@ -1119,6 +1140,22 @@ const AdminProfile = () => {
         }
       } else {
         profileSaved = true;
+      }
+
+      // The phone lives in its own owner-only table: public.profiles is publicly readable.
+      if (profileSaved) {
+        const { error: phoneError } = await supabase.from("profile_contact_details").upsert(
+          {
+            profile_id: userId,
+            phone_country_code: hasPhone ? normalizePhoneCountryCode(phoneCountryCode) || null : null,
+            phone_number: hasPhone ? normalizePhoneNumber(phoneNumber) : null,
+          },
+          { onConflict: "profile_id" },
+        );
+        if (phoneError) {
+          console.error("Phone save error:", phoneError);
+          profileSaved = false;
+        }
       }
 
       if (!newsletterSaved) {
@@ -1182,6 +1219,8 @@ const AdminProfile = () => {
             storyNotificationsEnabled,
             socials,
             notificationPreferences,
+            phoneCountryCode,
+            phoneNumber: normalizePhoneNumber(phoneNumber),
           });
           return true;
         }
@@ -1197,6 +1236,8 @@ const AdminProfile = () => {
           storyNotificationsEnabled,
           socials,
           notificationPreferences,
+          phoneCountryCode,
+          phoneNumber: normalizePhoneNumber(phoneNumber),
         });
         if (options?.showSuccessToast !== false) {
           toast.success(copy.actions.saveSuccess);
@@ -1504,6 +1545,23 @@ const AdminProfile = () => {
                     <Mail size={16} className="text-accent" />
                     <span className="truncate">{email}</span>
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="block text-xs font-sans uppercase tracking-[0.24em] text-muted-foreground">
+                    {copy.fields.phone}
+                  </span>
+                  <PhoneInput
+                    lang={lang === "en" ? "en" : "it"}
+                    countryCode={phoneCountryCode}
+                    number={phoneNumber}
+                    onChange={({ countryCode, number }) => {
+                      setPhoneCountryCode(countryCode);
+                      setPhoneNumber(number);
+                    }}
+                    variant="glass"
+                  />
+                  <p className="text-xs leading-relaxed text-muted-foreground">{copy.fields.phoneHint}</p>
                 </div>
 
                 <div className="space-y-2">

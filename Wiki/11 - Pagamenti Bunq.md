@@ -50,6 +50,11 @@ Ogni momento in cui i soldi cambiano stato genera una mail bilingue al candidato
 
 Un evento ripetibile (cambio metodo di pagamento, sollecito, saldo differenza dopo un cambio tratta) ri-arma la riga in coda e aggiorna `queued_at`, che entra nella idempotency key Resend: senza, i re-invii venivano deduplicati per 24 ore.
 
+## Saldo: promemoria ripetuti e acconto rinviato (24 settembre 2026)
+- **Promemoria martellanti:** `enqueue_voyage_booking_balance_reminders()` (cron giornaliero 08:30 UTC) non manda più una sola mail a 5 giorni dalla scadenza. La finestra si apre **14 giorni prima** della scadenza del saldo (`voyage_booking_balance_deadline` = 15 giorni prima dell'imbarco), poi un promemoria **ogni 3 giorni** e **ogni giorno** negli ultimi 5 (regola in `voyage_booking_balance_reminder_due`). `balance_reminder_sent_at` ora è l'ultimo invio, non un flag "già fatto". La mail riporta l'**importo che manca** (`amount_cents` = dovuto − versato; il totale è in `total_due_cents`) e il pulsante **Paga il saldo** porta a `/bookings?voyage=…`, dove il banner "Saldo da versare" apre il pagamento con carta o bonifico.
+- **Acconto rinviato al saldo:** `voyage_booking_requests.deposit_deferred_at` segna una prenotazione confermata dall'admin senza l'acconto completo. `resolveDepositPayer` porta allora il target acconto a 0, quindi il pagamento successivo è **tutto il residuo, come saldo** (riferimento `SAL-`), con la scadenza e la decadenza normali del saldo. `admin_set_voyage_booking_status` non blocca queste prenotazioni sul gate "acconto negoziato non versato". Per ora il flag si imposta solo da SQL, non c'è ancora un pulsante admin.
+- Sulla pagina booking, per le prenotazioni con contributo **negoziato** il saldo mostrato usa `contribution_due_cents` (il totale concordato, scritto dal server) e non la stima dalle miglia.
+
 ## Rimborsi automatici
 `apps/web/api/bookings/status.ts` applica la policy di rimborso prima di rendere terminale una prenotazione:
 

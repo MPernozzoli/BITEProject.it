@@ -10,6 +10,7 @@ import {
   type CandidateInfo,
   type CandidateLanguageLevel,
 } from "@/lib/booking-candidate-info";
+import PhoneInput from "@/components/booking/PhoneInput";
 
 const sailingKindOptions = [
   { value: "sail", it: "Vela", en: "Sail" },
@@ -157,6 +158,25 @@ const CandidateInfoForm = ({ value, onChange, lang, compact = false }: Candidate
 
   return (
     <div className={compact ? "space-y-4" : "space-y-5"}>
+      <fieldset className="space-y-3">
+        <legend className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          {lang === "it" ? "Telefono" : "Phone"}
+        </legend>
+        <PhoneInput
+          lang={lang === "it" ? "it" : "en"}
+          countryCode={normalizedValue.phoneCountryCode}
+          number={normalizedValue.phoneNumber}
+          onChange={({ countryCode, number }) =>
+            onChange({ ...normalizedValue, phoneCountryCode: countryCode, phoneNumber: number })
+          }
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {lang === "it"
+            ? "Serve all'equipaggio per coordinarsi con te prima dell'imbarco. Lo salviamo nel tuo profilo, visibile solo a te e agli organizzatori."
+            : "The crew uses it to coordinate with you before boarding. We save it to your profile, visible only to you and the organisers."}
+        </p>
+      </fieldset>
+
       <fieldset className="space-y-3">
         <legend className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           {lang === "it" ? "Esperienza nautica" : "Sailing experience"}

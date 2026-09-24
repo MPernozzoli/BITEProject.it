@@ -19,6 +19,7 @@ import {
 import CandidateInfoForm from "@/components/booking/CandidateInfoForm";
 import {
   buildCandidateInfoPrefill,
+  withPhoneFallback,
   emptyCandidateInfo,
   getCandidateInfoValidationError,
   type CandidateInfo,
@@ -27,6 +28,7 @@ import {
   getBookingApplicationBlocker,
   type BookingApplicationStep,
 } from "@/lib/booking-application-gate";
+import { pickProfilePhone } from "@/lib/phone";
 import {
   buildBookingApplicationDraft,
   clearCloudBookingApplicationDraft,
@@ -101,6 +103,13 @@ import {
   isLegSelectable,
   isVoyageBookableNow,
 } from "@/lib/booking-utils";
+
+/** The agreed total (EUR) of a booking whose contribution was negotiated: the mileage formula
+ * would show the standard price instead, so the server-stamped figure wins when present. */
+const negotiatedTotalDueEur = (request: BookingRequest): number | null =>
+  request.contribution_proposal_status === "accepted" && request.contribution_due_cents != null
+    ? request.contribution_due_cents / 100
+    : null;
 
 type RequestBookingResult = { booking_request_id: string; booking_status: BookingRequest["status"] };
 type VoyageAvailabilityWatch = {
@@ -235,6 +244,10 @@ const UserBookings = () => {
     null
   );
   const candidateInfoTouchedRef = useRef(false);
+  const hasNoPhone = !candidateInfo.phoneCountryCode && !candidateInfo.phoneNumber;
+  useEffect(() => {
+    if (hasNoPhone) setCandidateInfo((current) => withPhoneFallback(current, candidateInfoPrefill));
+  }, [candidateInfoPrefill, hasNoPhone]);
   const draftHydratedRef = useRef(false);
   const selectedVoyageIdRef = useRef("");
   const ticketDeepLinkHandledRef = useRef(false);
@@ -262,7 +275,7 @@ const UserBookings = () => {
       session?.user.id
         ? typedSupabase
             .from("profiles")
-            .select("preferred_language,secondary_language")
+            .select("preferred_language,secondary_language,profile_contact_details(phone_country_code,phone_number)")
             .eq("id", session.user.id)
         : Promise.resolve({ data: [], error: null }),
       session?.user.id
@@ -284,12 +297,13 @@ const UserBookings = () => {
 
     let loadedVoyages = ((voyagesRes.data as BookingVoyage[] | null) || []);
     const loadedRequests = ((requestsRes.data as BookingRequest[] | null) || []);
-    const profile = Array.isArray(profileRes.data) ? profileRes.data[0] as { preferred_language?: string | null; secondary_language?: string | null } | undefined : undefined;
+    const profile = Array.isArray(profileRes.data) ? profileRes.data[0] as { preferred_language?: string | null; secondary_language?: string | null; profile_contact_details?: unknown } | undefined : undefined;
     const latestReusableInfo = loadedRequests.find((request) => request.candidate_info)?.candidate_info as Partial<CandidateInfo> | null | undefined;
     const prefill = buildCandidateInfoPrefill({
       latestCandidateInfo: latestReusableInfo,
       preferredLanguage: profile?.preferred_language,
       secondaryLanguage: profile?.secondary_language,
+      profilePhone: pickProfilePhone(profile?.profile_contact_details),
     });
     setCandidateInfoPrefill(prefill);
     if (!candidateInfoTouchedRef.current && !draftHydratedRef.current) setCandidateInfo(prefill);
@@ -649,7 +663,9 @@ const UserBookings = () => {
     if (!ownRequestForSelectedVoyage) return null;
     const ownLegs = ownRequestLegIdsForSelectedVoyage.map((id) => legsById[id]).filter(Boolean);
     if (ownLegs.length === 0) return null;
-    const totalDueEur = totalDepositEur(ownLegs, ownRequestForSelectedVoyage.party_size, selectedContributionOptions);
+    const totalDueEur =
+      negotiatedTotalDueEur(ownRequestForSelectedVoyage) ??
+      totalDepositEur(ownLegs, ownRequestForSelectedVoyage.party_size, selectedContributionOptions);
     const paidEur = paidEurByRequestId[ownRequestForSelectedVoyage.id] ?? 0;
     const outstandingEur = Math.round((totalDueEur - paidEur + Number.EPSILON) * 100) / 100;
     const departureTimes = ownLegs
@@ -829,12 +845,14 @@ const UserBookings = () => {
     ) {
       return null;
     }
-    const totalDueEur = totalDepositEur(detailsOwnLegs, detailsRequest.party_size, {
-      contributionPerNmEur: detailsVoyage?.booking_contribution_per_nm_eur,
-      fixedMinimumEur: shouldApplyContributionFixedMinimum(requests, detailsRequest.voyage_id, detailsRequest.id)
-        ? undefined
-        : 0,
-    });
+    const totalDueEur =
+      negotiatedTotalDueEur(detailsRequest) ??
+      totalDepositEur(detailsOwnLegs, detailsRequest.party_size, {
+        contributionPerNmEur: detailsVoyage?.booking_contribution_per_nm_eur,
+        fixedMinimumEur: shouldApplyContributionFixedMinimum(requests, detailsRequest.voyage_id, detailsRequest.id)
+          ? undefined
+          : 0,
+      });
     const paidEur = paidEurByRequestId[detailsRequest.id] ?? 0;
     const outstandingEur = Math.round((totalDueEur - paidEur + Number.EPSILON) * 100) / 100;
     if (outstandingEur <= 0.5) return null;
@@ -1234,6 +1252,24 @@ const UserBookings = () => {
       }
       const result = Array.isArray(data) ? (data[0] as RequestBookingResult | undefined) : undefined;
       bookingRequestId = result?.booking_request_id;
+      // Admins travel as staff: the server confirms and comps their booking right away, so
+      // there is no contribution to collect and no review to wait for.
+      if (result?.booking_status === "user_confirmed") {
+        setSaving(false);
+        setConfirmOpen(false);
+        resetBookingApplicationForm();
+        clearLocalBookingApplicationDraft(selectedVoyageId);
+        await clearCloudBookingApplicationDraft(session.user.id, selectedVoyageId).catch((error) => {
+          console.error("Failed to clear booking draft", error);
+        });
+        toast.success(lang === "it" ? "Prenotazione confermata." : "Booking confirmed.");
+        if (bookingRequestId && parsedPartySize > 1) {
+          navigate(`/bookings/${bookingRequestId}/participants`);
+          return;
+        }
+        await loadData();
+        return;
+      }
       toast.info(
         lang === "it"
           ? "Ultimo passo: completa il pagamento del contributo per inviare la candidatura."
@@ -1438,13 +1474,13 @@ const UserBookings = () => {
   /** Traveller drags their own bar on the matrix: opens an admin-approval proposal, mirroring resizeBookingLegs on the admin Gantt. */
   const proposeLegChange = async (requestId: string, proposedLegIds: string[]) => {
     setSaving(true);
-    const { error } = await typedSupabase.rpc("user_propose_voyage_booking_legs", {
+    const { data: changeId, error } = await typedSupabase.rpc("user_propose_voyage_booking_legs", {
       _booking_request_id: requestId,
       _proposed_leg_ids: proposedLegIds,
       _user_message: null,
     });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       toast.error(
         lang === "it"
           ? `Non è stato possibile inviare la richiesta di modifica. Riprova. (${error.message})`
@@ -1452,7 +1488,16 @@ const UserBookings = () => {
       );
       return;
     }
-    toast.success(lang === "it" ? "Richiesta di modifica inviata al team." : "Change request sent to the team.");
+    // An admin's own change is applied server-side on the spot (recorded as auto_accepted).
+    const { data: change } = changeId
+      ? await supabase.from("voyage_booking_plan_changes").select("status").eq("id", changeId as string).maybeSingle()
+      : { data: null };
+    setSaving(false);
+    toast.success(
+      change?.status === "auto_accepted"
+        ? lang === "it" ? "Tratte aggiornate." : "Legs updated."
+        : lang === "it" ? "Richiesta di modifica inviata al team." : "Change request sent to the team."
+    );
     await loadData();
   };
 

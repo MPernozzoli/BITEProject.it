@@ -24,8 +24,10 @@ import {
   type VoyageJoinStage,
 } from "@/lib/voyage-join-flow";
 import { getBookingApplicationBlocker } from "@/lib/booking-application-gate";
+import { pickProfilePhone } from "@/lib/phone";
 import {
   buildCandidateInfoPrefill,
+  withPhoneFallback,
   emptyCandidateInfo,
   type CandidateInfo,
 } from "@/lib/booking-candidate-info";
@@ -193,16 +195,16 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
     },
   });
 
-  const { data: profileRow = null } = useQuery<{ preferred_language: string | null; secondary_language: string | null } | null>({
+  const { data: profileRow = null } = useQuery<{ preferred_language: string | null; secondary_language: string | null; profile_contact_details?: unknown } | null>({
     queryKey: ["voyage-join-profile", userId],
     enabled: Boolean(userId),
     queryFn: async () => {
       const { data, error } = await typedSupabase
         .from("profiles")
-        .select("preferred_language,secondary_language")
+        .select("preferred_language,secondary_language,profile_contact_details(phone_country_code,phone_number)")
         .eq("id", userId);
       if (error) throw new Error(error.message);
-      const rows = (data as { preferred_language: string | null; secondary_language: string | null }[] | null) || [];
+      const rows = (data as { preferred_language: string | null; secondary_language: string | null; profile_contact_details?: unknown }[] | null) || [];
       return rows[0] ?? null;
     },
   });
@@ -218,10 +220,16 @@ const VoyageJoinPanel = ({ voyage, voyageName, legs, lang, waypointLabel }: Voya
       latestCandidateInfo: latest,
       preferredLanguage: profileRow?.preferred_language,
       secondaryLanguage: profileRow?.secondary_language,
+      profilePhone: pickProfilePhone(profileRow?.profile_contact_details),
     });
     setCandidateInfoPrefill(prefill);
     if (!candidateInfoTouchedRef.current && !draftHydratedRef.current) setCandidateInfo(prefill);
   }, [ownRequests, profileRow]);
+
+  const hasNoPhone = !candidateInfo.phoneCountryCode && !candidateInfo.phoneNumber;
+  useEffect(() => {
+    if (hasNoPhone) setCandidateInfo((current) => withPhoneFallback(current, candidateInfoPrefill));
+  }, [candidateInfoPrefill, hasNoPhone]);
 
   // Only needed to label a workaway proposal, which stays a per-voyage opt-in.
   useEffect(() => {

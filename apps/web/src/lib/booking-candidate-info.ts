@@ -1,4 +1,10 @@
+import { isValidPhone, normalizePhoneCountryCode, normalizePhoneNumber, type ProfilePhone } from "@/lib/phone";
+
 export type CandidateInfo = {
+  /** "+39". Also saved to the profile (profile_contact_details) by a trigger on the request. */
+  phoneCountryCode: string;
+  /** Digits only, without the prefix. */
+  phoneNumber: string;
   sailingExperienceLevel: number;
   sailingKinds: string[];
   navigationRange: string;
@@ -66,6 +72,8 @@ export const findCandidateLanguageOption = (value?: string | null) => {
 };
 
 export const emptyCandidateInfo: CandidateInfo = {
+  phoneCountryCode: "",
+  phoneNumber: "",
   sailingExperienceLevel: 2,
   sailingKinds: [],
   navigationRange: "",
@@ -99,6 +107,8 @@ export const languageLevelOptions: Array<{ value: CandidateLanguageLevel; it: st
 ];
 
 const reusableCandidateKeys: Array<keyof CandidateInfo> = [
+  "phoneCountryCode",
+  "phoneNumber",
   "sailingExperienceLevel",
   "sailingKinds",
   "navigationRange",
@@ -128,6 +138,8 @@ export function normalizeCandidateInfo(value?: Partial<CandidateInfo> | null): C
     languages: Array.isArray(value?.languages) ? value.languages : [],
     languageLevels: value?.languageLevels && typeof value.languageLevels === "object" ? value.languageLevels : {},
     foodRegimes: Array.isArray(value?.foodRegimes) ? value.foodRegimes : [],
+    phoneCountryCode: typeof value?.phoneCountryCode === "string" ? value.phoneCountryCode : "",
+    phoneNumber: typeof value?.phoneNumber === "string" ? value.phoneNumber : "",
   };
 }
 
@@ -135,11 +147,23 @@ export function buildCandidateInfoPrefill(params: {
   latestCandidateInfo?: Partial<CandidateInfo> | null;
   preferredLanguage?: string | null;
   secondaryLanguage?: string | null;
+  /** The phone saved on the profile wins over the one in the last application: it may have been
+   * corrected from the profile page since. */
+  profilePhone?: ProfilePhone | null;
 }) {
   const latest = normalizeCandidateInfo(params.latestCandidateInfo);
   const next = { ...emptyCandidateInfo };
   for (const key of reusableCandidateKeys) {
     (next[key] as CandidateInfo[typeof key]) = latest[key] as CandidateInfo[typeof key];
+  }
+  if (isValidPhone(params.profilePhone?.phone_country_code, params.profilePhone?.phone_number)) {
+    next.phoneCountryCode = normalizePhoneCountryCode(params.profilePhone?.phone_country_code);
+    next.phoneNumber = normalizePhoneNumber(params.profilePhone?.phone_number);
+  }
+  // Nothing known yet: an Italian-speaking profile most likely has an Italian number. The prefix
+  // stays visible and editable, so this saves a tap without deciding anything silently.
+  if (!next.phoneCountryCode && normalizeLanguageCode(params.preferredLanguage) === "it") {
+    next.phoneCountryCode = "+39";
   }
 
   const profileLanguages = [params.preferredLanguage, params.secondaryLanguage]
@@ -167,6 +191,15 @@ export function getCandidateInfoValidationError(
   const candidateInfo = normalizeCandidateInfo(value);
   const hasKnownLanguage = candidateInfo.languages.length > 0;
   const hasOtherLanguage = candidateInfo.otherLanguages.trim().length > 0;
+
+  if (!normalizePhoneCountryCode(candidateInfo.phoneCountryCode)) {
+    return lang === "it" ? "Scegli il prefisso internazionale del tuo telefono." : "Choose your phone's international prefix.";
+  }
+  if (!isValidPhone(candidateInfo.phoneCountryCode, candidateInfo.phoneNumber)) {
+    return lang === "it"
+      ? "Inserisci un numero di telefono valido (solo cifre, senza prefisso)."
+      : "Enter a valid phone number (digits only, without the prefix).";
+  }
 
   if (!candidateInfo.ageRange) {
     return lang === "it" ? "Seleziona la tua fascia d'eta." : "Select your age range.";
@@ -196,4 +229,16 @@ export function getCandidateInfoValidationError(
   }
 
   return null;
+}
+
+/**
+ * Drafts saved before the phone field existed (and drafts restored after the prefill arrived)
+ * come back without a phone: take it from the prefill. Only when both halves are empty, so a
+ * traveller who is retyping their number is never overwritten. Returns the same object when
+ * nothing changes, so it is safe inside a state updater.
+ */
+export function withPhoneFallback(current: CandidateInfo, prefill: CandidateInfo): CandidateInfo {
+  if (current.phoneCountryCode || current.phoneNumber) return current;
+  if (!prefill.phoneCountryCode && !prefill.phoneNumber) return current;
+  return { ...current, phoneCountryCode: prefill.phoneCountryCode, phoneNumber: prefill.phoneNumber };
 }

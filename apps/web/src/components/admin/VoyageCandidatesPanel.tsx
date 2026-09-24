@@ -31,6 +31,7 @@ import {
   isWithinFullPaymentWindow,
 } from "@/lib/booking-deposit";
 import { getWorkawayFileSignedUrl } from "@/lib/booking-proposal-apply";
+import { formatPhone } from "@/lib/phone";
 import { updateBookingStatusWithRefund } from "@/lib/booking-refunds";
 import ProfileAvatar from "@/components/ProfileAvatar";
 import { getBookingPartyOverview, type BookingPartyMember } from "@/lib/booking-participants";
@@ -562,6 +563,7 @@ const VoyageCandidatesPanel = ({ voyageId, onCountChange }: VoyageCandidatesPane
     const experience = experienceOptions.find((option) => option.value === candidateInfo.sailingExperienceLevel)?.it || "Non indicato";
     return (
       <div className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        <InfoLine label="Telefono" value={formatPhone(candidateInfo.phoneCountryCode, candidateInfo.phoneNumber) || "Non indicato"} />
         <InfoLine label="Esperienza" value={experience} />
         <InfoLine label="Tipo navigazione" value={`${valueList(candidateInfo.sailingKinds)} · ${candidateInfo.navigationRange || "range non indicato"}`} />
         <InfoLine label="Eta" value={candidateInfo.ageRange || "Non indicata"} />

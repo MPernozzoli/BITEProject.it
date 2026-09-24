@@ -143,7 +143,7 @@ const COPY = {
       if (eventType === 'payment_failed') return `${prefix}il pagamento per ${voyageName} non e andato a buon fine. Apri la tua area booking per riprovare o scegliere un altro metodo.`
       if (eventType === 'payment_expired') return `${prefix}la finestra di pagamento per ${voyageName} e scaduta. Apri la tua area booking per verificare lo stato della prenotazione.`
       if (eventType === 'payment_reminder') return `${prefix}non abbiamo ancora ricevuto il bonifico per ${voyageName}. Qui sotto trovi di nuovo tutti i dati: ricorda di indicare la causale esatta, senza di quella non riusciamo ad abbinare il pagamento. Se non arriva entro la scadenza, la richiesta viene annullata in automatico.`
-      if (eventType === 'balance_reminder') return `${prefix}il saldo per ${voyageName}${balanceDueAtLabel ? ` scade il ${balanceDueAtLabel}` : ' sta per scadere'}. Se non arriva entro quella data, la prenotazione decade e l'acconto gia versato non e rimborsabile.`
+      if (eventType === 'balance_reminder') return `${prefix}il saldo per ${voyageName}${balanceDueAtLabel ? ` scade il ${balanceDueAtLabel}` : ' sta per scadere'}. Qui sotto trovi l'importo che manca: il pulsante ti porta alla pagina del viaggio, dove puoi pagarlo con carta o bonifico. Se non arriva entro quella data, la prenotazione decade e quanto gia versato non e rimborsabile.`
       if (eventType === 'balance_deadline_missed' && scope === 'participant') return `${prefix}la scadenza per versare il saldo di ${voyageName} e passata: la tua partecipazione e stata annullata e l'acconto versato non e rimborsabile.`
       if (eventType === 'balance_deadline_missed' && scope === 'participant_removed') return `${prefix}un partecipante che avevi invitato su ${voyageName} non ha versato il proprio saldo entro la scadenza: la sua partecipazione e stata annullata. Il resto della prenotazione resta confermato.`
       if (eventType === 'balance_deadline_missed') return `${prefix}la scadenza per versare il saldo di ${voyageName} e passata: la prenotazione e stata annullata e l'acconto versato non e rimborsabile.`
@@ -174,6 +174,7 @@ const COPY = {
     refundPendingBody:
       'Ti spetta il rimborso della quota di partecipazione, ma non siamo riusciti ad accreditarlo automaticamente. Premi il pulsante qui sotto, accedi al tuo account e inserisci le coordinate bancarie: l’importo e gia impostato e il bonifico parte subito dopo la conferma.',
     refundCta: 'Comunica IBAN per il rimborso',
+    payBalanceCta: 'Paga il saldo',
     legsTitle: 'Tratte',
     oldLegsTitle: 'Prima',
     proposedLegsTitle: 'Proposta',
@@ -289,7 +290,7 @@ const COPY = {
       if (eventType === 'payment_failed') return `${prefix}the payment for ${voyageName} did not go through. Open your booking area to retry or choose another method.`
       if (eventType === 'payment_expired') return `${prefix}the payment window for ${voyageName} expired. Open your booking area to check the booking status.`
       if (eventType === 'payment_reminder') return `${prefix}we still have not received your bank transfer for ${voyageName}. All the details are below again: remember to use the exact reference, without it we cannot match the payment. If it does not arrive before the deadline, the request is cancelled automatically.`
-      if (eventType === 'balance_reminder') return `${prefix}the balance for ${voyageName}${balanceDueAtLabel ? ` is due on ${balanceDueAtLabel}` : ' is due soon'}. If it does not arrive by then, the booking lapses and the deposit already paid is not refundable.`
+      if (eventType === 'balance_reminder') return `${prefix}the balance for ${voyageName}${balanceDueAtLabel ? ` is due on ${balanceDueAtLabel}` : ' is due soon'}. The amount still missing is below: the button takes you to the voyage page, where you can pay it by card or bank transfer. If it does not arrive by then, the booking lapses and what you have already paid is not refundable.`
       if (eventType === 'balance_deadline_missed' && scope === 'participant') return `${prefix}the deadline to pay the balance for ${voyageName} has passed: your participation was cancelled and the deposit you paid is not refundable.`
       if (eventType === 'balance_deadline_missed' && scope === 'participant_removed') return `${prefix}a participant you invited on ${voyageName} did not pay their balance by the deadline: their participation was cancelled. The rest of the booking stays confirmed.`
       if (eventType === 'balance_deadline_missed') return `${prefix}the deadline to pay the balance for ${voyageName} has passed: the booking was cancelled and the deposit you paid is not refundable.`
@@ -320,6 +321,7 @@ const COPY = {
     refundPendingBody:
       'You are entitled to a refund of your participation fee, but we could not send it automatically. Tap the button below, sign in to your account and enter your bank details: the amount is already set and the transfer starts as soon as you confirm.',
     refundCta: 'Send your IBAN for the refund',
+    payBalanceCta: 'Pay the balance',
     legsTitle: 'Legs',
     oldLegsTitle: 'Before',
     proposedLegsTitle: 'Proposed',
@@ -506,7 +508,9 @@ const VoyageBookingNotificationEmail = ({
   // primary button leads straight to the self-service refund form.
   const primaryCta = refundPending
     ? { label: copy.refundCta, url: `${PUBLIC_SITE_URL}/bookings/rimborso` }
-    : { label: copy.cta, url: resolvedBookingUrl }
+    : normalizedEventType === 'balance_reminder'
+      ? { label: copy.payBalanceCta, url: resolvedBookingUrl }
+      : { label: copy.cta, url: resolvedBookingUrl }
 
   return (
     <EditorialEmailShell

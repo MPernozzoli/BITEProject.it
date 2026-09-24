@@ -37,7 +37,8 @@ tags: [frontend, lib, hooks, logica]
 
 ### Booking & pagamenti → [[13 - Booking Voyage]] / [[11 - Pagamenti Bunq]]
 - `booking-deposit.ts` — **calcolo contributo server-authoritative**
-- `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`)
+- `booking-candidate-info.ts` — tipo, opzioni, livelli lingua, normalizzazione e prefill riusabile per le risposte candidato (`candidate_info`) (incluso il telefono, con prefill dal profilo e `withPhoneFallback` per le bozze)
+- `phone.ts` — prefissi internazionali (in evidenza i paesi più frequenti, poi alfabetico per lingua), normalizzazione/validazione allineate ai CHECK di `profile_contact_details`, `formatPhone`, `pickProfilePhone` per l'embed PostgREST
 - `booking-application-draft.ts` — serializzazione bozza candidatura: `localStorage` per utenti anonimi e sincronizzazione Supabase su `voyage_booking_drafts` per utenti loggati.
 - `booking-leg-selection.ts` — modello tap-to-select delle tratte, condiviso da matrice `/bookings` e lista `/voyages/:slug`: primo tap apre il range sull'imbarco, secondo lo chiude sullo sbarco prendendo quelle in mezzo, terzo ricomincia; ruolo di ogni tratta nel range e frase di istruzioni per lo stato corrente.
 - `voyage-join-flow.ts` — copy e stato del bottone sticky del flusso "Partecipa" in pagina: i tre passi con il loro stato (`done`/`active`/`todo`), l'etichetta e la riga di aiuto della CTA per ogni combinazione di stage/selezione, e il riassunto "Bari → Messina" della selezione. Funzioni pure, così pannello, barra e test dicono la stessa cosa → [[13 - Booking Voyage]]
