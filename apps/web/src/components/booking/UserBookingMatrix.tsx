@@ -40,6 +40,11 @@ interface UserBookingMatrixProps {
   /** True when ownRequest is admin_approved but the traveller's own contribution is still
    * unpaid — the seat is reserved but not yet fully confirmed (see settle_voyage_booking_payment). */
   ownRequestAwaitingPayment?: boolean;
+  /** The traveller's OTHER active requests on this same voyage — legitimate when their legs
+   * don't overlap ownRequest's (the server only blocks a second request on the SAME legs, see
+   * BK001). Shown as extra read-only bars on the same "You" row so they stay visible instead of
+   * silently disappearing behind the single most-recent request; each opens its own details. */
+  otherOwnRequests?: { request: BookingRequest; legIds: string[] }[];
   /** Anonymized occupancy of other bookers, already scoped to this voyage. */
   companions: VoyageBookingOccupancyRow[];
   /** Draft, not-yet-submitted leg selection — controlled by the parent (existing submit flow). */
@@ -107,6 +112,7 @@ const UserBookingMatrix = ({
   ownRequest,
   ownRequestLegIds,
   ownRequestAwaitingPayment = false,
+  otherOwnRequests = [],
   companions,
   draftLegIds,
   onDraftLegIdsChange,
@@ -128,6 +134,28 @@ const UserBookingMatrix = ({
   const ownRange = useMemo(() => legIdsToRange(ownRequestLegIds, legIndexById), [ownRequestLegIds, legIndexById]);
   const draftRange = useMemo(() => legIdsToRange(draftLegIds, legIndexById), [draftLegIds, legIndexById]);
   const hasOwnRequest = Boolean(ownRequest && ownRange);
+
+  // Other bookings of the same traveller on this voyage: their legs never overlap ownRange
+  // (the server blocks a second request on the same legs), so they render as extra static bars
+  // on the same "You" row rather than a bar each — one row per person, not one per booking.
+  const otherOwnRanges = useMemo(
+    () =>
+      otherOwnRequests
+        .map(({ request: otherRequest, legIds }) => ({ request: otherRequest, range: legIdsToRange(legIds, legIndexById) }))
+        .filter((item): item is { request: BookingRequest; range: { start: number; end: number } } => Boolean(item.range)),
+    [otherOwnRequests, legIndexById]
+  );
+  const otherOwnLegIds = useMemo(() => new Set(otherOwnRequests.flatMap((item) => item.legIds)), [otherOwnRequests]);
+  /** Which own request a given leg belongs to — the primary one by default, another own
+   * booking when the leg falls in its range instead. Used to open the right details modal. */
+  const ownRequestByLegId = useMemo(() => {
+    const map = new Map<string, BookingRequest>();
+    if (ownRequest) for (const legId of ownRequestLegIds) map.set(legId, ownRequest);
+    for (const { request: otherRequest, legIds } of otherOwnRequests) {
+      for (const legId of legIds) map.set(legId, otherRequest);
+    }
+    return map;
+  }, [ownRequest, ownRequestLegIds, otherOwnRequests]);
   const ownPlanChangePending = ownRequest?.plan_change_status && ownRequest.plan_change_status !== "none";
   const ownPlanChangeKind = readMetadataString(ownRequest?.plan_change_metadata, "change_kind");
   /** A delay notice keeps the same legs (only the dates move), so there is nothing to preview. */
@@ -233,7 +261,8 @@ const UserBookingMatrix = ({
   const handleLegTap = (legId: string) => {
     if (saving) return;
     if (hasOwnRequest) {
-      if (ownRequest) onOpenOwnRequest(ownRequest);
+      const target = ownRequestByLegId.get(legId) || ownRequest;
+      if (target) onOpenOwnRequest(target);
       return;
     }
     const next = selectLegOnTap(orderedLegIds, { legIds: draftLegIds, anchorLegId }, legId);
@@ -377,7 +406,8 @@ const UserBookingMatrix = ({
         {legMeta.map(({ leg, label, dateRange, durationLabel, remaining, isFull, isTight }, index) => {
           const role = getLegSelectionRole(index, highlightRange);
           const roleLabel = getLegSelectionRoleLabel(role, it ? "it" : "en");
-          const selected = role !== "none";
+          const isOtherOwnLeg = otherOwnLegIds.has(leg.id);
+          const selected = role !== "none" || isOtherOwnLeg;
           const companionCount = companions.filter((row) => row.leg_ids.includes(leg.id)).length;
           return (
             <li key={leg.id}>
@@ -419,6 +449,11 @@ const UserBookingMatrix = ({
                     {roleLabel && (
                       <span className="rounded-full bg-emerald-600/15 px-2 py-0.5 font-semibold text-emerald-800 dark:text-emerald-300 dark:text-emerald-200">
                         {roleLabel}
+                      </span>
+                    )}
+                    {isOtherOwnLeg && (
+                      <span className="rounded-full border border-dashed border-emerald-400/70 dark:border-emerald-500/30 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-300">
+                        {it ? "Un'altra tua prenotazione" : "Another booking of yours"}
                       </span>
                     )}
                     {typeof remaining === "number" && (
@@ -513,6 +548,13 @@ const UserBookingMatrix = ({
             <div className="grid border-b border-border/50" style={{ gridTemplateColumns }}>
               <div className="sticky left-0 z-10 min-w-0 bg-background/95 p-2 text-[13px] font-semibold">
                 {it ? "Tu" : "You"}
+                {otherOwnRanges.length > 0 && (
+                  <span className="mt-0.5 block text-[10.5px] font-normal leading-snug text-muted-foreground">
+                    {it
+                      ? `${otherOwnRanges.length + 1} prenotazioni`
+                      : `${otherOwnRanges.length + 1} bookings`}
+                  </span>
+                )}
               </div>
               <div
                 className="relative border-l border-border/50"
@@ -602,6 +644,30 @@ const UserBookingMatrix = ({
                     <span className="truncate">{it ? "Proposta" : "Proposed"}</span>
                   </div>
                 )}
+
+                {/* Other bookings of yours on this voyage: read-only (no drag), each opens its
+                    own details on click. Their legs never overlap ownDisplayRange. */}
+                {otherOwnRanges.map(({ request: otherRequest, range }) => (
+                  <div
+                    key={otherRequest.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenOwnRequest(otherRequest)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") onOpenOwnRequest(otherRequest);
+                    }}
+                    title={it ? "Un'altra tua prenotazione su questo viaggio" : "Another booking of yours on this voyage"}
+                    className="absolute flex cursor-pointer items-center justify-center rounded-full border border-dashed border-emerald-400/70 dark:border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-500/10 px-3 text-[12px] font-semibold text-emerald-800 dark:text-emerald-300 hover:brightness-95"
+                    style={{
+                      top: 8,
+                      height: ROW_HEIGHT - 16,
+                      left: range.start * COLUMN_WIDTH + 4,
+                      width: (range.end - range.start + 1) * COLUMN_WIDTH - 8,
+                    }}
+                  >
+                    <span className="truncate">{getBookingStatusLabel(otherRequest.status, lang)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}

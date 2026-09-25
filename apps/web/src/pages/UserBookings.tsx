@@ -613,8 +613,9 @@ const UserBookings = () => {
     };
   }, [selectedVoyageSettings?.workaway_enabled]);
 
-  // The matrix edits a single active request per voyage; with several active requests
-  // (allowed server-side when their legs don't overlap) it targets the most recent one.
+  // The drag/resize/proposal controls edit a single active request per voyage — the most
+  // recent one; with several active requests (allowed server-side when their legs don't
+  // overlap, see BK001) the others still show up as read-only bars, see otherOwnRequestsForSelectedVoyage.
   const ownRequestForSelectedVoyage = useMemo(
     () =>
       requests
@@ -653,6 +654,24 @@ const UserBookings = () => {
             .map((link) => link.bookable_leg_id)
         : [],
     [requestLegs, ownRequestForSelectedVoyage]
+  );
+  /** Any OTHER active requests the traveller holds on this same voyage (legitimate when their
+   * legs don't overlap ownRequestForSelectedVoyage's, see BK001) — shown on the matrix as extra
+   * read-only bars on the same "You" row instead of being invisible behind the most recent one. */
+  const otherOwnRequestsForSelectedVoyage = useMemo(
+    () =>
+      requests
+        .filter(
+          (request) =>
+            request.voyage_id === selectedVoyageId &&
+            request.id !== ownRequestForSelectedVoyage?.id &&
+            !["cancelled", "rejected", "expired"].includes(request.status)
+        )
+        .map((request) => ({
+          request,
+          legIds: requestLegs.filter((link) => link.booking_request_id === request.id).map((link) => link.bookable_leg_id),
+        })),
+    [requests, requestLegs, selectedVoyageId, ownRequestForSelectedVoyage]
   );
   /** Outstanding balance (EUR) still owed on the own request for the selected voyage, and the
    * date by which it must arrive (15 days before the earliest departure among its own legs — the
@@ -2005,6 +2024,7 @@ const UserBookings = () => {
                         ownRequest={ownRequestForSelectedVoyage}
                         ownRequestLegIds={ownRequestLegIdsForSelectedVoyage}
                         ownRequestAwaitingPayment={ownRequestAwaitingPayment}
+                        otherOwnRequests={otherOwnRequestsForSelectedVoyage}
                         companions={companionRows}
                         draftLegIds={selectedLegIds}
                         onDraftLegIdsChange={setSelectedLegIds}

@@ -1280,15 +1280,39 @@ const CandidateReviewGantt = ({
   onSetProposalRange,
 }: CandidateReviewGanttProps) => {
   const sortedLegs = [...legs].sort((a, b) => a.sort_order - b.sort_order);
-  const rows = [
-    request,
-    ...requests
-      .filter((item) => item.id !== request.id && blockingStatuses.has(item.status))
-      .sort((a, b) => {
-        const aName = profilesById[a.profile_id]?.name || profilesById[a.profile_id]?.email || "";
-        const bName = profilesById[b.profile_id]?.name || profilesById[b.profile_id]?.email || "";
-        return aName.localeCompare(bName);
-      }),
+  const legIndexById = new Map(sortedLegs.map((leg, idx) => [leg.id, idx]));
+
+  // One row per traveller, not per booking: someone with two separate, non-overlapping
+  // bookings on this voyage (e.g. an earlier stretch plus a later one) shares a single row
+  // instead of appearing twice under their own name. The candidate being reviewed always
+  // keeps its own dedicated, interactive row regardless of what else that profile holds.
+  type ReviewLane = { key: string; profileId: string; requests: BookingRequest[]; isCandidate: boolean; usedIndices: Set<number> };
+  const otherLanes: ReviewLane[] = [];
+  const lanesByProfile = new Map<string, ReviewLane[]>();
+  for (const item of requests) {
+    if (item.id === request.id || !blockingStatuses.has(item.status)) continue;
+    const indices = (requestLegIds[item.id] || [])
+      .map((legId) => legIndexById.get(legId))
+      .filter((idx): idx is number => idx != null);
+    const profileLanes = lanesByProfile.get(item.profile_id) || [];
+    let lane = profileLanes.find((candidateLane) => indices.every((idx) => !candidateLane.usedIndices.has(idx)));
+    if (!lane) {
+      lane = { key: item.id, profileId: item.profile_id, requests: [], isCandidate: false, usedIndices: new Set() };
+      profileLanes.push(lane);
+      lanesByProfile.set(item.profile_id, profileLanes);
+      otherLanes.push(lane);
+    }
+    lane.requests.push(item);
+    for (const idx of indices) lane.usedIndices.add(idx);
+  }
+  otherLanes.sort((a, b) => {
+    const aName = profilesById[a.profileId]?.name || profilesById[a.profileId]?.email || "";
+    const bName = profilesById[b.profileId]?.name || profilesById[b.profileId]?.email || "";
+    return aName.localeCompare(bName);
+  });
+  const rows: ReviewLane[] = [
+    { key: request.id, profileId: request.profile_id, requests: [request], isCandidate: true, usedIndices: new Set() },
+    ...otherLanes,
   ];
 
   if (sortedLegs.length === 0) {
@@ -1351,21 +1375,26 @@ const CandidateReviewGantt = ({
           })}
         </div>
         {rows.map((row) => {
-          const isCandidate = row.id === request.id;
-          const profile = profilesById[row.profile_id];
-          const activeLegs = new Set(requestLegIds[row.id] || []);
+          const isCandidate = row.isCandidate;
+          const profile = profilesById[row.profileId];
+          const activeLegs = new Set(row.requests.flatMap((item) => requestLegIds[item.id] || []));
           // While composing, show the live selection; once a proposal has been sent (and the
           // composition cleared on reload) keep the pending proposal visible so the admin still
           // sees the outstanding change instead of just the current legs.
           const persistedProposedLegIds =
-            isCandidate && row.plan_change_status === "pending_user_approval"
-              ? readProposedLegIds(row.plan_change_metadata)
+            isCandidate && request.plan_change_status === "pending_user_approval"
+              ? readProposedLegIds(request.plan_change_metadata)
               : [];
           const proposedLegs = new Set(
             selectedProposalLegIds.length > 0 ? selectedProposalLegIds : persistedProposedLegIds,
           );
+          const statusLabel = isCandidate
+            ? "Candidatura"
+            : row.requests.length > 1
+              ? `${row.requests.length} prenotazioni`
+              : getBookingStatusLabel(row.requests[0].status, "it");
           return (
-            <div key={row.id} className="grid min-h-[54px] border-b border-border/50 last:border-b-0" style={columnStyle}>
+            <div key={row.key} className="grid min-h-[54px] border-b border-border/50 last:border-b-0" style={columnStyle}>
               <div className="flex min-w-0 items-center gap-2 border-r border-border/70 px-3 py-2">
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full border border-border bg-accent/10">
                   <ProfileAvatar
@@ -1376,7 +1405,7 @@ const CandidateReviewGantt = ({
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold text-foreground">{profile?.name || profile?.email || "Candidato"}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{isCandidate ? "Candidatura" : getBookingStatusLabel(row.status, "it")}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{statusLabel}</p>
                 </div>
               </div>
               {sortedLegs.map((leg) => {

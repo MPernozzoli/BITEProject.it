@@ -68,6 +68,7 @@ import {
   formatDepositEur,
   isWithinFullPaymentWindow,
   perPersonDepositEur,
+  totalDepositEur,
 } from "@/lib/booking-deposit";
 import {
   type DangerReasonKey,
@@ -216,6 +217,9 @@ const AdminVoyageBookings = () => {
   const [requestLegs, setRequestLegs] = useState<BookingRequestLeg[]>([]);
   const [participants, setParticipants] = useState<BookingParticipant[]>([]);
   const [paidDepositRequestIds, setPaidDepositRequestIds] = useState<Set<string>>(() => new Set());
+  /** Every paid deposit row for the selected voyage's requests (deposit + balance payments alike),
+   * kept separately from paidDepositRequestIds so the overview can sum actual amounts collected. */
+  const [paidDeposits, setPaidDeposits] = useState<{ booking_request_id: string; amount_cents: number }[]>([]);
   const [profiles, setProfiles] = useState<BookingProfile[]>([]);
   const [availableProfiles, setAvailableProfiles] = useState<BookingProfile[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(emptySettingsForm);
@@ -392,7 +396,7 @@ const AdminVoyageBookings = () => {
       requestIds.length
         ? typedSupabase
             .from("voyage_booking_deposits")
-            .select("booking_request_id,status")
+            .select("booking_request_id,status,amount_cents")
             .in("booking_request_id", requestIds)
             .eq("status", "paid")
         : Promise.resolve({ data: [], error: null }),
@@ -424,13 +428,9 @@ const AdminVoyageBookings = () => {
     setRequestLegs(((requestLegsRes.data as BookingRequestLeg[] | null) || []));
     setProfiles(((profilesRes.data as BookingProfile[] | null) || []));
     setParticipants(((participantsRes.data as BookingParticipant[] | null) || []));
-    setPaidDepositRequestIds(
-      new Set(
-        (((depositsRes.data as { booking_request_id: string }[] | null) || []).map(
-          (deposit) => deposit.booking_request_id
-        ))
-      )
-    );
+    const loadedPaidDeposits = ((depositsRes.data as { booking_request_id: string; amount_cents: number }[] | null) || []);
+    setPaidDepositRequestIds(new Set(loadedPaidDeposits.map((deposit) => deposit.booking_request_id)));
+    setPaidDeposits(loadedPaidDeposits);
     setBookingSettings(loadedSettings);
     setBookingTasks(((tasksRes.data as BookingTask[] | null) || []));
 
@@ -559,6 +559,43 @@ const AdminVoyageBookings = () => {
       ).length,
     [requests]
   );
+
+  /** Overview specchietto: how many real travellers (not the crew's own auto-booked seats) this
+   * voyage currently carries, and where its contribution money stands — what's actually landed
+   * vs. the full amount every active, non-comped party still owes. Uses contribution_due_cents
+   * when a negotiation stamped it (authoritative), otherwise the same mileage formula every other
+   * contribution figure on this page uses. */
+  const voyageOverviewStats = useMemo(() => {
+    const activeRequests = requests.filter(
+      (request) => !request.is_crew && !negativeBookingStatuses.has(request.status)
+    );
+    const totalPassengers = activeRequests.reduce((total, request) => total + request.party_size, 0);
+
+    const crewRequestIds = new Set(requests.filter((request) => request.is_crew).map((request) => request.id));
+    const totalCollectedEur = paidDeposits.reduce(
+      (total, deposit) =>
+        crewRequestIds.has(deposit.booking_request_id) ? total : total + deposit.amount_cents / 100,
+      0
+    );
+
+    const totalDueEur = activeRequests.reduce((total, request) => {
+      if (request.is_comped) return total;
+      if (request.contribution_due_cents != null) return total + request.contribution_due_cents / 100;
+      const legIds = new Set(
+        requestLegs.filter((link) => link.booking_request_id === request.id).map((link) => link.bookable_leg_id)
+      );
+      const bookedLegs = legs.filter((leg) => legIds.has(leg.id));
+      if (!bookedLegs.length) return total;
+      return (
+        total +
+        totalDepositEur(bookedLegs, request.party_size, {
+          contributionPerNmEur: selectedVoyage?.booking_contribution_per_nm_eur,
+        })
+      );
+    }, 0);
+
+    return { totalPassengers, totalCollectedEur, totalDueEur };
+  }, [requests, requestLegs, legs, paidDeposits, selectedVoyage?.booking_contribution_per_nm_eur]);
 
   /** Bookings whose only participant is still an unaccepted email invite — nobody has agreed
    * to anything yet, so leg changes on these should apply directly instead of going through the
@@ -1643,6 +1680,36 @@ const AdminVoyageBookings = () => {
               <p className="mt-2 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">{item.label}</p>
             </div>
           ))}
+        </section>
+        )}
+
+        {activeTab === "overview" && (
+        <section className="glass-panel rounded-[26px] p-5">
+          <div className="grid gap-5 sm:grid-cols-[auto_1fr] sm:items-center">
+            <div className="flex items-center gap-3">
+              <Users size={20} className="shrink-0 text-accent" />
+              <div>
+                <p className="editorial-heading text-3xl">{voyageOverviewStats.totalPassengers}</p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                  Passeggeri (esclusi admin/equipaggio)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 sm:border-l sm:border-border/70 sm:pl-5">
+              <Coins size={20} className="shrink-0 text-accent" />
+              <div>
+                <p className="editorial-heading text-2xl">
+                  {formatDepositEur(voyageOverviewStats.totalCollectedEur)}
+                  <span className="ml-1 text-base font-normal text-muted-foreground">
+                    / {formatDepositEur(voyageOverviewStats.totalDueEur)}
+                  </span>
+                </p>
+                <p className="mt-1 text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                  Contributi incassati / totale da avere
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
         )}
 

@@ -1,6 +1,8 @@
+import { Link } from "react-router-dom";
 import { Anchor, Check, ChevronDown, Mountain, Navigation, Ship } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getLocalizedVoyageName, type Voyage } from "@/lib/voyage-utils";
+import { buildVoyagePath, getLocalizedVoyageName, type Voyage } from "@/lib/voyage-utils";
+import { withLang } from "@/lib/seo";
 import type { Language } from "@/lib/language";
 
 const getVoyageTypeIconClassName = (voyageType: Voyage["type"]) =>
@@ -193,9 +195,12 @@ const JournalMapStatsBar = ({
           {stats.activeVoyage && (
             <>
               <span className="w-px h-3 bg-border" />
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-accent">
+              <Link
+                to={withLang(lang, buildVoyagePath(stats.activeVoyage, lang))}
+                className="inline-flex items-center gap-1.5 text-[10px] font-sans tracking-wider uppercase text-accent hover:underline underline-offset-2 transition-colors duration-interaction ease-out-expo"
+              >
                 <Anchor size={10} /> {getLocalizedVoyageName(stats.activeVoyage, lang)}
-              </span>
+              </Link>
             </>
           )}
         </div>
