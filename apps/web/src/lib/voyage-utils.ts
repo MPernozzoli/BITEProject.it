@@ -5,6 +5,10 @@ import { getActualStopHours } from "@/lib/voyage-schedule";
 const BITE_MAPS_USER_AGENT = "BITE-Logbook/1.0";
 const OSRM_BASE_URL = "https://router.project-osrm.org";
 const BROUTER_BASE_URL = "https://brouter.de";
+// Rigenerare la geometria di una rotta lunga (centinaia di tratte) non deve poter girare per ore:
+// poca concorrenza per non farsi limitare da Overpass, e un budget oltre il quale si passa a corde rette.
+const WATERWAY_BUILD_CONCURRENCY = 3;
+const WATERWAY_BUILD_BUDGET_MS = 120_000;
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -2064,29 +2068,65 @@ export async function buildVoyageGeometry(
     // per tratta e infine si ricade sul mare. Ogni altra tratta è mare aperto: corda retta che
     // aggira la costa solo se la attraversa (buildSeaSegmentGeometry).
     const riverFlags = getRiverLegFlags(waypoints);
-    const waterwayRoute: [number, number][] = [];
-    let index = 1;
-    while (index < waypoints.length) {
+
+    // Prima si pianifica cosa calcolare (un tratto fiume intero, oppure una singola tratta), poi si
+    // eseguono i pezzi con poca concorrenza e un budget di tempo complessivo: una rotta con centinaia
+    // di tratte in mare, fatte una dopo l'altra con Overpass lento, non finirebbe più. Passato il
+    // budget le tratte rimaste sono corde rette (nessun controllo costa), mai un'attesa infinita.
+    type Piece = { from: number; to: number; river: boolean };
+    const pieces: Piece[] = [];
+    for (let index = 1; index < waypoints.length; ) {
       if (riverFlags[index]) {
         let runEnd = index;
         while (runEnd + 1 < waypoints.length && riverFlags[runEnd + 1]) runEnd += 1;
-        const run = await fetchBRouterWaterwayRoute(waypoints.slice(index - 1, runEnd + 1));
-        if (run?.coordinates && run.coordinates.length >= 2) {
-          appendRouteCoordinates(waterwayRoute, run.coordinates);
-          index = runEnd + 1;
+        pieces.push({ from: index - 1, to: runEnd, river: true });
+        index = runEnd + 1;
+      } else {
+        pieces.push({ from: index - 1, to: index, river: false });
+        index += 1;
+      }
+    }
+
+    const deadline = Date.now() + WATERWAY_BUILD_BUDGET_MS;
+    const seaLeg = async (start: LatLng, end: LatLng): Promise<[number, number][]> =>
+      Date.now() > deadline
+        ? [[start.lng, start.lat], [end.lng, end.lat]]
+        : buildSeaSegmentGeometry(start, end);
+
+    const results: [number, number][][] = new Array(pieces.length);
+    let nextPiece = 0;
+    const worker = async () => {
+      while (nextPiece < pieces.length) {
+        const pieceIndex = nextPiece;
+        nextPiece += 1;
+        const piece = pieces[pieceIndex];
+        if (piece.river) {
+          const run = await fetchBRouterWaterwayRoute(waypoints.slice(piece.from, piece.to + 1));
+          if (run?.coordinates && run.coordinates.length >= 2) {
+            results[pieceIndex] = run.coordinates;
+            continue;
+          }
+          // Tratto fiume non instradabile in blocco: si riprova tratta per tratta, poi mare.
+          const legs: [number, number][] = [];
+          for (let leg = piece.from + 1; leg <= piece.to; leg += 1) {
+            const segment = await fetchBRouterWaterwaySegment(waypoints[leg - 1], waypoints[leg]);
+            appendRouteCoordinates(
+              legs,
+              segment?.coordinates && segment.coordinates.length >= 2
+                ? segment.coordinates
+                : await seaLeg(waypoints[leg - 1], waypoints[leg])
+            );
+          }
+          results[pieceIndex] = legs;
           continue;
         }
+        results[pieceIndex] = await seaLeg(waypoints[piece.from], waypoints[piece.to]);
       }
-      const start = waypoints[index - 1];
-      const end = waypoints[index];
-      const segment = riverFlags[index] ? await fetchBRouterWaterwaySegment(start, end) : null;
-      const segmentCoordinates =
-        segment?.coordinates && segment.coordinates.length >= 2
-          ? segment.coordinates
-          : await buildSeaSegmentGeometry(start, end);
-      appendRouteCoordinates(waterwayRoute, segmentCoordinates);
-      index += 1;
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(WATERWAY_BUILD_CONCURRENCY, pieces.length) }, worker));
+
+    const waterwayRoute: [number, number][] = [];
+    results.forEach((coordinates) => appendRouteCoordinates(waterwayRoute, coordinates));
 
     return waterwayRoute.length >= 2 ? waterwayRoute : getStraightVoyageGeometry(waypoints);
   }
