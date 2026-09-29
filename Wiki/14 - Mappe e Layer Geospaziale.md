@@ -42,6 +42,15 @@ Quando una rotta viene condivisa (WhatsApp, Facebook, Telegram, Slack) l'antepri
 
 > La mappa renderizzata resta un **derivato**: le coordinate raw restano la fonte, coerentemente con i principi qui sopra.
 
+## Geometria della rotta acqua: mare e fiume per singola tratta
+
+`buildVoyageGeometry` (`lib/voyage-utils.ts`) calcola `voyages.cached_geometry`. Per i viaggi `water` l'instradamento è **manuale, a due livelli**:
+
+- **Viaggio** (`voyages.waterway_autoroute`, default `false`): senza, la rotta è la linea retta fra i waypoint. Con, ogni tratta viene instradata singolarmente.
+- **Tratto fiume** (`voyage_waypoints.river_endpoint`, default `false`; migrazioni `20260929090227` + `20260929090925` che l'ha rinominata da `river_leg`): si marcano **solo i due estremi**. I waypoint marcati si accoppiano nell'ordine della rotta (1º+2º, 3º+4º…) e tutte le tratte fra i due, waypoint intermedi compresi, sono fiume/canale (BRouter, profilo `river`, una richiesta per tratto; se fallisce si riprova tratta per tratta e infine si ricade sul mare). Un waypoint appartiene a un solo tratto, quindi fiume–mare–fiume restano due tratti distinti (servono due coppie di estremi). Un marcatore dispari finale è "non accoppiato" e conta come mare. Helper: `getRiverMarkerRoles` / `getRiverLegFlags`. Tutte le tratte fuori dai tratti fiume sono **mare aperto**: corda retta che aggira la costa (Overpass `natural=coastline`) solo se la attraversa davvero.
+
+Nell'admin il toggle 🌊 compare per ogni waypoint della lista solo se il viaggio è `water` con instradamento attivo: i waypoint dentro un tratto mostrano l'icona attenuata e non sono marcabili, smarcare un estremo rimuove l'intero tratto. Dopo le modifiche si salva e si rigenera da "Rigenera geometria". Prima esisteva la classificazione automatica di ogni tratta (BRouter sull'intera catena + patch dei tratti "beeline"): è stata tolta perché sbagliava, e i viaggi già salvati mantengono la geometria in cache finché non vengono rigenerati.
+
 ## Esposizione machine-readable → [[15 - Semantic Layer (AI Agents)]]
 La function `public-geo` serve GeoJSON:
 - `public-geo?kind=routes` → feature `LineString` (rotte)

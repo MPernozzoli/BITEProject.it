@@ -1,9 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
-import { GripVertical, Eye, EyeOff, Trash2, Edit, ChevronUp, ChevronDown, LocateFixed } from "lucide-react";
+import { GripVertical, Eye, EyeOff, Trash2, Edit, ChevronUp, ChevronDown, LocateFixed, Waves } from "lucide-react";
 import {
   buildWaypointDefaultName,
   formatWaypointCoordinateLabel,
   getLocalizedWaypointName,
+  getRiverLegFlags,
+  getRiverMarkerRoles,
   getWaypointEffectiveType,
   type VoyageWaypoint,
 } from "@/lib/voyage-utils";
@@ -23,6 +25,9 @@ export interface WaypointListPanelProps {
   savingWaypointNameId: string | null;
   onReorder: (voyageId: string, fromIndex: number, toIndex: number) => void;
   onToggleVisibility: (waypoint: VoyageWaypoint, index: number, total: number) => void;
+  /** Mostra il toggle fiume/canale per tratta (viaggio acqua con instradamento attivo). */
+  riverToggleEnabled: boolean;
+  onToggleRiver: (waypoint: VoyageWaypoint) => void;
   onBeginNameEdit: (waypoint: VoyageWaypoint, index: number) => void;
   onCancelNameEdit: () => void;
   onSubmitNameEdit: (waypoint: VoyageWaypoint, index: number) => void;
@@ -47,6 +52,8 @@ const WaypointListPanel = ({
   savingWaypointNameId,
   onReorder,
   onToggleVisibility,
+  riverToggleEnabled,
+  onToggleRiver,
   onBeginNameEdit,
   onCancelNameEdit,
   onSubmitNameEdit,
@@ -56,6 +63,8 @@ const WaypointListPanel = ({
   onFocusOnMap,
   maxHeightClass,
 }: WaypointListPanelProps) => {
+  const riverRoles = getRiverMarkerRoles(selectedWaypoints);
+  const riverLegFlags = getRiverLegFlags(selectedWaypoints);
   return (
     <>
       <div className={`space-y-0 overflow-y-auto ${maxHeightClass}`}>
@@ -132,6 +141,41 @@ const WaypointListPanel = ({
                   <Eye size={10} className="text-accent shrink-0" />
                 )}
               </button>
+              {riverToggleEnabled && (() => {
+                const role = riverRoles[index];
+                const insideStretch = !role && riverLegFlags[index];
+                if (insideStretch) {
+                  return (
+                    <span
+                      className="p-0.5 text-accent/50"
+                      title="Waypoint dentro un tratto fiume/canale: ne fa parte automaticamente."
+                    >
+                      <Waves size={10} className="shrink-0" />
+                    </span>
+                  );
+                }
+                const title =
+                  role === "start"
+                    ? "Inizio di un tratto fiume/canale. Click per rimuovere l'intero tratto."
+                    : role === "end"
+                      ? "Fine di un tratto fiume/canale. Click per rimuovere l'intero tratto."
+                      : role === "unpaired"
+                        ? "Estremo fiume senza coppia: marca l'altro estremo (o click per smarcare). Finché manca conta come mare."
+                        : "Mare aperto. Click per marcare qui l'inizio o la fine di un tratto fiume/canale.";
+                return (
+                  <button
+                    type="button"
+                    onClick={() => onToggleRiver(waypoint)}
+                    className={`p-0.5 hover:text-foreground ${
+                      role === "unpaired" ? "text-amber-600" : role ? "text-accent" : "text-muted-foreground/40"
+                    }`}
+                    title={title}
+                    aria-pressed={Boolean(role)}
+                  >
+                    <Waves size={10} className="shrink-0" />
+                  </button>
+                );
+              })()}
               {/* Tappe previste/effettive: sola lettura qui, si segnano dal widget "viaggio in corso". */}
               {waypoint.actual_status === "skipped" && (
                 <span

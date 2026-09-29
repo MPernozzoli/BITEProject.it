@@ -37,6 +37,8 @@ import {
   geocodePlaces,
   haversineNM,
   getLocalizedWaypointName,
+  getRiverLegFlags,
+  getRiverMarkerRoles,
   getWaypointEffectiveType,
   getWaypointSequenceHeading,
   getStraightVoyageGeometry,
@@ -78,7 +80,7 @@ export interface VoyageFormState {
   description_it: string;
   description_en: string;
   type: "water" | "land";
-  /** BRouter river profile; only applies when type is water; stored separately from voyage_type. */
+  /** Instradamento per tratta (mare che aggira la costa + fiume dove marcato); solo type water. */
   waterway_autoroute: boolean;
   /** Effective status, derived by the database. Read-only here; the form never writes it. */
   status: "planned" | "active" | "completed";
@@ -127,7 +129,7 @@ const emptyVoyageForm: VoyageFormState = {
   description_it: "",
   description_en: "",
   type: "water",
-  waterway_autoroute: true,
+  waterway_autoroute: false,
   status: "planned",
   status_override: "",
   is_published: true,
@@ -526,6 +528,7 @@ const WAYPOINT_PERSIST_PATCH_KEYS = [
   "stop_departure_time",
   "waypoint_type",
   "visibility_mode",
+  "river_endpoint",
   "sort_order",
   "media",
 ] as const;
@@ -563,7 +566,7 @@ const isMissingWaypointMetadataColumnError = (
 ) => {
   if (!error) return false;
   const text = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
-  return ["waypoint_type", "date_start", "date_end", "visibility_mode", "name_it", "name_en", "description_it", "description_en", "event_date", "event_time", "media", "planned_stop_duration_minutes", "stop_mode", "stop_hours", "stop_nights", "stop_departure_time"].some((column) => text.includes(column)) &&
+  return ["waypoint_type", "river_endpoint", "date_start", "date_end", "visibility_mode", "name_it", "name_en", "description_it", "description_en", "event_date", "event_time", "media", "planned_stop_duration_minutes", "stop_mode", "stop_hours", "stop_nights", "stop_departure_time"].some((column) => text.includes(column)) &&
     (text.includes("column") || text.includes("schema cache"));
 };
 
@@ -596,6 +599,7 @@ const normalizeWaypoint = (waypoint: WaypointRecord): VoyageWaypoint => ({
   name_en: (waypoint?.name_en ?? waypoint?.name ?? "") as string,
   waypoint_type: waypoint?.waypoint_type === "narrative" ? "narrative" : "technical",
   visibility_mode: waypoint?.visibility_mode === "manual" ? "manual" : "auto",
+  river_endpoint: Boolean(waypoint?.river_endpoint),
   description_it: (waypoint?.description_it ?? null) as string | null,
   description_en: (waypoint?.description_en ?? null) as string | null,
   event_date: (waypoint?.event_date ?? null) as string | null,
@@ -781,6 +785,7 @@ const serializeWaypointDrafts = (waypoints: VoyageWaypoint[]) => JSON.stringify(
     stop_departure_time: waypoint.stop_departure_time,
     waypoint_type: waypoint.waypoint_type,
     visibility_mode: waypoint.visibility_mode,
+    river_endpoint: waypoint.river_endpoint,
     media: waypoint.media,
   }))
 );
@@ -1388,6 +1393,7 @@ const AdminVoyageManager = ({
       sort_order: sortOrder,
       waypoint_type: waypoint.waypoint_type,
       visibility_mode: waypoint.visibility_mode,
+      river_endpoint: Boolean(waypoint.river_endpoint),
       description_it: waypoint.description_it,
       description_en: waypoint.description_en,
       event_date: waypoint.event_date,
@@ -1473,6 +1479,7 @@ const AdminVoyageManager = ({
         created_at: new Date().toISOString(),
         waypoint_type: "technical",
         visibility_mode: "auto",
+        river_endpoint: false,
         description_it: null,
         description_en: null,
         event_date: null,
@@ -1733,6 +1740,50 @@ const AdminVoyageManager = ({
       { successMessage: nextType === "narrative" ? "Waypoint is now public" : "Waypoint is now technical" }
     );
   }, [updateWaypoint]);
+
+  const toggleWaypointRiverEndpoint = useCallback(async (waypoint: VoyageWaypoint) => {
+    const ordered = sortWaypoints(waypointsRef.current[waypoint.voyage_id] || []);
+    const position = ordered.findIndex((item) => item.id === waypoint.id);
+    if (position < 0) return;
+    const roles = getRiverMarkerRoles(ordered);
+    const role = roles[position];
+
+    // Un waypoint intermedio di un tratto fiume ne fa già parte: marcarlo romperebbe l'accoppiamento.
+    if (!role && getRiverLegFlags(ordered)[position]) {
+      toast.error("Questo waypoint è già dentro un tratto fiume: ogni waypoint appartiene a un solo tratto.");
+      return;
+    }
+
+    // Smarcare un estremo di un tratto completo smarca anche l'altro: altrimenti l'estremo rimasto
+    // si riaccoppierebbe col marcatore successivo, fondendo tratti che dovevano restare separati.
+    const clearIds = new Set([waypoint.id]);
+    if (role === "start" || role === "end") {
+      const partnerPosition = role === "start"
+        ? roles.findIndex((item, index) => index > position && item === "end")
+        : roles.map((item, index) => (index < position && item === "start" ? index : -1)).filter((index) => index >= 0).pop() ?? -1;
+      if (partnerPosition >= 0) clearIds.add(ordered[partnerPosition].id);
+    }
+
+    const turningOn = !waypoint.river_endpoint;
+    const nextWaypoints = commitWaypoints(
+      waypoint.voyage_id,
+      (waypointsRef.current[waypoint.voyage_id] || []).map((item) =>
+        item.id === waypoint.id
+          ? normalizeWaypoint({ ...item, river_endpoint: turningOn })
+          : !turningOn && clearIds.has(item.id)
+            ? normalizeWaypoint({ ...item, river_endpoint: false })
+            : item
+      )
+    );
+    primeGeometryOverrideAfterWaypointEdit(waypoint.voyage_id, nextWaypoints);
+    toast.success(
+      turningOn
+        ? "Estremo fiume marcato: segna l'altro estremo del tratto, poi salva e rigenera la geometria"
+        : clearIds.size > 1
+          ? "Tratto fiume rimosso: salva e rigenera la geometria"
+          : "Marcatore fiume rimosso"
+    );
+  }, [commitWaypoints, primeGeometryOverrideAfterWaypointEdit]);
 
   const selectedVoyage = voyages.find((voyage) => voyage.id === selectedVoyageId);
   const selectedWaypoints = useMemo(
@@ -2947,6 +2998,8 @@ const AdminVoyageManager = ({
     onReorder: (voyageId: string, fromIndex: number, toIndex: number) => void reorderWaypoint(voyageId, fromIndex, toIndex),
     onToggleVisibility: (waypoint: VoyageWaypoint, index: number, total: number) =>
       void toggleWaypointVisibility(waypoint, index, total),
+    riverToggleEnabled: Boolean(selectedVoyage?.type === "water" && selectedVoyage.waterway_autoroute),
+    onToggleRiver: (waypoint: VoyageWaypoint) => void toggleWaypointRiverEndpoint(waypoint),
     onBeginNameEdit: beginWaypointNameEdit,
     onCancelNameEdit: cancelWaypointNameEdit,
     onSubmitNameEdit: (waypoint: VoyageWaypoint, index: number) => void submitWaypointNameEdit(waypoint, index),
@@ -3249,8 +3302,8 @@ const AdminVoyageManager = ({
                         ) : null}
                         <p className="mt-1 text-[11px] font-sans text-muted-foreground">
                           {selectedVoyageHasCachedGeometry
-                            ? "Rigenera se hai spostato i waypoint: ogni tratta viene riclassificata (fiume/canale o mare aperto che aggira la terra)."
-                            : "Genera e salva la rotta per la mappa pubblica: fiumi/canali seguono il grafo OSM, il mare aggira la terra quando serve (stesso tipo voyage: acqua)."}
+                            ? "Rigenera se hai spostato i waypoint o cambiato i tratti fiume: i tratti fra due waypoint marcati 🌊 seguono il fiume/canale, il resto è mare aperto che aggira la costa."
+                            : "Genera e salva la rotta per la mappa pubblica: i tratti fra due waypoint marcati 🌊 seguono il grafo OSM dei fiumi/canali, il resto è mare aperto che aggira la costa quando serve."}
                         </p>
                         {isRouteDraftDirty ? (
                           <p className="mt-2 text-[11px] font-sans text-amber-700 dark:text-amber-300">
@@ -3282,7 +3335,7 @@ const AdminVoyageManager = ({
                         : voyageDates || (selectedVoyage?.type === "land"
                           ? "I waypoint fuori carreggiata vengono instradati verso il tratto stradale più vicino."
                           : selectedVoyage?.waterway_autoroute
-                            ? "Instradamento auto: per un fiume/canale avvicina i waypoint al suo asse, altrimenti la tratta resta mare aperto."
+                            ? "Instradamento attivo: marca con 🌊 inizio e fine di un tratto fiume/canale (i waypoint in mezzo ne fanno parte, avvicinali al suo asse); il resto resta mare aperto."
                             : "The first and last waypoints stay public by default. Intermediate ones are technical.")}
                     </p>
                     {isRouteDraftDirty && (

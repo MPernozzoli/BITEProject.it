@@ -6119,6 +6119,7 @@ export type Database = {
           nearby_airports: Json
           planned_stop_duration_minutes: number
           poi: Json
+          river_endpoint: boolean
           sort_order: number
           stop_departure_time: string | null
           stop_hours: number | null
@@ -6152,6 +6153,7 @@ export type Database = {
           nearby_airports?: Json
           planned_stop_duration_minutes?: number
           poi?: Json
+          river_endpoint?: boolean
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null
@@ -6185,6 +6187,7 @@ export type Database = {
           nearby_airports?: Json
           planned_stop_duration_minutes?: number
           poi?: Json
+          river_endpoint?: boolean
           sort_order?: number
           stop_departure_time?: string | null
           stop_hours?: number | null

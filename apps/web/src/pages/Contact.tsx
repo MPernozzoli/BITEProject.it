@@ -1,7 +1,7 @@
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Instagram, Ship, Youtube } from "lucide-react";
+import { ArrowRight, CheckCircle2, Instagram, Ship, Youtube } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +85,15 @@ const Contact = () => {
   const [errors, setErrors] = useState<ContactFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
+  const [sentCopy, setSentCopy] = useState<{ email: string; subject: string; message: string } | null>(null);
+  const sentPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (sentCopy) {
+      sentPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      sentPanelRef.current?.focus();
+    }
+  }, [sentCopy]);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,11 +251,17 @@ const Contact = () => {
         throw error;
       }
 
+      setSentCopy({
+        email: formValues.email.trim(),
+        subject: formValues.subject.trim(),
+        message: formValues.message.trim(),
+      });
       setFormValues(EMPTY_FORM);
       setErrors({});
       setSubmitState("success");
       toast({
-        title: t("contact.status.success"),
+        title: t("contact.sent.title"),
+        description: t("contact.sent.body"),
       });
     } catch (error) {
       console.error("Failed to submit contact form", error);
@@ -342,6 +357,45 @@ const Contact = () => {
       <section className="px-6 md:px-12 pb-0">
         <div className="page-section-wide">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            {sentCopy ? (
+              <div
+                ref={sentPanelRef}
+                tabIndex={-1}
+                role="status"
+                aria-live="polite"
+                className="glass-panel rounded-[34px] border-emerald-200/60 dark:border-emerald-500/30 bg-gradient-to-br from-emerald-50/80 dark:from-emerald-500/10 to-glass/55 p-6 md:p-8 space-y-6 focus:outline-none"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 size={30} />
+                  </span>
+                  <h2 className="editorial-heading text-3xl md:text-4xl text-emerald-950 dark:text-emerald-300">
+                    {t("contact.sent.title")}
+                  </h2>
+                </div>
+                <p className="editorial-body text-emerald-900/80 dark:text-emerald-300">{t("contact.sent.body")}</p>
+                <p className="text-sm font-sans text-emerald-900/70 dark:text-emerald-300">
+                  {t("contact.sent.confirmation", { email: sentCopy.email })}
+                </p>
+                <div className="glass-panel-soft rounded-[26px] p-5 space-y-2">
+                  <p className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground">
+                    {t("contact.sent.copyLabel")}
+                  </p>
+                  <p className="font-sans font-medium text-foreground break-words">{sentCopy.subject}</p>
+                  <p className="font-sans text-muted-foreground whitespace-pre-wrap break-words">{sentCopy.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSentCopy(null);
+                    setSubmitState("idle");
+                  }}
+                  className="glass-button px-8 py-3.5 text-sm font-sans font-medium tracking-wide"
+                >
+                  {t("contact.sent.another")}
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleSubmit} className="glass-panel rounded-[34px] p-6 md:p-8 space-y-6">
               <div className="hidden" aria-hidden="true">
                 <label htmlFor="contact-company">Company</label>
@@ -440,14 +494,14 @@ const Contact = () => {
                 >
                   {isSubmitting ? t("contact.sending") : t("contact.send")}
                 </button>
-                {submitState === "success" ? (
-                  <p className="text-sm text-accent">{t("contact.status.success")}</p>
-                ) : null}
                 {submitState === "error" ? (
-                  <p className="text-sm text-destructive">{t("contact.status.error")}</p>
+                  <p role="alert" className="rounded-[18px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {t("contact.status.error")}
+                  </p>
                 ) : null}
               </div>
             </form>
+            )}
 
             <div className="glass-panel rounded-[34px] p-6 md:p-8 space-y-8">
               <div className="glass-panel-soft rounded-[26px] p-5">

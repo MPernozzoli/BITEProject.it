@@ -226,13 +226,13 @@ const VoyageFormPanel = ({
               {([
                 {
                   value: true,
-                  label: "Auto",
-                  hint: "Ogni tratta viene classificata da sola: fiume/canale (BRouter) dove c’è una via navigabile, mare aperto altrove — in mare la linea resta retta ma aggira la terra se la incrocia.",
+                  label: "Per tratta",
+                  hint: "Instradamento attivato a mano: i tratti fiume/canale — delimitati da due waypoint marcati 🌊, inizio e fine, con i waypoint in mezzo inclusi — seguono la via navigabile (BRouter), tutto il resto è mare aperto — linea retta che aggira la costa se la incrocia.",
                 },
                 {
                   value: false,
                   label: "Manuale · linea retta",
-                  hint: "Nessun instradamento: la rotta collega i waypoint in linea retta, anche se attraversa terra. Usalo solo se l’instradamento automatico sbaglia su questo viaggio.",
+                  hint: "Nessun instradamento: la rotta collega i waypoint in linea retta, anche se attraversa terra. È il default.",
                 },
               ] as const).map((option) => {
                 const active = voyageForm.waterway_autoroute === option.value;
@@ -258,8 +258,8 @@ const VoyageFormPanel = ({
             </div>
             <span className="mt-2 block text-[11px] font-sans text-muted-foreground">
               {voyageForm.waterway_autoroute
-                ? "Automatico: fiumi/canali seguono il grafo OSM, il mare aperto resta in linea retta salvo aggirare la terra quando serve. Sul sito resta un voyage acqua come gli altri."
-                : "Override manuale: nessun instradamento, la rotta collega i waypoint in linea retta anche sopra la terra."}
+                ? "Per tratta: solo i tratti fra due waypoint marcati 🌊 seguono il grafo OSM di fiumi/canali; il mare aperto resta in linea retta salvo aggirare la costa quando serve. Sul sito resta un voyage acqua come gli altri."
+                : "Nessun instradamento: la rotta collega i waypoint in linea retta anche sopra la terra."}
             </span>
           </div>
         )}

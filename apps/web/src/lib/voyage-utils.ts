@@ -130,8 +130,8 @@ export async function fetchBRouterWaterwaySegment(
 }
 
 // --- Open-sea land avoidance -------------------------------------------------
-// A tratta counts as "river/canal" when BRouter finds a navigable waterway between its two
-// waypoints (see buildVoyageGeometry). Everywhere else it's open sea: by default that's a
+// A tratta counts as "river/canal" only inside a stretch the admin delimited with two flagged
+// waypoints (`river_endpoint`, see getRiverLegFlags and buildVoyageGeometry). Everywhere else it's open sea: by default that's a
 // straight chord, but a straight chord can cross a headland or an island. This section fetches
 // the nearby coastline from Overpass and, only when the chord actually crosses land, bulges it
 // out just enough to clear the obstacle — a cheap heuristic, not a real navigation graph.
@@ -1980,60 +1980,62 @@ export function getFleetBoatPositions(
   return positions;
 }
 
+export type RiverMarkerRole = "start" | "end" | "unpaired";
+
+/**
+ * Waypoints flagged `river_endpoint` pair up in route order (1st+2nd, 3rd+4th, ...): each pair is
+ * the start and end of one river stretch. Pairing by order means a waypoint can never be both the
+ * end of one stretch and the start of the next, so river-sea-river never merges into one river.
+ * A trailing odd marker has no partner yet and is reported as "unpaired" (it routes as sea).
+ */
+export function getRiverMarkerRoles(
+  waypoints: { river_endpoint?: boolean | null }[]
+): (RiverMarkerRole | null)[] {
+  const roles: (RiverMarkerRole | null)[] = waypoints.map(() => null);
+  let openIndex = -1;
+  waypoints.forEach((waypoint, index) => {
+    if (!waypoint.river_endpoint) return;
+    if (openIndex < 0) {
+      openIndex = index;
+      roles[index] = "unpaired";
+    } else {
+      roles[openIndex] = "start";
+      roles[index] = "end";
+      openIndex = -1;
+    }
+  });
+  return roles;
+}
+
+/** flags[i] is true when the leg from waypoint i-1 to waypoint i lies inside a river stretch. */
+export function getRiverLegFlags(waypoints: { river_endpoint?: boolean | null }[]): boolean[] {
+  const roles = getRiverMarkerRoles(waypoints);
+  let inside = false;
+  return roles.map((role) => {
+    if (role === "start") {
+      inside = true;
+      return false;
+    }
+    if (role === "end") {
+      inside = false;
+      return true;
+    }
+    return inside;
+  });
+}
+
 export type VoyageGeometryBuildOptions = {
   /**
-   * When true with type water, auto-route each tratta: BRouter's river profile where a
-   * navigable waterway connects the two waypoints, otherwise a straight sea chord bulged around
-   * any land it would cross. When false/omitted, water geometry is a straight chord throughout
-   * (manual override for when the heuristic gets a voyage wrong).
+   * When true with type water, legs are routed individually: legs inside a river stretch (see
+   * getRiverLegFlags) follow BRouter's river profile (navigable waterways); every other leg is open
+   * sea, i.e. a straight chord bulged around any land it would cross. When false/omitted, water
+   * geometry is a straight chord throughout.
    */
   waterwayAutoroute?: boolean;
 };
 
-/**
- * The single-request full-chain reply from fetchBRouterWaterwayRoute can silently beeline
- * straight across land for a via pair its river-profile graph can't actually connect, instead
- * of failing the whole request the way a single out-of-graph point normally would. Each gap
- * shows up as zero routing detail between two consecutive input waypoints (BRouter gives every
- * real river/coastal stretch several intermediate points); those gaps are patched with the same
- * open-sea land-avoidance the per-segment fallback below already uses — it only ever changes a
- * straight chord that actually crosses land, so a genuinely fine open-sea gap is left untouched.
- */
-async function patchWaterwayBeelines(
-  coordinates: [number, number][],
-  waypoints: { lat: number; lng: number }[]
-): Promise<[number, number][]> {
-  const patched: [number, number][] = [];
-  let searchFrom = 0;
-
-  for (let index = 1; index < waypoints.length; index += 1) {
-    const startWaypoint = waypoints[index - 1];
-    const endWaypoint = waypoints[index];
-    const startIndex = getNearestGeometryCoordinateIndex(
-      coordinates,
-      [startWaypoint.lng, startWaypoint.lat],
-      searchFrom
-    );
-    const endIndex = getNearestGeometryCoordinateIndex(
-      coordinates,
-      [endWaypoint.lng, endWaypoint.lat],
-      startIndex
-    );
-
-    const straightDistanceKm = haversineNM(startWaypoint.lat, startWaypoint.lng, endWaypoint.lat, endWaypoint.lng) * 1.852;
-    if (endIndex - startIndex <= 1 && straightDistanceKm >= MIN_LAND_CHECK_KM) {
-      appendRouteCoordinates(patched, await buildSeaSegmentGeometry(startWaypoint, endWaypoint));
-    } else {
-      appendRouteCoordinates(patched, coordinates.slice(startIndex, endIndex + 1));
-    }
-    searchFrom = endIndex;
-  }
-
-  return patched.length >= 2 ? patched : coordinates;
-}
-
 export async function buildVoyageGeometry(
-  waypoints: { lat: number; lng: number }[],
+  waypoints: { lat: number; lng: number; river_endpoint?: boolean | null }[],
   type: VoyageType,
   options?: VoyageGeometryBuildOptions
 ): Promise<[number, number][]> {
@@ -2057,26 +2059,33 @@ export async function buildVoyageGeometry(
   const fullRoute: [number, number][] = [];
 
   if (useWaterwayRouting) {
-    // Primo tentativo: un'unica richiesta per tutta la catena (geometria migliore, 1 sola chiamata).
-    const fullChain = await fetchBRouterWaterwayRoute(waypoints);
-    if (fullChain?.coordinates?.length && fullChain.coordinates.length >= 2) {
-      return await patchWaterwayBeelines(fullChain.coordinates, waypoints);
-    }
-
-    // Se la catena intera non è instradabile (un via è fuori dal grafo idrico, BRouter risponde 400
-    // "no track found"), classifichiamo tratta per tratta: dove BRouter trova una via navigabile è
-    // fiume/canale, altrove è mare aperto — e in quel caso la corda retta viene aggirata solo se
-    // attraversa davvero della terra (vedi buildSeaSegmentGeometry).
+    // Le tratte dentro un tratto fiume (fra due waypoint marcati) usano BRouter, una richiesta per
+    // tratto con i waypoint intermedi come via; se non trova una via navigabile si riprova tratta
+    // per tratta e infine si ricade sul mare. Ogni altra tratta è mare aperto: corda retta che
+    // aggira la costa solo se la attraversa (buildSeaSegmentGeometry).
+    const riverFlags = getRiverLegFlags(waypoints);
     const waterwayRoute: [number, number][] = [];
-    for (let index = 1; index < waypoints.length; index += 1) {
+    let index = 1;
+    while (index < waypoints.length) {
+      if (riverFlags[index]) {
+        let runEnd = index;
+        while (runEnd + 1 < waypoints.length && riverFlags[runEnd + 1]) runEnd += 1;
+        const run = await fetchBRouterWaterwayRoute(waypoints.slice(index - 1, runEnd + 1));
+        if (run?.coordinates && run.coordinates.length >= 2) {
+          appendRouteCoordinates(waterwayRoute, run.coordinates);
+          index = runEnd + 1;
+          continue;
+        }
+      }
       const start = waypoints[index - 1];
       const end = waypoints[index];
-      const segment = await fetchBRouterWaterwaySegment(start, end);
+      const segment = riverFlags[index] ? await fetchBRouterWaterwaySegment(start, end) : null;
       const segmentCoordinates =
         segment?.coordinates && segment.coordinates.length >= 2
           ? segment.coordinates
           : await buildSeaSegmentGeometry(start, end);
       appendRouteCoordinates(waterwayRoute, segmentCoordinates);
+      index += 1;
     }
 
     return waterwayRoute.length >= 2 ? waterwayRoute : getStraightVoyageGeometry(waypoints);
@@ -2136,10 +2145,9 @@ export interface Voyage {
   description_it: string | null;
   type: VoyageType;
   /**
-   * When true (the default for water voyages) each tratta is auto-routed: river/canal via
-   * BRouter or open sea bulged around land, whichever fits. False forces a plain straight chord
-   * throughout — the manual override for when the heuristic misreads a voyage. Always shown as a
-   * normal water voyage either way.
+   * Opt-in (manual): when true each tratta is routed — river/canal via BRouter for legs flagged
+   * inside a river stretch (two waypoints flagged `river_endpoint`), open sea bulged around land elsewhere.
+   * False is a plain straight chord throughout. Always shown as a normal water voyage.
    */
   waterway_autoroute?: boolean;
   booking_enabled?: boolean;
@@ -2176,6 +2184,8 @@ export interface VoyageWaypoint {
   sort_order: number;
   waypoint_type: "technical" | "narrative";
   visibility_mode: "auto" | "manual";
+  /** Estremo (inizio o fine) di un tratto fiume; i marcati si accoppiano in ordine (solo con waterway_autoroute). */
+  river_endpoint?: boolean;
   description_en: string | null;
   description_it: string | null;
   event_date: string | null;

@@ -19,7 +19,7 @@ Tutte le pagine sono **lazy-loaded** in `apps/web/src/App.tsx`.
 | `Voyages.tsx` | `voyages` | Elenco viaggi |
 | `VoyagePage.tsx` | `voyages/:voyageRef` | Dettaglio viaggio + mappa rotta; supporta `?leg=<bookable_leg_id>` per evidenziare una tratta referenziata dalla community. La sezione `#partecipa` ospita l'intero flusso di candidatura in pagina (`VoyageJoinPanel`), senza rimandare a `/bookings` → [[13 - Booking Voyage]] |
 | `Collaborations.tsx` | `collaborations` | Collaborazioni aperte: ricerca in mare, creator/editoriale e brand |
-| `Contact.tsx` | `contact` | Form contatti → [[09 - Edge Functions\|contact-form-submit]] |
+| `Contact.tsx` | `contact` | Form contatti → [[09 - Edge Functions\|contact-form-submit]]. Dopo l'invio il form è sostituito da un pannello di conferma verde (titolo, indirizzo della mail di conferma, copia di oggetto e messaggio, «Invia un altro messaggio»); la edge function manda già al visitatore una mail di conferma IT/EN con copia del messaggio |
 | `Links.tsx` | `links` | Pagina linktree |
 | `NotFound.tsx` | `*` | 404 |
 

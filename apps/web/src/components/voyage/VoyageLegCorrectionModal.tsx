@@ -26,7 +26,7 @@ async function recomputeVoyageGeometryAfterCorrection(voyageId: string): Promise
 
   const { data: waypoints, error: waypointsError } = await supabase
     .from("voyage_waypoints")
-    .select("lat, lng, actual_status")
+    .select("lat, lng, river_endpoint, actual_status")
     .eq("voyage_id", voyageId)
     .order("sort_order", { ascending: true });
   if (waypointsError || !waypoints) return false;
