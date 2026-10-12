@@ -136,6 +136,9 @@ export interface BookingRequest {
   /** Set when an admin confirmed the seat without the full deposit: everything outstanding is
    * collected in one balance payment by the regular balance deadline. */
   deposit_deferred_at?: string | null;
+  /** Admin-granted extension: the balance deadline becomes the later of the computed one and this
+   * (mirrors voyage_booking_balance_deadline in the DB). */
+  balance_deadline_extended_until?: string | null;
 }
 
 export interface BookingRequestLeg {

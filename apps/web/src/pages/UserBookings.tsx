@@ -692,8 +692,14 @@ const UserBookings = () => {
       .filter((value): value is string => Boolean(value))
       .map((value) => new Date(value).getTime())
       .filter((time) => Number.isFinite(time));
+    // An admin-granted extension (balance_deadline_extended_until) pushes the deadline later.
+    const extendedUntil = ownRequestForSelectedVoyage.balance_deadline_extended_until
+      ? new Date(ownRequestForSelectedVoyage.balance_deadline_extended_until).getTime()
+      : Number.NEGATIVE_INFINITY;
     const deadline = departureTimes.length
-      ? new Date(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000).toISOString()
+      ? new Date(
+          Math.max(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000, extendedUntil)
+        ).toISOString()
       : null;
     return { outstandingEur, deadline };
   }, [ownRequestForSelectedVoyage, ownRequestLegIdsForSelectedVoyage, legsById, selectedContributionOptions, paidEurByRequestId]);
@@ -880,8 +886,14 @@ const UserBookings = () => {
       .filter((value): value is string => Boolean(value))
       .map((value) => new Date(value).getTime())
       .filter((time) => Number.isFinite(time));
+    // An admin-granted extension (balance_deadline_extended_until) pushes the deadline later.
+    const extendedUntil = detailsRequest.balance_deadline_extended_until
+      ? new Date(detailsRequest.balance_deadline_extended_until).getTime()
+      : Number.NEGATIVE_INFINITY;
     const deadline = departureTimes.length
-      ? new Date(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000).toISOString()
+      ? new Date(
+          Math.max(Math.min(...departureTimes) - BALANCE_DUE_DAYS_BEFORE_DEPARTURE * 24 * 60 * 60 * 1000, extendedUntil)
+        ).toISOString()
       : null;
     return { outstandingEur, deadline };
   })();

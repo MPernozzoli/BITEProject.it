@@ -5585,6 +5585,7 @@ export type Database = {
       voyage_booking_requests: {
         Row: {
           admin_notes: string | null
+          balance_deadline_extended_until: string | null
           balance_forfeited_at: string | null
           balance_reminder_sent_at: string | null
           cancelled_at: string | null
@@ -5616,6 +5617,7 @@ export type Database = {
         }
         Insert: {
           admin_notes?: string | null
+          balance_deadline_extended_until?: string | null
           balance_forfeited_at?: string | null
           balance_reminder_sent_at?: string | null
           cancelled_at?: string | null
@@ -5647,6 +5649,7 @@ export type Database = {
         }
         Update: {
           admin_notes?: string | null
+          balance_deadline_extended_until?: string | null
           balance_forfeited_at?: string | null
           balance_reminder_sent_at?: string | null
           cancelled_at?: string | null
