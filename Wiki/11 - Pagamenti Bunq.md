@@ -96,6 +96,8 @@ Interventi completati durante la correzione:
 ## Sicurezza webhook
 `apps/web/api/payments/bunq/webhook.ts` richiede `BUNQ_WEBHOOK_SECRET`: la callback Bunq deve includerlo nella URL (`?secret=...`) oppure in header `x-bite-bunq-webhook-secret` se passa da un proxy. Senza secret valido l'endpoint risponde `401` e non tenta alcuna riconciliazione. Il polling `/status` resta il controllo live autorevole verso Bunq.
 
+Fino al 13 ottobre 2026 in produzione mancavano sia `BUNQ_WEBHOOK_SECRET` sia `CRON_SECRET`, e il webhook non era mai stato registrato presso Bunq: nessun pagamento veniva riconosciuto dal webhook e il cron `reconcile-expired-bunq-links` rispondeva sempre `401`. In pratica i pagamenti con link Bunq passavano solo dalla conferma manuale, i bonifici solo se il pagatore teneva aperta la finestra del bonifico. Ora entrambi i secret sono impostati in Production, e il webhook si registra (e si verifica) con `/api/payments/bunq/webhook-setup` → [[10 - API Vercel]]. Il polling `/status` resta comunque il fallback.
+
 ## Endpoint → [[10 - API Vercel]]
 `request` · `status` · `webhook` · `bank-transfer` · `bookings/status` per transizioni terminali con rimborso
 

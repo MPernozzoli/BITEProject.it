@@ -17,13 +17,10 @@ import {
   isFullPaymentSettlement,
   paymentPhaseFromReference,
 } from "../../../src/server/bunq/deposit-resolver.js";
-import { getBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
+import { extractReference, getBunqPaymentRequest } from "../../../src/server/bunq/payment-requests.js";
 import { firstQueryParam, readJsonBody, sendJson, type NodeRequest, type NodeResponse } from "../../../src/server/http.js";
 import { timingSafeEqual } from "node:crypto";
 
-// CON/DEP/BON are the pre-deposit/balance-split prefixes, kept so in-flight references issued
-// before this shipped still reconcile. ACC (acconto) / SAL (saldo) are current.
-const REFERENCE_PATTERN = /\b(?:CON|DEP|BON|ACC|SAL)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
 
 type BunqNotificationPayload = {
   NotificationUrl?: {
@@ -207,12 +204,6 @@ async function enqueuePaymentReceivedForDeposit(
     reference: row.reference,
     phase: fullPayment ? "balance" : inferredPhase,
   });
-}
-
-function extractReference(description: string | undefined): string | null {
-  if (!description) return null;
-  const match = description.match(REFERENCE_PATTERN);
-  return match ? match[0].toUpperCase() : null;
 }
 
 export default async function handler(req: NodeRequest, res: NodeResponse): Promise<void> {

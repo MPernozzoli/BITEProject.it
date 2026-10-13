@@ -141,6 +141,17 @@ type BunqPaymentListResponse = Array<
   | { Pagination: BunqPagination }
 >;
 
+// CON/DEP/BON are the pre-deposit/balance-split prefixes, kept so in-flight references issued
+// before this shipped still reconcile. ACC (acconto) / SAL (saldo) are current.
+const REFERENCE_PATTERN = /\b(?:CON|DEP|BON|ACC|SAL)-[A-Z0-9]{8}-[A-Z0-9]{4}\b/i;
+
+/** Pulls our payment reference out of a Bunq payment description, if it carries one. */
+export function extractReference(description: string | undefined): string | null {
+  if (!description) return null;
+  const match = description.match(REFERENCE_PATTERN);
+  return match ? match[0].toUpperCase() : null;
+}
+
 const BUNQ_PAYMENT_SCAN_COUNT = 200;
 const BUNQ_PAYMENT_SCAN_MAX_PAGES = 5;
 
